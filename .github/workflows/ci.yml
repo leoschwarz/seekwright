@@ -73,6 +73,57 @@ jobs:
           echo "image --check exit code: $?"
           set -e
 
+  # The four commands a newcomer runs from the README, run to their end: without this job the
+  # bundle rots behind a green `check`. No provider search is asserted -- the anonymous tiers are
+  # rate-limited and a runner's address is throttled often enough to flake -- so the determinstic
+  # half is: both listeners answer, the fetch path resolves and dials through the bundle's own
+  # resolver and proxy, the two refusals hold, and the search proxy denied nothing.
+  compose:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: deploy/compose
+    steps:
+      - uses: actions/checkout@v7
+
+      # `--build` replaces the published tag with this checkout's image; the name is
+      # registry-qualified but the job never logs in, so nothing here can push it.
+      - name: bring the unit set up
+        run: docker compose up -d --build
+
+      - name: wait for both listeners
+        run: |
+          set -eu
+          for port in 8000 8001; do
+            for _ in $(seq 1 60); do
+              curl -fsS "http://127.0.0.1:$port/healthz" >/dev/null 2>&1 && break
+              sleep 2
+            done
+            curl -fsS "http://127.0.0.1:$port/healthz"
+          done
+
+      - name: the bundle holds together
+        run: |
+          set -eu
+          [ "$(docker compose ps -q | wc -l)" -eq 7 ]
+          curl -fsS -X POST http://127.0.0.1:8001/api/v1/fetch \
+            -H 'content-type: application/json' -d '{"url": "https://example.com/"}' \
+            | grep -q "Example Domain"
+          curl -s -X POST http://127.0.0.1:8000/api/v1/fetch \
+            -H 'content-type: application/json' -d '{"url": "https://example.com/"}' \
+            | grep -q "fetch tool disabled"
+          curl -s -X POST http://127.0.0.1:8001/api/v1/search \
+            -H 'content-type: application/json' \
+            -d '{"query": "example", "provider": "freeserp", "max_results": 2}' \
+            | grep -q "not permitted on this server"
+          ! docker compose logs search-proxy | grep -q TCP_DENIED
+
+      - name: tear the unit set down
+        if: always()
+        run: docker compose down -v --remove-orphans
+
   wheel:
     runs-on: ubuntu-latest
     if: ${{ github.event_name != 'pull_request' }}
