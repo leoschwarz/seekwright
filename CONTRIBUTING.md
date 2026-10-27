@@ -19,37 +19,15 @@ commands CI runs.
   will need.
 - **Security problems** — not the tracker. [SECURITY.md](SECURITY.md) says what is
   in scope and where to report it privately.
-- **Code and documentation** — a pull request. `main` is protected: it moves
-  only through a pull request whose merge is pinned to the reviewed commit and
-  landed by the merge gate, so work on a branch and never push to `main` or
-  force-push. The PR body carries the review record as its first line, below.
+- **Code and documentation** — a pull request. `main` is protected, so work on
+  a branch and never push or force-push to it. The gate a change has to pass is
+  the block of commands below; a PR body says what changed, why, and which of
+  those checks were run with their real output.
 
-The review record — the **first line of the PR body**, verbatim:
-
-```text
-Fixes #<N>
-```
-
-`<N>` is the issue number the pull request resolves. The rest of the body
-carries the review evidence for that issue — the checks run and how each was
-verified — so the record lives in the PR itself. The merge gate writes the
-trailer when it opens a PR and refuses to land a body whose line 1 does not
-match `^Fixes #\d+$`; on a landing that creates a merge commit the trailer
-reaches that commit's message too. The author also posts the trailer as the
-PR's first comment, because a verdict or gate note can hold the thread's first
-slot before the pull is trailed.
-
-Read any merged PR's record from the body alone:
-
-```bash
-gh pr view <n> --json body --jq .body | grep -oE 'Fixes #[0-9]+'
-```
-
-then `git merge-base --is-ancestor <sha> origin/main` for the SHA the body
-names. That `grep -oE` is a **presence** check for a human, not a form check —
-it matches the prefix anywhere in the body; opening the merged PR is what shows
-the trailer is line 1. `AGENTS.md` states the merge routes and why the record
-is a trailer rather than a review object.
+The **first line of the PR body** names the issue the change resolves,
+verbatim: `Fixes #<N>`, or `Part of #<N> - ` followed by the part it lands when
+the issue stays open. `<N>` is the issue number; the rest of the body is the
+evidence.
 
 ## Set up
 

@@ -1,12 +1,9 @@
 Fixes #<N>
 
-<!-- The review record, and it must stay the body's first line: the merge gate
-     refuses to land a PR whose body lacks it. It asserts the line's form, not a
-     prefix match anywhere in the body — line 1 must match `^Fixes #\d+$`, where
-     <N> is the issue number this PR resolves, and the rest of the body
-     carries the review evidence for that issue. Replace the placeholder: a
-     gate-opened PR gets the real issue number written for it, because the
-     template is not applied to PRs opened through the API. -->
+<!-- Keep this on line 1: `<N>` is the issue this PR resolves. When it lands
+     part of an issue that stays open, write `Part of #<N> - ` and name the part
+     after the dash instead. The rest of the body is the evidence: what changed,
+     why, and which checks ran with their real output. -->
 
 # What this changes
 
