@@ -41,7 +41,7 @@ jobs:
           fi
           echo "TAG NAMES MAIN HEAD: ${GITHUB_REF_NAME} at ${GITHUB_SHA}"
 
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
 
       # An identical asset skips; a different file fails the release path.
       - name: build and upload the wheel
