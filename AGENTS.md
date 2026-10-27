@@ -108,6 +108,13 @@ rules).
 - Keep `import seekwright` cheap: `__init__.py` imports `cli` lazily precisely
   so importing the package does not trigger config loading.
 
+## Commits
+
+One line per commit, lowercase, the area named first (`deploy: …`). A
+description body is added only when the line alone would drop a constraint a
+reader of the diff needs — the reasoning lives in the code, its comments and
+`docs/`, not in history prose.
+
 ## Architecture
 
 The table is the agent-facing copy of the module map;
