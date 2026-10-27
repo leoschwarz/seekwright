@@ -1,0 +1,30 @@
+# The paranoid fetch policy: hosts `fetch` may reach, and everything else refused.
+# Not active by default. Enable it with `EGRESS_FETCH_POLICY=strict` (deploy/compose/compose.yaml), which
+# mounts deploy/compose/squid/fetch-strict.conf as the proxy's config, and that config reads
+# deploy/compose/generated/fetch-allow.txt.
+# Same line format as deny-hosts.txt: one host per line, and a leading dot matches the domain under it.
+#
+# Three things belong in a strict list before it is switched on, or the fetch tool stops working
+# rather than narrowing: the hosts of the fallbacks `fetcher.py` names by constant -- every row of
+# `KNOWN_FALLBACKS` that names one, which `tools/egress_lists.py` refuses to render a list without;
+# the answer for a fallback the operator configures by URL, which that check reads here but cannot
+# derive, being a host this deployment writes in its own config; and every host this deployment
+# actually reads, which only the operator can name.
+# The search providers' hosts are not on that list: `--check` does not ask for them, and this role
+# runs `permitted_providers = []` (deploy/compose/fetch.toml), so it dials none of them. The two
+# keyed fallbacks are the overlap: `tavily` and `linkup` are provider names *and* fallback names, so their
+# hosts are required here as fallback hosts even though this role's empty set leaves those fallbacks unbuilt.
+
+# The fetch fallbacks this tree ships, beside the constant that names each one in fetcher.py.
+api.linkup.so
+api.tavily.com
+r.jina.ai
+scrappa.co
+
+# A fallback whose host is config rather than constant answers for itself here: `fallback=<name> <host>` names the
+# host the ladder dials for it, `fallback=<name>` alone says this deployment runs no such service, and either
+# way `--check` refuses a strict list that leaves such a fallback unanswered.
+fallback=crawl4ai
+
+# Operator territory below this line: the sites this deployment reads. Nothing here is a default --
+# a strict policy with an empty tail refuses every page a caller is likely to want.

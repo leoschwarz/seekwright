@@ -1,0 +1,20 @@
+# The build needs pyproject.toml, uv.lock, README.md and src/ -- nothing else.
+.git/
+.gitignore
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+tests/
+docs/
+deploy/
+tools/
+AGENTS.md
+CLAUDE.md
+Containerfile
+.containerignore
+
+.agents/
+.research/
+.eval/

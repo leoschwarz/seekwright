@@ -1,0 +1,48 @@
+# The fetch role's deny-list: hosts `fetch` must not reach, however the caller phrased the URL.
+# One host per line, in the spelling Squid reads: a leading dot matches that domain and every host under
+# it, and a bare host matches that one host only. Blank lines and `#` lines are for the reader -- Squid
+# reads deploy/compose/generated/fetch-deny.txt, the comment-free rendering of this file
+# (tools/egress_lists.py).
+# Add the host you want refused here, re-run `uv run python -m tools.egress_lists`, restart the fetch proxy.
+#
+# A deny-list is a policy, not a defence: any host not named here stays reachable, and a caller that
+# controls a name outside this list can carry bytes out through it. What it does stop, cheaply and at the
+# network layer, is the two shapes an injected prompt reaches for: a callback check that confirms a
+# request left this network, and a public sink to deposit what it exfiltrated.
+
+# Callback and out-of-band verification services: the "did my SSRF work" probe.
+.oast.pro
+.oast.fun
+.oast.me
+.oastify.com
+.burpcollaborator.net
+.ceye.io
+.dnslog.cn
+.interact.sh
+.requestcatcher.com
+.pipedream.net
+.hookbin.com
+.webhook.site
+
+# Tunnels whose whole purpose is to turn a laptop into a public listener.
+.ngrok.io
+.ngrok.app
+.ngrok-free.app
+.trycloudflare.com
+.serveo.net
+.localtunnel.me
+.localhost.run
+.tunnelmole.net
+
+# Drop sites: upload-first services, pages nobody reads on purpose.
+.transfer.sh
+.0x0.st
+.anonfiles.com
+.file.io
+.tmpfiles.org
+
+# Cloud metadata service names. The address-side rule is the app's SSRF guard and the `nonpublic`
+# ACL in deploy/compose/squid/, which already cover 169.254.169.254 and the rest of link-local; these are the
+# names some clouds resolve, refused here so the fetch tool says so before connecting.
+metadata.google.internal
+metadata.goog

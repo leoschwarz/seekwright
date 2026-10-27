@@ -1,0 +1,8 @@
+# The fetch role's name answer: an `internal` network has no route, so the role container cannot ask a
+# resolver of its own. `resolv.conf` is this container's own -- the daemon's, on the network that does
+# have a route -- so the upstream stays whatever the host already uses rather than a named third party.
+. {
+    errors
+    forward . /etc/resolv.conf
+    cache 30
+}

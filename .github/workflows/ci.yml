@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - run: uv lock --check
+
+      # No SEEKWRIGHT_LIVE_TESTS: the live-marked tests skip, so nothing is billed.
+      - run: uv sync
+
+      - name: Check the frozen surface manifest
+        run: uv run python -m tools.surface --check
+
+      - name: Check the rendered egress lists
+        run: uv run python -m tools.egress_lists --check
+
+      - name: Check the frozen value sets
+        run: uv run python -m tools.value_sets --check
+
+      - run: uv run ruff check
+
+      - run: uv run ty check
+
+      - run: uv run pytest -q
+
+  # The wheel and the image a release ships, built and smoked by a check instead of
+  # by a release write: measuring an artifact must not cost publishing it.
+  container:
+    runs-on: ubuntu-latest
+    # A pull request runs the gate; the artifact builds run where the extra minutes
+    # cost nothing: a push to main, and a dispatch.
+    if: ${{ github.event_name != 'pull_request' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Without this job the recipe rots behind a green check; docker builds plain
+      # OCI. An unqualified tag names no registry, so nothing here can push it.
+      - name: build the image
+        run: |
+          set -eu
+          DOCKER_BUILDKIT=1 docker build --file Containerfile --tag seekwright:ci .
+          docker images seekwright:ci
+
+      # `--help` is asserted; `--check` is recorded, not asserted: CI has no
+      # provider keys to configure, the same stance the publish smoke takes.
+      - name: smoke the image
+        run: |
+          set -eu
+          docker run --rm seekwright:ci --help | head -6
+          docker run --rm --entrypoint python seekwright:ci \
+            -c "import seekwright.extractors.trafilatura; print('default extractor importable')"
+          set +e
+          docker run --rm seekwright:ci --check
+          echo "image --check exit code: $?"
+          set -e
+
+  wheel:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      # The smoke runs from outside the checkout, so the installed wheel is what
+      # resolves and not the source tree.
+      - name: build the wheel and smoke the installed entry point
+        run: |
+          set -eu
+          uv build
+          ls -l dist/
+          WHEEL=$(basename dist/*.whl)
+          SHA=$(sha256sum "dist/$WHEEL" | cut -c1-64)
+          echo "built $WHEEL sha256=$SHA"
+          # uv asks before replacing an existing path and a runner step has no
+          # terminal to answer, so the smoke venv is created with --clear.
+          uv venv --clear --python 3.14 /tmp/wheel-smoke
+          uv pip install --python /tmp/wheel-smoke/bin/python "dist/$WHEEL"
+          cd /tmp
+          /tmp/wheel-smoke/bin/seekwright --help | head -6
+          echo "WHEEL BUILD OK: $WHEEL sha256=$SHA installed and smoked outside the checkout"

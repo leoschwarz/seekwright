@@ -1,0 +1,83 @@
+# The two-role deployment as a unit set. Steps and reasoning: docs/reference/deploying.md.
+name: seekwright
+
+services:
+  search:
+    image: seekwright:dev
+    build:
+      context: ../..
+      dockerfile: Containerfile
+    pull_policy: never
+    command: ["--http", "--host", "0.0.0.0", "--allowed-host", "${SEEKWRIGHT_PUBLISH:-127.0.0.1}:8000"]
+    restart: unless-stopped
+    volumes:
+      - ./search.toml:/etc/seekwright/config.toml:ro
+    # The search role's keys; absent means the keyless pair. Never on the fetch role.
+    env_file:
+      - path: ./search.env
+        required: false
+    ports:
+      - "${SEEKWRIGHT_PUBLISH:-127.0.0.1}:8000:8000"
+    environment:
+      - HTTP_PROXY=http://search-proxy:3128
+      - HTTPS_PROXY=http://search-proxy:3128
+      - NO_PROXY=127.0.0.1,localhost
+    networks: [search-egress]
+    depends_on: [search-proxy]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  fetch:
+    image: seekwright:dev
+    pull_policy: never
+    command: ["--http", "--host", "0.0.0.0", "--allowed-host", "${SEEKWRIGHT_PUBLISH:-127.0.0.1}:8001"]
+    restart: unless-stopped
+    volumes:
+      - ./fetch.toml:/etc/seekwright/config.toml:ro
+    ports:
+      - "${SEEKWRIGHT_PUBLISH:-127.0.0.1}:8001:8000"
+    environment:
+      - HTTP_PROXY=http://fetch-proxy:3128
+      - HTTPS_PROXY=http://fetch-proxy:3128
+      - NO_PROXY=127.0.0.1,localhost
+    networks: [fetch-egress]
+    dns: [172.28.1.53]
+    depends_on: [fetch-proxy, resolver]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+
+  resolver:
+    image: docker.io/coredns/coredns:1.11.3
+    restart: unless-stopped
+    volumes:
+      - ./coredns/Corefile:/etc/coredns/Corefile:ro
+    networks:
+      fetch-egress:
+        ipv4_address: 172.28.1.53
+      egress:
+
+  search-proxy:
+    image: ubuntu/squid:6.6-24.04_edge
+    restart: unless-stopped
+    volumes:
+      - ./squid/search-allow.conf:/etc/squid/squid.conf:ro
+      - ./generated:/etc/squid/lists:ro
+    networks: [search-egress, egress]
+
+  fetch-proxy:
+    image: ubuntu/squid:6.6-24.04_edge
+    restart: unless-stopped
+    volumes:
+      - ./squid/fetch-${EGRESS_FETCH_POLICY:-lenient}.conf:/etc/squid/squid.conf:ro
+      - ./generated:/etc/squid/lists:ro
+    networks: [fetch-egress, egress]
+
+networks:
+  search-egress:
+    internal: true
+  fetch-egress:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.28.1.0/24
+  egress:

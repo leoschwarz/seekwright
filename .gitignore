@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+pytest-of-*/
+dist/
+*.db
+*.db-wal
+*.db-shm
+
+# Private: internal hostnames, runbook detail, caller content.
+deploy/*
+# One exception, one subtree: the compose unit set and the lists CI renders into it.
+# The private rule stays whole everywhere else under `deploy/`, so an operator snapshot cannot
+# become a stray unignored file the way five sub-path exceptions would let it.
+!deploy/compose/
+# The operator's own values in the shipped bundle; the `.example` files stay tracked.
+deploy/compose/.env
+deploy/compose/search.env
+docs/internal/
+
+.eval/
+
+.research/
+
+# `.eval/`, `.research/`, `.agents/` are mirrored in `.containerignore`.
+.agents/

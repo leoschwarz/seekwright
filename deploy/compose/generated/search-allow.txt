@@ -1,0 +1,15 @@
+.algolia.net
+api.anysearch.com
+api.deepseek.com
+api.linkup.so
+api.parallel.ai
+api.querit.ai
+api.search.tinyfish.ai
+api.search1api.com
+api.tavily.com
+freeserp.ai
+google.serper.dev
+mcp.exa.ai
+scrappa.co
+search.parallel.ai
+serpapi.com

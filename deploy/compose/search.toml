@@ -1,0 +1,15 @@
+# The search role: it searches, and it reads no page.
+# The keyless pair, so this role needs no API key anywhere in it. See docs/reference/deploying.md.
+permitted_providers = ["exa:free", "freeserp"]
+
+[providers."exa:free"]
+enabled = true
+
+[providers.freeserp]
+enabled = true
+
+[fetch]
+enabled = false
+
+[agent]
+enabled = false

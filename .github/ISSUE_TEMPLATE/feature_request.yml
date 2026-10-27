@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest a capability, a provider or a change in behaviour
+title: "[feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        `docs/ROADMAP.md` lists the open work and what gates it, and its
+        "Deliberately not on the roadmap" section carries what was declined and
+        why — a cache, a "pick the cheapest" router, and auth on the HTTP
+        listener are all there. A request that reverses one of those is welcome,
+        but it has to argue against the stated reason, so quoting it helps.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What can you not do today?
+      description: >-
+        The task you were trying to complete and where seekwright stopped you —
+        a tool parameter you wanted, a provider that is missing, a behaviour you
+        had to work around.
+    validations:
+      required: true
+  - type: textarea
+    id: shape
+    attributes:
+      label: What would it look like?
+      description: >-
+        A new tool parameter, a config key, a provider, a docs change. If you
+        know which module or reference page it touches, say so.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What did you try instead?
+      description: >-
+        Workarounds, other MCP servers, or the page that states the rule you
+        think rules this out.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the project?
+      options:
+        - The tool surface (search, fetch, answer)
+        - The provider set
+        - Fetching and extraction
+        - Configuration
+        - Documentation
+        - Packaging and deployment
+    validations:
+      required: true

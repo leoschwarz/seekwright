@@ -1,0 +1,73 @@
+[project]
+name = "seekwright"
+# A copy of `seekwright.__version__`: uv_build rejects `dynamic`.
+version = "0.1.0"
+description = "An MCP proxy in front of web-search providers: paid, free-tiered and keyless"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Leonardo Schwarz", email = "mail@leoschwarz.com" }
+]
+keywords = ["mcp", "search", "web-search", "agents", "llm", "proxy"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet :: WWW/HTTP",
+    "Typing :: Typed",
+]
+requires-python = ">=3.14"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp>=1.28,<2",
+    "pydantic>=2.12",
+    "loguru>=0.7",
+]
+
+[project.optional-dependencies]
+# Named after the `fetch.extractor` value it serves.
+trafilatura = ["trafilatura>=2", "pypdf>=5"]
+
+[project.scripts]
+seekwright = "seekwright:main"
+
+[project.urls]
+Homepage = "https://github.com/leoschwarz/seekwright"
+Documentation = "https://github.com/leoschwarz/seekwright/blob/main/docs/index.md"
+Repository = "https://github.com/leoschwarz/seekwright"
+# All four fields name the public home: a machine-local checkout address is not a link
+# a consumer can follow, so nothing else belongs in this table.
+Issues = "https://github.com/leoschwarz/seekwright/issues"
+
+[build-system]
+# The lower bound is the Containerfile's uv image tag; the pair moves by hand.
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-bdd>=8.1",
+    "ruff>=0.16.1",
+    # The self-include keeps a bare `uv sync` a working fetch tool.
+    "seekwright[trafilatura]",
+    "ty>=0.0.92",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "live: hits real paid provider endpoints; gated by SEEKWRIGHT_LIVE_TESTS=1",
+]
+
+[tool.ty.rules]
+# Why each rule below is on: docs/reference/typing.md.
+missing-type-argument = "error"
+missing-override-decorator = "warn"

@@ -1,0 +1,6 @@
+# The fetch role: it reads a caller-chosen URL, and it dispatches no provider.
+# An empty permission set is a declared one, so nothing is ever billed by this container.
+permitted_providers = []
+
+[fetch]
+enabled = true

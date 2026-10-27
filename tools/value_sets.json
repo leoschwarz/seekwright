@@ -1,0 +1,49 @@
+{
+  "KNOWN_EXTRACTORS": [
+    "stdlib",
+    "trafilatura"
+  ],
+  "KNOWN_FALLBACKS": [
+    "crawl4ai",
+    "jina",
+    "linkup",
+    "scrappa",
+    "tavily"
+  ],
+  "KNOWN_PROVIDERS": [
+    "algolia",
+    "anysearch",
+    "deepseek",
+    "exa",
+    "exa:free",
+    "freeserp",
+    "linkup",
+    "parallel",
+    "parallel:free",
+    "querit",
+    "scrappa",
+    "search1api",
+    "searxng",
+    "serpapi",
+    "serper",
+    "tavily",
+    "tinyfish"
+  ],
+  "LogLevel": [
+    "CRITICAL",
+    "DEBUG",
+    "ERROR",
+    "INFO",
+    "SUCCESS",
+    "TRACE",
+    "WARNING"
+  ],
+  "LoggingConfig.format": [
+    "json",
+    "text"
+  ],
+  "ProviderConfig.output_type": [
+    "searchResults",
+    "sourcedAnswer"
+  ]
+}

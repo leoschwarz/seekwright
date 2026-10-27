@@ -1,0 +1,7 @@
+Answer a question in prose, grounded in fresh web results, with citations.
+
+This is the most expensive operation this server offers. One call runs a fixed set of searches, may read several pages, and then makes one model call over what it retrieved -- so use it when you want a synthesised answer, and use `search` when you would rather read the sources yourself.
+
+The answer is written by a model, from the retrieved material only. `sources` is not the model's list: it is built by the server from the results the prose actually cited, so a URL the model invented is not in it. Read the prose against `sources` -- every claim should be traceable to one of them -- and read `notice`, which says when it is not: an answer with no citations, or citations the server dropped because they named nothing it retrieved.
+
+`depth` is the one cost knob you control. `brief` (the default) runs a single search and answers from snippets. `report` runs up to three searches and reads up to three pages first, which is slower and costs the operator several times as much. Retrieval is never driven by the model: the same queries always run, so an answer costs a bounded amount rather than whatever the model decides.

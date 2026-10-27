@@ -1,0 +1,149 @@
+name: publish
+
+# A release is a tag push: the wheel becomes an asset of the GitHub Release the tag
+# names, and the image goes to ghcr.io (docs/reference/publishing.md).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # A release run is build, upload, install and push. Bounded, or a hung step
+    # inherits the runner default.
+    timeout-minutes: 30
+    # The release write needs contents: write; the ghcr.io push uses the
+    # automatic GITHUB_TOKEN.
+    permissions:
+      contents: write
+    steps:
+      # The tag/main guard below needs `main` to be fetchable, so no shallow clone.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The tag has to name main's head, or CI never ran on what gets published.
+      - name: the tag must name the commit main names
+        run: |
+          set -eu
+          git fetch -q --depth 1 origin main
+          MAIN=$(git rev-parse FETCH_HEAD)
+          if [ "$MAIN" != "$GITHUB_SHA" ]; then
+            echo "FAIL: ${GITHUB_REF_NAME} names ${GITHUB_SHA}, but main names ${MAIN}: this run would publish a commit main does not name, under a release name, on a tree CI never ran on."
+            echo "FAIL: the fix is to move or re-cut ${GITHUB_REF_NAME} from ${GITHUB_SHA} onto ${MAIN}, main's head, and re-run this tag; nothing was uploaded or pushed."
+            exit 1
+          fi
+          echo "TAG NAMES MAIN HEAD: ${GITHUB_REF_NAME} at ${GITHUB_SHA}"
+
+      - uses: astral-sh/setup-uv@v6
+
+      # An identical asset skips; a different file fails the release path.
+      - name: build and upload the wheel
+        id: wheel
+        run: |
+          set -eu
+          uv build --wheel
+          ls -l dist/
+          WHEEL=$(basename dist/*.whl)
+          # The version comes from the built wheel name, so a bump needs no edit here.
+          VERSION=$(printf '%s' "$WHEEL" | cut -d- -f2)
+          echo "release name ${GITHUB_REF_NAME} WHEEL=$WHEEL VERSION=$VERSION"
+          # The release name is the ref: it has to be `v` plus the built version.
+          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
+            echo "FAIL: ${GITHUB_REF_NAME} is a tag push, so this is the release path, and its release name is the ref: ${GITHUB_REF_NAME} does not match v${VERSION}, the version of the wheel just built ($WHEEL)."
+            echo "FAIL: the fix is to cut the tag that matches [project] version in pyproject.toml (v${VERSION}), or to bump that version and re-tag. Nothing was uploaded or pushed."
+            exit 1
+          fi
+          echo "tag ${GITHUB_REF_NAME} matches the built wheel version ${VERSION}"
+          LOCAL_SHA=$(sha256sum "dist/$WHEEL" | cut -c1-64)
+          echo "built $WHEEL sha256=$LOCAL_SHA"
+          # The already-published rule: the asset list off the release, the file
+          # itself fetched over its public URL with no credential.
+          PUBLISHED=$(gh release view "$GITHUB_REF_NAME" --json assets \
+            --jq --arg name "$WHEEL" '.assets[] | select(.name == $name) | .browser_download_url' \
+            2>/dev/null || true)
+          if [ -n "$PUBLISHED" ]; then
+            curl -sSL -o /tmp/published.whl "$PUBLISHED"
+            PUB_SHA=$(sha256sum /tmp/published.whl | cut -c1-64)
+            if [ "$PUB_SHA" = "$LOCAL_SHA" ]; then
+              echo "release already holds the identical $WHEEL (sha256 match); skipping upload"
+            else
+              echo "FAIL: the release already holds a different $WHEEL: published sha256=$PUB_SHA, this build sha256=$LOCAL_SHA."
+              echo "FAIL: the fix is deleting that asset from ${GITHUB_REF_NAME} (gh release delete-asset) or a version bump in pyproject.toml, then re-running this tag. Nothing was uploaded or pushed."
+              exit 1
+            fi
+          else
+            gh release create "$GITHUB_REF_NAME" "dist/$WHEEL" --target "$GITHUB_SHA" \
+              --title "seekwright ${VERSION}" \
+              --notes "seekwright ${VERSION}: an MCP server in front of web-search providers. Setup: docs/quickstart.md in the tag's tree."
+            echo "created release ${GITHUB_REF_NAME} carrying $WHEEL"
+          fi
+          {
+            echo "wheel=$WHEEL"
+            echo "version=$VERSION"
+            echo "local_sha=$LOCAL_SHA"
+          } >> "$GITHUB_OUTPUT"
+
+      # The cold install a consumer gets: the asset fetched over its public URL with
+      # no credential at all, then installed into a throwaway venv.
+      - name: install the published wheel in a clean venv
+        run: |
+          set -eu
+          WHEEL="${{ steps.wheel.outputs.wheel }}"
+          VERSION="${{ steps.wheel.outputs.version }}"
+          LOCAL_SHA="${{ steps.wheel.outputs.local_sha }}"
+          URL=$(gh release view "$GITHUB_REF_NAME" --json assets \
+            --jq --arg name "$WHEEL" '.assets[] | select(.name == $name) | .browser_download_url')
+          curl -sSL -o "/tmp/$WHEEL" "$URL"
+          FILE_SHA=$(sha256sum "/tmp/$WHEEL" | cut -c1-64)
+          echo "downloaded anonymously from the release: ${WHEEL} (version ${VERSION}) sha256=$FILE_SHA"
+          if [ "$FILE_SHA" != "$LOCAL_SHA" ]; then
+            echo "FAIL: the asset the release serves is not the wheel this run built: downloaded sha256=$FILE_SHA, built sha256=$LOCAL_SHA."
+            exit 1
+          fi
+          # uv asks before replacing an existing path and a runner step has no
+          # terminal to answer, so the smoke venv is created with --clear.
+          uv venv --clear --python 3.14 /tmp/release-smoke
+          uv pip install --python /tmp/release-smoke/bin/python "/tmp/$WHEEL[trafilatura]"
+          /tmp/release-smoke/bin/seekwright --help | head -8
+          echo "WHEEL INSTALL OK: seekwright ${VERSION} (${WHEEL}) installed from the release asset"
+
+      - name: build and push the image
+        id: image
+        run: |
+          set -eu
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF_NAME}"
+          # The release tag names no commit, so GITHUB_SHA goes in as a label.
+          DOCKER_BUILDKIT=1 docker build --file Containerfile --build-arg SEEKWRIGHT_REVISION="$GITHUB_SHA" --tag "$IMAGE" .
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          docker push "$IMAGE"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "PUSHED $IMAGE"
+
+      # `--check` is recorded, not asserted: CI has no provider keys to configure.
+      - name: smoke the published image
+        run: |
+          set -eu
+          IMAGE="${{ steps.image.outputs.image }}"
+          docker pull "$IMAGE"
+          REVISION=$(docker image inspect \
+            --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")
+          if [ "$REVISION" != "$GITHUB_SHA" ]; then
+            echo "FAIL: $IMAGE carries org.opencontainers.image.revision=$REVISION, not $GITHUB_SHA, the commit this run built from."
+            echo "FAIL: the fix is the --build-arg SEEKWRIGHT_REVISION in the build step above; a pushed image is not relabelled from here."
+            exit 1
+          fi
+          echo "IMAGE REVISION OK: $IMAGE built from $GITHUB_SHA"
+          docker run --rm "$IMAGE" --help | head -6
+          set +e
+          docker run --rm "$IMAGE" --check
+          echo "seekwright --check exit code: $?"
+          set -e
+          docker image inspect --format 'digest={{index .RepoDigests 0}} size={{.Size}}' "$IMAGE"
+          echo "IMAGE SMOKE OK: $IMAGE"

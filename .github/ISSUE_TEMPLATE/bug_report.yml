@@ -1,0 +1,117 @@
+name: Bug report
+description: Something in seekwright does not work as documented
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **A security problem does not belong in this tracker.** API-key handling
+        and the fetcher's guardrails are in scope for a private report — see
+        `SECURITY.md` in the repository root for what is in scope and where to
+        send it.
+
+        Before filing, it is worth knowing what is a known non-feature rather
+        than a bug: there is no cache, the HTTP listener has no authentication,
+        `robots.txt` is not consulted, and fetched text is untrusted by design.
+        `docs/architecture.md` records each of those and why.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, including the exact error message or `notice` text.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+      description: What the README or docs/reference/ led you to expect.
+    validations:
+      required: true
+  - type: textarea
+    id: check
+    attributes:
+      label: Output of `uv run seekwright --check`
+      description: >-
+        Paste the whole thing. It validates the config and probes provider
+        connectivity without spending anything, and it prints provider names,
+        status and price — plus the *name* of any missing environment variable,
+        never its value. If the server will not start at all, paste the startup
+        error instead.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: >-
+        The tool call or REST request you made, the provider you named, and the
+        response's `notice`. Redact the query text if it is sensitive — it is
+        not needed to diagnose a transport or provider failure.
+      placeholder: |
+        search(query="...", provider="serper", max_results=5)
+        -> SearchFailed: provider 'serper' returned HTTP 401
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface?
+      options:
+        - MCP over stdio
+        - MCP over streamable HTTP (--http)
+        - REST (POST /api/v1/search, POST /api/v1/fetch)
+        - The CLI (--check, --check --live, --metrics)
+        - The container image
+        - The test suite
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Config and environment
+      description: >-
+        Which providers you enabled and which `SEEKWRIGHT_*` variable names you
+        set. Never paste the values.
+      render: toml
+      placeholder: |
+        default_provider = "serper"
+
+        [providers.serper]
+        enabled = true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: >-
+        The `version` in `pyproject.toml` (`0.1.0` today) or the commit you are
+        on — `git rev-parse --short HEAD`. There is no `--version` flag yet.
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime
+      description: >-
+        Python version (`uv run python -V`), OS, and the MCP client you mounted
+        the server in, if the problem is client-side.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: >-
+        Logs go to stderr. With `[logging] log_queries` and `log_content` off —
+        the defaults — they carry no query text and no page content, so they are
+        safe to paste. If you turned either on, redact first.
+      render: shell
+  - type: checkboxes
+    id: secrets
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have not pasted an API key or any other credential.
+          required: true
