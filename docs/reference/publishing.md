@@ -136,8 +136,11 @@ A run is evidence when its log carries these lines, and the release record quote
   when the run reads `org.opencontainers.image.revision` back off the image it pulled
   out of the registry — not off the local build — and it equals the sha the run built
   from; an image naming another commit, or none, fails the run instead
-- `seekwright --check exit code: 1`, recorded rather than asserted: a CI run holds no
-  provider keys, which is also the reading a consumer gets from an unconfigured install
+- `seekwright --check exit code: 0`, recorded rather than asserted. An unconfigured
+  install resolves to the keyless set, and while `exa:free`, `parallel:free` and
+  `freeserp` answer, `--check` has nothing to report — so the figure is the keyless
+  providers' reachability on the runner that day, not a property of the image, and the
+  run asserts nothing about it
 - `IMAGE SMOKE OK: ghcr.io/leoschwarz/seekwright:v0.1.0`
 
 The acceptance check is the two halves of that list: the wheel installs in a clean
@@ -149,9 +152,9 @@ pulled back out of the registry answers `--help` and prints its `--check` exit c
 The per-item answers live here, each naming the date it was measured at; the next run
 re-measures them rather than carrying a figure over.
 
-Measured 2026-10-27 on the head that carries the GitHub lane: no tag has been pushed
-from it, so items 4 and 6 carry what the guards and the CI lane answer, not what a
-publish answered.
+Measured 2026-10-27 on the head that carries the GitHub lane, at `0def969`: the tag
+`v0.1.0` has been pushed from it, and its publish run carried every line above. Items 4
+and 6 therefore carry what a publish answered, not what the guards alone predicted.
 
 - **Item 1, every release-critical issue closed: open work, not answerable from the
   tree.** What the tree does answer is the freeze: the three `--check` instruments of
@@ -177,30 +180,29 @@ publish answered.
   install block in `docs/quickstart.md` is the clone plus `uv`, which is the
   development path 0.1.0 documents; the deployment the README leads with is the Compose
   bundle on the published image ([deploying.md](deploying.md)).
-- **Item 4, install verified from the published artifacts: measured up to the artifact,
-  and the published half waits on the first tag.** The `wheel` job of
+- **Item 4, install verified from the published artifacts: verified.** The `wheel` job of
   `.github/workflows/ci.yml` builds that file at every push to `main`, prints
   `built <wheel> sha256=…`, installs it into a clean venv and runs `seekwright --help`
   from outside the checkout. What only a release can measure is the install of what the
-  release serves: the run's `install the published wheel in a clean venv` step, which
-  downloads the asset by URL with no credential, compares its sha256 with the build's
-  and installs it. There is no asset to read until the first tag runs, so this item
-  closes with the release, not before it.
-- **Item 5, live URLs and the version: the version half is verified, the URL half
-  closes at publication.** `pyproject.toml`'s `[project] version` reads
-  `version = "0.1.0"`, which matches the tag name and the `Containerfile` label, and
-  `tests/repo/test_packaging.py` fails CI when those three copies drift.
+  release serves, and the run's `install the published wheel in a clean venv` step is
+  it: the asset downloaded from the release's public URL with no credential, its sha256
+  equal to the build's, then `seekwright --help` running in a venv built for it alone.
+- **Item 5, live URLs and the version: verified.** `pyproject.toml`'s `[project]
+  version` reads `version = "0.1.0"`, which matches the tag name and the `Containerfile`
+  label, and `tests/repo/test_packaging.py` fails CI when those three copies drift.
   `pyproject.toml`'s `[project.urls]` names `github.com/leoschwarz/seekwright`
-  addresses; they answer 404 until the repository is public and answer the real thing
-  the moment it is, and the same test module keeps any retired host name out of the
-  shipped fields — including the `User-Agent` the wheel carries, which is built from
-  the same table.
-- **Item 6, tag `v0.1.0` on the verified commit and publish: both artifacts are
-  measured by CI, and the tag is the release.** The `container` job of
-  `.github/workflows/ci.yml` builds this `Containerfile` at every push to `main`, runs
-  `--help` inside the result and pushes nothing. Cutting the tag at a head is the
-  release rather than a check of it, and the two guards — the tag against `main`'s head,
-  the tag name against the built version — are what make pushing it a measured act.
+  addresses; the repository answers them, and the same test module keeps any retired
+  host name out of the shipped fields — including the `User-Agent` the wheel carries,
+  which is built from the same table.
+- **Item 6, tag `v0.1.0` on the verified commit and publish: verified.** The
+  `container` job of `.github/workflows/ci.yml` builds this `Containerfile` at every
+  push to `main`, runs `--help` inside the result and pushes nothing. Cutting the tag at
+  `0def969` is the release, not a check of it, and the two guards — the tag against
+  `main`'s head, the tag name against the built version — are what made pushing it a
+  measured act. The run that followed read the release already holding the identical
+  wheel, so it skipped the upload rather than re-creating it, pushed
+  `ghcr.io/leoschwarz/seekwright:v0.1.0`, and read the revision label back off the
+  pulled image as `0def969`.
 
-Items 1, 4, 5 and 6 all move with the publication itself — the tracker, the public
-repository, and the first tag.
+Item 1 is the only one still open: the rest moved with the publication itself — the
+tracker, the public repository and the first tag.
