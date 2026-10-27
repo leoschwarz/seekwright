@@ -31,8 +31,7 @@ import json
 from typing import Any
 
 import httpx
-from mcp import types
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp import Client, types
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from seekwright import server
@@ -145,8 +144,8 @@ def _payload(result: types.CallToolResult) -> dict[str, Any]:
 
 def _call_search(arguments: dict[str, object]) -> types.CallToolResult:
     async def run() -> types.CallToolResult:
-        async with create_connected_server_and_client_session(server.mcp) as session:
-            return await session.call_tool("search", arguments)
+        async with Client(server.mcp) as client:
+            return await client.call_tool("search", arguments)
 
     return asyncio.run(run())
 
@@ -235,7 +234,7 @@ def the_provider_receives_language(
 
 @then("the response carries no notice")
 def the_response_carries_no_notice(result: types.CallToolResult) -> None:
-    assert not result.isError, _text(result)
+    assert not result.is_error, _text(result)
     assert _payload(result).get("notice") is None
 
 
@@ -248,7 +247,7 @@ def the_notice_says_it_was_ignored(token: str, result: types.CallToolResult) -> 
     named inside a longer phrase. What the caller has to be able to tell is that
     the constraint was seen and not applied.
     """
-    assert not result.isError, _text(result)
+    assert not result.is_error, _text(result)
     notice = _payload(result).get("notice") or ""
     assert token in notice, f"{token!r} is not named in {notice!r}"
     assert "ignored" in notice
@@ -265,7 +264,7 @@ def the_call_is_an_error(
     `split("-")[0]` would have spent the call and answered a different question
     than the caller asked.
     """
-    assert result.isError, f"expected a tool error, got {_text(result)!r}"
+    assert result.is_error, f"expected a tool error, got {_text(result)!r}"
     for stub in providers.values():
         assert not stub.requests, "a refused request still reached the backend"
 

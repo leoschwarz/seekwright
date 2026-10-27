@@ -24,7 +24,11 @@ classifiers = [
 requires-python = ">=3.14"
 dependencies = [
     "httpx>=0.28.1",
-    "mcp>=1.28,<2",
+    # Imported directly by `providers/exa_mcp.py`: under mcp 2 the client handed to
+    # `streamable_http_client(http_client=...)` must be an httpx2 type or the
+    # server-to-client messages silently stop arriving. Our own httpx use stays httpx.
+    "httpx2>=2.10,<3",
+    "mcp>=2.3,<3",
     "pydantic>=2.12",
     "loguru>=0.7",
 ]

@@ -18,8 +18,7 @@ from typing import Any, override
 
 import httpx
 import pytest
-from mcp import types
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp import Client, types
 
 from seekwright import server
 from seekwright.agent import (
@@ -1043,8 +1042,8 @@ class TestThroughTheMcpServer:
     @staticmethod
     def _call(arguments: dict[str, object]) -> types.CallToolResult:
         async def run() -> types.CallToolResult:
-            async with create_connected_server_and_client_session(server.mcp) as session:
-                return await session.call_tool("answer", arguments)
+            async with Client(server.mcp) as client:
+                return await client.call_tool("answer", arguments)
 
         return asyncio.run(run())
 
@@ -1055,12 +1054,12 @@ class TestThroughTheMcpServer:
     async def test_only_the_question_is_required(self):
         tool = await self._tool()
 
-        assert tool.inputSchema["required"] == ["query"]
+        assert tool.input_schema["required"] == ["query"]
 
     async def test_the_parameters_are_the_specs_and_nothing_else(self):
         tool = await self._tool()
 
-        assert set(tool.inputSchema["properties"]) == {
+        assert set(tool.input_schema["properties"]) == {
             "query",
             "extra_queries",
             "depth",
@@ -1073,10 +1072,10 @@ class TestThroughTheMcpServer:
         }
         # The four things that would make this an open proxy on the operator's key.
         for absent in ("max_results", "model", "temperature", "system_prompt"):
-            assert absent not in tool.inputSchema["properties"]
+            assert absent not in tool.input_schema["properties"]
 
     async def test_the_parameter_bounds_are_the_specs(self):
-        props = (await self._tool()).inputSchema["properties"]
+        props = (await self._tool()).input_schema["properties"]
 
         assert props["query"]["minLength"] == 2
         assert props["query"]["maxLength"] == 400
@@ -1099,7 +1098,7 @@ class TestThroughTheMcpServer:
         assert props["safe_search"]["anyOf"][0]["type"] == "boolean"
 
     async def test_the_provider_pin_lists_every_adapter(self):
-        props = (await self._tool()).inputSchema["properties"]
+        props = (await self._tool()).input_schema["properties"]
 
         assert sorted(props["provider"]["anyOf"][0]["enum"]) == [
             "algolia",
@@ -1122,7 +1121,7 @@ class TestThroughTheMcpServer:
         ]
 
     async def test_the_response_model_is_the_specs(self):
-        schema = (await self._tool()).outputSchema
+        schema = (await self._tool()).output_schema
 
         assert schema is not None
         assert set(schema["properties"]) == {
@@ -1153,7 +1152,7 @@ class TestThroughTheMcpServer:
 
         result = self._call({"query": "why is the sky blue"})
 
-        assert result.isError
+        assert result.is_error
         text = _text(result)
         assert "agent mode disabled" in text
         assert "`search` or `fetch`" in text
@@ -1185,7 +1184,7 @@ class TestThroughTheMcpServer:
 
         result = self._call({"query": "why is the sky blue"})
 
-        assert not result.isError, _text(result)
+        assert not result.is_error, _text(result)
         payload = json.loads(_text(result))
         assert payload["answer"] == "Rayleigh scattering [1]."
         assert payload["model"] == "test-model"
@@ -1228,7 +1227,7 @@ class TestThroughTheMcpServer:
 
         result = self._call({"query": "why is the sky blue"})
 
-        assert result.isError
+        assert result.is_error
         assert "Zero results usually means the phrasing" in _text(result)
 
 

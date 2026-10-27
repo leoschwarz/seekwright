@@ -1158,11 +1158,12 @@ class TestTheListener:
     async def test_a_host_the_operator_never_allowed_is_refused(
         self, srv, monkeypatch, path, payload
     ):
-        """Unlike `/healthz`, these carry data: no exemption from the allowlist."""
-        security = srv.mcp.settings.transport_security
-        assert security is not None
-        monkeypatch.setattr(security, "enable_dns_rebinding_protection", True)
+        """Unlike `/healthz`, these carry data: no exemption from the allowlist.
 
+        Nothing is flipped on the way in: `_guard` reads the allowlist the
+        listener was built with, and with no listener here -- the app is built
+        directly -- it falls back to the loopback seed, which refuses this Host.
+        """
         async with _served(srv, _config(), monkeypatch) as (app, _):
             r = await _post(app, path, payload, headers={"Host": "evil.example"})
 
@@ -1272,7 +1273,7 @@ class TestTheTwoEncodingsAgree:
         # The tool spells its MCP result out, because an image rides there as a
         # content block; `structuredContent` is the `FetchResponse` the REST body
         # is built from, and FastMCP validates it against the advertised schema.
-        assert _comparable(r.json()) == _comparable(tool.structuredContent)
+        assert _comparable(r.json()) == _comparable(tool.structured_content)
 
     async def test_an_image_is_bytes_in_the_body_and_a_block_in_the_tool(
         self, srv, monkeypatch
@@ -1299,9 +1300,9 @@ class TestTheTwoEncodingsAgree:
         assert body["image"] == {"byte_count": len(_PNG), "base64": _B64_PNG}
         blocks = [c for c in tool.content if c.type == "image"]
         assert len(blocks) == 1
-        assert blocks[0].mimeType == "image/png"
+        assert blocks[0].mime_type == "image/png"
         assert blocks[0].data == _B64_PNG
-        assert "image" not in (tool.structuredContent or {})
+        assert "image" not in (tool.structured_content or {})
 
     async def test_answer_returns_what_the_tool_returns(
         self, srv, monkeypatch, agent_key
@@ -1336,19 +1337,19 @@ class TestNoDrift:
     async def test_the_search_body_is_the_search_tool(self, srv):
         tools = {tool.name: tool for tool in await srv.mcp.list_tools()}
         assert set(SearchRequest.model_fields) == set(
-            tools["search"].inputSchema["properties"]
+            tools["search"].input_schema["properties"]
         )
 
     async def test_the_fetch_body_is_the_fetch_tool(self, srv):
         tools = {tool.name: tool for tool in await srv.mcp.list_tools()}
         assert set(FetchRequest.model_fields) == set(
-            tools["fetch"].inputSchema["properties"]
+            tools["fetch"].input_schema["properties"]
         )
 
     async def test_the_answer_body_is_the_answer_tool(self, srv):
         tools = {tool.name: tool for tool in await srv.mcp.list_tools()}
         assert set(AnswerRequest.model_fields) == set(
-            tools["answer"].inputSchema["properties"]
+            tools["answer"].input_schema["properties"]
         )
 
     def test_country_stays_off_the_api_while_language_and_safe_search_are_on_it(self):
@@ -1400,7 +1401,7 @@ class TestOneMappingPerOperation:
         reaching one encoding and not the other.
         """
         tools = {tool.name: tool for tool in await srv.mcp.list_tools()}
-        schema_fields = set(tools[operation].inputSchema["properties"])
+        schema_fields = set(tools[operation].input_schema["properties"])
         signature_fields = set(inspect.signature(getattr(srv, operation)).parameters)
         signature_fields.discard("ctx")
         assert signature_fields == schema_fields == set(model.model_fields)

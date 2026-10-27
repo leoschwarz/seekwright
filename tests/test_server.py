@@ -15,8 +15,7 @@ from typing import Any, NoReturn, cast
 
 import httpx
 import pytest
-from mcp import ClientSession
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp import Client, ClientSession
 from mcp.types import ImageContent, TextContent
 
 from seekwright import server as server_module
@@ -58,17 +57,17 @@ class TestToolSurface:
     async def test_schemas_are_object_rooted(self, server):
         """The 2025-11-25 spec restricts both schemas to `type: object` at root."""
         for tool in await server.list_tools():
-            assert tool.inputSchema["type"] == "object"
-            assert tool.outputSchema is not None
-            assert tool.outputSchema["type"] == "object"
+            assert tool.input_schema["type"] == "object"
+            assert tool.output_schema is not None
+            assert tool.output_schema["type"] == "object"
 
     async def test_search_requires_a_query(self, server):
         search = next(t for t in await server.list_tools() if t.name == "search")
-        assert search.inputSchema["required"] == ["query"]
+        assert search.input_schema["required"] == ["query"]
 
     async def test_fetch_requires_a_url(self, server):
         tool = next(t for t in await server.list_tools() if t.name == "fetch")
-        assert tool.inputSchema["required"] == ["url"]
+        assert tool.input_schema["required"] == ["url"]
 
     async def test_fetch_omits_search_params(self, server):
         """Fetch takes a URL, not a *search* -- no domain filters, no free mode.
@@ -81,7 +80,7 @@ class TestToolSurface:
         pins what that parameter looks like.
         """
         tool = next(t for t in await server.list_tools() if t.name == "fetch")
-        props = tool.inputSchema["properties"]
+        props = tool.input_schema["properties"]
         assert "url" in props
         for absent in ("max_results", "include_domains", "mode", "recency"):
             assert absent not in props
@@ -89,8 +88,8 @@ class TestToolSurface:
     async def test_fetch_paging_and_targeting_params(self, server):
         """`offset` and `query` are optional, and neither replaces the other."""
         tool = next(t for t in await server.list_tools() if t.name == "fetch")
-        props = tool.inputSchema["properties"]
-        assert tool.inputSchema["required"] == ["url"]
+        props = tool.input_schema["properties"]
+        assert tool.input_schema["required"] == ["url"]
 
         offset = props["offset"]
         assert offset["default"] is None
@@ -114,14 +113,14 @@ class TestToolSurface:
         and it fires at call time.
         """
         tool = next(t for t in await server.list_tools() if t.name == "fetch")
-        prop = tool.inputSchema["properties"]["provider"]
+        prop = tool.input_schema["properties"]["provider"]
         assert prop["default"] is None
         assert "enum" not in str(prop)
 
     async def test_no_cache_params_survive(self, server):
         """Nothing in the surface promises caching this version does not do."""
         for tool in await server.list_tools():
-            props = tool.inputSchema["properties"]
+            props = tool.input_schema["properties"]
             assert "max_age_seconds" not in props
             assert "refresh_token" not in props
 
@@ -132,7 +131,7 @@ class TestToolSurface:
         in an error at call time.
         """
         search = next(t for t in await server.list_tools() if t.name == "search")
-        prop = search.inputSchema["properties"]["provider"]
+        prop = search.input_schema["properties"]["provider"]
         assert prop["default"] is None
         assert "scrappa" in str(prop)
 
@@ -149,7 +148,7 @@ class TestToolSurface:
         from seekwright.config import KNOWN_PROVIDERS
 
         tool = next(t for t in await server.list_tools() if t.name == tool_name)
-        names = tool.inputSchema["properties"]["provider"]["anyOf"][0]["enum"]
+        names = tool.input_schema["properties"]["provider"]["anyOf"][0]["enum"]
         assert sorted(names) == [
             "algolia",
             "anysearch",
@@ -173,7 +172,7 @@ class TestToolSurface:
 
     async def test_recency_is_the_four_value_enum(self, server):
         search = next(t for t in await server.list_tools() if t.name == "search")
-        prop = search.inputSchema["properties"]["recency"]
+        prop = search.input_schema["properties"]["recency"]
         assert prop["default"] is None
         values = prop["anyOf"][0]["enum"]
         assert sorted(values) == ["day", "month", "week", "year"]
@@ -189,7 +188,7 @@ class TestToolSurface:
         (ROADMAP §6).
         """
         search = next(t for t in await server.list_tools() if t.name == "search")
-        prop = search.inputSchema["properties"]["mode"]
+        prop = search.input_schema["properties"]["mode"]
         assert prop["default"] is None
         # A one-member `Literal` renders as `const`; more members would render
         # as an `enum`. Either way the only value in the schema is a constant.
@@ -198,8 +197,8 @@ class TestToolSurface:
 
     async def test_annotations_mark_both_tools_read_only(self, server):
         for tool in await server.list_tools():
-            assert tool.annotations.readOnlyHint is True
-            assert tool.annotations.openWorldHint is True
+            assert tool.annotations.read_only_hint is True
+            assert tool.annotations.open_world_hint is True
 
 
 _PNG_BODY = b"\x89PNG\r\n\x1a\n" + b"a png body"
@@ -256,8 +255,8 @@ class TestFetchImageContent:
         self, server
     ):
         tool = next(t for t in await server.list_tools() if t.name == "fetch")
-        assert tool.outputSchema is not None
-        assert set(tool.outputSchema["properties"]) == set(FetchResponse.model_fields)
+        assert tool.output_schema is not None
+        assert set(tool.output_schema["properties"]) == set(FetchResponse.model_fields)
 
     async def test_an_image_arrives_as_an_image_block(self, server, monkeypatch):
         fetcher = _StubLocalFetcher(
@@ -268,16 +267,16 @@ class TestFetchImageContent:
             return fetcher, []
 
         monkeypatch.setattr(server_module, "build_fetch_stack", stack)
-        async with create_connected_server_and_client_session(server) as session:
-            result = await session.call_tool("fetch", {"url": "https://img.test/a.png"})
+        async with Client(server) as client:
+            result = await client.call_tool("fetch", {"url": "https://img.test/a.png"})
 
-        assert not result.isError
+        assert not result.is_error
         assert [block.type for block in result.content] == ["text", "image"]
         image = next(b for b in result.content if b.type == "image")
         assert isinstance(image, ImageContent)
-        assert image.mimeType == "image/png"
+        assert image.mime_type == "image/png"
         assert base64.b64decode(image.data) == _PNG_BODY
-        structured = result.structuredContent
+        structured = result.structured_content
         assert structured is not None
         assert structured["content_type"] == "image/png"
         # The bytes ride once: the content block carries them, and the JSON half
@@ -294,15 +293,15 @@ class TestFetchImageContent:
             return _StubLocalFetcher(), []
 
         monkeypatch.setattr(server_module, "build_fetch_stack", stack)
-        async with create_connected_server_and_client_session(server) as session:
-            result = await session.call_tool("fetch", {"url": "https://example.com/a"})
+        async with Client(server) as client:
+            result = await client.call_tool("fetch", {"url": "https://example.com/a"})
 
-        assert not result.isError
+        assert not result.is_error
         assert [block.type for block in result.content] == ["text"]
-        assert result.structuredContent is not None
+        assert result.structured_content is not None
         text = result.content[0]
         assert isinstance(text, TextContent)
-        assert json.loads(text.text) == result.structuredContent
+        assert json.loads(text.text) == result.structured_content
 
 
 class TestSharedContext:
@@ -705,40 +704,51 @@ class TestMainFetchExtractor:
 
 
 class TestAllowedHosts:
-    """DNS-rebinding protection defaults to loopback-only and stays on."""
+    """DNS-rebinding protection defaults to loopback-only and stays on.
 
-    def test_declared_hosts_are_added_not_substituted(self, monkeypatch):
+    mcp 2 moved the setting off `mcp.settings` onto the app factory, so the
+    allowlist is now a value this server builds per listener rather than one
+    mutated in place. The two properties that matter survive the move: the
+    loopback seed is always there, and `--allowed-host` adds to it.
+    """
+
+    def test_the_loopback_names_are_always_seeded(self):
         import seekwright.server as srv
 
-        security = srv.mcp.settings.transport_security
-        assert security is not None
-        monkeypatch.setattr(
-            security, "allowed_hosts", list(security.allowed_hosts), raising=False
-        )
-        monkeypatch.setattr(
-            security, "allowed_origins", list(security.allowed_origins), raising=False
-        )
-        before = list(security.allowed_hosts)
-        assert any("127.0.0.1" in h for h in before)
+        security = srv._transport_security([])
 
-        srv._allow_hosts(["search.internal:*"])
+        assert security.enable_dns_rebinding_protection is True
+        for host in ("localhost", "127.0.0.1", "::1"):
+            assert host in security.allowed_hosts
+            # The port-carrying spelling as well: the matcher compares `Host`
+            # exactly or by a trailing `:*`, and a client sends the port.
+            assert f"{host}:*" in security.allowed_hosts
+        assert "http://127.0.0.1" in security.allowed_origins
+        assert "https://127.0.0.1" in security.allowed_origins
 
-        assert security.allowed_hosts == [*before, "search.internal:*"]
+    def test_declared_hosts_are_added_not_substituted(self):
+        import seekwright.server as srv
+
+        security = srv._transport_security(["search.internal:*"])
+        seeded = srv._transport_security([])
+
+        assert security.allowed_hosts[: len(seeded.allowed_hosts)] == (
+            seeded.allowed_hosts
+        )
+        assert "search.internal:*" in security.allowed_hosts
         assert "http://search.internal:*" in security.allowed_origins
         assert "https://search.internal:*" in security.allowed_origins
         assert security.enable_dns_rebinding_protection is True
 
-    def test_no_declared_hosts_changes_nothing(self, monkeypatch):
+    def test_each_call_builds_a_fresh_object(self):
+        """No shared mutable state between two listeners in one process."""
         import seekwright.server as srv
 
-        security = srv.mcp.settings.transport_security
-        assert security is not None
-        monkeypatch.setattr(
-            security, "allowed_hosts", list(security.allowed_hosts), raising=False
-        )
-        before = list(security.allowed_hosts)
-        srv._allow_hosts([])
-        assert security.allowed_hosts == before
+        first = srv._transport_security(["a.internal"])
+        second = srv._transport_security(["b.internal"])
+
+        assert "b.internal" not in first.allowed_hosts
+        assert "a.internal" not in second.allowed_hosts
 
 
 class TestExaSessionLifetime:
@@ -907,11 +917,6 @@ class TestHealthz:
         manager's task group -- which is also the point, since that manager is
         where the Host check lives.
         """
-        import seekwright.server as srv
-
-        security = srv.mcp.settings.transport_security
-        assert security is not None
-        security.enable_dns_rebinding_protection = True
         transport = httpx.ASGITransport(app=app)
         async with app.router.lifespan_context(app), httpx.AsyncClient(
             transport=transport, base_url="http://testserver"
@@ -1376,7 +1381,11 @@ class TestUvicornLogging:
 
 
 class _FixedContext:
-    """The slice of FastMCP's `Context` the tool bodies read: the app."""
+    """The slice of the server's `Context` the tool bodies read: the app.
+
+    Duck-typed on purpose -- mcp 2's `Context` is generic and validating one
+    properly would mean building a request context. Call sites cast it.
+    """
 
     def __init__(self, app: Any) -> None:
         class _RequestContext:
@@ -1394,6 +1403,8 @@ class TestFetchDisabled:
     import."""
 
     async def test_a_disabled_fetch_refuses_with_a_clean_error(self):
+        from mcp.server.mcpserver.exceptions import ToolError
+
         from seekwright.config import Config, FetchConfig, ProviderConfig
         from seekwright.server import AppContext, fetch
 
@@ -1403,8 +1414,10 @@ class TestFetchDisabled:
         )
         app = AppContext(config=cfg, engine=cast(Any, None), usage=UsageRecorder())
 
-        with pytest.raises(ValueError, match="disabled"):
-            await fetch(_FixedContext(app), "https://example.com/")
+        # `ToolError` is the documented way a tool message reaches the client
+        # under mcp 2; a bare exception's text is replaced there.
+        with pytest.raises(ToolError, match="disabled"):
+            await fetch(cast(Any, _FixedContext(app)), "https://example.com/")
 
     async def test_a_disabled_fetch_builds_no_fetcher_or_fallbacks(
         self, monkeypatch, tmp_path
@@ -1528,10 +1541,16 @@ class TestFreeModeOnTheTool:
         return AppContext(config=cfg, engine=engine, usage=UsageRecorder())
 
     async def test_no_free_provider_enabled_refuses_naming_the_free_set(self, server):
+        from mcp.server.mcpserver.exceptions import ToolError
+
         from seekwright.server import search
 
-        with pytest.raises(ValueError, match="No free provider is enabled") as exc:
-            await search(_FixedContext(self._app("serper")), "sqlite wal mode", mode="free")
+        with pytest.raises(ToolError, match="No free provider is enabled") as exc:
+            await search(
+                cast(Any, _FixedContext(self._app("serper"))),
+                "sqlite wal mode",
+                mode="free",
+            )
 
         text = str(exc.value)
         for name in ("exa:free", "parallel:free", "freeserp", "searxng", "tinyfish"):
@@ -1541,13 +1560,15 @@ class TestFreeModeOnTheTool:
         assert "search" in [t.name for t in await server.list_tools()]
 
     async def test_naming_both_provider_and_mode_refuses(self, server):
+        from mcp.server.mcpserver.exceptions import ToolError
+
         from seekwright.server import search
 
         app = self._app("serper", "exa:free")
 
-        with pytest.raises(ValueError) as exc:
+        with pytest.raises(ToolError) as exc:
             await search(
-                _FixedContext(app),
+                cast(Any, _FixedContext(app)),
                 "sqlite wal mode",
                 provider="serper",
                 mode="free",

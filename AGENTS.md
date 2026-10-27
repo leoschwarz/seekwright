@@ -229,13 +229,14 @@ change to the gate.
   `WireModel`, not `BaseModel`.
 - **`ProviderConfig.cost_per_1k` is `None` by default** and nothing routes on
   it; it only corrects the figure `--check --live` prints.
-- **`lifespan` runs per `Server.run()`, not per process.** Under stdio that is
-  the same thing; under `--http` the session manager calls it *per request*. So
-  the shared httpx client and the provider handshakes live in
-  `build_app_context`, which the HTTP path enters once and parks in
-  `server._shared` for `lifespan` to hand out. Constructing anything expensive
-  in `lifespan` re-does it on every search, silently and only in production.
-  `tests/test_server.py::TestSharedContext` is the guard.
+- **`lifespan` is the session manager's, not the process's.** Under stdio it is
+  entered once; under `--http` mcp 2's session manager enters it at startup, so
+  its scope is the server's, and the shared httpx client has to outlive nothing
+  but the socket — which only `_serve_http` can express. So the client and the
+  provider handshakes live in `build_app_context`, which the HTTP path enters
+  once and parks in `server._shared` for `lifespan` to hand out. Constructing
+  anything expensive in `lifespan` re-does it wherever it is entered, silently
+  and only in production. `tests/test_server.py::TestSharedContext` is the guard.
 - **Logs go to stderr or stdio breaks.** stdout is the JSON-RPC channel, so a
   `print()` on the serving path corrupts the protocol — `--check` is the sole
   exception, because it never runs a server. `tests/test_logs.py` asserts an

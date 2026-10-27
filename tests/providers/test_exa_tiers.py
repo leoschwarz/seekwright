@@ -264,7 +264,7 @@ class TestCost:
 
 
 class TestUpstreamErrors:
-    """`_search_once`'s isError branch: the only place an upstream tool failure
+    """`_search_once`'s `is_error` branch: the only place an upstream tool failure
     becomes an exception, and previously untested."""
 
     def _provider_returning(self, text: str, monkeypatch) -> ExaMcpProvider:
@@ -273,7 +273,7 @@ class TestUpstreamErrors:
         class StubSession:
             async def call_tool(self, *_args: Any, **_kw: Any) -> CallToolResult:
                 return CallToolResult(
-                    content=[TextContent(type="text", text=text)], isError=True
+                    content=[TextContent(type="text", text=text)], is_error=True
                 )
 
         async def _ensure_session() -> Any:
@@ -290,7 +290,7 @@ class TestUpstreamErrors:
             await provider.search(QUERY)
 
     async def test_a_rejected_key_is_an_error_not_a_result(self, monkeypatch):
-        """Verified live: an invalid key comes back as isError inside a
+        """Verified live: an invalid key comes back as `is_error` inside a
         successful MCP call, not as a transport failure."""
         provider = self._provider_returning(
             "web_search_exa error (401): Invalid API key", monkeypatch

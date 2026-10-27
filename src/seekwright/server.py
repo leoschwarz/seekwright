@@ -15,12 +15,16 @@ import json
 import time
 from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 import anyio
 import httpx
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.transport_security import TransportSecurityMiddleware
+from mcp.server.mcpserver import Context, MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from mcp.server.transport_security import (
+    TransportSecurityMiddleware,
+    TransportSecuritySettings,
+)
 from mcp.types import (
     CallToolResult,
     ContentBlock,
@@ -202,13 +206,13 @@ _shared: AppContext | None = None
 
 
 @contextlib.asynccontextmanager
-async def lifespan(_server: FastMCP) -> AsyncGenerator[AppContext]:
+async def lifespan(_server: MCPServer) -> AsyncGenerator[AppContext]:
     """Hand the running server its context.
 
-    `Server.run` enters this once per call: once per process under stdio, but
-    under streamable-http the session manager calls it per request, so building
-    the context here would open a connection pool and re-handshake every
-    MCP-client provider on every search.
+    Building the context here would tie it to the server's own lifetime, and the
+    HTTP path needs it to outlive nothing but the socket: it has to open before
+    `uvicorn.Server.serve()` and close after, which a lifespan the session
+    manager runs cannot express.
 
     The HTTP path therefore builds the context itself and parks it in `_shared`;
     this hands out a reference. Under stdio `_shared` is never set.
@@ -220,17 +224,20 @@ async def lifespan(_server: FastMCP) -> AsyncGenerator[AppContext]:
         yield ctx
 
 
-mcp = FastMCP(
+mcp = MCPServer(
     "seekwright",
     instructions=SERVER_INSTRUCTIONS,
     lifespan=lifespan,
 )
 
 
-# FastMCP matches this annotation against the bare `Context` class at runtime, so
-# it cannot be subscripted even though `Context` is generic -- hence the ignores.
-def _ctx(ctx: Context) -> AppContext:  # ty: ignore[missing-type-argument]
-    return ctx.request_context.lifespan_context
+# The server matches this annotation against the bare `Context` class at runtime,
+# so it cannot be subscripted even though `Context` is generic. That is also why
+# the cast is here: the class is unparameterised, so mcp 2's own typing reads the
+# lifespan value back as `dict[str, Any]`. Through `object` because the two types
+# do not overlap, which is exactly what the cast asserts.
+def _ctx(ctx: Context) -> AppContext:
+    return cast(AppContext, cast(object, ctx.request_context.lifespan_context))
 
 
 # One mapping per operation, run by both encodings: the tool builds the request model, the route validates one from the body.
@@ -285,7 +292,7 @@ def _image_block(response: FetchResponse) -> ImageContent | None:
     image, kind = response.image, response.content_type
     if image is None or not kind or kind not in IMAGE_TYPES:
         return None
-    return ImageContent(type="image", data=image.base64, mimeType=kind)
+    return ImageContent(type="image", data=image.base64, mime_type=kind)
 
 
 def _fetch_tool_result(response: FetchResponse) -> CallToolResult:
@@ -311,7 +318,7 @@ def _fetch_tool_result(response: FetchResponse) -> CallToolResult:
     ]
     if block is not None:
         content.append(block)
-    return CallToolResult(content=content, structuredContent=payload)
+    return CallToolResult(content=content, structured_content=payload)
 
 
 async def _run_answer(engine: AgentEngine, req: AnswerRequest) -> AnswerResponse:
@@ -339,11 +346,11 @@ async def _run_answer(engine: AgentEngine, req: AnswerRequest) -> AnswerResponse
     title="Web Search",
     description=SEARCH_DESCRIPTION,
     annotations=ToolAnnotations(
-        readOnlyHint=True, idempotentHint=True, openWorldHint=True
+        read_only_hint=True, idempotent_hint=True, open_world_hint=True
     ),
 )
 async def search(
-    ctx: Context,  # ty: ignore[missing-type-argument]
+    ctx: Context,
     query: Annotated[
         str,
         Field(
@@ -487,7 +494,14 @@ async def search(
     try:
         return await _run_search(app.engine, req)
     except SearchFailed as exc:
-        raise ValueError(str(exc)) from exc
+        # `ToolError`, not a bare exception. Both reach the client under mcp 2,
+        # but only `ToolError` is the documented contract, and only it is logged
+        # as one line: anything else is reported with a traceback, which this
+        # codebase does not render (a failing adapter has an API key in scope).
+        # This sentence -- which names the providers that would serve the call --
+        # is the product contract, asserted by the feature tests. The REST route
+        # keeps its own `_error`, so both encodings carry the same text.
+        raise ToolError(str(exc)) from exc
 
 
 @mcp.tool(
@@ -495,11 +509,11 @@ async def search(
     title="Fetch Page Text",
     description=FETCH_DESCRIPTION,
     annotations=ToolAnnotations(
-        readOnlyHint=True, idempotentHint=True, openWorldHint=True
+        read_only_hint=True, idempotent_hint=True, open_world_hint=True
     ),
 )
 async def fetch(
-    ctx: Context,  # ty: ignore[missing-type-argument]
+    ctx: Context,
     url: Annotated[
         str,
         Field(
@@ -582,14 +596,14 @@ async def fetch(
     if app.fetch_engine is None:
         # Only `[fetch] enabled = false` gets here; the REST projection hands the
         # same sentence back as its 404.
-        raise ValueError(_FETCH_DISABLED)
+        raise ToolError(_FETCH_DISABLED)
     try:
         req = FetchRequest(
             url=url, offset=offset, query=query, path=path, provider=provider
         )
         response = await _run_fetch(app.fetch_engine, req)
     except FetchFailed as exc:
-        raise ValueError(str(exc)) from exc
+        raise ToolError(str(exc)) from exc
     return _fetch_tool_result(response)
 
 
@@ -598,11 +612,11 @@ async def fetch(
     title="Answer a Question",
     description=ANSWER_DESCRIPTION,
     annotations=ToolAnnotations(
-        readOnlyHint=True, idempotentHint=True, openWorldHint=True
+        read_only_hint=True, idempotent_hint=True, open_world_hint=True
     ),
 )
 async def answer(
-    ctx: Context,  # ty: ignore[missing-type-argument]
+    ctx: Context,
     query: Annotated[
         str,
         Field(
@@ -729,7 +743,7 @@ async def answer(
     if app.agent_engine is None:
         # Only `[agent] enabled = false` gets here; the same constant the REST
         # route answers 404 with, so the two encodings cannot drift apart.
-        raise ValueError(_AGENT_DISABLED)
+        raise ToolError(_AGENT_DISABLED)
     req = AnswerRequest(
         query=query,
         extra_queries=extra_queries,
@@ -744,31 +758,55 @@ async def answer(
     try:
         return await _run_answer(app.agent_engine, req)
     except AgentFailed as exc:
-        raise ValueError(str(exc)) from exc
+        raise ToolError(str(exc)) from exc
 
 
-def _allow_hosts(allowed_hosts: list[str]) -> None:
-    """Widen DNS-rebinding protection to the names this service answers to.
+def _transport_security(allowed_hosts: list[str]) -> TransportSecuritySettings:
+    """Build the Host+Origin allowlist the listener and `_guard` share.
 
-    FastMCP turns protection on with an allowlist of `localhost` and the loopback
-    literals, so a server bound to a routable address rejects every request with
-    `421 Invalid Host header` until the operator says what clients will put in
-    `Host`. That default stays -- it is what stops a web page from driving this
-    server through the user's network -- so the flag adds to the list rather than
-    replacing it.
+    mcp 2 moved transport config off `mcp.settings` onto the app factory, and its
+    auto-enable only fires for a loopback bind -- this server may bind a routable
+    address, so the allowlist is always built here, seeded with the loopback names
+    and widened with the operator's.
 
-    Origins are widened in step, under both schemes: a browser client that got
-    past the Host check only to fail on Origin would debug a second, near
-    identical 403 for the same reason.
+    Both spellings of the loopback entries: bare names (v1 style, what `_guard`
+    matched before) and `host:*` patterns (what mcp 2's auto-enable uses). The
+    matcher compares `Host` exactly or by trailing `:*` pattern, and a client
+    almost always sends the port, so the bare names alone would refuse every
+    request through `_guard`.
+
+    Widening, never narrowing: the loopback seed is what stops a web page from
+    driving this server through the user's network, so `--allowed-host` adds to it
+    rather than replacing it. Origins are widened in step, under both schemes: a
+    browser client that got past the Host check only to fail on Origin would debug
+    a second, near identical 403 for the same reason.
     """
-    security = mcp.settings.transport_security
-    if security is None or not allowed_hosts:
-        return
-    security.allowed_hosts = [*security.allowed_hosts, *allowed_hosts]
-    security.allowed_origins = [
-        *security.allowed_origins,
-        *(f"{scheme}://{h}" for h in allowed_hosts for scheme in ("http", "https")),
-    ]
+    loopback = ("localhost", "127.0.0.1", "::1")
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=[
+            *loopback,
+            *(f"{h}:*" for h in loopback),
+            "[::1]:*",
+            *allowed_hosts,
+        ],
+        allowed_origins=[
+            *(
+                f"{scheme}://{h}"
+                for h in (*loopback, *allowed_hosts)
+                for scheme in ("http", "https")
+            ),
+        ],
+    )
+
+
+_transport_security_settings: TransportSecuritySettings | None = None
+"""The allowlist the running listener was built with. Set by `_serve_http`.
+
+`_guard` reads it for the custom routes, which sit outside the transport where
+the check actually runs. `None` means no listener is up -- under stdio, or in a
+test that builds the app itself.
+"""
 
 
 _started_at: float | None = None
@@ -822,9 +860,14 @@ async def _guard(request: Request) -> Response | None:
     allowlist, and a browser needs the name it types in `--allowed-host`. Returns
     the refusal response, or None to proceed.
     """
-    settings = mcp.settings.transport_security
-    if settings is None:
-        return None
+    settings = (
+        _transport_security_settings
+        if _transport_security_settings is not None
+        # No listener was built by this process -- a test driving the app
+        # directly. The loopback seed alone is the v1 default this replaces; the
+        # bare constructor would carry an empty allowlist and refuse everything.
+        else _transport_security([])
+    )
     return await TransportSecurityMiddleware(settings).validate_request(
         request, is_post=False
     )
@@ -1060,13 +1103,14 @@ async def _serve_http(
     which builds the app and serves it in one call, leaving nowhere to open
     `build_app_context` around it.
 
-    The server is stateless: with `_shared` in place a per-request `lifespan` is a
-    bare yield. Statelessness also avoids `StreamableHTTPSessionManager` tracking
+    The server is stateless: with `_shared` in place `lifespan` is a bare yield
+    however often the session manager enters it. Statelessness also avoids
+    `StreamableHTTPSessionManager` tracking
     stateful sessions in a dict with no idle timeout by default, so every client
     that ever connected holds a slot until restart. Nothing here needs a session:
     the tools are request/response.
     """
-    global _shared
+    global _shared, _transport_security_settings
 
     import uvicorn
 
@@ -1087,14 +1131,20 @@ async def _serve_http(
         # The data route's `endpoints` key alone, for a script.
         mcp.custom_route("/dashboard/metrics", methods=["GET"])(dashboard_metrics)
 
+    security = _transport_security(allowed_hosts)
+    # Before the socket opens: `_guard` serves the custom routes, and a request
+    # arriving between the two lines would be checked against the previous
+    # allowlist.
+    _transport_security_settings = security
+
     async with build_app_context(config) as ctx:
         _shared = ctx
         try:
-            mcp.settings.stateless_http = True  # read when the app is built, below
-            _allow_hosts(allowed_hosts)
             server = uvicorn.Server(
                 uvicorn.Config(
-                    mcp.streamable_http_app(),
+                    mcp.streamable_http_app(
+                        stateless_http=True, transport_security=security
+                    ),
                     host=host,
                     port=port,
                     # `None`, not uvicorn's built-in config: it points
@@ -1112,6 +1162,10 @@ async def _serve_http(
             await server.serve()
         finally:
             _shared = None
+            # Last, with the socket: once this is gone `_guard` falls back, so a
+            # request in flight against the dying listener is checked against the
+            # allowlist the listener was actually built with.
+            _transport_security_settings = None
 
 
 def main(

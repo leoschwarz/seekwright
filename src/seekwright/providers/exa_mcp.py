@@ -4,8 +4,9 @@ The one adapter where we are an MCP *client*, which is why it exists in v1: it
 exercises the riskiest integration path. Two things verified against the live
 endpoint (``https://mcp.exa.ai/mcp``) shape this code:
 
-* ``streamablehttp_client`` yields a **3-tuple** ``(read, write, get_session_id)``
-  -- unlike ``stdio_client``'s 2-tuple.
+* ``streamable_http_client`` yields a **2-tuple** ``(read, write)``, like every
+  other transport since mcp 2; the third element (a ``get_session_id`` callable)
+  is gone.
 * The server returns **plain formatted text**, not ``structuredContent`` (which
   comes back empty), so results are parsed out of a ``Title:``/``URL:``/
   ``Published:``/``Highlights:`` block format.
@@ -19,10 +20,13 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import re
-from datetime import timedelta
 from typing import Any
 
-import httpx
+# Not `httpx`: mcp 2 speaks httpx2, and a client of the wrong type is accepted
+# by `streamable_http_client(http_client=...)` but silently stops delivering the
+# server-to-client messages this session needs. Our own HTTP adapters stay on
+# `httpx`; the two libraries coexist in the same process.
+import httpx2
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 from mcp.types import TextContent
@@ -91,16 +95,20 @@ class ExaMcpProvider:
         assert self._ready is not None and self._shutdown is not None
         try:
             async with contextlib.AsyncExitStack() as stack:
-                # Auth goes through a pre-configured httpx client, not a `headers` kwarg.
+                # Auth goes through a pre-configured client, not a `headers` kwarg --
+                # and it has to be an `httpx2` one: that is the type the transport
+                # was written against, and httpx is API-identical but is a different
+                # class, so passing one degrades the session quietly rather than
+                # raising.
                 http_client = None
                 if self._api_key:
                     http_client = await stack.enter_async_context(
-                        httpx.AsyncClient(
+                        httpx2.AsyncClient(
                             headers={"Authorization": f"Bearer {self._api_key}"},
                             timeout=self._timeout,
                         )
                     )
-                read, write, _get_session_id = await stack.enter_async_context(
+                read, write = await stack.enter_async_context(
                     streamable_http_client(self._url, http_client=http_client)
                 )
                 session = await stack.enter_async_context(ClientSession(read, write))
@@ -193,14 +201,16 @@ class ExaMcpProvider:
         result = await session.call_tool(
             self._tool_name,
             self._tool_args(q),
-            read_timeout_seconds=timedelta(seconds=self._timeout),
+            # Seconds, as a float: mcp 2 dropped the timedelta form, and the
+            # TypeError it would raise lands after the request is on the wire.
+            read_timeout_seconds=self._timeout,
         )
 
         text = "\n".join(
             block.text for block in result.content if isinstance(block, TextContent)
         )
 
-        if result.isError:
+        if result.is_error:
             lowered = text.lower()
             if "rate" in lowered or "quota" in lowered or "429" in lowered:
                 raise QuotaExhausted(self.name, "rate limited")

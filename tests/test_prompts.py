@@ -129,7 +129,7 @@ class TestTheUnbilledSetIsNamed:
         from seekwright.server import mcp
 
         search = next(tool for tool in await mcp.list_tools() if tool.name == "search")
-        description = search.inputSchema["properties"]["mode"]["description"]
+        description = search.input_schema["properties"]["mode"]["description"]
 
         assert UNBILLED_ANCHOR in " ".join(description.split())
         assert _unbilled_names_in(description) == set(FREE_PROVIDERS)

@@ -19,8 +19,7 @@ run inside a single ``asyncio.run`` in the when-step.
 import asyncio
 import json
 
-from mcp import types
-from mcp.shared.memory import create_connected_server_and_client_session
+from mcp import Client, types
 from pytest_bdd import given, parsers, scenarios, then, when
 
 from seekwright import server
@@ -73,8 +72,8 @@ def _text(result: types.CallToolResult) -> str:
 
 def _call_search(arguments: dict[str, object]) -> types.CallToolResult:
     async def run() -> types.CallToolResult:
-        async with create_connected_server_and_client_session(server.mcp) as session:
-            return await session.call_tool("search", arguments)
+        async with Client(server.mcp) as client:
+            return await client.call_tool("search", arguments)
 
     return asyncio.run(run())
 
@@ -215,7 +214,7 @@ def searching_without_provider() -> types.CallToolResult:
 
 @then("the call comes back as an error")
 def the_call_is_an_error(result: types.CallToolResult) -> None:
-    assert result.isError, f"expected a tool error, got {_text(result)!r}"
+    assert result.is_error, f"expected a tool error, got {_text(result)!r}"
 
 
 @then(parsers.parse("the error names {name} as available"))
@@ -250,7 +249,7 @@ def the_error_names_the_whole_literal(result: types.CallToolResult) -> None:
 def serper_ran_the_search(
     result: types.CallToolResult, providers: dict[str, StubProvider]
 ) -> None:
-    assert not result.isError, _text(result)
+    assert not result.is_error, _text(result)
     assert providers["serper"].calls == 1
 
 
@@ -258,7 +257,7 @@ def serper_ran_the_search(
 def linkup_ran_and_the_notice_names_the_substitute(
     result: types.CallToolResult, providers: dict[str, StubProvider]
 ) -> None:
-    assert not result.isError, _text(result)
+    assert not result.is_error, _text(result)
     payload = json.loads(_text(result))
     assert payload["provider"] == "linkup"
     assert "serper failed (upstream 503)" in payload["notice"]
@@ -351,6 +350,6 @@ def the_agent_retries_and_the_search_runs(
     it suggests works without a second failure."""
     retry = _call_search({"query": "sqlite wal mode", "provider": provider})
 
-    assert not retry.isError, _text(retry)
+    assert not retry.is_error, _text(retry)
     assert json.loads(_text(retry))["provider"] == provider
     assert providers[provider].calls == 1
