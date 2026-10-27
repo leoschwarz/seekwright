@@ -19,9 +19,17 @@ jobs:
     # inherits the runner default.
     timeout-minutes: 30
     # The release write needs contents: write; the ghcr.io push uses the
-    # automatic GITHUB_TOKEN.
+    # automatic GITHUB_TOKEN, and naming any scope here zeroes the ones it does
+    # not name, so the package write is spelled out beside it.
     permissions:
       contents: write
+      packages: write
+    # The runner exposes that token as a workflow context only: it sets no
+    # GITHUB_TOKEN variable in the environment, and `gh` reads GH_TOKEN alone. So
+    # the one name is handed to every step here, and the registry login below
+    # spends GH_TOKEN rather than a variable that reads empty.
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
       # The tag/main guard below needs `main` to be fetchable, so no shallow clone.
       - uses: actions/checkout@v7
@@ -121,7 +129,7 @@ jobs:
           IMAGE="ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF_NAME}"
           # The release tag names no commit, so GITHUB_SHA goes in as a label.
           DOCKER_BUILDKIT=1 docker build --file Containerfile --build-arg SEEKWRIGHT_REVISION="$GITHUB_SHA" --tag "$IMAGE" .
-          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
           docker push "$IMAGE"
           echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "PUSHED $IMAGE"
