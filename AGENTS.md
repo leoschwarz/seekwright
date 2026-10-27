@@ -17,9 +17,9 @@ and billed with a key.
 The `answer` operation (agent mode, decided 2026-10-13) is built and **off by
 default** (`[agent] enabled = false`); its contract is
 [`docs/reference/agent-mode.md`](docs/reference/agent-mode.md) and its open
-questions are ROADMAP §8. With it on, one operator-configured model writes prose
-over material the server retrieved, and the server builds `sources` from the
-citations it can validate.
+questions are in [`docs/ROADMAP.md`](docs/ROADMAP.md). With it on, one
+operator-configured model writes prose over material the server retrieved, and
+the server builds `sources` from the citations it can validate.
 
 This is v1: a proxy and nothing else. There is deliberately **no cache** — every
 `search` call reaches a provider. Read
@@ -133,13 +133,13 @@ change to the gate.
   Three scoped reversals are on record: a default-route `search` walks the
   operator-ordered `[search] fallback` ladder when the default fails, and a named
   provider stays terminal; a caller-declared `search(mode="free")` route
-  restricted to providers that cannot bill (ROADMAP §6); and a bare `search`
+  restricted to providers that cannot bill; and a bare `search`
   with no default on a deployment whose reachable names are all free, served
-  from that same walk (ROADMAP §9). Both free-set conditions read the *effective*
+  from that same walk. Both free-set conditions read the *effective*
   set (`enabled ∩ permitted`), so `permitted_providers` narrows them — see
   [`docs/reference/allow-list.md`](docs/reference/allow-list.md). Routing *by
-  task* stays declined until ROADMAP §3 clears; §5's ceiling was never this
-  route's binding gate, since the free-set-restricted form cannot bill.
+  task* stays declined until measured per-task defaults exist; a spend ceiling
+  was never this route's gate, since the free-set-restricted form cannot bill.
 - **Providers are opt-in; the empty set is the keyless set.** A config that
   enables nothing — no `[providers]` block, an empty one, or every entry
   disabled — resolves to `exa:free`, `parallel:free` and `freeserp`, the names
@@ -297,13 +297,13 @@ change to the gate.
   Invalid Host header` means a name is missing from that list, not that the
   check should be disabled.
 - **The model in agent mode must never drive retrieval** (`answer` is the third
-  tool: ROADMAP §8). The shape it takes: a fixed plan — the caller's query plus
+  tool). The shape it takes: a fixed plan — the caller's query plus
   ≤2 extra queries, `max_results=5` each, up to three pages for
   `depth="report"` — feeding **exactly one** model call over the material, so the
   per-call cost is bounded by arithmetic and not by accounting. A loop in which
   the model asks for another search would make the cost the model's decision and
-  put accounting back on the serving path — the ledger ROADMAP §5 declined
-  (2026-10-14). `[agent]` is off by default; the model, the prompt, the
+  put accounting back on the serving path — the ledger a spend ceiling would
+  need, which is declined. `[agent]` is off by default; the model, the prompt, the
   temperature and the token budget are the server's, never tool parameters; the
   citations are the server's (validated against what it retrieved), only the
   prose is the model's. `search` and `fetch` are untouched by all of it
@@ -434,7 +434,9 @@ a head that was live when a record named it and unreachable four minutes later
 
 ## Docs
 
-[`docs/index.md`](docs/index.md) is the map, and the only place the shape of
+[`VISION.md`](VISION.md) holds the project's goals, their precedence and its
+non-goals: read it before deciding whether something belongs in this project at
+all. [`docs/index.md`](docs/index.md) is the map, and the only place the shape of
 `docs/` is written down: every page, its kind, which kind goes where, and why a
 page's path and dated headings are never renamed for tidiness — both are cited
 from `src/` and `tests/` comments and from dated records, so a move is a sweep no

@@ -5,9 +5,9 @@ server decides what to fetch -- the caller's question, up to two extra queries,
 five results from each, and up to three pages through the fetch ladder -- and
 the model writes prose over that material. Letting the model loop over
 ``search`` and ``fetch`` would make the per-call cost the *model's* decision,
-enforced only by the reserve-then-reconcile ledger ROADMAP §5 declines. A fixed
-plan costs a bounded amount by arithmetic, so there is exactly one model call
-per ``answer`` and no loop anywhere in this module.
+bounded only by a reserve-then-reconcile spend ceiling -- which is declined. A
+fixed plan costs a bounded amount by arithmetic, so there is exactly one model
+call per ``answer`` and no loop anywhere in this module.
 
 The client is one POST to an OpenAI-compatible ``/chat/completions`` on the
 shared ``httpx`` client -- no SDK, and no tokenizer: the endpoint reports

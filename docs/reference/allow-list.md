@@ -1,7 +1,7 @@
 # The allow-list
 
-The contract for the permission set over provider names. [ROADMAP.md](../ROADMAP.md)
-§9, paragraph **"Tier x"**, is the tier itself.
+The contract for the permission set over provider names. It is onboarding's fourth
+tier in [quickstart.md](../quickstart.md).
 
 ## What it is
 
@@ -61,7 +61,7 @@ cross-cutting — it covers `search` and `fetch` — so it cannot live under
 name set and the other three call limits.
 
 **Why that name.** The feature is called *the allow-list* — the maintainer's word,
-this page's title, and how ROADMAP §9 names the tier — but the key is
+this page's title — but the key is
 `permitted_providers`. The tree already spells `allow*` for two other checks, and
 a third `allow*` key would be read as one of them. The name also makes the key
 findable from the error: the refusal says *not permitted*, so the word an

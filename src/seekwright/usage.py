@@ -2,8 +2,8 @@
 
 The journal is append-only JSONL, one line per terminal call, read back only by
 the dashboard at start and on refresh. Nothing on the serving path reads the
-file, so it is not a cache returning by another name. ROADMAP §5 declines the
-ceiling a ledger was reserved for.
+file, so it is not a cache returning by another name. A spend ceiling is
+declined; one built later would read this journal.
 
 Content-free by construction: a line holds counts, money, timing and a provider
 or fallback *name*, never query text, URLs, hosts, titles or extracted text.

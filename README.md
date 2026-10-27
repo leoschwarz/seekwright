@@ -12,7 +12,7 @@ or a skill file reaches them too.
 ## Run it
 
 The clone is the install path in 0.1.0 — nothing is on PyPI, and
-[ROADMAP](docs/ROADMAP.md) §1 is what distribution still owes — though a tagged
+[the roadmap](docs/ROADMAP.md) is what distribution still owes — though a tagged
 release files the wheel on its GitHub Release and pushes the image to `ghcr.io`.
 It needs Python 3.14 or newer.
 
@@ -135,6 +135,7 @@ how people here behave with each other is [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.m
 | what `fetch` guards against, and what it does not | [fetch safety](docs/reference/fetch-safety.md) |
 | how the code is shaped, and why | [architecture](docs/architecture.md) |
 | what is next, and what gates it | [roadmap](docs/ROADMAP.md) |
+| why it exists: goals, precedence, non-goals | [vision](VISION.md) |
 | everything else, with each page's kind | [docs/index.md](docs/index.md) |
 
 `uv run pytest` runs the suite, and [CONTRIBUTING.md](CONTRIBUTING.md) carries the

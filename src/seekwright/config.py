@@ -450,9 +450,8 @@ class DashboardConfig(Section):
     """The browser usage dashboard served under ``--http`` (see ``dashboard.py``).
 
     Reports aggregates only -- counts, money, timing and provider names -- never
-    query text, URLs or content. It is a journal, not a spend ledger: the ceiling
-    a ledger was reserved for is declined (ROADMAP §5), and a ceiling built later
-    reads this journal.
+    query text, URLs or content. It is a journal, not a spend ledger: a spend
+    ceiling is declined, and one built later would read this journal.
     """
 
     # Rides the same no-auth listener as /mcp -- the bind address is the access

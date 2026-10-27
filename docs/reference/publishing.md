@@ -18,7 +18,7 @@ without an index to name:
   built from.
 
 0.1.0 publishes **no PyPI.org artifact**: the release asset and the image are the two
-artifacts, and a PyPI.org release stays open work in [ROADMAP §1](../ROADMAP.md) — one
+artifacts, and a PyPI.org release stays open work in [the roadmap](../ROADMAP.md) — one
 `uv publish` step and a repository credential this repository does not hold yet. Until
 it exists there is no bare `uvx seekwright` spawn: the only documented install is the
 clone plus `uv sync` in the [quickstart](../quickstart.md), which carries `fetch`'s
@@ -114,7 +114,7 @@ smoke steps never run, and the registry gains nothing.
 4. **The image tag keeps the leading `v`, and it is the only name.** The release pushes
    exactly `ghcr.io/leoschwarz/seekwright:v0.1.0`. Pushing an unqualified `0.1.0`
    beside it is rejected: two pullable names for one release is how an image goes
-   unnoticed. A moving `latest` tag is open work in [ROADMAP §1](../ROADMAP.md).
+   unnoticed. A moving `latest` tag is open work in [the roadmap](../ROADMAP.md).
 
 ## What a publish run has to show
 
@@ -155,9 +155,8 @@ publish answered.
 
 - **Item 1, every release-critical issue closed: open work, not answerable from the
   tree.** What the tree does answer is the freeze: the three `--check` instruments of
-  item 3 exit 0, and the **Out** verdicts in [ROADMAP](../ROADMAP.md) hold. Which issues
-  are release-critical is the tracker's answer, and this repository acquires one when it
-  is published.
+  item 3 exit 0. Which issues are release-critical is the tracker's answer, and this
+  repository acquires one when it is published.
 - **Item 2, the release commit is green: verified.** `uv run ruff check` prints
   `All checks passed!`, `uv run ty check` prints `All checks passed!`, and
   `uv run pytest -q` exits 0 with no failures. The counts on those lines are read off

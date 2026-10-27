@@ -3,7 +3,8 @@
 The documentation surface of this project and its design record in the same
 tree. Read the [README](../README.md) for what the project is, the
 [quickstart](quickstart.md) for a first run, then the reference page that covers
-what you are about to touch. The dated surveys, the decision record and the
+what you are about to touch. The project's goals, precedence and non-goals are
+[VISION.md](../VISION.md). The dated surveys, the decision record and the
 roadmap are the reasoning those pages rest on: worth reading before changing
 something structural, never needed to use the server. Open work lives in
 [ROADMAP.md](ROADMAP.md), not here.
@@ -171,7 +172,7 @@ None of it names a contract, and all of it is cited as it was written.
   alternative it rejected and the page that now owns the rule. Read it before changing
   anything structural; nothing in `src/`, `tests/` or `tools/` cites it by date.
 - **survey** — [Keyless and free-no-account coverage survey](reference/free-providers-survey.md)
-  — the ROADMAP §9 coverage question, answered as one dated verdict per candidate,
+  — the free-provider coverage question, answered as one dated verdict per candidate,
   with the tier-1 test and the parsers the 2026-10-13 no-scrape rule rejects.
   `providers.md` keeps the per-candidate records its code citations point at; the
   verdicts are here.

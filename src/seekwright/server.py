@@ -399,7 +399,7 @@ async def search(
     mode: Annotated[
         # Constants only, like `provider`: the annotation is `eval`'d against module
         # globals at import, so config values raise NameError. `"task"` is reserved
-        # and stays absent until ROADMAP §3 clears.
+        # and stays absent until measured per-task defaults exist.
         Literal["free"] | None,
         Field(
             None,

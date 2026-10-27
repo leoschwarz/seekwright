@@ -133,8 +133,8 @@ same listener inherits that exactly and offers nothing `/mcp` does not already
 offer the same reachable set.
 
 What *would* be a reversal is making the REST API multi-user. The gate is
-**auth** on the listener, which sits on ROADMAP's deliberately-not list — not a
-spend/call ceiling: ROADMAP §5's ledger is declined and was never the gate. A
+**auth** on the listener, which [VISION.md](../VISION.md) names as a non-goal —
+not a spend/call ceiling: a ceiling is declined and was never the gate. A
 per-caller budget needs auth *and* a ceiling; a route that cannot bill needs
 neither. So:
 
@@ -212,8 +212,8 @@ Constraints on the implementation:
 The omissions are decisions.
 
 - **No auth, no tokens, no OAuth, no per-caller identity, no quotas or
-  budgets.** Auth is the gate anything per-caller would need first; ROADMAP's
-  deliberately-not list holds it, and §5's ceiling was never the gate.
+  budgets.** Auth is the gate anything per-caller would need first; it is a
+  non-goal in [VISION.md](../VISION.md), and a spend ceiling was never the gate.
 - **No multi-user anything**: no tenancy, no per-key accounting, no
   caller-attributed audit.
 - **No cache** — no cache endpoints, headers or semantics. Every `search`

@@ -1,6 +1,6 @@
 # Keyless and free-no-account coverage survey
 
-Survey date: 2026-10-17. This document answers the ROADMAP §9 coverage question —
+Survey date: 2026-10-17. This document answers the free-provider coverage question —
 whether the tree is leaving free coverage on the table — as a survey, not an
 implementation. It consolidates and updates the survey material already in the
 tree:
@@ -20,7 +20,7 @@ end, which are recorded as separate issues.
 ## The tier 1 test
 
 Tier 1 is the maintainer's wording: **no account, no key, no card, plus a real
-contract — a documented API with documented limits** (ROADMAP §9; the 2026-10-14
+contract — a documented API with documented limits** (the 2026-10-14
 survey in `reference/providers.md`). The readings it carries, unchanged:
 
 - a metered allowance can bill, so it is tier 2/3 however generous;

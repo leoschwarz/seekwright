@@ -512,7 +512,9 @@ prices behind the seventeen names are in
 ## Deliberate non-features
 
 These are decisions with entries in [`decisions.md`](decisions.md), not gaps
-waiting to be filled. Reversing one is a decision, not an oversight.
+waiting to be filled. Reversing one is a decision, not an oversight. The intent
+behind each is [`VISION.md`](../VISION.md)'s non-goals; this section is how one
+works.
 
 - **No cache.** Every `search` reaches a provider, which is why a provider
   failure is terminal rather than degrading to older data, and why the usage
@@ -524,6 +526,15 @@ waiting to be filled. Reversing one is a decision, not an oversight.
   FastMCP's loopback allowlist rather than replacing it. `/healthz` sits outside
   that allowlist on purpose, so a kubelet probe works, and stays secret-free.
   See [`reference/container.md`](reference/container.md).
+- **No spend ceiling.** A per-caller or per-day cap was declined: with no caller
+  identity it could only be one deployment-global limit, `cost_usd` is a declared
+  figure no channel here verifies against a price change, and the usage journal
+  has a single event-loop-confined writer, so it needs no
+  reserve-then-reconcile. Four things reopen it, any one alone: auth being
+  committed, a measured declared-vs-invoiced comparison, an overspend the
+  dashboard missed, or a second operator. If it is built it reads the journal,
+  not a second store — agent mode's `max_cost_usd` already reads the in-memory
+  aggregate mid-dispatch.
 - **No router, and nothing picks the cheapest.** Nothing reads the query and
   `cost_per_1k` is reporting-only, so no caller is billed at a price it never
   named. Four scoped reversals are on record: the default-route
@@ -531,10 +542,9 @@ waiting to be filled. Reversing one is a decision, not an oversight.
   (both above), a caller-declared `search(mode="free")` route restricted to
   providers that cannot bill (`config.FREE_PROVIDERS`, walked by
   `SearchEngine._resolve_free`), and an unnamed `search` where every enabled name
-  is free. Routing *by task* remains declined, gated on measured defaults (§3):
-  [`ROADMAP.md` §6](ROADMAP.md) carries the contract and the gates a task router
-  must clear — a caller-*declared* `task`, never inferred from the query's shape,
-  and §3's per-task numbers first.
+  is free. Routing *by task* remains declined until measured per-task defaults
+  exist: if it lands it takes a caller-*declared* `task`, never inferred from the
+  query's shape.
 - **No host allow-list inside the application.** There is no `egress_allowlist`
   key: which hosts a search may reach follows from which provider names the
   config enables, so the key would be a second copy of the deployment's

@@ -226,9 +226,8 @@ measured $/1k  =  declared $/1k × (billed calls / all terminal calls)
 ```
 
 A 20% terminal-failure rate therefore reads as "the provider got 20% cheaper".
-The disagreement [ROADMAP](../ROADMAP.md) §2 asks about is a price signal only
-over billed calls, so read `calls` against `errors` before treating a shortfall
-as a repricing.
+That disagreement is a price signal only over billed calls, so read `calls`
+against `errors` before treating a shortfall as a repricing.
 
 ### The latency population
 

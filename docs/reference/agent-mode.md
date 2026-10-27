@@ -2,8 +2,8 @@
 
 The third operation: a question in, a grounded prose answer out, with citations
 the server validated — the one place a model runs *inside* this server. It is off
-by default (`[agent] enabled = false`) and built in full. [ROADMAP.md](../ROADMAP.md)
-§8 holds only the questions the operation leaves open. This page is its contract
+by default (`[agent] enabled = false`) and built in full; the questions it leaves
+open are in [ROADMAP.md](../ROADMAP.md). This page is its contract
 for the boundary, cost control, the ranking data and the failure contract.
 
 ## What it is, and what it is not
@@ -228,7 +228,7 @@ reader carries no figure. The price is declared, not invoiced.
 The operator, whose exposure this page's boundary and ceiling sections already
 describe.
 
-- **ROADMAP §5's per-caller ceiling is declined (2026-10-14) and is not a
+- **A per-caller spend ceiling is declined (2026-10-14) and is not a
   precondition for this per-call bound**, because the bound is arithmetic and
   stateless. Auth, not a ceiling, is the precondition for offering agent mode to
   more than one trusted operator; multi-user stays declined until that separate
@@ -303,11 +303,12 @@ mid-call — keeps its `retrieved` and gains no `cited`.
 
 ### What it is not
 
-**Not a gold-set replacement, and §3's gates stand.** The gold set scored against
+**Not a gold-set replacement, and the gold-set gates stand.** The gold set scored against
 keys a human verified; live traffic has no ground truth. A provider whose results
 got cited is not thereby correct, and the data is selected by whatever the default
 route already served. Agent mode adds a second, cheaper, uncontrolled instrument
-for drift and provider choice, not the controlled one ROADMAP §3 waits on.
+for drift and provider choice, not the controlled one measured per-task defaults
+wait on.
 
 What lands here are counts, not content, and the gold set stays out of the server.
 

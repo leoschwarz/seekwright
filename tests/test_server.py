@@ -185,7 +185,7 @@ class TestToolSurface:
         raise `NameError` before the server ever started -- the same reason
         `provider` lists every adapter rather than this deployment's set.
         `"task"` is the reserved second member and is deliberately absent
-        (ROADMAP §6).
+        until measured per-task defaults exist.
         """
         search = next(t for t in await server.list_tools() if t.name == "search")
         prop = search.input_schema["properties"]["mode"]

@@ -93,7 +93,7 @@ usage: `ProviderResult._reported_cost_usd` (`TavilyProvider.search`), bound as
 never on the wire and not a journal field. Both sides use the same local `cost_per_1k`
 (`TavilyProvider.cost_for` for the estimate), so their diff is the **credit count**
 consumed (1 `basic`, 2 `advanced`), never a price: a Tavily repricing moves neither, and
-the drift question in ROADMAP **§2** stays open.
+the drift between recorded and published prices stays unmeasured.
 - Failure classification: 401/403 auth (non-retryable); **429 and 432 quota**
 (432 is the monthly-credit-exhausted code); other ≥400 generic.
 - Cost: **1,000 credits/month free**, then $0.008/credit pay-as-you-go;

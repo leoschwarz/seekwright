@@ -1355,9 +1355,9 @@ class TestNoDrift:
     def test_country_stays_off_the_api_while_language_and_safe_search_are_on_it(self):
         """`SearchQuery` carries all three; only two are tool parameters.
 
-        `country` is exposed by neither encoding -- §4 named language, not geo,
-        and exposing it is its own decision -- so the REST body must not carry
-        it. `language` and `safe_search` *are* tool parameters, and the body is
+        `country` is exposed by neither encoding -- the model-facing fields name
+        language, not geo, and exposing it is its own decision -- so the REST body
+        must not carry it. `language` and `safe_search` *are* tool parameters, and the body is
         the tool's parameter set, so both are projected.
         """
         assert {"country", "language", "safe_search"} <= set(SearchQuery.model_fields)
