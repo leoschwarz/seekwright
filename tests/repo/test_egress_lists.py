@@ -42,6 +42,10 @@ COMPOSE = BUNDLE / "compose.yaml"
 # The published image both roles run; the tag is the release, and a local build replaces it.
 IMAGE = "ghcr.io/leoschwarz/seekwright:${SEEKWRIGHT_TAG:-v0.1.0}"
 
+# The `_edge` tag moves underneath its name (it shipped Squid 6.14 while reading 6.6), so the
+# digest pins the build the bundle's ACL syntax was verified against; refresh it consciously.
+SQUID_IMAGE = "ubuntu/squid:6.6-24.04_edge@sha256:8a3baed477e2c282ab8aa5edad442f69873246964f225c5c2ae8364b6610963c"
+
 # Every path the bundle needs in a clone, named exactly once here; `.gitignore` names the subtree once.
 TRACKED = (
     "deploy/compose/.env.example",
@@ -407,7 +411,7 @@ def test_every_generated_list_is_read_by_a_proxy_and_mounted() -> None:
     """
     named: set[str] = set()
     for conf in sorted(SQUID.glob("*.conf")):
-        named |= set(re.findall(r"dstdomain /etc/squid/lists/([A-Za-z0-9._-]+)", read(conf)))
+        named |= set(re.findall(r'dstdomain "/etc/squid/lists/([A-Za-z0-9._-]+)"', read(conf)))
     unread = sorted(named - set(GENERATED_LISTS))
     assert not unread, f"these Squid configs read a list the tree does not render: {unread}"
     unused = sorted(set(GENERATED_LISTS) - named)
@@ -441,6 +445,21 @@ def test_the_two_roles_keep_opposite_default_policies() -> None:
     )
 
 
+def test_every_squid_file_acl_quotes_its_path() -> None:
+    """An unquoted path is a domain to Squid, not a file.
+
+    The release's `6.6-24.04_edge` tag moved to Squid 6.14, every list-backed ACL silently matched
+    nothing, and the search proxy answered `TCP_DENIED` for its own providers (observed 2026-10-27).
+    The quoted form is the file syntax on every Squid this bundle can meet.
+    """
+    for conf in sorted(SQUID.glob("*.conf")):
+        text = read(conf)
+        assert not re.search(r"dstdomain\s+/etc", text), (
+            f"{conf.name}: a file ACL path must be quoted, or Squid reads it as a literal domain"
+        )
+        assert re.search(r'dstdomain "/etc/squid/lists/', text), f"{conf.name} reads no list file"
+
+
 def test_compose_gives_each_role_its_own_proxy_and_no_route_around_it() -> None:
     """Two role networks, both `internal`, and only the proxies reach the network with a route out.
 
@@ -467,6 +486,28 @@ def test_compose_gives_each_role_its_own_proxy_and_no_route_around_it() -> None:
         assert f"networks: [{role}-egress, egress]" in block.group(1), (
             f"{proxy} must bridge {role}-egress and the network with a route out, not the other role's"
         )
+    # The listener is published by a forwarder, not the role: Docker maps no port for a container
+    # whose networks are all internal. The forwarder dials one address and carries no key, no env
+    # and no volume, so it is publish plumbing rather than a route around the proxy.
+    assert re.search(r"^  ingress:\n(?!    internal)", compose, re.MULTILINE), (
+        "the forwarders need one network ports can be published from; it must not be internal"
+    )
+    for role in ("search", "fetch"):
+        forwarder = re.search(rf"^  {role}-ingress:\n((?:    .+\n)+)", compose, re.MULTILINE)
+        assert forwarder, f"compose has no {role}-ingress service"
+        body = forwarder.group(1)
+        assert f"networks: [{role}-egress, ingress]" in body, (
+            f"{role}-ingress must bridge its role network and the publish network only"
+        )
+        assert f"depends_on: [{role}]" in body
+        assert "cap_drop: [ALL]" in body
+        assert not re.search(r"^\s*env(_file)?:", body, re.MULTILINE) and "volumes:" not in body, (
+            "a forwarder that dials one address carries no configuration of its own"
+        )
+        assert f"TCP:{role}:8000" in body, f"{role}-ingress must forward to the {role} role only"
+    for proxy in ("search-proxy", "fetch-proxy"):
+        block = re.search(rf"^  {proxy}:\n((?:    .+\n)+)", compose, re.MULTILINE)
+        assert block and SQUID_IMAGE in block.group(1), f"{proxy} must run the digest-pinned Squid"
 
 
 def test_only_the_search_role_is_handed_a_key() -> None:
@@ -484,20 +525,24 @@ def test_only_the_search_role_is_handed_a_key() -> None:
 
 
 def test_no_default_publishes_a_listener_beyond_loopback() -> None:
-    """Both listeners default to `127.0.0.1`, in the port mapping and the Host allowlist alike.
+    """Both listeners default to `127.0.0.1`, in the forwarder's port mapping and the role's Host
+    allowlist alike.
 
-    The published address is the access control, so this default is the bundle's whole safety margin.
+    The published address is the access control, so this default is the bundle's whole safety
+    margin. The mapping sits on the ingress forwarder because Docker maps no port for a container
+    whose networks are all `internal`.
     """
     compose = read(COMPOSE)
     for role, port in (("search", 8000), ("fetch", 8001)):
         block = re.search(rf"^  {role}:\n((?:    .+\n)+)", compose, re.MULTILINE)
         assert block, f"compose has no {role} service"
-        body = block.group(1)
-        assert f'"${{SEEKWRIGHT_PUBLISH:-127.0.0.1}}:{port}:8000"' in body, (
-            f"{role} must publish on loopback by default"
-        )
-        assert f'"${{SEEKWRIGHT_PUBLISH:-127.0.0.1}}:{port}"' in body, (
+        assert f'"${{SEEKWRIGHT_PUBLISH:-127.0.0.1}}:{port}"' in block.group(1), (
             f"{role}'s Host allowlist must name the same default address"
+        )
+        forwarder = re.search(rf"^  {role}-ingress:\n((?:    .+\n)+)", compose, re.MULTILINE)
+        assert forwarder, f"compose has no {role}-ingress service to publish the listener"
+        assert f'"${{SEEKWRIGHT_PUBLISH:-127.0.0.1}}:{port}:8000"' in forwarder.group(1), (
+            f"{role}-ingress must publish on loopback by default"
         )
 
 
@@ -582,6 +627,10 @@ def test_the_fetch_role_asks_a_resolver_the_same_file_starts() -> None:
             f"the role asks {address}, which no service in this file is given"
         )
     assert "./coredns/Corefile:/etc/coredns/Corefile:ro" in block.group(1)
+    assert 'command: ["-conf", "/etc/coredns/Corefile"]' in block.group(1), (
+        "the image carries an empty CMD and a default Corefile in its working directory, so"
+        " without -conf the mount is silently ignored and the fetch role resolves nothing"
+    )
     assert (COREDNS / "Corefile").is_file(), "the resolver mounts a Corefile the tree does not hold"
 
 
