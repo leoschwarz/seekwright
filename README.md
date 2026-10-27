@@ -11,10 +11,7 @@ or a skill file reaches them too.
 
 ## Run it
 
-The clone is the install path in 0.1.0 — nothing is on PyPI, and
-[the roadmap](docs/ROADMAP.md) is what distribution still owes — though a tagged
-release files the wheel on its GitHub Release and pushes the image to `ghcr.io`.
-It needs Python 3.14 or newer.
+In 0.1.0 the clone is the install path, and it needs Python 3.14 or newer.
 
 ```bash
 git clone https://github.com/leoschwarz/seekwright.git
@@ -22,6 +19,13 @@ cd seekwright
 uv sync
 uv run seekwright --check
 ```
+
+There is no PyPI package, and none is planned while the implementation language
+is still open: the tool surface is the contract, this Python code is one
+implementation of it, and it may be rewritten in another language once the shape
+settles — a package name would promise an importable Python library that this is
+not. A tagged release files the wheel on its GitHub Release and pushes the image
+to `ghcr.io`.
 
 There is nothing to sign up for first: with no config the server resolves to the
 keyless providers, so a fresh clone already searches. `--check` prints the config
@@ -116,9 +120,11 @@ operator's job.
 The first release, maintained by one person and looking for early adopters. What
 you can build on: the `search` and `fetch` surfaces are the contract and are
 meant to stay stable, while the config keys, the provider set and the log fields
-may change between 0.x releases without a deprecation cycle. What confused you and
-what broke is the most useful thing you can send back:
-[open an issue](https://github.com/leoschwarz/seekwright/issues). Security
+may change between 0.x releases without a deprecation cycle. That contract is
+about the tool surface, not about this code: the Python here is an implementation
+that may be replaced before 1.0, which is the other reason not to publish a
+library. What confused you and what broke is the most useful thing you can send
+back: [open an issue](https://github.com/leoschwarz/seekwright/issues). Security
 reports have their own route, [SECURITY.md](SECURITY.md), and not a public issue;
 how people here behave with each other is [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
@@ -134,7 +140,6 @@ how people here behave with each other is [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.m
 | deploy it, safely | [deploying](docs/reference/deploying.md) |
 | what `fetch` guards against, and what it does not | [fetch safety](docs/reference/fetch-safety.md) |
 | how the code is shaped, and why | [architecture](docs/architecture.md) |
-| what is next, and what gates it | [roadmap](docs/ROADMAP.md) |
 | why it exists: goals, precedence, non-goals | [vision](VISION.md) |
 | everything else, with each page's kind | [docs/index.md](docs/index.md) |
 

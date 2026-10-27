@@ -12,7 +12,9 @@ on the GitHub Release and pushes `ghcr.io/leoschwarz/seekwright:<tag>`
 ([runbook](reference/publishing.md)). Open:
 
 - **PyPI.** No `uv publish` step and no token, so there is no bare `uvx seekwright`; the
-  install stays the clone plus `uv sync`.
+  install stays the clone plus `uv sync`. It also waits on a question this release does
+  not answer: whether the contract should ship as a Python library at all, given that the
+  implementation may be rewritten once the surface settles.
 - **A moving `latest` tag.** The lane publishes the tag name and nothing else.
 - **A multi-arch image.** amd64 rather than fighting QEMU emulation on the runner.
 
