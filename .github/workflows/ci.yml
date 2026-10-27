@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v6
         with:
@@ -50,7 +50,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Without this job the recipe rots behind a green check; docker builds plain
       # OCI. An unqualified tag names no registry, so nothing here can push it.
@@ -78,7 +78,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v6
         with:

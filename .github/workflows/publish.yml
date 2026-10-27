@@ -24,7 +24,7 @@ jobs:
       contents: write
     steps:
       # The tag/main guard below needs `main` to be fetchable, so no shallow clone.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
