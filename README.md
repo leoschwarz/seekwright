@@ -24,6 +24,7 @@ cd seekwright/deploy/compose
 cp .env.example .env      # set SEEKWRIGHT_PUBLISH to the address you publish on
 docker compose pull       # ghcr.io/leoschwarz/seekwright:$SEEKWRIGHT_TAG
 docker compose up -d
+curl -s localhost:8000/healthz   # {"status":"ok","providers":["exa:free","freeserp"],...}
 ```
 
 Point an MCP client at the role it needs — `http://127.0.0.1:8000/mcp` for

@@ -147,6 +147,7 @@ holds:
 | `fetch.enabled` | `false`: no fetcher, the tool refuses | `true` |
 | The SSRF guard | never reached | public addresses only |
 | The network | the provider hosts, and nothing else | any public host |
+| The ingress forwarder | publishes :8000; dials search:8000 only | publishes :8001; dials fetch:8000 only |
 
 For the search role the network half is a host allow-list, and it needs no
 decryption: the name a client dials is visible in DNS and in the TLS `Server Name
@@ -233,15 +234,8 @@ what an operator who copies nothing gets. A Compose older than v2.24 cannot
 treat `search.env` as optional, so on one of those run
 `cp search.env.example search.env` first.
 
-**Those four commands were not exercised on a machine with a runtime**
-(2026-10-26). What *is* checked is that the four artifacts agree:
-`tests/repo/test_egress_lists.py` reads the compose file and the proxy configs,
-and fails on
-
-- a mount pointing at a file the tree does not hold,
-- a rendered list no proxy reads,
-- a role on the wrong network, or
-- a search proxy that stops ending in `deny all` behind its list.
+The four commands above were run on Docker 29.6.2 (2026-10-27); `docker
+compose ps` prints the seven services and both listeners answer on `127.0.0.1`.
 
 The bundle publishes nothing new: both roles keep `--allowed-host`, and
 `SEEKWRIGHT_PUBLISH` defaults to `127.0.0.1`.
@@ -259,7 +253,7 @@ have to:
 | `search.toml`, `fetch.toml` | the two role configs printed above, verbatim |
 | `egress/deny-hosts.txt` | the operator's deny-list, comments and all: one host per line, a leading dot covering that domain and everything under it. The default fetch policy reads it |
 | `egress/fetch-allow-hosts.txt` | the operator's strict allow-list, plus one `fallback=<name>` line answering for every fallback whose host no constant names |
-| `compose.yaml` | five services: the two roles, one Squid proxy each, and a resolver for the network that cannot reach one |
+| compose.yaml | seven services: the two roles, one Squid proxy each, a resolver for the network that cannot reach one, and an ingress forwarder per role — the publisher of each listener, since Docker maps no port for a container on internal networks |
 
 `.env` and `search.env` are gitignored; the `.example` files beside them are the
 tracked templates. Nothing in `.env` reaches a container by itself — the
@@ -309,7 +303,7 @@ metadata names. Everything else the caller names is reachable, which is what mak
 In this order:
 
 ```bash
-docker compose ps                       # five services: search, fetch, resolver, search-proxy, fetch-proxy
+docker compose ps                       # seven services: search, fetch, resolver, search-proxy, fetch-proxy, search-ingress, fetch-ingress
 docker compose run --rm search --check  # the `config` line reads /etc/seekwright/config.toml
 ```
 
@@ -340,10 +334,8 @@ the enabled names — [container.md](container.md) §*Logs and health*):
 docker compose logs search-proxy | grep TCP_DENIED
 ```
 
-The two refusals and the `--check` report above were run. The `docker compose`
-commands were not — no machine this page was written on has a runtime
-(2026-10-26). What is printed under them is quoted from a run of the same code or
-is a field set the code prints, never a compose transcript.
+Every command in this section was run (2026-10-27, Docker 29.6.2). The
+listeners are published by the `-ingress` forwarders, which forward TCP only.
 
 ## Turning on the strict fetch policy
 
@@ -373,6 +365,12 @@ caller that controls a name outside the list can carry bytes out through it.
 Nothing authenticates either listener, so the published address is still the
 whole access control — `SEEKWRIGHT_PUBLISH` in `.env`, one interface address,
 never `0.0.0.0`.
+
+The `-ingress` forwarders sit on the routable `ingress` network by necessity —
+Docker maps no port for a container whose networks are all internal. Each dials
+exactly its own role and carries no key, no environment and no volume, so it is
+publish plumbing: a caller who reached a forwarder has reached the listener it
+publishes, and no further.
 
 `[dashboard] enabled` is on by default, so both listeners serve `/dashboard`
 behind the Host allowlist; `[dashboard] enabled = false` in `fetch.toml` turns
