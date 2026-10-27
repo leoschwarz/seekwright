@@ -24,7 +24,7 @@ classifiers = [
 requires-python = ">=3.14"
 dependencies = [
     "httpx>=0.28.1",
-    "mcp>=1.28,<2",
+    "mcp>=1.28,<3",
     "pydantic>=2.12",
     "loguru>=0.7",
 ]
