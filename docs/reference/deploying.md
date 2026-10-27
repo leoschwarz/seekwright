@@ -210,12 +210,18 @@ Two properties of the network shape, both load-bearing:
 ```bash
 cd deploy/compose
 cp .env.example .env      # then set SEEKWRIGHT_PUBLISH to the address you publish on
-docker compose build
+docker compose pull       # ghcr.io/leoschwarz/seekwright:$SEEKWRIGHT_TAG
 docker compose up -d
 ```
 
 No `-f` and no `-p`: Compose discovers `compose.yaml` from the project
 directory it is run in, and `name: seekwright` in that file is the project name.
+
+Both roles run the published image, `ghcr.io/leoschwarz/seekwright:<tag>`, and
+`SEEKWRIGHT_TAG` in `.env` picks the release — pinned rather than a moving
+`latest`, because the release lane publishes the tag name and nothing else.
+`docker compose up -d --build` builds that same image from this checkout
+instead, which is the path for a tree whose tag has not been released.
 
 There is deliberately no second Compose file at the repository root: a root
 `docker-compose.yml` would be an unguarded copy of the same services, since the

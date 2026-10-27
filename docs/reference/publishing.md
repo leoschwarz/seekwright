@@ -174,9 +174,9 @@ publish answered.
   [surface.md](surface.md)'s, rendered by [`tools/surface.py`](../../tools/surface.py)
   from the tree. `docs/architecture.md` and `docs/reference/metrics.md` both exist, and
   the surface manifest is the census `configuration.md` and `providers.md` render. The
-  install block in `docs/quickstart.md` is the clone plus `uv`, which is the only
-  install path 0.1.0 documents, and the README points there rather than adding a
-  command of its own.
+  install block in `docs/quickstart.md` is the clone plus `uv`, which is the
+  development path 0.1.0 documents; the deployment the README leads with is the Compose
+  bundle on the published image ([deploying.md](deploying.md)).
 - **Item 4, install verified from the published artifacts: measured up to the artifact,
   and the published half waits on the first tag.** The `wheel` job of
   `.github/workflows/ci.yml` builds that file at every push to `main`, prints

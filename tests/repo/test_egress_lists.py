@@ -39,6 +39,8 @@ GENERATED = BUNDLE / "generated"
 SQUID = BUNDLE / "squid"
 COREDNS = BUNDLE / "coredns"
 COMPOSE = BUNDLE / "compose.yaml"
+# The published image both roles run; the tag is the release, and a local build replaces it.
+IMAGE = "ghcr.io/leoschwarz/seekwright:${SEEKWRIGHT_TAG:-v0.1.0}"
 
 # Every path the bundle needs in a clone, named exactly once here; `.gitignore` names the subtree once.
 TRACKED = (
@@ -454,7 +456,7 @@ def test_compose_gives_each_role_its_own_proxy_and_no_route_around_it() -> None:
         body = block.group(1)
         assert f"HTTPS_PROXY=http://{proxy}:3128" in body, f"{role} must dial out through {proxy}"
         assert f"networks: [{role}-egress]" in body, f"{role} must sit only on its own role network"
-        assert "image: seekwright:dev" in body
+        assert f"image: {IMAGE}" in body, f"{role} must run the published image"
         assert "restart: unless-stopped" in body, f"{role} must come back after a restart of the host"
     for proxy, role in (("search-proxy", "search"), ("fetch-proxy", "fetch")):
         block = re.search(rf"^  {proxy}:\n((?:    .+\n)+)", compose, re.MULTILINE)

@@ -4,44 +4,67 @@ Web search for your AI assistant.
 
 `seekwright` sits in front of the search providers you choose — a paid API, a
 free tier, your own SearXNG, or the keyless defaults — and gives a model three
-web operations in one shape: `search`, `fetch` and `answer`. Add the server to
-Claude Desktop, Cursor, Zed or any other MCP client and the model you are
-talking to gets them; the same three are HTTP routes and CLI verbs, so a script
-or a skill file reaches them too.
+web operations in one shape: `search`, `fetch` and `answer`. Point an MCP client
+at it — the running deployment by URL, or a checkout over stdio — and the model
+you are talking to gets them; the same three are HTTP routes and CLI verbs, so a
+script or a skill file reaches them too.
 
 ## Run it
 
-In 0.1.0 the clone is the install path, and it needs Python 3.14 or newer.
+The deployment this repository ships is the Compose unit set under
+`deploy/compose/`: two containers from the published image, each behind its own
+egress proxy — `search` on `:8000`, `fetch` on `:8001` — so the process that
+reads a caller-named page never holds a provider key. The split is the default
+because the two tools need opposite egress rights: one dials a set you chose, the
+other dials whatever a caller names.
 
 ```bash
 git clone https://github.com/leoschwarz/seekwright.git
-cd seekwright
-uv sync
-uv run seekwright --check
+cd seekwright/deploy/compose
+cp .env.example .env      # set SEEKWRIGHT_PUBLISH to the address you publish on
+docker compose pull       # ghcr.io/leoschwarz/seekwright:$SEEKWRIGHT_TAG
+docker compose up -d
 ```
 
-There is no PyPI package, and none is planned while the implementation language
-is still open: the tool surface is the contract, this Python code is one
-implementation of it, and it may be rewritten in another language once the shape
-settles — a package name would promise an importable Python library that this is
-not. A tagged release files the wheel on its GitHub Release and pushes the image
-to `ghcr.io`.
+Point an MCP client at the role it needs — `http://127.0.0.1:8000/mcp` for
+`search`, `http://127.0.0.1:8001/mcp` for `fetch` — and register both if the model
+should have both. Nothing authenticates a listener, so the address you publish on
+is the access control; `/healthz` on either port sits outside that check and is
+secret-free, for a probe, and `/dashboard` shows usage and spend — counts and
+cost, never query text.
+`docker compose up -d --build` builds the image from this checkout instead of
+pulling it, which is what a tag the release lane has not published yet needs.
+[Deploying](docs/reference/deploying.md) carries the role configs, the key file,
+the egress lists and the verification sequence; the `mcpServers` block and every
+config key are in [configuration](docs/reference/configuration.md).
+
+One container serving everything is the other shape: it builds from the
+`Containerfile` at the root and takes a mounted config plus environment keys,
+giving up the egress split ([container](docs/reference/container.md)).
+
+## Develop it
+
+`uv` is the development path — a checkout and Python 3.14 or newer, no container
+runtime needed:
+
+```bash
+uv sync                    # dev group included: the trafilatura extraction backend
+uv run seekwright --check  # config and provider handshakes, billed nothing
+uv run seekwright          # stdio MCP — your client launches this (the default)
+uv run seekwright --http   # or serve one endpoint yourself: MCP at /mcp
+```
 
 There is nothing to sign up for first: with no config the server resolves to the
 keyless providers, so a fresh clone already searches. `--check` prints the config
 path it read, then reaches every enabled provider without billing anything. Keys,
 when you have them, come from the environment, never from the config file.
 
-```bash
-uv run seekwright          # stdio MCP — your client launches this (the default)
-uv run seekwright --http   # one process serves every client: MCP at /mcp
-```
-
-Under `--http` one process backs every client, and the same listener answers
-`GET /healthz` for an orchestrator and serves a spend dashboard at
-`GET /dashboard`. The `mcpServers` block that registers the server with your
-client, and every config key, flag and environment variable, are in
-[configuration](docs/reference/configuration.md).
+There is no PyPI package, and none is planned while the implementation language
+is still open: the tool surface is the contract, this Python code is one
+implementation of it, and it may be rewritten in another language once the shape
+settles — a package name would promise an importable Python library that this is
+not. A tagged release files the wheel on its GitHub Release and pushes the image
+to `ghcr.io`, one tag per release and no moving `latest`.
 
 ## The three tools
 
@@ -67,27 +90,19 @@ how a Makefile, a cron job or a skill file reaches them. They read no config and
 hold no key, so the config, the provider keys and the bill stay on the server:
 
 ```bash
-uv run seekwright --http   # once
 uv run seekwright search "first plasma in a tokamak" --json
-uv run seekwright fetch https://en.wikipedia.org/wiki/Tokamak --query plasma
+uv run seekwright fetch https://en.wikipedia.org/wiki/Tokamak --query plasma \
+  --server http://127.0.0.1:8001
 ```
 
 `--json` prints the response body verbatim, so it pipes into `jq`; exit codes are
-`0` on success, `1` on a server error and `2` on a usage error; `--server URL`
-names a deployment on another machine.
+`0` on success, `1` on a server error and `2` on a usage error. `--server URL`
+names the deployment the verb talks to, and defaults to `http://127.0.0.1:8000` —
+the port the `search` role publishes, so the `fetch` role is `:8001`. The verbs
+need the CLI on the machine that calls them; `uv run` from a checkout is the way
+to get it.
 [The CLI client](docs/reference/public-api.md#the-cli-client) has every flag,
 status code and remote-host flag.
-
-## Deploying it
-
-Nothing authenticates the listener, so the bind address is the access control:
-`--host` defaults to `127.0.0.1`, every call it serves is billed, and a caller
-from another machine needs the `Host` value it sends named with `--allowed-host`.
-`/healthz` is outside that check and secret-free, so a kubelet probe needs
-nothing. The image builds from the `Containerfile` at the root and takes a mounted
-config file plus environment keys: [container.md](docs/reference/container.md) is
-the runbook, [deploying.md](docs/reference/deploying.md) the two-role deployment
-that gives `search` and `fetch` different egress rights.
 
 ## Choosing a provider
 
@@ -97,8 +112,9 @@ price. [The quickstart](docs/quickstart.md) walks the four tiers in the order a
 new deployment meets them — keyless, free with a key, paid, and the allow-list
 that caps which names a deployment may dispatch to at all — and
 [providers.md](docs/reference/providers.md) has each one's endpoint, filters and
-price. Cost is measured rather than quoted: `uv run seekwright --metrics` prints
-latency and dollars per 1,000 calls from your own usage
+price. Cost is measured rather than quoted: `--metrics` prints latency and
+dollars per 1,000 calls from your own usage — `uv run seekwright --metrics` from a
+checkout, `docker compose run --rm search --metrics` from the deployment
 ([metrics.md](docs/reference/metrics.md)).
 
 ## Data privacy

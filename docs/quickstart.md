@@ -18,7 +18,9 @@ whole-web SERP with a documented 1,000 requests/day anonymous quota, but it is
 explicit-only: no default and no free walk reaches it. It is live-verified as of
 2026-10-17.
 
-The one public install path in 0.1.0 is the clone:
+The shipped deployment is the Compose bundle running the published image
+([deploying.md](reference/deploying.md)). This page stays with a clone, where `uv`
+is the whole toolchain and nothing has to be built or mounted:
 
 ```bash
 git clone https://github.com/leoschwarz/seekwright.git

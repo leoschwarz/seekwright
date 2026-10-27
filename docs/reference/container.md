@@ -13,8 +13,10 @@ repository ships.
 
 A release publishes two artifacts: the wheel as an asset of the GitHub Release the tag
 names, and the image at `ghcr.io/leoschwarz/seekwright:<tag>`. Neither exists until a
-`v*` tag is pushed, so the commands below build rather than pull, and the
-[quickstart](../quickstart.md) documents the clone as the install path.
+`v*` tag is pushed. The Compose bundle under `deploy/compose/` pulls that image and
+is the shipped deployment shape ([deploying.md](deploying.md)); the commands below
+build from a checkout instead, which is what an unreleased tree and the
+single-container shape need.
 
 Two names, and only two. The git tag is `v0.1.0`, and the release run names the
 image after that ref verbatim, so the published image tag is `v0.1.0` too. The

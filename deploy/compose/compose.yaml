@@ -3,11 +3,12 @@ name: seekwright
 
 services:
   search:
-    image: seekwright:dev
+    # The published image, one tag per release: `docker compose pull` fetches it,
+    # `up --build` builds the same image from this checkout instead.
+    image: ghcr.io/leoschwarz/seekwright:${SEEKWRIGHT_TAG:-v0.1.0}
     build:
       context: ../..
       dockerfile: Containerfile
-    pull_policy: never
     command: ["--http", "--host", "0.0.0.0", "--allowed-host", "${SEEKWRIGHT_PUBLISH:-127.0.0.1}:8000"]
     restart: unless-stopped
     volumes:
@@ -28,8 +29,7 @@ services:
     security_opt: ["no-new-privileges:true"]
 
   fetch:
-    image: seekwright:dev
-    pull_policy: never
+    image: ghcr.io/leoschwarz/seekwright:${SEEKWRIGHT_TAG:-v0.1.0}
     command: ["--http", "--host", "0.0.0.0", "--allowed-host", "${SEEKWRIGHT_PUBLISH:-127.0.0.1}:8001"]
     restart: unless-stopped
     volumes:
