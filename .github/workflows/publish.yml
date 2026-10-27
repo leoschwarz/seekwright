@@ -72,9 +72,11 @@ jobs:
           LOCAL_SHA=$(sha256sum "dist/$WHEEL" | cut -c1-64)
           echo "built $WHEEL sha256=$LOCAL_SHA"
           # The already-published rule: the asset list off the release, the file
-          # itself fetched over its public URL with no credential.
+          # itself fetched over its public URL with no credential. `--jq` is gh's
+          # own jq and takes one expression with no `--arg`: the name is spliced
+          # in, and `.url` is the browser download URL in `--json assets`.
           PUBLISHED=$(gh release view "$GITHUB_REF_NAME" --json assets \
-            --jq --arg name "$WHEEL" '.assets[] | select(.name == $name) | .browser_download_url' \
+            --jq ".assets[] | select(.name == \"$WHEEL\") | .url" \
             2>/dev/null || true)
           if [ -n "$PUBLISHED" ]; then
             curl -sSL -o /tmp/published.whl "$PUBLISHED"
@@ -107,7 +109,7 @@ jobs:
           VERSION="${{ steps.wheel.outputs.version }}"
           LOCAL_SHA="${{ steps.wheel.outputs.local_sha }}"
           URL=$(gh release view "$GITHUB_REF_NAME" --json assets \
-            --jq --arg name "$WHEEL" '.assets[] | select(.name == $name) | .browser_download_url')
+            --jq ".assets[] | select(.name == \"$WHEEL\") | .url")
           curl -sSL -o "/tmp/$WHEEL" "$URL"
           FILE_SHA=$(sha256sum "/tmp/$WHEEL" | cut -c1-64)
           echo "downloaded anonymously from the release: ${WHEEL} (version ${VERSION}) sha256=$FILE_SHA"
