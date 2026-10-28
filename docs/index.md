@@ -80,7 +80,7 @@ is placed where its contract lands and the other group links it from prose.
 - **guide** — [Quickstart](quickstart.md) — the four onboarding tiers in the order a
   new operator meets them, each ending in the check that verifies it.
 - **explanation** — [Architecture](architecture.md) — the three request paths, the
-  provider and extraction-backend seams, the fallback ladders, the observability
+  routing, provider and extraction-backend seams, the fallback ladders, the observability
   half, and the deliberate non-features. The human-facing counterpart to `AGENTS.md`'s
   architecture table.
 

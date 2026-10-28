@@ -34,14 +34,17 @@ This file maps that. The precise requirements an adapter must meet live in
   provider is one of the free ones.
 
 ```
-search:  MCP tool ─▶ engine.SearchEngine ─▶ providers/<name>.py ─▶ provider API
+search:  MCP tool ─▶ engine.SearchEngine ─▶ router ─▶ providers/<name>.py ─▶ provider API
+                       health, log, record     which name, and in what order
                               └─ default route only: search.fallback ladder
                               └─ unnamed search with no default, every enabled
                                  name free: the mode="free" walk (search.
                                  free_fallback, else FREE_PROVIDER_ORDER)
 
-fetch:   MCP tool ─▶ engine.FetchEngine ─▶ fetch.primary ─▶ fetcher.HttpFetcher
-                                 (default)                └─▶ extractors/<name>
+fetch:   MCP tool ─▶ engine.FetchEngine ──▶ router ─▶ fetch.primary ─▶ fetcher.HttpFetcher
+                       fetch, log, record         which route, which ladder
+                                                      (default)
+                                                     └─▶ extractors/<name>
                               └─ a primary naming a built fallback leads instead,
                                  and the local read is out of the unnamed route
                               └─ on failure or a near-empty page, and only with
@@ -144,13 +147,39 @@ billing model onto the per-1k unit.
 
 ## The engine ladders
 
-`engine.py` holds the orchestration, separate from the tool definitions so it is
-testable without the MCP layer: it resolves what to call, calls it, records the
-outcome, and turns a provider exception into something a model can act on.
+The routing sits in two modules, split along one line: **decide**, then
+**execute**. `router.py` decides — which provider a `search` attempts and in what
+order, which route a `fetch` takes, and the sentences that explain a routing
+outcome: a refusal, a substitution notice, an exhaustion note, a retry menu.
+`engine.py` executes — the adapter calls, the health board, the usage journal,
+the log events, and every notice about a *result* rather than a route (the
+zero-results diagnostic in `SearchEngine._compose_notice` is that kind). Both
+sit apart from the tool definitions, so neither needs the MCP layer to be tested.
+
+The router is pure functions over a **routing table**: one deployment's routing
+facts as plain strings and tuples — the built names, the default, the permission
+set, both ladders, the free set and its order. Same table in, same answer out:
+no I/O, no clock, no state, and it logs nothing. It imports nothing of
+`seekwright` — not `config`, not `models`, not an exception type — so the
+free-name constants stay in `config.py`, where the validators read them, and
+arrive as table fields; `tests/test_router.py` parses the module and fails the
+moment an import crosses that line.
+
+That stdlib-only rule is the reason for the split. What language this ships in is
+still open ([`../README.md`](../README.md)), and routing is the first layer worth
+porting: it is the decision on the hot path, and it is the piece to run on its
+own later, with search agents built on top. A rewrite implements these functions
+1:1 and keeps the engines as its clients; the table's fields are that wire
+contract. The cost is one indirection — an engine builds its table on every
+routing call rather than once in its constructor, because `providers`, `fetcher`
+and `fallbacks` are public attributes a caller may swap after construction (a
+test swaps one) and a route has to come from what the engine holds when it
+routes, not when it was built.
 
 ### `search`: the default route may fail over
 
-`SearchEngine.resolve` picks the provider:
+`router.resolve_search` picks the provider — `SearchEngine.resolve` is the wrapper
+that turns its refusal into a `SearchRefused`:
 
 - A **named** provider is used or the call fails with an error listing the
   enabled ones. A name that is not enabled is a refusal, not a silent
@@ -166,8 +195,8 @@ With no default configured, the free walk takes `[search] free_fallback` when
 the operator set one, otherwise `FREE_PROVIDER_ORDER`.
 
 Only the unnamed route walks `[search] fallback`, and only once it has resolved
-to a default. When the default fails, `SearchEngine._walk_fallbacks` tries each
-fallback in config order:
+to a default. When the default fails, `router.fallback_rungs` says which rung may
+run and `SearchEngine._walk_fallbacks` runs it, in config order:
 
 - each fallback at most once, the failed default skipped;
 - a fallback whose circuit breaker is open skipped with a log line saying so;
@@ -207,9 +236,10 @@ ladder as a list of `provider` values to retry on. The `answer` plan is the
 route that asks, passing `auto_fallback=True` on each page it reads, because its
 steps run unattended — a list handed back would have no reader.
 
-With the walk on it runs `fetch.fallback` in config order, minus the route that
-already led. Each fallback runs at most once, and the walk continues past a
-fallback that returns an empty page. `KNOWN_FALLBACKS` holds the five rows
+With the walk on it runs `fetch.fallback` in config order — `router.fetch_walk`
+takes out the name that already led. Each fallback runs at most once, and the
+walk continues past a fallback that returns an empty page.
+`KNOWN_FALLBACKS` holds the five rows
 `fetch.fallback` may name — the keyless `crawl4ai` renderer and `jina` reader,
 then the billable `scrappa`, `tavily` and `linkup` — and config reads each row's
 `billable` flag rather than checking a name. At most one fallback can bill and
@@ -224,9 +254,11 @@ fallback that cannot run is a startup error: a search ladder has to serve
 through an outage, and a dead-on-arrival fallback would make it theatre.
 
 The `fetch` tool and the REST route take a `provider` field the way `search` has
-one, and it is a plain `str` validated against the built stack rather than a
-`Literal`: which names exist is a function of config, a key and a permission
-set, and the annotation is evaluated at import. Naming one is the whole route —
+one, and it is a plain `str` validated at call time by `router.resolve_fetch`
+(behind `FetchEngine.resolve`) rather than a `Literal`: which names exist is a
+function of config, a key and a permission set, and the annotation is evaluated
+at import.
+Naming one is the whole route —
 no read first and nothing behind it — so a priced name is billed for that call.
 [reference/fetch-provider-selection.md](reference/fetch-provider-selection.md)
 pins the decided shape: what the field may name, each failure sentence and the
@@ -482,7 +514,8 @@ working in the tree; this is the same map for a reader:
 | `prompts.py` | every model-facing string — server instructions, the three tool descriptions and agent mode's system prompt — read from `resources/`; prose only, no logic |
 | `resources/` | the text of those prompts (`server_instructions.txt`, `search_description.txt`, `fetch_description.txt`, `answer_system.txt`, `answer_description.txt`) and the dashboard page, shipped in the wheel as package data |
 | `config.py` | `Config` and its sections: enabled providers, both ladders, fetch limits, logging, dashboard. Validates provider and extractor names, resolves `default_provider` |
-| `engine.py` | `SearchEngine` resolves a provider, records every dispatch on the health board and walks the ladders above; `FetchEngine` fetches a page and walks `fetch.fallback`, paid fallback last |
+| `router.py` | the routing decisions as pure functions over a frozen routing table: which provider answers and in what order, and the sentences that explain a routing outcome. It imports nothing of `seekwright` — standard library only — which is what makes the layer portable |
+| `engine.py` | execution: `SearchEngine` dispatches the name `router.resolve_search` answered, records every dispatch on the health board and walks the ladder rung by rung as `router.fallback_rungs` says; `FetchEngine` reads a page and walks `fetch.fallback`, paid fallback last. Its `resolve` wrappers turn a router refusal into `SearchRefused` / `FetchRefused` |
 | `agent.py` | agent mode behind `answer`: the model client (one OpenAI-compatible chat call on the shared httpx client — no SDK, no tokenizer) and the fixed retrieval plan. One model call per `answer`; the model never drives retrieval. Contract: [`reference/agent-mode.md`](reference/agent-mode.md) |
 | `fetcher.py` | URL fetching behind the SSRF guardrails; `HttpFetcher` takes the extraction backend injected (no default), and `ScrappaFetcher`, `Crawl4aiFetcher`, `JinaFetcher` and `TavilyFetcher`/`LinkupFetcher` are the fallbacks, declared in the `KNOWN_FALLBACKS` registry beside them |
 | `extractors/` | one module per extraction backend, each implementing `base.py`'s `Extractor` protocol; `base.py` also holds the `KNOWN_EXTRACTORS` registry, the shared plumbing and passage selection |
@@ -542,10 +575,24 @@ works.
   `search.fallback` ladder, `exa`'s free-tier-first ladder inside one adapter
   (both above), a caller-declared `search(mode="free")` route restricted to
   providers that cannot bill (`config.FREE_PROVIDERS`, walked by
-  `SearchEngine._resolve_free`), and an unnamed `search` where every enabled name
+  `router._resolve_free`), and an unnamed `search` where every enabled name
   is free. Routing *by task* remains declined until measured per-task defaults
   exist: if it lands it takes a caller-*declared* `task`, never inferred from the
-  query's shape.
+  query's shape. `router.py` is not this refusal: it is the operator's ladder and
+  permission set made readable by a pure function, and it reads neither the
+  query nor a price.
+- **No wire contract for the routing core, and no vocabulary in it.** `router.py`
+  is standard-library-only and pure so the open language question can be answered
+  one layer at a time; three things that would make it *more* standalone were
+  declined. **Serialising a routing table** — an encoder, a schema, a version —
+  would publish a contract before the rewrite exists to be bound by it: the
+  table's field list *is* the contract. **Moving `config.FREE_PROVIDERS`,
+  `FREE_PROVIDER_ORDER` or `KEYLESS_PROVIDERS` into it** — that vocabulary is what
+  `config`'s validators reject a bad ladder with and what `docs/` cites by name,
+  so the router takes it as a table field instead. **Building the table once in a
+  constructor** — `providers`, `fetcher` and `fallbacks` are public and swappable,
+  so a table built at construction is a route from a snapshot; rebuilding one
+  frozen value per routing call is arithmetic beside a network round trip.
 - **No host allow-list inside the application.** There is no `egress_allowlist`
   key: which hosts a search may reach follows from which provider names the
   config enables, so the key would be a second copy of the deployment's

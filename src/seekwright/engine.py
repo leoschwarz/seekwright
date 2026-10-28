@@ -1,17 +1,18 @@
 """Search and fetch orchestration, kept out of the MCP layer so it is testable.
 
-No cache: both engines resolve what to call, call it, and turn a provider
-exception into a message a model can act on.
+No cache: both engines ask `router` which name to call and in what order, call
+it, record the outcome, and turn a provider exception into a message a model can
+act on.
 """
 
 from __future__ import annotations
 
 import base64
 import time
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal, Never
 
+from . import router
 from .config import FREE_PROVIDER_ORDER, FREE_PROVIDERS, Config
 from .extractors.base import select_passages
 from .fetcher import (
@@ -113,144 +114,32 @@ class SearchEngine:
         returned, so an unpermitted ``default_provider`` is refused rather than
         silently served by the ladder configured behind it.
         """
-        if mode is not None:
-            return self._resolve_free()
-        enabled = ", ".join(self.providers) or "none"
-        if requested is None:
-            default = self.config.default_provider
-            if default is None:
-                if self._unnamed_walks_free():
-                    # Same fallbacks, same order, same ending as `mode="free"` --
-                    # the mode's own walk, reached from the other direction.
-                    return self._resolve_free()
-                raise SearchRefused(
-                    "No default provider is configured; pass `provider`. "
-                    f"Available: {enabled}."
-                )
-            if not self.config.is_permitted(default):
-                raise SearchRefused(self._default_not_permitted(default))
-            return default
-        if requested not in self.providers:
-            # Offer the default only when there is one; the other error is the recovery.
-            recovery = (
-                "Retry with one of those, or omit `provider` to use the default."
-                if self.config.default_provider is not None
-                else "Retry with one of those."
-            )
-            raise SearchRefused(
-                f"Provider {requested!r} is not enabled on this server. "
-                f"Available: {enabled}. {recovery}"
-            )
-        if not self.config.is_permitted(requested):
-            raise SearchRefused(self._not_permitted(requested))
-        return requested
+        try:
+            return router.resolve_search(self._table, requested, mode)
+        except router.RouteRefused as refusal:
+            raise SearchRefused(str(refusal)) from None
 
-    def _unnamed_walks_free(self) -> bool:
-        """Whether an unnamed search is served by the free walk, not the default.
+    @property
+    def _table(self) -> router.SearchTable:
+        """The routing facts this engine holds *now*, rebuilt on every read.
 
-        True only where the substitution cannot spend: no default configured
-        *and* every enabled provider free. A single enabled provider never
-        reaches it -- config gives that one the default.
-
-        Both halves read config, not ``self.providers``: "every *enabled*
-        provider is free" is the rule, so a deployment that enabled a name it
-        could not build still refuses. ``default_route_is_free_only`` reads the
-        *effective* set, so a permission set that removes every free name leaves
-        the walk with nothing to serve.
+        Never cached in ``__init__``: ``providers`` and ``config`` are public
+        attributes a caller may swap after construction, and a route has to
+        come from what the engine holds at the moment it routes. The table is
+        plain strings and tuples so that ``router.py`` can read a deployment
+        without importing one.
         """
-        return (
-            self.config.default_provider is None
-            and self.config.default_route_is_free_only()
+        permitted = self.config.permitted_providers
+        return router.SearchTable(
+            providers=tuple(self.providers),
+            default=self.config.default_provider,
+            permitted=None if permitted is None else tuple(permitted),
+            fallback=tuple(self.config.search.fallback or ()),
+            free_fallback=tuple(self.config.search.free_fallback or ()),
+            free=FREE_PROVIDERS,
+            free_order=FREE_PROVIDER_ORDER,
+            effective=tuple(self.config.effective_providers()),
         )
-
-    def _not_permitted(self, requested: str) -> str:
-        """The refusal for a caller-named provider the allow-list excludes.
-
-        The recovery clause offers the default only when one exists *and* is
-        itself permitted: advice to omit ``provider`` when that retry would be
-        refused for the same reason fails on the second call.
-        """
-        default = self.config.default_provider
-        recovery = (
-            "Retry with one of those, or omit `provider` to use the default."
-            if default is not None and self.config.is_permitted(default)
-            else "Retry with one of those."
-        )
-        return (
-            f"Provider {requested!r} is not permitted on this server. "
-            f"Permitted: {', '.join(self.config.permitted_providers or [])}. "
-            f"{recovery}"
-        )
-
-    def _default_not_permitted(self, default: str) -> str:
-        """The refusal for a default the allow-list excludes.
-
-        Never a reroute: raised in ``resolve``, before any ladder exists.
-        """
-        return (
-            f"The default provider {default!r} is not permitted on this "
-            f"server. Permitted: "
-            f"{', '.join(self.config.permitted_providers or [])}. "
-            "Pass `provider` with one of those."
-        )
-
-    def _resolve_free(self) -> str:
-        """The free walk's first fallback, or a :class:`SearchRefused` naming the free set.
-
-        A clean error rather than a disappearing tool, because the schema is
-        frozen at import and cannot advertise what this deployment enabled.
-
-        Two reasons empty the walk, and they must not read alike: nothing free
-        is enabled, or the allow-list removes every free name that is. The
-        second names the permission set, the key the operator has to fix.
-        """
-        walk = self._free_walk()
-        if walk:
-            return walk[0]
-        enabled_free = [
-            fallback
-            for fallback in self._free_candidates()
-            if fallback in self.providers and fallback in FREE_PROVIDERS
-        ]
-        if enabled_free:
-            raise SearchRefused(
-                "No permitted free provider is enabled on this server, so a "
-                'mode="free" search has nothing to try. Permitted: '
-                f"{', '.join(self.config.permitted_providers or [])}. The "
-                f"free providers are: {', '.join(sorted(FREE_PROVIDERS))}."
-            )
-        raise SearchRefused(
-            "No free provider is enabled on this server, so a "
-            'mode="free" search has nothing to try. The free providers '
-            f"are: {', '.join(sorted(FREE_PROVIDERS))}."
-        )
-
-    def _free_candidates(self) -> Sequence[str]:
-        """The names a free walk considers, before any filter.
-
-        ``search.free_fallback`` when the operator set one -- their order --
-        else ``FREE_PROVIDER_ORDER``. An empty ``free_fallback`` reads as unset.
-        """
-        configured = self.config.search.free_fallback
-        return configured if configured else FREE_PROVIDER_ORDER
-
-    def _free_walk(self) -> list[str]:
-        """The fallbacks the free routes walk, in order, every one of them free.
-
-        Serves both ``mode="free"`` and an unnamed all-free search: one walk, so
-        the two routes cannot drift apart.
-
-        Drops a fallback that is unbuilt or unpermitted. The free-set check is
-        redundant with config validation on purpose: "never dispatch outside the
-        free set" is this mode's whole promise, so it is a condition in the code.
-        """
-        return [
-            fallback
-            for fallback in self._free_candidates()
-            if fallback in self.providers
-            and fallback in FREE_PROVIDERS
-            and self.config.is_permitted(fallback)
-        ]
 
     async def search(
         self,
@@ -273,11 +162,12 @@ class SearchEngine:
             # a refusal (400) not a failure (502), since nothing was billed.
             raise SearchRefused("pass `provider` or `mode`, not both")
         free = mode is not None
-        # Both free routes resolve through `_free_walk` rather than growing a second walk.
-        walking_free = free or (provider is None and self._unnamed_walks_free())
+        # Both free routes resolve through `router.free_walk` rather than growing a second walk.
+        table = self._table
+        walking_free = free or (provider is None and router.unnamed_walks_free(table))
         # Resolved once: the first attempt and the fallbacks walked behind it must
         # come from the same list, or a fallback could be tried twice.
-        fallbacks = self._free_walk() if walking_free else None
+        fallbacks = list(router.free_walk(table)) if walking_free else None
         name = self._resolve_or_reject(provider, mode)
         # `provider` stays the first attempt for every event of this call; a
         # substitute is named by `search.fallback` and by the response's `provider`.
@@ -319,7 +209,7 @@ class SearchEngine:
                     step=step,
                 )
                 raise SearchFailed(
-                    f"Search failed - {exc}.{self._retry_advice(exc)}"
+                    f"Search failed - {exc}.{router.retry_advice(isinstance(exc, QuotaExhausted))}"
                 ) from exc
         notice = self._compose_notice(result, result.provider)
         # Escaped once: the decision line, the content log and the agent's
@@ -417,15 +307,6 @@ class SearchEngine:
         self.health.record_success(name, reason="search succeeded")
         return result
 
-    @staticmethod
-    def _retry_advice(exc: ProviderError) -> str:
-        """Quota means retrying now is pointless; anything else may pass with time."""
-        return (
-            " Do not retry immediately."
-            if isinstance(exc, QuotaExhausted)
-            else " Retry shortly or try a different phrasing."
-        )
-
     async def _walk_fallbacks(
         self,
         tried: str,
@@ -442,7 +323,7 @@ class SearchEngine:
         """Walk a ladder in walk order; the first result wins.
 
         The default route's ladder is ``search.fallback``; ``mode="free"`` passes
-        its own ``fallbacks`` from ``_free_walk``, which cannot contain a paid
+        its own ``fallbacks`` from ``router.free_walk``, which cannot contain a paid
         name. Each fallback at most once; the tried, unpermitted and open-circuit
         ones are skipped. When every fallback fails the ORIGINAL error raises,
         with the failed fallbacks appended: "serper: rate limited" explains the
@@ -450,12 +331,17 @@ class SearchEngine:
         saying why nothing paid was tried.
         """
         failed: list[str] = []
-        ladder = (self.config.search.fallback or []) if fallbacks is None else fallbacks
-        for fallback in ladder:
-            if fallback == tried or fallback not in self.providers:
-                # Already tried, or enabled-but-unbuilt: skipped silently, like fetch's inert fallbacks.
+        table = self._table
+        ladder = table.fallback if fallbacks is None else fallbacks
+        # Who is gated, snapshotted once: the walk records the board only for names it
+        # attempts, and each name appears at most once, so a rung ahead of the walk
+        # cannot change state under it.
+        gated = frozenset(name for name in ladder if self.health.is_open(name))
+        for rung in router.fallback_rungs(table, ladder, tried, gated):
+            fallback = rung.name
+            if rung.status is router.RungStatus.SKIP:
                 continue
-            if not self.config.is_permitted(fallback):
+            if rung.status is router.RungStatus.UNPERMITTED:
                 # Warning rather than info, unlike the open-circuit skip below: a
                 # gated fallback is dead config the operator should fix.
                 log.bind(
@@ -463,7 +349,7 @@ class SearchEngine:
                     permitted=",".join(self.config.permitted_providers or []),
                 ).warning("search.fallback_unpermitted")
                 continue
-            if self.health.is_open(fallback):
+            if rung.status is router.RungStatus.OPEN:
                 log.bind(
                     fallback=fallback, until_s=round(self.health.open_for_s(fallback), 1)
                 ).info("search.fallback_skipped")
@@ -483,19 +369,14 @@ class SearchEngine:
             log.bind(
                 fallback=fallback, reason=original.message, ms=elapsed_ms(fallback_started)
             ).info("search.fallback")
-            served = f"{tried} failed ({original.message}); served by {fallback} instead"
             result = result.model_copy(
-                update={"notice": f"{served}; {result.notice}" if result.notice else served}
+                update={
+                    "notice": router.fallback_served_notice(
+                        tried, original.message, fallback, result.notice
+                    )
+                }
             )
             return result
-        fallbacks_note = f" Fallbacks also failed: {', '.join(failed)}." if failed else ""
-        # The caller asked for a zero ceiling, so say nothing paid was tried: the model cannot see the walk.
-        mode_note = (
-            " The server was asked for a free-only search, so no paid "
-            "provider was tried."
-            if mode is not None
-            else ""
-        )
         log.bind(
             ms=elapsed_ms(started),
             kind=type(original).__name__,
@@ -511,8 +392,8 @@ class SearchEngine:
             step=step,
         )
         raise SearchFailed(
-            f"Search failed - {original}.{fallbacks_note}{mode_note}"
-            f"{self._retry_advice(original)}"
+            f"Search failed - {original}.{router.fallback_exhausted_note(failed, mode)}"
+            f"{router.retry_advice(isinstance(original, QuotaExhausted))}"
         ) from original
 
     def _compose_notice(self, result: ProviderResult, name: str) -> str | None:
@@ -716,17 +597,25 @@ class FetchEngine:
 
         Computed rather than stored, so a swap of ``engine.fallbacks`` is
         honoured. The primary is skipped because the route already tried it;
-        walking it twice would bill the same name twice.
+        walking it twice would bill the same name twice. It is taken out by name
+        rather than by object identity because a built ladder holds one object
+        per name: config dedupes ``fetch.fallback``, and `factory` appends the
+        primary to the stack only when it is absent from it.
         """
-        return [f for f in self.fallbacks if f is not self._primary]
+        walked = frozenset(router.fetch_walk(self._table))
+        return [f for f in self.fallbacks if f.name in walked]
 
-    def _origin(self) -> str:
-        """The unnamed route's first attempt, as a sentence names it."""
-        return "local fetch" if self._primary_name is None else self._primary_name
+    @property
+    def _table(self) -> router.FetchTable:
+        """The fetch routing facts this engine holds *now*, rebuilt on every read.
 
-    def _choose_names(self) -> str:
-        """The names the withheld walk leaves over: the walk, never the primary."""
-        return ", ".join(fallback.name for fallback in self._walk)
+        Not built in ``__init__``, for the reason that constructor states: a
+        caller that swaps ``engine.fetcher`` or ``engine.fallbacks`` afterwards
+        gets a route from what the engine holds now.
+        """
+        return router.FetchTable(
+            built=tuple(f.name for f in self.fallbacks), primary=self._primary_name
+        )
 
     def resolve(self, requested: str | None) -> ContentFetcher | None:
         """Route this page: ``None`` is the local read, a name is that provider.
@@ -746,92 +635,13 @@ class FetchEngine:
         """
         if requested is None:
             return None
-        for fallback in self.fallbacks:
-            if fallback.name == requested:
-                return fallback
-        raise FetchRefused(self._not_enabled(requested))
-
-    def _not_enabled(self, requested: str) -> str:
-        """The refusal sentence: the name it cannot serve, and the names it can.
-
-        It states what *is* available, never *why* the named one is not:
-        ``seekwright --check`` prints one row per configured name with what it is
-        missing, and deployment inventory has no place in a model-facing sentence.
-        The closing clause offers what omitting ``provider`` means -- the local
-        read while the primary is ``http``, else the operator's chosen route. With
-        nothing configured the middle clause says so rather than print an empty list.
-        """
-        listed = (
-            f"Available: {self._provider_names()}."
-            if self.fallbacks
-            else "No other fetch provider is configured on this server."
-        )
-        omit = (
-            "read the page locally"
-            if self._primary_name is None
-            else "use this server's default route"
-        )
-        return (
-            f"Fetch provider {requested!r} is not enabled on this server. "
-            f"{listed} Retry with one of those, or omit `provider` to {omit}."
-        )
-
-    def _provider_names(self) -> str:
-        """The providers this server built, in ladder order.
-
-        Built names, not configured ones: a caller can only be told to name
-        something this server can serve. The `--check` rows are the other read --
-        `cli` builds them from ``cfg.fetch.fallback``, because that is where *why
-        a configured name was not built* is reported.
-        """
-        return ", ".join(fallback.name for fallback in self.fallbacks)
-
-    def _choose_instead(self) -> str:
-        """The failed read's recovery: the names to name, and one retry on one of them.
-
-        The half of the deal the withheld walk pays for: the caller is handed the
-        choice rather than having it taken. Its wording follows ``search``'s
-        zero-results recovery, and it says nothing about *why* a name is missing
-        -- that stays ``--check``'s report.
-
-        With nothing left to walk there is no list, so this returns the empty
-        string: a choice with no names in it is not a choice. The menu is the
-        walk, never the primary -- the route that just failed is not to offer.
-        """
-        if not self._walk:
-            return ""
-        return (
-            f" Other configured fetch providers: {self._choose_names()}. "
-            "Retry once with `provider` set to one of those before concluding "
-            "the page cannot be read."
-        )
-
-    def _empty_notice(self, walked: bool) -> str:
-        """What a nearly-empty page reports, and what it offers in place of the walk.
-
-        With the walk off the caller gets the choice and the diagnosis: a page
-        that extracts to nothing needs a browser, not a second read by the same
-        reader -- model-facing text over MCP, not only a JSON key. With the walk
-        on the ladder already ran and said which name served, and with nothing
-        configured there is no name to hand over; both keep the shorter sentence.
-        """
-        if walked or not self._walk:
-            return (
-                "almost no readable text could be extracted (the page may be "
-                "JavaScript-rendered); try `search` for its content instead"
-            )
-        origin = (
-            "the local fetcher"
-            if self._primary_name is None
-            else f"`{self._primary_name}`"
-        )
-        return (
-            f"Almost no readable text came back from {origin}. Other "
-            f"configured fetch providers: {self._choose_names()}. A page that "
-            "extracts to nothing usually needs a browser, not a second try at "
-            "the same reader: retry once with `provider` set to one of those "
-            "before concluding the page has no text."
-        )
+        try:
+            name = router.resolve_fetch(self._table, requested)
+        except router.RouteRefused as refusal:
+            raise FetchRefused(str(refusal)) from None
+        # ``resolve_fetch`` only answers a name it took from this same list, so the
+        # lookup cannot miss; the object, not the name, is what the caller bills.
+        return next(fallback for fallback in self.fallbacks if fallback.name == name)
 
     async def fetch(
         self,
@@ -937,7 +747,7 @@ class FetchEngine:
         empty_page = offset == 0 and self._is_empty(page.text)
         if empty_page:
             log.bind(chars=len(page.text.strip())).info("fetch.empty")
-            notices.append(self._empty_notice(walk))
+            notices.append(router.empty_notice(self._table, walk))
 
         matches = self._select(page, query, path, empty_page, notices)
 
@@ -1003,7 +813,7 @@ class FetchEngine:
                 # what was refused.
                 choice = ""
                 if not isinstance(exc, FetchBlocked):
-                    choice = self._choose_instead()
+                    choice = router.choose_instead(self._table)
                 self._raise_fetch_failure(
                     log,
                     exc,
@@ -1475,7 +1285,7 @@ class FetchEngine:
                 fallback=fallback.name, reason=reason, ms=elapsed_ms(started)
             ).info("fetch.fallback")
             notices.append(
-                f"{self._origin()} failed ({reason}); refetched via {fallback.name}"
+                router.refetched_notice(self._table, reason, fallback.name)
             )
             served = (candidate, fallback.name)
             if not self._is_empty(candidate.text):
