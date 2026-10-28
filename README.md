@@ -155,6 +155,7 @@ how people here behave with each other is [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.m
 | the tool and route contract, and what is deliberately not in it | [public API](docs/reference/public-api.md) |
 | run it in a container | [container](docs/reference/container.md) |
 | deploy it, safely | [deploying](docs/reference/deploying.md) |
+| teach an agent to use or deploy it | [skills](skills/) |
 | what `fetch` guards against, and what it does not | [fetch safety](docs/reference/fetch-safety.md) |
 | how the code is shaped, and why | [architecture](docs/architecture.md) |
 | why it exists: goals, precedence, non-goals | [vision](VISION.md) |

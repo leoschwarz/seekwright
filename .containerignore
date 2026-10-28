@@ -10,6 +10,7 @@ tests/
 docs/
 deploy/
 tools/
+skills/
 AGENTS.md
 CLAUDE.md
 Containerfile
