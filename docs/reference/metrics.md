@@ -484,6 +484,18 @@ The panel differs from the terminal in presentation only: thousands separators,
 `$/1k` with a `$` and four decimals, `Last seen` as `YYYY-MM-DD HH:MMZ` rather
 than an ISO string, and no absolute `cost usd` column in the rollup.
 
+The page's look and its interaction surface are page-local and read the same
+snapshot: one light print-inspired theme declared as `:root` tokens in the file
+itself (no stylesheet, no external asset — the self-contained rule above), mono
+tabular numerals, and chart marks in the three series hues. Three additions are
+presentation only and add no field: error ticks under the traffic bars (one mark
+per failed call, scaled to the worst day in the window), an `Err %` column on the
+Providers table, and click-to-sort on that table and on the rollup above — a row
+with no figure for the sorted column sorts last in **both** directions, since a
+`null` percentile is absence and never the fastest row. Recent calls carries a
+tool filter that persists in `localStorage`, and every timestamp cell carries the
+reader's local time in a tooltip while its visible text stays UTC.
+
 ## Non-goals
 
 - **No content.** No query text, no URLs, no hosts, no titles, no extracted
