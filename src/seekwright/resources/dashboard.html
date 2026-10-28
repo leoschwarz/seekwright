@@ -3,25 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="dark">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#f4f1ea">
 <title>seekwright · usage</title>
 <style>
   :root {
-    --bg: #0b1220;
-    --bg-2: #0e1730;
-    --surface: #131c2e;
-    --surface-2: #17223a;
-    --text: #e2e8f0;
-    --muted: #8494b0;
-    --faint: #5c6b87;
-    --accent: #38bdf8;
-    --accent-2: #818cf8;
-    --good: #34d399;
-    --warn: #fbbf24;
-    --bad: #f87171;
-    --line: #22304a;
-    --line-soft: #1a2540;
-    --radius: 16px;
+    --paper: #f4f1ea;
+    --surface: #fdfcf9;
+    --surface-2: #f0ede4;
+    --ink: #201d18;
+    --ink-2: #5f594e;
+    --ink-3: #8d8778;
+    --rule: #d9d4c7;
+    --rule-soft: #e7e3d7;
+    --accent: #0e6b5c;
+    --accent-2: #8c5a10;
+    --model: #6b5a8c;
+    --good: #2e7d46;
+    --warn: #9c6b0a;
+    --bad: #b3271e;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
   * { box-sizing: border-box; }
   html { -webkit-text-size-adjust: 100%; }
@@ -29,197 +32,210 @@
     margin: 0;
     min-height: 100vh;
     padding: clamp(18px, 3vw, 40px);
-    background:
-      radial-gradient(1200px 600px at 78% -10%, rgba(56, 189, 248, 0.10), transparent 60%),
-      radial-gradient(900px 500px at 5% 0%, rgba(129, 140, 248, 0.08), transparent 55%),
-      linear-gradient(180deg, var(--bg-2), var(--bg) 55%);
-    background-attachment: fixed;
-    color: var(--text);
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    font-size: 14px;
-    line-height: 1.5;
-    font-feature-settings: "cv02", "cv03", "cv04";
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.55;
   }
   .wrap { max-width: 1120px; margin: 0 auto; }
 
   header {
     display: flex; align-items: flex-start; justify-content: space-between;
-    gap: 16px; flex-wrap: wrap; margin-bottom: 24px;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 22px;
   }
   h1 {
-    display: flex; align-items: center; gap: 10px;
-    margin: 0; font-size: 19px; font-weight: 650; letter-spacing: -0.01em;
+    display: flex; align-items: center; gap: 10px; margin: 0;
+    font-family: var(--serif); font-size: 21px; font-weight: 600;
+    letter-spacing: 0.005em;
   }
   .mark {
-    width: 22px; height: 22px; border-radius: 7px; flex: none;
-    background: conic-gradient(from 210deg, var(--accent), var(--accent-2), var(--accent));
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 6px 18px rgba(56, 189, 248, 0.25);
+    width: 18px; height: 18px; flex: none; border-radius: 2px;
+    border: 1px solid var(--ink);
+    background: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 4px);
   }
   .sub {
-    color: var(--muted); font-size: 12.5px; margin: 7px 0 0;
+    color: var(--ink-2); font-size: 12px; margin: 6px 0 0;
     display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
   }
-  .sub b { color: var(--text); font-weight: 550; font-variant-numeric: tabular-nums; }
-  .sep { color: var(--faint); }
+  .sub b {
+    color: var(--ink); font-family: var(--mono); font-size: 12px;
+    font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .sep { color: var(--ink-3); }
   .chip {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 2px 9px; border-radius: 999px;
-    border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02);
-    color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums;
+    padding: 1px 7px; border-radius: 2px;
+    border: 1px solid var(--rule); background: var(--surface);
+    color: var(--ink-2); font-family: var(--mono); font-size: 11px;
+    font-variant-numeric: tabular-nums;
     max-width: 70ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .chip::before {
-    content: ""; width: 6px; height: 6px; border-radius: 50%; flex: none;
+    content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none;
     background: var(--good);
   }
-  .chip.failed { color: var(--bad); border-color: rgba(248, 113, 113, 0.4); }
+  .chip.failed { color: var(--bad); border-color: var(--bad); }
   .chip.failed::before { background: var(--bad); }
 
   .status {
     display: inline-flex; align-items: center; gap: 8px;
-    padding: 6px 12px; border-radius: 999px;
-    border: 1px solid var(--line); background: rgba(255, 255, 255, 0.02);
-    color: var(--muted); font-size: 12px; white-space: nowrap;
+    padding: 4px 10px; border-radius: 2px;
+    border: 1px solid var(--rule); background: var(--surface);
+    color: var(--ink-2); font-family: var(--mono); font-size: 11.5px;
+    white-space: nowrap;
   }
   .pulse {
     width: 7px; height: 7px; border-radius: 50%; background: var(--good);
-    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); animation: pulse 2.4s infinite;
+    animation: pulse 2.6s infinite;
   }
   .status.stale .pulse { background: var(--warn); animation: none; }
   @keyframes pulse {
-    0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.45); }
-    70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
   }
 
   .cards {
-    display: grid; gap: 14px; margin-bottom: 18px;
-    grid-template-columns: repeat(auto-fit, minmax(176px, 1fr));
+    display: grid; gap: 12px; margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
   }
   .card {
     position: relative; overflow: hidden;
-    background: linear-gradient(180deg, var(--surface-2), var(--surface));
-    border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 16px 18px 15px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 3px;
+    padding: 14px 16px 13px;
+    transition: border-color 0.15s ease;
   }
   .card::before {
     content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
-    background: linear-gradient(90deg, var(--c, var(--accent)), transparent 75%);
-    opacity: 0.9;
+    background: var(--c, var(--accent));
   }
-  .card:hover {
-    transform: translateY(-2px); border-color: #2c3d5e;
-    box-shadow: 0 10px 26px rgba(3, 8, 20, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  }
+  .card:hover { border-color: var(--ink-3); }
   .card .card-label {
-    display: block; color: var(--muted); font-size: 11px; font-weight: 550;
-    text-transform: uppercase; letter-spacing: 0.09em;
+    display: block; color: var(--ink-2); font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
   }
   .card .card-value {
-    display: block; margin-top: 8px; font-size: 29px; font-weight: 650;
-    letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1;
+    display: block; margin-top: 8px; font-family: var(--mono);
+    font-size: 26px; font-weight: 600;
+    font-variant-numeric: tabular-nums; line-height: 1.15;
   }
   .card .card-foot {
-    display: block; margin-top: 6px; color: var(--faint); font-size: 11.5px;
+    display: block; margin-top: 5px; color: var(--ink-3); font-size: 11.5px;
     font-variant-numeric: tabular-nums;
   }
 
   .panel {
-    background: linear-gradient(180deg, var(--surface-2), var(--surface));
-    border: 1px solid var(--line); border-radius: var(--radius);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
-    margin-bottom: 18px; overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 3px;
+    margin-bottom: 16px; overflow: hidden;
   }
   .panel-head {
     display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 14px 18px; border-bottom: 1px solid var(--line-soft);
+    padding: 12px 16px; border-bottom: 1px solid var(--rule);
   }
   .panel-head h2 {
-    margin: 0; font-size: 13px; font-weight: 600; letter-spacing: 0.01em;
+    margin: 0; font-family: var(--serif); font-size: 14px; font-weight: 600;
+    letter-spacing: 0.005em;
   }
-  .panel-head .hint { color: var(--faint); font-size: 11.5px; }
+  .panel-head .hint { color: var(--ink-3); font-size: 11.5px; }
   .spacer { flex: 1 1 auto; }
 
-  .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; color: var(--muted); font-size: 11.5px; }
+  .legend {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    color: var(--ink-2); font-family: var(--mono); font-size: 11px;
+  }
   .sw { display: inline-flex; align-items: center; gap: 6px; }
-  .sw i { width: 9px; height: 9px; border-radius: 3px; display: inline-block; flex: none; }
+  .sw i { width: 9px; height: 9px; border-radius: 1px; display: inline-block; flex: none; }
 
   .toggle {
-    display: inline-flex; padding: 3px; gap: 2px;
-    border: 1px solid var(--line); border-radius: 10px;
-    background: rgba(6, 12, 24, 0.5);
+    display: inline-flex; padding: 2px; gap: 2px;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: var(--surface-2);
   }
   .toggle button {
-    appearance: none; border: 0; background: transparent; color: var(--muted);
-    padding: 6px 15px; border-radius: 7px; cursor: pointer;
-    font: inherit; font-size: 12.5px; font-weight: 550;
-    transition: background 0.16s ease, color 0.16s ease;
+    appearance: none; border: 0; background: transparent; color: var(--ink-2);
+    padding: 4px 11px; border-radius: 2px; cursor: pointer;
+    font: inherit; font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: background 0.12s ease, color 0.12s ease;
   }
-  .toggle button:hover { color: var(--text); }
-  .toggle button[aria-pressed="true"] {
-    background: linear-gradient(180deg, #45c6fb, var(--accent)); color: #04121e;
-    box-shadow: 0 2px 8px rgba(56, 189, 248, 0.28);
-  }
-  .toggle button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .toggle button:hover { color: var(--ink); }
+  .toggle button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .toggle button:focus-visible, th:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .chart { padding: 8px 10px 4px; }
+  .chart { padding: 6px 8px 2px; }
   .chart svg { display: block; width: 100%; height: auto; }
-  .chart .axis { fill: var(--faint); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .chart .axis {
+    fill: var(--ink-3); font-family: var(--mono); font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
   .chart .axis.today { fill: var(--accent); font-weight: 600; }
-  .chart .bar { transition: opacity 0.15s ease; }
-  .chart .bar:hover { opacity: 0.75; }
-  .chart .today-glow { filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.45)); }
+  .chart .bar { transition: fill-opacity 0.12s ease; }
+  .chart .bar:hover { fill-opacity: 0.8; }
 
   .scroll { overflow: auto; max-height: 420px; }
   table { width: 100%; border-collapse: separate; border-spacing: 0; }
   th, td {
-    text-align: left; padding: 10px 18px; white-space: nowrap;
+    text-align: left; padding: 8px 16px; white-space: nowrap;
     font-variant-numeric: tabular-nums;
   }
   thead th {
     position: sticky; top: 0; z-index: 1;
-    background: #141e33; color: var(--muted);
-    font-size: 11px; font-weight: 550; text-transform: uppercase; letter-spacing: 0.07em;
-    border-bottom: 1px solid var(--line);
+    background: var(--surface-2); color: var(--ink-2);
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid var(--rule);
   }
-  tbody td { border-bottom: 1px solid var(--line-soft); font-size: 13px; }
+  thead th[data-sort] { cursor: pointer; user-select: none; }
+  thead th[data-sort]:hover { color: var(--ink); }
+  thead th[aria-sort="descending"]::after { content: "▾"; margin-left: 5px; color: var(--ink-3); }
+  thead th[aria-sort="ascending"]::after { content: "▴"; margin-left: 5px; color: var(--ink-3); }
+  tbody td { border-bottom: 1px solid var(--rule-soft); font-size: 12.5px; }
   tbody tr:last-child td { border-bottom: 0; }
-  tbody tr { transition: background 0.14s ease; }
-  tbody tr:hover { background: rgba(56, 189, 248, 0.05); }
-  .num { text-align: right; }
+  tbody tr { transition: background 0.12s ease; }
+  tbody tr:hover { background: var(--surface-2); }
+  .num { text-align: right; font-family: var(--mono); }
   .emph { color: var(--accent); font-weight: 600; }
   .err { color: var(--bad); font-weight: 600; }
-  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+  .mono { font-family: var(--mono); }
 
-  .share { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+  .share { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
   .share .track {
-    width: 54px; height: 5px; border-radius: 999px; flex: none;
-    background: rgba(255, 255, 255, 0.06); overflow: hidden;
+    width: 52px; height: 5px; border-radius: 1px; flex: none;
+    border: 1px solid var(--rule-soft); background: var(--surface-2); overflow: hidden;
   }
-  .share .track i { display: block; height: 100%; border-radius: 999px; }
+  .share .track i { display: block; height: 100%; }
 
   .pill {
-    display: inline-block; padding: 2px 9px; border-radius: 999px;
-    font-size: 11.5px; font-weight: 550; letter-spacing: 0.01em;
+    display: inline-block; padding: 1px 6px; border-radius: 2px;
+    border: 1px solid; font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.02em;
   }
-  .pill.search { color: #7dd3fc; background: rgba(56, 189, 248, 0.13); }
-  .pill.fetch { color: #a5b4fc; background: rgba(129, 140, 248, 0.15); }
-  .pill.answer { color: #f0abfc; background: rgba(232, 121, 249, 0.14); }
-  .pill.err { color: var(--bad); background: rgba(248, 113, 113, 0.13); }
-  .dim { color: var(--faint); }
+  .pill.search { color: var(--accent); border-color: var(--accent); background: rgba(14, 107, 92, 0.07); }
+  .pill.fetch { color: var(--accent-2); border-color: var(--accent-2); background: rgba(140, 90, 16, 0.07); }
+  .pill.answer { color: var(--model); border-color: var(--model); background: rgba(107, 90, 140, 0.08); }
+  .pill.err {
+    color: var(--bad); border-color: var(--bad); background: rgba(179, 39, 30, 0.07);
+    max-width: 34ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;
+  }
+  .dim { color: var(--ink-3); }
 
-  .empty { padding: 26px 18px; color: var(--faint); text-align: center; font-size: 13px; }
-  footer { color: var(--faint); font-size: 12px; margin: 26px 2px 0; text-align: center; }
+  .empty { padding: 22px 16px; color: var(--ink-3); text-align: center; font-size: 12.5px; }
+  footer {
+    color: var(--ink-3); font-family: var(--serif); font-style: italic; font-size: 12px;
+    line-height: 1.6; max-width: 78ch; margin: 26px auto 0; padding-top: 14px;
+    border-top: 1px solid var(--rule); text-align: center;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     *, .card, .pulse, .toggle button, .chart .bar { transition: none !important; animation: none !important; }
   }
   @media (max-width: 560px) {
-    .card .card-value { font-size: 25px; }
-    th, td { padding: 9px 12px; }
-    .panel-head { padding: 12px 14px; }
+    .card .card-value { font-size: 23px; }
+    th, td { padding: 7px 11px; }
+    .panel-head { padding: 11px 12px; }
   }
 </style>
 </head>
@@ -245,12 +261,12 @@
       <span class="card-value" id="m-spend">$0.0000</span>
       <span class="card-foot" id="f-spend">estimated from provider prices</span>
     </div>
-    <div class="card" style="--c: #7dd3fc">
+    <div class="card" style="--c: var(--model)">
       <span class="card-label">Spend · model</span>
       <span class="card-value" id="m-model">—</span>
       <span class="card-foot" id="f-model">counted, not priced</span>
     </div>
-    <div class="card" style="--c: #7dd3fc">
+    <div class="card" style="--c: var(--accent)">
       <span class="card-label">Searches</span>
       <span class="card-value" id="m-searches">0</span>
       <span class="card-foot" id="f-searches">—</span>
@@ -260,7 +276,7 @@
       <span class="card-value" id="m-fetches">0</span>
       <span class="card-foot" id="f-fetches">—</span>
     </div>
-    <div class="card" style="--c: var(--accent-2)">
+    <div class="card" style="--c: var(--model)">
       <span class="card-label">Answers</span>
       <span class="card-value" id="m-answers">0</span>
       <span class="card-foot" id="f-answers">—</span>
@@ -309,12 +325,13 @@
       <table>
         <thead>
           <tr>
-            <th>Provider</th>
-            <th class="num">Calls</th>
-            <th class="num">Errors</th>
-            <th class="num">Avg ms</th>
-            <th class="num" id="th-spend">Spend</th>
-            <th>Last used</th>
+            <th data-sort="provider">Provider</th>
+            <th class="num" data-sort="calls">Calls</th>
+            <th class="num" data-sort="errors">Errors</th>
+            <th class="num" data-sort="errrate">Err %</th>
+            <th class="num" data-sort="avg_ms">Avg ms</th>
+            <th class="num" id="th-spend" data-sort="cost_usd">Spend</th>
+            <th data-sort="last_used">Last used</th>
           </tr>
         </thead>
         <tbody id="providers"></tbody>
@@ -331,16 +348,16 @@
       <table>
         <thead>
           <tr>
-            <th>Provider</th>
-            <th class="num">Calls</th>
-            <th class="num">Errors</th>
-            <th class="num">Fallbacks</th>
-            <th class="num">Samples</th>
-            <th class="num">p50 ms</th>
-            <th class="num">p95 ms</th>
-            <th class="num">Mean ms</th>
-            <th class="num">$/1k</th>
-            <th>Last seen</th>
+            <th data-sort="provider">Provider</th>
+            <th class="num" data-sort="calls">Calls</th>
+            <th class="num" data-sort="errors">Errors</th>
+            <th class="num" data-sort="fell_back_calls">Fallbacks</th>
+            <th class="num" data-sort="latency_samples">Samples</th>
+            <th class="num" data-sort="p50_ms">p50 ms</th>
+            <th class="num" data-sort="p95_ms">p95 ms</th>
+            <th class="num" data-sort="mean_ms">Mean ms</th>
+            <th class="num" data-sort="cost_per_1k">$/1k</th>
+            <th data-sort="last_seen">Last seen</th>
           </tr>
         </thead>
         <tbody id="endpoint-rollup"></tbody>
@@ -406,7 +423,14 @@
   <section class="panel">
     <div class="panel-head">
       <h2>Recent calls</h2>
-      <span class="hint">latest 100, newest first</span>
+      <span class="hint" id="recent-hint">latest 100, newest first</span>
+      <span class="spacer"></span>
+      <div class="toggle" role="group" aria-label="Tool">
+        <button id="t-all" type="button" aria-pressed="true">All</button>
+        <button id="t-search" type="button" aria-pressed="false">Search</button>
+        <button id="t-fetch" type="button" aria-pressed="false">Fetch</button>
+        <button id="t-answer" type="button" aria-pressed="false">Answer</button>
+      </div>
     </div>
     <div class="scroll">
       <table>
@@ -442,6 +466,12 @@
   "use strict";
   var data = null;
   var view = localStorage.getItem("dashboard.view") || "requests";
+  var tool = localStorage.getItem("dashboard.tool") || "all";
+  // Sort state outlives a render, because the poll re-renders every ten seconds
+  // and a table that reshuffles under the reader is a table they cannot read.
+  // `null` means "the snapshot's own order", which is the ranking the server
+  // built; a click is what replaces it.
+  var sortState = { providers: null, endpoints: null };
 
   function $(id) { return document.getElementById(id); }
   function setText(id, v) { var el = $(id); if (el) { el.textContent = v; } }
@@ -464,6 +494,15 @@
     var iso = d.toISOString();
     return short ? iso.slice(11, 16) : iso.slice(0, 16).replace("T", " ") + "Z";
   }
+  // Every timestamp the page prints is UTC, because that is what the journal
+  // writes and a reader comparing two rows needs one clock. The reader's own
+  // clock rides along in the tooltip, so the visible text never has to be
+  // re-derived by hand to answer "when was that, locally".
+  function localTitle(ts) {
+    if (!ts) { return ""; }
+    var d = new Date(ts);
+    return isNaN(d.getTime()) ? "" : d.toLocaleString();
+  }
   function niceMax(v, div) {
     if (!(v > 0)) { return div; }
     var raw = v / div;
@@ -478,10 +517,91 @@
     if (text !== undefined) { node.textContent = text; }
     return node;
   }
+  function stampCell(ts, cls, short) {
+    var td = el("td", cls, stamp(ts, short));
+    var title = localTitle(ts);
+    if (title) { td.title = title; }
+    return td;
+  }
+
+  function setStampText(id, ts, fallback) {
+    setText(id, ts ? stamp(ts) : fallback);
+    var node = $(id);
+    if (node) { node.title = localTitle(ts); }
+  }
+
+  // Rows with no figure for the sort column land last in both directions: a
+  // null p95 or an unset `cost_per_1k` is absence, so it can be neither the
+  // fastest nor the cheapest row, and flipping the arrow must not promote it to
+  // the top.
+  function sortRows(rows, state, get) {
+    if (!state) { return rows; }
+    var scored = [], missing = [];
+    rows.forEach(function (row) {
+      var v = get(row, state.key);
+      (v === null || v === undefined) ? missing.push(row) : scored.push(row);
+    });
+    scored.sort(function (a, b) {
+      var x = get(a, state.key), y = get(b, state.key);
+      if (typeof x === "string" || typeof y === "string") {
+        var byText = String(x).localeCompare(String(y));
+        return state.dir === "asc" ? byText : -byText;
+      }
+      return state.dir === "asc" ? x - y : y - x;
+    });
+    return scored.concat(missing);
+  }
+
+  function providerValue(p, key) {
+    if (key === "provider") { return p.provider; }
+    if (key === "last_used") { return p.last_used || null; }
+    if (key === "errrate") {
+      return Number(p.calls || 0) ? 100 * Number(p.errors || 0) / Number(p.calls) : 0;
+    }
+    return Number(p[key] || 0);
+  }
+
+  function endpointValue(p, key) {
+    if (key === "provider") { return p.provider; }
+    if (key === "last_seen") { return p.last_seen || null; }
+    if (key === "p50_ms" || key === "p95_ms" || key === "mean_ms" || key === "cost_per_1k") {
+      return (p[key] === null || p[key] === undefined) ? null : Number(p[key]);
+    }
+    return Number(p[key] || 0);
+  }
+
+  function markSort(head, state) {
+    Array.prototype.forEach.call(head.querySelectorAll("th[data-sort]"), function (th) {
+      if (state && th.getAttribute("data-sort") === state.key) {
+        th.setAttribute("aria-sort", state.dir === "asc" ? "ascending" : "descending");
+      } else {
+        th.removeAttribute("aria-sort");
+      }
+    });
+  }
+
+  function wireSort(bodyId, stateKey, get) {
+    var body = $(bodyId);
+    var head = body.parentNode.tHead;
+    head.addEventListener("click", function (event) {
+      var th = event.target.closest("th[data-sort]");
+      if (!th) { return; }
+      var key = th.getAttribute("data-sort");
+      var current = sortState[stateKey];
+      var same = current && current.key === key;
+      var dir = same
+        ? (current.dir === "desc" ? "asc" : "desc")
+        : (key === "provider" || key === "last_used" || key === "last_seen" ? "asc" : "desc");
+      sortState[stateKey] = { key: key, dir: dir };
+      markSort(head, sortState[stateKey]);
+      if (!data) { return; }
+      if (stateKey === "providers") { renderProviders(); } else { renderEndpoints(); }
+    });
+  }
 
   function renderHeader() {
-    setText("since", data.since ? stamp(data.since) : "never");
-    setText("started", stamp(data.process_started_at));
+    setStampText("since", data.since, "never");
+    setStampText("started", data.process_started_at, "—");
     var chip = $("journal");
     var j = data.journal || {};
     if (j.failed) {
@@ -542,16 +662,14 @@
   // colours are chosen here rather than configured: `[dashboard]`'s two keys are
   // fixed for 0.1.0, so a per-provider colour needs that set widened before it
   // could be a config key.
-  // Ordered so its first eight slots are none of the hues the bar chart above
-  // already draws with: that panel's two series hues sit at slots 9 and 12. A
-  // provider segment in the same sky as "search cost" would read as that series
-  // rather than as a provider. Sixteen slots because the frozen surface names
-  // sixteen provider names, so a window showing every one of them needs no
-  // repeat.
+  // Ordered so its first eight slots are none of the hues the two charts above
+  // draw with: the three series hues (teal, plum, umber) sit at slots 9, 11 and
+  // 12, so a provider segment never reads as a chart series. Sixteen slots is
+  // one short of the seventeen frozen provider names, so a window showing all of
+  // them wraps at slot one.
   var PALETTE = [
-    "#34d399", "#f472b6", "#fbbf24", "#2dd4bf", "#f87171", "#a3e635",
-    "#c084fc", "#fb923c", "#38bdf8", "#4ade80", "#f0abfc", "#818cf8",
-    "#60a5fa", "#facc15", "#fda4af", "#94a3b8"
+    "#a63a2b", "#3c688b", "#577e2e", "#93465c", "#b06800", "#5a5f66", "#8f3f74", "#4f7d46",
+    "#7a5c2e", "#0e6b5c", "#96694a", "#6b5a8c", "#8c5a10", "#3a7d74", "#a2785a", "#71735d"
   ];
   var colour = Object.create(null);
   var nextSlot = 0;
@@ -581,8 +699,10 @@
   }
   function renderLegend(spend) {
     $("legend").innerHTML = spend
-      ? swatch("var(--accent)", "search cost") + swatch("var(--accent-2)", "model cost")
-      : swatch("var(--accent)", "searches") + swatch("var(--accent-2)", "fetches");
+      ? swatch("var(--accent)", "search cost") + swatch("var(--model)", "model cost") +
+        swatch("var(--bad)", "errors")
+      : swatch("var(--accent)", "searches") + swatch("var(--accent-2)", "fetches") +
+        swatch("var(--bad)", "errors");
   }
 
   function renderChart() {
@@ -591,7 +711,10 @@
     setText("chart-title", (spend ? "Spend" : "Requests") + " · last 14 days (UTC)");
     renderLegend(spend);
 
-    var W = 720, H = 232, padL = 52, padR = 14, padT = 14, padB = 32;
+    // The bottom margin is 62px, not 32: the day labels sit under the baseline
+    // and the error ticks sit between the two, so neither can be clipped by a
+    // viewBox scaled into a narrow column.
+    var W = 720, H = 262, padL = 52, padR = 14, padT = 14, padB = 62;
     var base = H - padB, top = padT;
     var n = Math.max(days.length, 1);
     var slot = (W - padL - padR) / n;
@@ -610,17 +733,23 @@
       var value = max * i / 4;
       var yy = y(value);
       parts.push('<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy +
-                 '" y2="' + yy + '" stroke="var(--line-soft)"></line>');
+                 '" y2="' + yy + '" stroke="var(--rule-soft)"></line>');
       parts.push('<text class="axis" x="' + (padL - 9) + '" y="' + (yy + 3.5) +
                  '" text-anchor="end">' + axisLabel(value, spend) + "</text>");
     });
 
-    function bar(x, yy, h, fill, tip, today) {
+    function bar(x, yy, h, fill, tip) {
       if (!(h > 0)) { return ""; }
-      return '<rect class="bar' + (today ? " today-glow" : "") + '" x="' + x +
-             '" y="' + yy + '" width="' + bw + '" height="' + h +
-             '" rx="3" fill="' + fill + '"><title>' + tip + "</title></rect>";
+      return '<rect class="bar" x="' + x + '" y="' + yy + '" width="' + bw +
+             '" height="' + h + '" rx="1" fill="' + fill + '"><title>' + tip + "</title></rect>";
     }
+
+    // One tick per failed call, scaled to the worst day in the window, so a
+    // reader sees *whether* a day was clean before they hover a bar to count
+    // it. A day with no error draws nothing rather than a zero-height mark.
+    var tickMax = Math.max.apply(null, days.map(function (d) {
+      return Number(d.errors || 0);
+    }).concat([1]));
 
     days.forEach(function (d, i) {
       var x = padL + slot * i + (slot - bw) / 2;
@@ -640,19 +769,32 @@
         var hs = base - y(Number(d.cost_usd || 0));
         var hm = base - y(Number(d.model_cost_usd || 0));
         var yS = base - hs;
-        parts.push(bar(x, yS, hs, "var(--accent)", tip, today));
-        parts.push(bar(x, yS - hm, hm, "var(--accent-2)", tip, today));
+        parts.push(bar(x, yS, hs, "var(--accent)", tip));
+        parts.push(bar(x, yS - hm, hm, "var(--model)", tip));
       } else {
         var fs = Number(d.fetches || 0), ss = Number(d.searches || 0);
         var gap = (fs > 0 && ss > 0) ? 2 : 0;
-        var hf = base - y(fs), hs = base - y(ss);
+        var hf = base - y(fs), hs2 = base - y(ss);
         var yF = base - hf;
-        parts.push(bar(x, yF, hf, "var(--accent-2)", tip, today));
-        parts.push(bar(x, yF - gap - hs, hs, "var(--accent)", tip, today));
+        parts.push(bar(x, yF, hf, "var(--accent-2)", tip));
+        parts.push(bar(x, yF - gap - hs2, hs2, "var(--accent)", tip));
+      }
+      if (Number(d.errors || 0) > 0) {
+        var th = Math.max(1.5, 18 * Number(d.errors || 0) / tickMax);
+        parts.push('<rect x="' + x + '" y="' + (base + 26 - th) + '" width="' + bw +
+                   '" height="' + th + '" rx="1" fill="var(--bad)" fill-opacity="0.8">' +
+                   "<title>" + tip + "</title></rect>");
       }
       parts.push('<text class="axis' + (today ? " today" : "") + '" x="' +
                  (x + bw / 2) + '" y="' + (H - 10) +
                  '" text-anchor="middle">' + d.date.slice(5) + "</text>");
+      // Today is marked with a rule under its label instead of a glow: the
+      // palette has no shadow, and a highlight that changes a bar's weight
+      // would read as a data difference.
+      if (today) {
+        parts.push('<rect x="' + (x + bw / 2 - 9) + '" y="' + (H - 6) +
+                   '" width="18" height="2" fill="var(--accent)"></rect>');
+      }
     });
 
     $("chart").innerHTML =
@@ -713,7 +855,7 @@
       var value = max * i / 4;
       var yy = y(value);
       parts.push('<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy +
-                 '" y2="' + yy + '" stroke="var(--line-soft)"></line>');
+                 '" y2="' + yy + '" stroke="var(--rule-soft)"></line>');
       parts.push('<text class="axis" x="' + (padL - 9) + '" y="' + (yy + 3.5) +
                  '" text-anchor="end">' + axisLabel(value, true) + "</text>");
     });
@@ -733,7 +875,7 @@
         // Square corners, unlike the single bars above: a rounded corner on
         // every layer of a stack reads as a gap that is not there.
         parts.push('<rect class="bar" x="' + x + '" y="' + (stackBase - h) +
-                   '" width="' + bw + '" height="' + h + '" fill="' + colourFor(name) +
+                   '" width="' + bw + '" height="' + h + '" rx="1" fill="' + colourFor(name) +
                    '"><title>' + name + " · " + date + " — " + money(v) +
                    " over " + num(row.calls) + " searches</title></rect>");
         stackBase -= h;
@@ -757,7 +899,7 @@
 
   function renderProviders() {
     var spend = view === "spend";
-    var rows = data.providers || [];
+    var rows = sortRows(data.providers || [], sortState.providers, providerValue);
     var body = $("providers");
     body.innerHTML = "";
     $("th-spend").className = spend ? "num emph" : "num";
@@ -765,7 +907,7 @@
     if (!rows.length) {
       var empty = el("tr");
       var cell = el("td", "empty", "no searches recorded yet");
-      cell.colSpan = 6;
+      cell.colSpan = 7;
       empty.appendChild(cell);
       body.appendChild(empty);
       return;
@@ -784,10 +926,14 @@
       var calls = cell("", "num");
       calls.innerHTML = share(Number(p.calls || 0), maxCalls, "var(--accent-2)");
       cell(num(p.errors), p.errors ? "num err" : "num dim");
+      // The same ratio the Errors card states, per row: the row a reader is
+      // about to retry is the row where the share matters, not the total.
+      var rate = Number(p.calls || 0) ? 100 * Number(p.errors || 0) / Number(p.calls) : null;
+      cell(rate === null ? "—" : rate.toFixed(1) + "%", rate ? "num" : "num dim");
       cell(num(p.avg_ms), "num");
       var spendCell = cell("", spend ? "num emph" : "num");
       spendCell.innerHTML = share(Number(p.cost_usd || 0), maxSpend, colourFor(p.provider));
-      cell(p.last_used ? stamp(p.last_used) : "—", "dim");
+      tr.appendChild(stampCell(p.last_used, "dim"));
       body.appendChild(tr);
     });
   }
@@ -797,7 +943,7 @@
     var days = $("endpoint-days");
     rollup.innerHTML = "";
     days.innerHTML = "";
-    var rows = (data.endpoints || {}).providers || [];
+    var rows = sortRows((data.endpoints || {}).providers || [], sortState.endpoints, endpointValue);
 
     if (!rows.length) {
       [rollup, days].forEach(function (body, i) {
@@ -833,7 +979,7 @@
       cell(ms(p.p95_ms), "num");
       cell(ms(p.mean_ms), "num");
       cell(perK(p.cost_per_1k), "num");
-      cell(p.last_seen ? stamp(p.last_seen) : "—", "dim");
+      tr.appendChild(stampCell(p.last_seen, "dim"));
       rollup.appendChild(tr);
 
       (p.days || []).forEach(function (d) {
@@ -925,11 +1071,19 @@
 
   function renderRecent() {
     var body = $("recent");
+    var hint = $("recent-hint");
     body.innerHTML = "";
-    var rows = data.recent || [];
+    var all = data.recent || [];
+    // The filter narrows the rows the poll already delivered: the journal's
+    // newest hundred is the window, so a filtered table is a view of it and
+    // never a second query.
+    var rows = tool === "all" ? all : all.filter(function (e) { return e.tool === tool; });
+    hint.textContent = "latest 100, newest first" +
+      (tool === "all" ? "" : " · " + num(rows.length) + " shown");
     if (!rows.length) {
       var empty = el("tr");
-      var cell = el("td", "empty", "nothing recorded yet");
+      var cell = el("td", "empty",
+        tool === "all" ? "nothing recorded yet" : "no " + tool + " calls recorded yet");
       cell.colSpan = 7;
       empty.appendChild(cell);
       body.appendChild(empty);
@@ -946,7 +1100,7 @@
         tr.appendChild(td);
         return td;
       }
-      cell(stamp(e.ts, true), "dim");
+      tr.appendChild(stampCell(e.ts, "dim", true));
       cell(el("span", "pill " + (isSearch ? "search" : isAnswer ? "answer" : "fetch"), e.tool));
       cell(isSearch ? (e.provider || "—") : isAnswer ? (e.model || "—") : (e.fallback || "local"), "mono");
       cell(num(e.ms), "num");
@@ -977,6 +1131,15 @@
     $("v-requests").setAttribute("aria-pressed", String(next === "requests"));
     $("v-spend").setAttribute("aria-pressed", String(next === "spend"));
     if (data) { renderChart(); renderProviders(); }
+  }
+
+  function setTool(next) {
+    tool = next;
+    localStorage.setItem("dashboard.tool", next);
+    ["all", "search", "fetch", "answer"].forEach(function (name) {
+      $("t-" + name).setAttribute("aria-pressed", String(name === next));
+    });
+    if (data) { renderRecent(); }
   }
 
   function render() {
@@ -1014,7 +1177,14 @@
 
   $("v-requests").addEventListener("click", function () { setView("requests"); });
   $("v-spend").addEventListener("click", function () { setView("spend"); });
+  $("t-all").addEventListener("click", function () { setTool("all"); });
+  $("t-search").addEventListener("click", function () { setTool("search"); });
+  $("t-fetch").addEventListener("click", function () { setTool("fetch"); });
+  $("t-answer").addEventListener("click", function () { setTool("answer"); });
+  wireSort("providers", "providers", providerValue);
+  wireSort("endpoint-rollup", "endpoints", endpointValue);
   setView(view);
+  setTool(tool);
   refresh();
   setInterval(refresh, 10000);
 })();
