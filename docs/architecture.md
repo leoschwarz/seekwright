@@ -511,8 +511,9 @@ prices behind the seventeen names are in
 
 ## Deliberate non-features
 
-These are decisions with entries in [`decisions.md`](decisions.md), not gaps
-waiting to be filled. Reversing one is a decision, not an oversight. The intent
+These are deliberate refusals, not gaps waiting to be filled. Reversing one is
+a decision, not an oversight, and it belongs in the pull request that reverses
+it. The intent
 behind each is [`VISION.md`](../VISION.md)'s non-goals; this section is how one
 works.
 

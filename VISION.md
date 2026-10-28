@@ -2,7 +2,8 @@
 
 What this project is for, what it will refuse, and which good wins when two collide.
 Every task and decision steers by this page; if a task cannot be reconciled with it, the
-reconciliation is a dated entry in [`docs/decisions.md`](docs/decisions.md). The mechanism
+reconciliation is a change to this page in the same pull request: either the task is
+refused, or this page states which goal yields and why. The mechanism
 is [`docs/architecture.md`](docs/architecture.md), the open work is
 [`docs/ROADMAP.md`](docs/ROADMAP.md), and every name a caller may depend on is
 [`docs/reference/surface.md`](docs/reference/surface.md).
@@ -28,7 +29,7 @@ is [`docs/architecture.md`](docs/architecture.md), the open work is
 - Every response names the provider or fallback that served it, and the price it declared.
 - Adding or removing a vendor is configuration, not code.
 - The surface is enumerable and checked: the three tools and every frozen name move only
-  through a dated decision.
+  in a pull request that moves the code and the printed surface together.
 - An `answer` citation resolves to a page this deployment actually retrieved.
 
 ## Diagnosis

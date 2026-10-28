@@ -328,8 +328,7 @@ figure.
   prices unset the line carries no cost, so the aggregate reports `null` rather
   than a free call, and `priced_calls` says how much of `calls` the total covers.
   The token totals have the same shape — `null` when no call reported `usage`,
-  with `token_calls` beside them — which is the *counted, not priced* rule in
-  `decisions.md`.
+  with `token_calls` beside them.
 - **A run's `cited` is credited to a provider per run, not per citation**: every
   provider that contributed results to an answering run is credited with that
   run's `cited`, once. Exact for the ordinary one-provider run, and a documented

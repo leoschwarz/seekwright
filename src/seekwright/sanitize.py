@@ -87,8 +87,8 @@ def sanitize_model(model: BaseModel) -> int:
 
     Walks the model\'s own fields and recurses into nested response models (the
     ``results`` / ``matches`` / ``sources`` lists), so one call at the engine
-    covers a whole response. Returns the number of literals escaped, the figure
-    the decision log carries -- a count, never the content.
+    covers a whole response. Returns the number of literals escaped: the
+    caller logs that count, never the content.
     """
     count = 0
     for name in type(model).model_fields:

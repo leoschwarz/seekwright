@@ -160,9 +160,9 @@ table (README, read 2026-10-22) settles which is which: web search is cloud-only
 offers no search endpoint at all (`/md`, `/html`, `/crawl`, `/crawl/stream`,
 `/screenshot`, `/pdf`, `/execute_js`). So neither ask touches this contract,
 this fallback, or the ladder's free renderer: each would be its own keyed adapter,
-with its own price and its own unconditional target validation. Both are open
-as survey-and-decision entries — one for `POST /scrape` as a `fetch` fallback and
-one for `/search` and `/serp` as a search provider. Nothing here
+with its own price and its own unconditional target validation. Both stay open
+questions, not decisions — one for `POST /scrape` as a `fetch` fallback and one
+for `/search` and `/serp` as a search provider. Nothing here
 pre-decides either, and nothing in this tree has an adapter for any of it.
 
 The fetch half was surveyed on 2026-10-22: the vendor's endpoint, auth,
