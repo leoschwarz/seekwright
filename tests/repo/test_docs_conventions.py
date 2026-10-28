@@ -1,78 +1,30 @@
-"""The prepend-collision check: `docs/decisions.md` is newest-first, by test.
+"""The map checked against the tree, and the retired record kept retired.
 
-Every dated entry is inserted at the same spot -- the first `## <date>` heading
-under the header note -- so two decision-record PRs in one cycle conflict in one
-hunk whatever their content, and the gate cannot resolve it: the case arose
-in a real gate run, where `git merge-tree --write-tree` on a pull head returned
-rc=1 with `CONFLICT (content): Merge conflict in docs/decisions.md` while the
-other two files auto-merged and the pull-request readback reported
-`mergeable: false`. The convention that settles it is stated in the header note
-here and in AGENTS.md:
-keep both entries, in date order. This file pins the ordering half of that
-convention, so a merge resolution that drops an entry or leaves it below an
-older one fails the gate instead of reaching main.
+`docs/index.md` is the way into `docs/` -- README.md and AGENTS.md both point at
+it -- and its `## Documents` section is where every page is linked one at a time,
+while the `## Structure` table above it names the paths in prose only. When the
+map check was first written, exactly one tracked page had no link there:
+`docs/reference/surface.md`, the frozen-surface manifest, the page that says what
+the freeze holds. Nothing read the map, so the gap was silent. The check walks
+`docs/` from the filesystem and asks that every page but the map itself be
+linked in that section, so a page added later arrives with its entry or fails
+the gate.
 
-The two `## Earlier -- ...` sections at the tail of the file carry no date and so
-take no part in the order; the check reads the dated headings only.
-
-The remaining checks read the documented map against the tree. `docs/index.md`
-is the way into `docs/` -- README.md and AGENTS.md both point at it -- and its
-`## Documents` section is where every page is linked one at a time, while the
-`## Structure` table above it names the paths in prose only. When this check was first
-written, exactly one tracked page had no link there: `docs/reference/surface.md`, the
-frozen-surface manifest, the page that says what the freeze holds. Nothing read the
-map, so the gap was silent. The check walks `docs/` from the filesystem and asks
-that every page but the map itself be linked in that
-section, so a page added later arrives with its entry or fails the gate.
+The last check reads the other direction. The dated decision record was retired
+because its reasoning belongs beside the rule it explains, not in a growing
+ledger; the file is gone, and nothing resolves a markdown link, so a surviving
+mention would send a reader nowhere. This module also keeps the older ban on
+arguing from a date: a page states its own reason, and a measurement date ("read
+2026-10-23") stays legal anywhere.
 """
 
 from __future__ import annotations
 
 import re
 from collections import Counter
-from itertools import pairwise
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DECISIONS = ROOT / "docs" / "decisions.md"
-AGENTS = ROOT / "AGENTS.md"
-
-DATED_HEADING = re.compile(r"^## (\d{4}-\d{2}-\d{2})\b", re.MULTILINE)
-
-# The tie-break rule, held here as one string so the two documents that state it
-# cannot drift into stating two different rules.
-TIE_BREAK = (
-    "Entries sit newest-first at the first `## <date>` heading, and when two "
-    "branches each prepend an entry, the resolution is to keep both entries in "
-    "date order (newest first) and to make no other edit to either entry."
-)
-
-
-def _flat(text: str) -> str:
-    """The document on one line: markdown wraps, the agreement between copies does not."""
-    return " ".join(text.split())
-
-
-def test_dated_entries_sit_newest_first() -> None:
-    """A `^## <date>` heading is never followed by an older one."""
-    dates = DATED_HEADING.findall(DECISIONS.read_text(encoding="utf-8"))
-    assert len(dates) > 1, f"{DECISIONS.relative_to(ROOT)}: no dated entry headings parsed"
-    reversed_pairs = [
-        (newer, older) for newer, older in pairwise(dates) if newer < older
-    ]
-    assert not reversed_pairs, (
-        "docs/decisions.md must hold its dated entries newest-first; these adjacent "
-        f"headings are out of order: {reversed_pairs}"
-    )
-
-
-def test_tie_break_rule_is_the_same_sentence_in_both_documents() -> None:
-    """The rule is stated once in `docs/decisions.md` and identically in AGENTS.md."""
-    rule = _flat(TIE_BREAK)
-    decisions = _flat(DECISIONS.read_text(encoding="utf-8"))
-    agents = _flat(AGENTS.read_text(encoding="utf-8"))
-    assert decisions.count(rule) == 1, "the tie-break sentence is missing from docs/decisions.md"
-    assert agents.count(rule) == 1, "the tie-break sentence is missing from AGENTS.md"
 
 
 # The map links every docs page: a page named only in prose never reaches a reader.
@@ -124,16 +76,14 @@ def test_every_docs_page_is_linked_in_the_map() -> None:
     )
 
 
-# The eight words below are the whole vocabulary: the map may not invent a kind.
+# The six words below are the whole vocabulary: the map may not invent a kind.
 KINDS = (
     "contract",
     "explanation",
     "guide",
-    "record",
     "roadmap",
     "runbook",
     "survey",
-    "thread",
 )
 MAP_BULLET = re.compile(r"^- \*\*([a-z ]+)\*\* — \[", re.MULTILINE)
 KIND_TABLE_ROW = re.compile(r"^\| `([a-z ]+)` \|", re.MULTILINE)
@@ -185,3 +135,40 @@ def test_the_map_labels_every_page_with_a_declared_kind() -> None:
         "docs/index.md must define exactly the kinds the map uses, one table row each; "
         f"the table declares {sorted(declared)} and the map allows {sorted(KINDS)}"
     )
+
+
+# The decision record was retired; a pointer to it is a pointer to no file. The
+# date-as-authority pattern is held for the same reason as before: a page states
+# its own reason, and a measurement date stays legal.
+RETIRED_RECORD = re.compile(r"decisions\.md")
+DATED_AUTHORITY = re.compile(r"\bthe \d{4}-\d{2}-\d{2} (?:entry|rule|decision)\b", re.IGNORECASE)
+GUARDED_SUFFIXES = (".md", ".py", ".html")
+
+
+def _files(root: Path, suffixes: tuple[str, ...]) -> list[Path]:
+    """Every candidate file under `root`, sorted, so a failure names files in a stable order."""
+    return sorted(path for path in root.rglob("*") if path.suffix in suffixes and path.is_file())
+
+
+def test_no_file_cites_the_retired_decision_record() -> None:
+    """`docs/`, `src/`, `tests/`, `tools/` and the front door name no retired record.
+
+    The file was deleted rather than trimmed, and nothing checks that a markdown
+    link resolves, so a surviving mention would send a reader to a 404. This module
+    is skipped by its own scan: it holds the pattern it bans.
+    """
+    roots = [DOCS, ROOT / "src", ROOT / "tests", ROOT / "tools"]
+    paths = [
+        path
+        for root in roots
+        for path in _files(root, GUARDED_SUFFIXES)
+        if path != Path(__file__).resolve()
+    ]
+    paths += [ROOT / name for name in ("AGENTS.md", "README.md", "CONTRIBUTING.md", "SECURITY.md")]
+    offenders = [
+        f"{path.relative_to(ROOT)}: {line.strip()}"
+        for path in paths
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if RETIRED_RECORD.search(line) or DATED_AUTHORITY.search(line)
+    ]
+    assert not offenders, "a surviving citation of the retired decision record:\n" + "\n".join(offenders)

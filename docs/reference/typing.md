@@ -61,5 +61,5 @@ One check is lost outright rather than traded: **`reportUnnecessaryComparison`**
 was at `"warning"` and real, and `ty` implements no rule for it. That, plus the
 untyped-boundary family, is what dropping the pyright fork gives up — deliberately:
 in the agent container a full `basedpyright` run did not finish in 600 s (its Node
-process at ~2 GB RSS), while `ty` checked the same head in 0.489 s. The
-measurements are in [the decisions log](../decisions.md).
+process at ~2 GB RSS), while `ty` checked the same head in 0.489 s. Both figures
+were measured on 2026-10-26 in the agent container.

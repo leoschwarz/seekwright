@@ -20,9 +20,9 @@ for free and bills with a key. In three groups:
 
 This is v1: a proxy and nothing else. There is deliberately **no cache** — every
 `search` call reaches a provider. [`VISION.md`](VISION.md) holds the goals,
-their precedence and the non-goals; [`docs/decisions.md`](docs/decisions.md)
-records what was removed on purpose and why, and is worth reading before
-changing anything structural.
+their precedence and the non-goals; `docs/architecture.md`'s "Deliberate
+non-features" records what was refused on purpose and why, and is worth reading
+before changing anything structural.
 
 `answer` (agent mode) is built and **off by default** (`[agent] enabled =
 false`); its contract is [`docs/reference/agent-mode.md`](docs/reference/agent-mode.md).
@@ -34,10 +34,14 @@ The model never drives retrieval. Open questions are in
 The 0.1.0 freeze holds the request surface: the three tools and their
 parameters, the three `POST /api/v1/…` routes and the four operational paths,
 the three client verbs, the ten server flags, the seventeen provider names and
-every config key. [`docs/reference/surface.md`](docs/reference/surface.md) is
-that surface printed from the tree by `tools/surface.py`; `--check` re-reads the
-tree and fails on drift, so a frozen name moves by changing the code and the
-manifest together, with a dated entry in `docs/decisions.md` for the reasoning.
+every config key, and the usage-journal fields behind `GET /dashboard`.
+[`docs/reference/surface.md`](docs/reference/surface.md) is that surface printed
+from the tree by `tools/surface.py`; `--check` re-reads the tree and fails on
+drift, so a frozen name moves by changing the code, re-printing the manifest and
+re-pinning `tools/value_sets.json` in one pull request, with the reasoning in its
+body. **Values** are not frozen: adding a name, a key or a rung is config.
+**Prose** is not frozen: tool descriptions are model-facing copy, not a wire
+contract.
 
 ## Commands
 
@@ -87,8 +91,8 @@ rules).
 - **A comment states a constraint; prose belongs in `docs/`.** The comment worth
   keeping is the one the code cannot state itself: a pin, an ordering, a name
   that has to match another file. A paragraph in comment syntax rots when the
-  code moves, so it belongs in `decisions.md` or a `reference/` page and the
-  file carries the link instead of the argument. Config files
+  code moves, so it belongs in a `docs/` page and the file carries the link
+  instead of the argument. Config files
   (`pyproject.toml`, `Containerfile`, `.gitignore`, the workflow YAML) take a
   comment only where a value would otherwise surprise a reader.
 - Package lives under `src/seekwright/`; `tests/` mirrors the modules it
@@ -98,7 +102,7 @@ rules).
   `provider_contract`), `tests/fetch/` (the fetcher, the fetch engine, the
   fallbacks, the extractors and `jsondoc`), `tests/repo/` (the guards that read
   this tree rather than the package: `packaging`, `surface`, `docs_conventions`,
-  `doc_cites`, `decision_cites`, `egress_lists`, `value_sets`, the CI-workflow
+  `doc_cites`, `egress_lists`, `value_sets`, the CI-workflow
   guards), and `tests/features/` (Gherkin). `tests/live/test_live.py` holds the
   live tests.
 - Tests use pytest-asyncio in auto mode; no fixtures are needed for async tests.
@@ -355,23 +359,20 @@ non-goals: read it before deciding whether something belongs in this project at
 all. [`docs/index.md`](docs/index.md) is the map, and the only place the shape of
 `docs/` is written down: every page, its kind, which kind goes where, and why a
 page's path and dated headings are never renamed for tidiness — both are cited
-from `src/` and `tests/` comments and from dated records, so a move is a sweep no
+from `src/` and `tests/` comments and from other pages, so a move is a sweep no
 check reads. Place a document by that map, not by a restatement here. Operator
 working notes live outside the repository; conclusions graduate out of them into
-`decisions.md` or `reference/`. [`CONTRIBUTING.md`](CONTRIBUTING.md) is the
-shorter path to the same conventions.
+the page that owns the contract. `AGENTS.md` travels with the checkout, so it may
+promise only what the published tree carries: `.containerignore` drops `tests/`,
+`docs/` and `tools/`, and `uv_build` packages only `src/`.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) is the shorter path to the same conventions.
 
 There is **no changelog**: a change a consumer sees lands in the reference page
 that owns it — `public-api.md`, `configuration.md`, `providers.md`,
-`metrics.md`, or the re-printed `surface.md` — and its reasoning goes in a dated
-`decisions.md` entry. An Added/Changed/Fixed log would restate the contract
-pages rather than record a delta; what is not built yet is
-[`docs/ROADMAP.md`](docs/ROADMAP.md)'s, never a release note's.
-
-**`docs/decisions.md` is newest-first.** Entries sit newest-first at the first
-`## <date>` heading, and when two branches each prepend an entry, the resolution
-is to keep both entries in date order (newest first) and to make no other edit to
-either entry.
+`metrics.md`, or the re-printed `surface.md` — and its reasoning goes beside the
+rule, in that page and in the pull request that makes it. An Added/Changed/Fixed
+log would restate the contract pages rather than record a delta; what is not
+built yet is [`docs/ROADMAP.md`](docs/ROADMAP.md)'s, never a release note's.
 
 Before writing or changing a provider adapter, read
 [`docs/reference/provider-contract.md`](docs/reference/provider-contract.md):

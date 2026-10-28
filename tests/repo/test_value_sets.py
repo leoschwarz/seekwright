@@ -2,11 +2,11 @@
 
 The 0.1.0 freeze fixes value sets as well as names -- the members of `KNOWN_FALLBACKS`,
 `KNOWN_EXTRACTORS`, `KNOWN_PROVIDERS`, `ProviderConfig.output_type`, `LoggingConfig.format`
-and `LogLevel` -- and the one path for moving one is a superseding dated entry in the
-decision record, opened as an issue first. Neither `tools/surface.py` nor any other step
-could see those sets move, which is how `KNOWN_FALLBACKS` went from three rows at a pull
-request's base to five at its head while `ci / check (pull_request)` answered success at
-that head. `tools/value_sets.py` is that reading, made once, at every head.
+and `LogLevel` -- and the one path for moving one is a single pull request, opened as an
+issue first, that re-pins the manifest beside the code. Neither `tools/surface.py` nor any
+other step could see those sets move, which is how `KNOWN_FALLBACKS` went from three rows at
+a pull request's base to five at its head while `ci / check (pull_request)` answered success
+at that head. `tools/value_sets.py` is that reading, made once, at every head.
 
 A checker's own blindness is what would let that happen again, so the guarantee the issue asks
 for runs against a tree this file builds and through the command CI runs: pin a
@@ -117,7 +117,7 @@ def test_a_fallback_added_to_the_registry_fails_the_command_ci_runs(tmp_path: Pa
     report = done.stderr
     assert "KNOWN_FALLBACKS" in report, report
     assert "linkup" in report, report
-    assert "docs/decisions.md" in report, (
+    assert "tools/value_sets.json" in report, (
         f"a move is reported without the rule it has to satisfy: {report}"
     )
 

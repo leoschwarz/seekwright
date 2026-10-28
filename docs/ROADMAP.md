@@ -1,7 +1,7 @@
 # Roadmap
 
 What is not built yet, and what holds it. Delivered behaviour is in the code and in
-`git log`; the reasoning behind it is a dated entry in [decisions.md](decisions.md).
+`git log`, and the page that owns a rule carries its reasoning.
 Project intent — goals, precedence and non-goals — is [VISION.md](../VISION.md), and how
 the pieces fit is [architecture.md](architecture.md).
 

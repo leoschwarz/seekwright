@@ -16,9 +16,9 @@ code the day the code beside them is rewritten.
 
 A prohibition has nothing to resolve, so the path lookup, the range classes, the
 named exceptions and the exit codes are gone with the tool they served; `uv run
-pytest` is the gate. This is the shape `tests/repo/test_decision_cites.py` already
-uses for the dated-cite ban: read the tree, name every offending line, assert the
-list is empty.
+pytest` is the gate. This is the shape `tests/repo/test_docs_conventions.py` uses
+for the map census: read the tree, name every offending line, assert the list is
+empty.
 
 What the pattern cannot see, and what stays a hand audit: a bare `` `:NNN` ``
 continuation carries no filename for the pattern to attach to, so it is caught only

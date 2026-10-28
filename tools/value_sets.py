@@ -26,10 +26,10 @@ Three conventions the check depends on:
   input never exits 0: a silent green on an unparsable source is the failure mode this guards.
 
 What is deliberately absent. Whether a move is allowed is not this tool's call: it prints the
-rule the move has to satisfy -- a superseding dated entry in `docs/decisions.md`, opened as an
-issue first -- and the gate decides. Only membership is compared: the freeze refuses to freeze
-defaults, bounds and prices. And size is not a check -- a name traded for a name leaves every
-count alone -- so the gate still reads the diff for a swap.
+rule the move has to satisfy -- an issue first, then one pull request that re-pins the
+manifest beside the code -- and the gate decides. Only membership is compared: the freeze
+refuses to freeze defaults, bounds and prices. And size is not a check -- a name traded for
+a name leaves every count alone -- so the gate still reads the diff for a swap.
 """
 
 from __future__ import annotations
@@ -55,9 +55,9 @@ COLLECTION = "set literal"
 LITERAL = "Literal members"
 
 FREEZE_RULE = (
-    "frozen value sets: a frozen set moves only through a superseding dated entry in `docs/decisions.md`, "
-    "opened as an issue first and landed in this pull request -- land that entry, re-run "
-    "`uv run python -m tools.value_sets --write` at it, or move the name back"
+    "frozen value sets: a frozen set moves only in one pull request that opens as an issue first and "
+    "re-pins `tools/value_sets.json` beside the code -- re-run "
+    "`uv run python -m tools.value_sets --write` at that tree, or move the name back"
 )
 
 
