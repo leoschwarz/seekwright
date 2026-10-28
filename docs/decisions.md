@@ -18,6 +18,25 @@ Entries sit newest-first at the first `## <date>` heading, and when two
 branches each prepend an entry, the resolution is to keep both entries in
 date order (newest first) and to make no other edit to either entry.
 
+## 2026-10-28 — Two Agent Skills: a skill is an adapter to the deployment, never a second implementation
+
+Two pages under `skills/`, markdown only: `skills/seekwright` drives the REST
+projection of a listener the operator already runs, `skills/seekwright-deploy`
+installs, verifies and debugs one. A skill cannot be the service -- it holds no
+engine, no config and no key -- so the split is by install grant, not by topic: a
+caller handed a URL is never handed the install path, and the usage skill's refusal
+of container, key and publish vocabulary is machine-checked rather than asked to be
+polite (`tests/repo/test_skills.py`, whose remaining rules read the frozen surface
+from `tools/surface.py` and refuse a flag, route, provider name or environment
+variable the tree stopped carrying). The operator half travels as commands a human
+watches run, because the blast radius of a bundled script is that machine and every
+one of its commands is already a documented one-liner. Each directory is
+self-contained -- no `references/`, no link reaching `../` -- because the directory
+is the unit of distribution, which is also why a pointer to `deploying.md` or
+`public-api.md` is prose and not a link. Distributing one usage skill to several
+operators is the multi-user question `VISION.md` gates on auth, not a hardening task
+these pages take on.
+
 ## 2026-10-27 — The release lands where the reader can reach it: one CI lane, GitHub Release and `ghcr.io`
 
 The merge gate existed twice: a copy that ran, and a copy written for the private
