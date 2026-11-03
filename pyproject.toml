@@ -50,7 +50,7 @@ Issues = "https://github.com/leoschwarz/seekwright/issues"
 
 [build-system]
 # The lower bound is the Containerfile's uv image tag; the pair moves by hand.
-requires = ["uv_build>=0.12.3,<0.13.0"]
+requires = ["uv_build>=0.12.3,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
