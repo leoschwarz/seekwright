@@ -1,16 +1,20 @@
 """Search and fetch orchestration, kept out of the MCP layer so it is testable.
 
-No cache: both engines ask `router` which name to call and in what order, call
-it, record the outcome, and turn a provider exception into a message a model can
-act on.
+Both engines ask `router` which name to call and in what order, call it, record
+the outcome, and turn a provider exception into a message a model can act on.
+`fetch` consults the optional disk page cache (:mod:`pagecache`) at the route's
+rung: a warm entry serves a read without a dispatch, a miss fills the entry and
+serves the caller the same window a live fetch would have.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal, Never
+from urllib.parse import urlsplit
 
 from . import router
 from .config import FREE_PROVIDER_ORDER, FREE_PROVIDERS, Config
@@ -22,6 +26,10 @@ from .fetcher import (
     FetchedImage,
     FetchedPage,
     UrlBlocked,
+    resolve_public,
+    resolved_cap,
+    validate_url,
+    window_text,
 )
 from .health import HealthBoard
 from .jsondoc import PathSyntax, parse_path, select_paths
@@ -34,6 +42,7 @@ from .models import (
     SearchQuery,
     SearchResponse,
 )
+from .pagecache import CachedPage, DiskPageCache, entry_name
 from .providers.base import ProviderError, QuotaExhausted, SearchProvider
 from .sanitize import sanitize_model, sanitize_text
 
@@ -540,6 +549,18 @@ class FetchEngine:
     reads stop at the primary and name the ladder as a choice; the `answer` plan
     passes ``auto_fallback=True``, because a refusal between its steps is a lost
     page rather than a decision someone is there to make.
+
+    This engine may hold the optional disk page cache (one process-level object
+    built beside the health board). The cache is consulted at each route rung --
+    primary, the named fallback, each step of a walk -- keyed by the *rung's*
+    name and the validated URL, so the local read and any fallback stay
+    different answers that never share an entry. A hit serves the read without
+    a dispatch and is journalled as unbilled; a miss fetches the page UNCAPPED,
+    stores it, and hands the caller the same window a live fetch would have
+    produced, so offsets and ``total_chars`` keep their meaning across both
+    paths. A cold fill is singleflight at this level: one in-flight future per
+    key, every concurrent cold reader awaiting it and journalled as cached,
+    because it never dispatched.
     """
 
     def __init__(
@@ -548,10 +569,20 @@ class FetchEngine:
         fetcher: ContentFetcher,
         fallbacks: list[ContentFetcher] | None = None,
         usage: UsageRecorder | None = None,
+        cache: DiskPageCache | None = None,
     ) -> None:
         self.config = config
         self.fetcher = fetcher
         self.fallbacks = fallbacks or []
+        # The page cache, absent unless the factory built one: `cache_dir` unset
+        # leaves every code path below on the live-fetch shape.
+        self.cache = cache
+        # One future per in-flight cold fill, keyed the same way the cache keys
+        # pages. A caller that finds its key here awaits the future instead of
+        # dispatching; there is no lock to take, because the check, the
+        # insertion and the awaits all sit on one loop with no `await` between
+        # the first two.
+        self._fills: dict[str, asyncio.Future[None]] = {}
         # When a fallback leads the unnamed route the local read is out of it
         # entirely: the operator who set it is saying this server's own IP should
         # not be what the page sees. Membership is checked here; the object is
@@ -704,7 +735,16 @@ class FetchEngine:
         max_chars = UNCAPPED if query is not None or path is not None else None
         log = self._log_for(url)
         started = time.monotonic()
-        page, fallback = await self._fetch_page(
+        # Guardrails before the cache gate, mirroring the local reader's own
+        # order: a refused URL is refused with the same journal entry whether a
+        # warm entry exists or not, and the validated form is what every entry
+        # is keyed on below.
+        if self.cache is not None:
+            try:
+                url = await self._preflight(url)
+            except UrlBlocked as exc:
+                self._raise_fetch_failure(log, exc, started, run=run, step=step)
+        page, fallback, cached = await self._fetch_page(
             url,
             offset,
             max_chars,
@@ -725,6 +765,7 @@ class FetchEngine:
                 log,
                 notices,
                 started,
+                cached=cached,
                 run=run,
                 step=step,
             )
@@ -740,7 +781,14 @@ class FetchEngine:
         # Offset > 0 only: an empty page at offset 0 is the JS-shell case, not a past-end bookmark.
         if not query and offset > 0 and offset >= page.total_chars:
             self._finish_served_call(
-                log, page, fallback, started, run=run, step=step, sanitized=sanitized
+                log,
+                page,
+                fallback,
+                started,
+                cached=cached,
+                run=run,
+                step=step,
+                sanitized=sanitized,
             )
             return self._past_end_response(url, page, offset)
 
@@ -752,7 +800,14 @@ class FetchEngine:
         matches = self._select(page, query, path, empty_page, notices)
 
         self._finish_served_call(
-            log, page, fallback, started, run=run, step=step, sanitized=sanitized
+            log,
+            page,
+            fallback,
+            started,
+            cached=cached,
+            run=run,
+            step=step,
+            sanitized=sanitized,
         )
         self._log_content(log, page, matches)
         return self._response(url, page, offset, matches, notices)
@@ -767,6 +822,189 @@ class FetchEngine:
             log = log.bind(url=safe(url, 200))
         return log
 
+    async def _preflight(self, url: str) -> str:
+        """The URL-level guardrails, run before any cache lookup when the cache is on.
+
+        A refused URL must be refused with a warm entry just as without one, and
+        the entry keys on what this returns — the same normalised form
+        ``validate_url`` hands the fetcher — so a caller's spelling of a page and
+        its post-redirect landing cannot share an entry. ``resolve_public``
+        applies under the same rule the local reader applies it: opt-out by
+        ``fetch.allow_private_addresses``, because the guardrail protects this
+        server's network, not the fetcher's code path. A refusal raises
+        :class:`UrlBlocked`, which the caller routes through the failure path:
+        the log line and the journal entry are the ones the uncached route
+        already records.
+
+        The fetchers re-run their own guardrails on a miss; this reads as
+        duplicate work only until it reads as what makes a warm hit safe.
+        """
+        validated = validate_url(url)
+        if not self.config.fetch.allow_private_addresses:
+            await resolve_public(urlsplit(validated).hostname or "")
+        return validated
+
+    async def _rung_read(
+        self,
+        fetcher: ContentFetcher,
+        name: str | None,
+        url: str,
+        *,
+        offset: int,
+        max_chars: int | None,
+    ) -> tuple[FetchedPage, bool]:
+        """One route rung's page read, through the page cache when this engine has one.
+
+        The bool answers "was this dispatch-free": a warm entry is, and so is a
+        cold fill led by a concurrent call. ``name`` keys the entry -- the
+        rung's own name, or ``None`` for the local reader -- so the local read
+        and a fallback's stay different answers to the same URL.
+
+        With the cache on, a miss is fetched **UNCAPPED at offset 0** and the
+        full extraction is stored; the *window this call serves* is cut out of
+        it with :func:`window_text` under the same
+        ``resolved_cap(fetch.max_text_chars, max_chars)`` the configured
+        fetchers apply, so a cached window is byte-identical to the live one.
+        After the store the entry is re-read through the same lookup a later
+        call would take, so a paged read streams only its window even on the
+        call that filled the cache. An image page bypasses the cache: bytes
+        pass through as today and nothing is stored (v1 scope).
+
+        Singleflight: one in-flight future per ``(provider, URL)`` key; late
+        arrivals await it instead of dispatching and are served by a cache
+        re-read (falling back to a live fetch when the fill could not store --
+        an over-cap entry), which is the only branch here that dispatches
+        without the leader. Failures propagate to every waiter through the
+        future, so a failing upstream is hit once, not once per waiter.
+        """
+        if self.cache is None:
+            return await fetcher.fetch(url, offset=offset, max_chars=max_chars), False
+        cache = self.cache
+        cap = resolved_cap(self.config.fetch.max_text_chars, max_chars)
+        provider = name or "http"
+        key = entry_name(provider, url)
+
+        async def _lookup() -> CachedPage | None:
+            """The entry, by the shape this call reads.
+
+            A paged read streams ``[offset, offset + cap + 2)``; a
+            ``query``/``path`` selection needs the whole document. Both come
+            back as one :class:`CachedPage`, the windowed one carrying its own
+            ``truncated`` finding in text, the full one ``False``.
+            """
+            if max_chars is UNCAPPED:
+                return await asyncio.to_thread(cache.get, provider, url)
+            return await asyncio.to_thread(
+                cache.get_window,
+                provider,
+                url,
+                offset=offset,
+                max_chars=cap,
+            )
+
+        entry = await _lookup()
+        if entry is not None:
+            return self._page_from_entry(entry), True
+        # Cold. The fill is singleflight: the first reader here owns it.
+        future = self._fills.get(key)
+        leading = future is None
+        if leading:
+            future = asyncio.get_running_loop().create_future()
+            self._fills[key] = future
+        try:
+            if not leading:
+                # The future always resolves once the leader is past the
+                # store, so the re-lookup below sees the entry whenever one
+                # was written; a skipped entry (over the per-entry cap) sends
+                # this reader to a live fetch of its own.
+                await future
+                entry = await _lookup()
+                if entry is not None:
+                    return self._page_from_entry(entry), True
+                return await fetcher.fetch(
+                    url, offset=offset, max_chars=max_chars
+                ), False
+            try:
+                full = await fetcher.fetch(url, offset=0, max_chars=UNCAPPED)
+            except BaseException as exc:
+                # Every waiter learns the one failure the leader saw; a
+                # second process sharing this directory would race an extra
+                # eviction at worst, never a served half entry.
+                if not future.done():
+                    future.set_exception(exc)
+                raise
+            if full.image is None:
+                # Stored pre-sanitize and whole, before this call's window is
+                # cut: the escape pass belongs to the caller, and every later
+                # read is recomputed from the entry.
+                await asyncio.to_thread(
+                    self.cache.put,
+                    provider,
+                    url,
+                    CachedPage(
+                        url=full.url,
+                        title=full.title,
+                        text=full.text,
+                        content_type=full.content_type,
+                        status_code=full.status_code,
+                        path_addressable=full.path_addressable,
+                        total_chars=full.total_chars,
+                    ),
+                )
+            future.set_result(None)
+            # This leader's own call is a dispatch (journalled as such) but is
+            # served through the just-written entry, so the window it hands
+            # back is the one a later hit would serve. When the store refused
+            # the page -- over the per-entry cap -- this fall-through returns
+            # the uncapped read a paged call would have got anyway, cut to the
+            # same window a live paged fetch applies.
+            entry = await _lookup()
+            if entry is not None:
+                return self._page_from_entry(entry), False
+            if max_chars is UNCAPPED:
+                return full, False
+            window, truncated = window_text(full.text, offset=offset, max_chars=cap)
+            return self._window_of(full, window, truncated), False
+        finally:
+            if leading:
+                self._fills.pop(key, None)
+
+    def _page_from_entry(self, entry: CachedPage) -> FetchedPage:
+        """The :class:`FetchedPage` fields a cache entry carries, rebuilt.
+
+        ``url`` is the *landing* URL the store recorded, so a response built
+        from a hit carries the same address a live fetch would have."""
+        return FetchedPage(
+            url=entry.url,
+            title=entry.title,
+            text=entry.text,
+            content_type=entry.content_type,
+            status_code=entry.status_code,
+            truncated=entry.truncated,
+            total_chars=entry.total_chars,
+            path_addressable=entry.path_addressable,
+        )
+
+    def _window_of(
+        self, page: FetchedPage, window: str, truncated: bool
+    ) -> FetchedPage:
+        """A page rebuilt so ``text`` is one window of the extraction.
+
+        Only the leader-without-entry path lands here -- the store refused the
+        page -- and every field but the text survives the re-cut, including an
+        image's bytes: nothing stored an image, so it still rides out."""
+        return FetchedPage(
+            url=page.url,
+            title=page.title,
+            text=window,
+            content_type=page.content_type,
+            status_code=page.status_code,
+            truncated=truncated,
+            total_chars=page.total_chars,
+            path_addressable=page.path_addressable,
+            image=page.image,
+        )
+
     async def _fetch_page(
         self,
         url: str,
@@ -780,7 +1018,7 @@ class FetchEngine:
         auto_fallback: bool,
         run: str | None = None,
         step: int | None = None,
-    ) -> tuple[FetchedPage, str | None]:
+    ) -> tuple[FetchedPage, str | None, bool]:
         """Fetch, escalating to the ladder only where the route asked for the walk.
 
         ``named`` is a fallback ``resolve`` already accepted, served alone: the
@@ -789,20 +1027,23 @@ class FetchEngine:
         failed read raises naming the configured providers as a choice, and a
         nearly-empty read is returned to be told about rather than walked past.
 
-        Returns the page and the name of the fallback that served it, or ``None``
-        when the local reader did: the caller needs the *name* to journal which
-        fallback a page was billed to, not merely the `fell_back` bool. When every
-        fallback fails the *original* failure raises -- "scrappa: rate limited"
-        explains nothing about the page asked for. The emptiness gate arms at
-        offset 0 only: a short window mid-page is a tail, not a symptom; a fetch
-        error escalates at any offset."""
+        Returns the page, the name of the fallback that served it (``None`` when
+        the local reader did; the caller needs the *name* to journal which
+        fallback a page was billed to, not merely the `fell_back` bool), and the
+        cache flag: ``True`` means no dispatch happened, so the caller journals
+        the line unbilled. When every fallback fails the *original* failure
+        raises -- "scrappa: rate limited" explains nothing about the page asked
+        for. The emptiness gate arms at offset 0 only: a short window mid-page is
+        a tail, not a symptom; a fetch error escalates at any offset."""
         if named is not None:
             return await self._fetch_named(
                 named, url, offset, max_chars, log, started, run=run, step=step
             )
         tried: list[str] = []
         try:
-            page = await self._primary.fetch(url, offset=offset, max_chars=max_chars)
+            page, cached = await self._rung_read(
+                self._primary, self._primary_name, url, offset=offset, max_chars=max_chars
+            )
         except ProviderError as exc:
             if not auto_fallback:
                 # The withheld walk is a choice only where the failure left one. A
@@ -846,7 +1087,8 @@ class FetchEngine:
                     run=run,
                     step=step,
                 )
-            return escalated
+            escalated_page, escalated_name, escalated_cached = escalated
+            return escalated_page, escalated_name, escalated_cached
         # An image's empty text is the resource itself, not the JS-shell symptom
         # this gate exists to catch; escalating would bill a renderer and a
         # scraper to look for prose in a photograph. Off, the walk is not entered
@@ -868,8 +1110,7 @@ class FetchEngine:
             )
             if rendered is not None:
                 return rendered
-        return page, self._primary_name
-
+        return page, self._primary_name, cached
     async def _fetch_named(
         self,
         named: ContentFetcher,
@@ -881,7 +1122,7 @@ class FetchEngine:
         *,
         run: str | None = None,
         step: int | None = None,
-    ) -> tuple[FetchedPage, str]:
+    ) -> tuple[FetchedPage, str, bool]:
         """Serve the page through the one provider the caller named.
 
         One attempt, and its name is the fallback the call is journalled to,
@@ -889,12 +1130,17 @@ class FetchEngine:
         for it, so a caller using ``provider`` as a cost knob is not billed by a
         second name -- `search`'s rule. A ``ProviderError`` carries the name that
         raised it, so the failure sentence already says which provider failed.
+
+        The read goes through :meth:`_rung_read`, so a warm cache entry serves
+        it without a dispatch; ``cached`` is what the caller journals.
         """
         try:
-            page = await named.fetch(url, offset=offset, max_chars=max_chars)
+            page, cached = await self._rung_read(
+                named, named.name, url, offset=offset, max_chars=max_chars
+            )
         except ProviderError as exc:
             self._raise_fetch_failure(log, exc, started, run=run, step=step)
-        return page, named.name
+        return page, named.name, cached
 
     def _raise_fetch_failure(
         self,
@@ -958,6 +1204,7 @@ class FetchEngine:
         notices: list[str],
         started: float,
         *,
+        cached: bool = False,
         run: str | None = None,
         step: int | None = None,
     ) -> FetchResponse:
@@ -995,6 +1242,7 @@ class FetchEngine:
             page,
             fallback,
             started,
+            cached=cached,
             run=run,
             step=step,
             sanitized=0,
@@ -1115,6 +1363,7 @@ class FetchEngine:
         step: int | None = None,
         sanitized: int,
         image_bytes: int | None = None,
+        cached: bool = False,
     ) -> None:
         """The shared tail of every served fetch: the fetch.ok line and the journal entry.
 
@@ -1122,6 +1371,11 @@ class FetchEngine:
         billed, so the operator's line and the dashboard's fetch counter must see
         the call, and it is priced like any other, because the *call* is what a
         fallback bills.
+
+        ``cached`` forces the price absent rather than merely leaving it out: a
+        dispatch-free read is unbilled even when the warm entry belongs to a
+        priced fallback, and absence is the journal's "nothing was spent", so a
+        cache easing repeat reads never reads as a provider turned free.
         """
         self._log_ok(
             log,
@@ -1130,6 +1384,7 @@ class FetchEngine:
             started,
             sanitized=sanitized,
             image_bytes=image_bytes,
+            cached=cached,
         )
         if self.usage is not None:
             # `chars` counts extracted text, which an image page has none of; the
@@ -1138,7 +1393,9 @@ class FetchEngine:
                 ms=elapsed_ms(started),
                 chars=len(page.text),
                 fallback=fallback,
-                cost_usd=self._fallback_cost_usd(fallback),
+                # A dispatch-free read is unbilled whatever the rung's price:
+                # the absence is meaningful, and "0.0" would read as free.
+                cost_usd=None if cached else self._fallback_cost_usd(fallback),
                 run=run,
                 step=step,
             )
@@ -1176,14 +1433,17 @@ class FetchEngine:
         *,
         sanitized: int,
         image_bytes: int | None = None,
+        cached: bool = False,
     ) -> None:
         """Emit fetch.ok: the aggregatable line -- counts and flags, never content.
 
         ``sanitized`` is the page's escape count, always bound like ``fell_back``:
         0 on the common path, a count rather than content. ``fell_back`` is true
         whenever a route other than this server's own reader served, an
-        operator-configured primary included. ``bytes`` rides only on an image
-        page."""
+        operator-configured primary included. ``cached`` is always bound the
+        same way -- a dispatch-free read is the line's one new fact, and it is
+        what makes a warm serving measurable from real traffic. ``bytes`` rides
+        only on an image page."""
         entry = log.bind(
             ms=elapsed_ms(started),
             status=page.status_code,
@@ -1191,6 +1451,7 @@ class FetchEngine:
             truncated=page.truncated,
             fell_back=fell_back,
             sanitized=sanitized,
+            cached=cached,
         )
         if image_bytes is not None:
             entry = entry.bind(bytes=image_bytes)
@@ -1250,26 +1511,32 @@ class FetchEngine:
         tried: list[str],
         offset: int = 0,
         max_chars: int | None = None,
-    ) -> tuple[FetchedPage, str] | None:
+    ) -> tuple[FetchedPage, str, bool] | None:
         """Walk the fallbacks in order; the best page found, or None.
 
         Returns the page *and the name of the fallback that produced it*, so the
         caller can journal which fallback a page is attributable to -- the name
-        is what its price derives from (``_fallback_cost_usd``). Never raises: the
-        caller keeps the *original* failure. Each fallback runs at most once, and
-        the walk continues past an empty fallback page -- the paid-run-last rule.
+        is what its price derives from (``_fallback_cost_usd``) -- and the cache
+        flag, ``False`` whenever a walk served (see below). Never raises: the
+        caller keeps the *original* failure -- its reason is what the walk's
+        members are told, and the sentence the caller gets names it. The cache
+        flag answers "was this rung's page served warm"; a walk-rung hit is
+        served by an entry filled on an earlier call, and the notice that a
+        vendor was re-fetched is dropped when nothing was re-fetched. Each
+        fallback runs at most once, and the walk continues past an empty
+        fallback page -- the paid-run-last rule.
 
         ``tried`` is the caller's list, filled with every member reached: reached
         rather than failed, because a walk returning no page had every name on
         it raise, and that is the list the failure sentence reports.
         """
-        served: tuple[FetchedPage, str] | None = None
+        served: tuple[FetchedPage, str, bool] | None = None
         for fallback in self._walk:
             tried.append(fallback.name)
             started = time.monotonic()
             try:
-                candidate = await fallback.fetch(
-                    url, offset=offset, max_chars=max_chars
+                candidate, cached = await self._rung_read(
+                    fallback, fallback.name, url, offset=offset, max_chars=max_chars
                 )
             except ProviderError as exc:
                 log.bind(
@@ -1284,10 +1551,11 @@ class FetchEngine:
             log.bind(
                 fallback=fallback.name, reason=reason, ms=elapsed_ms(started)
             ).info("fetch.fallback")
-            notices.append(
-                router.refetched_notice(self._table, reason, fallback.name)
-            )
-            served = (candidate, fallback.name)
+            if not cached:
+                notices.append(
+                    router.refetched_notice(self._table, reason, fallback.name)
+                )
+            served = (candidate, fallback.name, cached)
             if not self._is_empty(candidate.text):
                 return served
             reason = "almost no readable text"

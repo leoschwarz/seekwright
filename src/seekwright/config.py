@@ -243,6 +243,21 @@ class FetchConfig(Section):
     # A browser render waits longer than a static fetch; not a multiple of
     # timeout_seconds.
     crawl4ai_timeout_seconds: float = 60.0
+    # The directory the disk page cache stores its entries in. Unset — the
+    # default — is off: every fetch fetches, exactly as before, and nothing
+    # about the serving path changes shape. The cache is page content at rest
+    # (unlike the content-free journal), so the directory is operator-named
+    # storage, and ttl_seconds below is the retention bound it lives under.
+    cache_dir: str | None = None
+    # The directory's size cap, 256 MiB; eviction is LRU by a body file's
+    # atime, so a hit is a timestamp, never a rewrite.
+    cache_max_bytes: int = 268_435_456
+    # A single entry's cap, 32 MiB: a page above it is never stored, so a
+    # hostile page fetched live once costs disk nothing.
+    cache_max_entry_bytes: int = 33_554_432
+    # Freshness: an entry older than this reads as a miss and is removed on
+    # read. One page's working window, not an archive.
+    cache_ttl_seconds: float = 300.0
 
     @model_validator(mode="after")
     def _validate_extractor(self) -> FetchConfig:
