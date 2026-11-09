@@ -31,7 +31,8 @@ This file maps that. The precise requirements an adapter must meet live in
   `--http` serving the same three tools over streamable HTTP at `/mcp`, so one
   container can back every client on a machine.
 - **No cache.** Every `search` call reaches a provider and is billed, unless the
-  provider is one of the free ones.
+  provider is one of the free ones. (Fetch's optional page cache below
+  bounds repeated reads of one page; a search is never served from it.)
 
 ```
 search:  MCP tool ─▶ engine.SearchEngine ─▶ router ─▶ providers/<name>.py ─▶ provider API
@@ -258,6 +259,36 @@ one, and it is a plain `str` validated at call time by `router.resolve_fetch`
 (behind `FetchEngine.resolve`) rather than a `Literal`: which names exist is a
 function of config, a key and a permission set, and the annotation is evaluated
 at import.
+
+### `pagecache.py`: the optional disk page cache
+
+`fetch` may hold one process-level `DiskPageCache`, built beside the health
+board when `fetch.cache_dir` names a directory and absent otherwise. The seam
+is at the engine, not at a fetcher, for one reason: the journal has to tell a
+hit from a miss, so the read that never dispatched is recorded unbilled and the
+one that did is recorded at the rung's price. Every route rung goes through one
+reader — the primary, a named fallback, each step of a walk — keyed by that
+rung's name and the *validated* URL, so the local read and a fallback's are
+different answers that never share an entry.
+
+A miss fills the entry with the **uncapped** extraction and hands the caller
+the window a live fetch would have served — cut by the same
+`fetcher.window_text` the fetchers run, an equality a test pins over generated
+texts — so offsets and `total_chars` keep their meaning across both paths. The
+validate-and-resolve guardrails run before any lookup, so a refused URL is
+refused with a warm entry just as without one. A cold fill is singleflight at
+the engine: one in-flight future per key, late arrivals awaiting it and being
+journalled as cached, because they never dispatched. An image page bypasses
+the cache: bytes pass through as they always did and nothing is stored.
+
+The bounds are the per-entry cap (a hostile page above it is never stored), the
+directory cap (LRU eviction by the body file's atime — a hit is an
+`os.utime`, never a body rewrite) and the TTL (an expired entry is removed on
+read), and entries are written through a temporary file and `os.replace`, so a
+crash never leaves a half entry served. Nothing is resident in RAM between
+calls: a `query`/`path` read reads the body whole and frees it after the
+selection, and a paged read streams only its window off the disk. With the
+cache off, every fetch fetches, byte and byte the same as it always did.
 Naming one is the whole route —
 no read first and nothing behind it — so a priced name is billed for that call.
 [reference/fetch-provider-selection.md](reference/fetch-provider-selection.md)
@@ -550,9 +581,12 @@ it. The intent
 behind each is [`VISION.md`](../VISION.md)'s non-goals; this section is how one
 works.
 
-- **No cache.** Every `search` reaches a provider, which is why a provider
-  failure is terminal rather than degrading to older data, and why the usage
-  journal is counts rather than a store.
+- **No search cache.** Every `search` reaches a provider, which is why a
+  provider failure is terminal rather than degrading to older data, and why the
+  usage journal is counts rather than a store. The `fetch` page cache does not
+  reverse this: it is opt-in (`fetch.cache_dir`), short-TTL page storage for
+  repeated reads of one URL, and it never answers a search from anything but
+  the provider it names.
 - **No authentication on the listener.** Not a token, not OAuth: every call
   `--http` serves spends real money, so the bind address and the published port
   are the whole access-control story — hence `--host` defaulting to

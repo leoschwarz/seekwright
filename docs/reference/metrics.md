@@ -85,6 +85,13 @@ are both `None`). A `0.0` there would claim a measured free call and leave the
 money total covering pages it knows nothing about. A *declared* price of zero is
 the one real zero, and only a fallback that declares one can produce it.
 
+A **disk-page-cache hit** is a third unbilled case: the read never dispatched,
+so the line keeps the fallback *name* (the rung whose entry it was served from)
+but holds no `cost_usd`. The serving line's `cached` flag — a log field on
+`fetch.ok`, never a journal key — is what makes those lines tellable from the
+free-fallback ones; the name alone cannot, because a priced fallback's warmed
+page reads at no cost exactly the way its free neighbor's always did.
+
 In the aggregate the fetch money is `totals.fetch_cost_usd`, beside
 `search_cost_usd` and `fetch_pages_via_fallback`, with `totals.priced_fetches` as
 the sample size — the same pair the model figures keep. The `days[]` rows carry

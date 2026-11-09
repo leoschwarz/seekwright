@@ -132,6 +132,12 @@ you will talk to is on the screen rather than only in these docs, and each
 provider's own terms are worth reading before you pick one — that part is the
 operator's job.
 
+One on-disk opt-in to know about: if you set `fetch.cache_dir`, fetch stores
+**page content at rest** — full page extracts for one page per (provider, URL)
+within a cache TTL — in the directory you name, so that repeated reads of one
+page do not re-download it. Off (the default), nothing is stored. The usage
+journal, if you set `dashboard.history_path`, stays content-free either way.
+
 ## Status: 0.1, incubating
 
 The first release, maintained by one person and looking for early adopters. What

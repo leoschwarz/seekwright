@@ -208,6 +208,16 @@ crawl4ai_url = "http://crawl4ai.internal:11235"  # the renderer fallback's base 
 crawl4ai_token = "..."                      # its bearer token, when it runs with auth on
 crawl4ai_timeout_seconds = 60.0             # a browser render is slower than a static fetch
 
+# The disk page cache, off unless you name a directory. One page on disk per
+# (provider, URL) for the TTL, so repeated reads -- offset paging, query
+# selections, a re-fetch -- stop paying a download or a fallback credit each.
+# The directory holds page text at rest, unlike the journal: name it a volume
+# that is sized for it and treated like a cache (it is one).
+cache_dir = "/var/lib/seekwright/pages"   # unset -- off -- is every fetch a live fetch
+cache_max_bytes = 268435456               # the directory's LRU cap (256 MiB)
+cache_max_entry_bytes = 33554432          # one page above 32 MiB is never stored
+cache_ttl_seconds = 300.0                 # an entry older than this is removed on read
+
 [search]
 # Walked, in this order, when a `search` that names no provider fails on
 # default_provider. Every name must be an enabled provider -- a startup
@@ -473,6 +483,26 @@ max_cost_usd = 0.25           # per-call abort, checked after each retrieval ste
   `fetch.timeout_seconds` because a browser render pays a page-load and
   network-idle wait a static fetch never does; 60s is the default and the floor
   Scrappa gets (`max(timeout, 30)`) is not enough.
+- **`fetch.cache_dir`** turns the disk page cache on by naming the directory it
+  stores entries in; unset, it is off, and every fetch fetches exactly as it
+  always did. With it set, one page per (provider, validated URL) lives on disk
+  for `fetch.cache_ttl_seconds`, and a repeated read — an `offset`
+  continuation, a passage or path selection, a re-fetch of the same URL — is
+  served from the entry instead of a second dispatch. The bounds are three:
+  `fetch.cache_max_entry_bytes` (a page above it is never stored, so a hostile
+  page fetched once costs disk nothing), `fetch.cache_max_bytes` (LRU eviction
+  by the body file's atime, so a hit is a timestamp, never a rewrite) and
+  `fetch.cache_ttl_seconds` (an expired entry is removed on read). Entries are
+  keyed by provider and URL, so the local reader and a costed fallback never
+  share a page. Two operator-facing facts: the journal marks a cache-served
+  line with **no** `cost_usd`, since nothing was billed, and the cache is
+  **page content at rest** — unlike the content-free journal — so the
+  directory is storage to size, mount and treat as cache data. A bad
+  `cache_dir` is a startup refusal, not a degradation, and the guardrails
+  (`validate_url` and, unless `allow_private_addresses`, the public-address
+  lookup) run before any lookup, so a refused URL is refused with a warm entry
+  just as without one. The serving line gains a `cached` flag: always bound,
+  so a plain harness can count warm reads.
 - **`allow_private_addresses`** applies only to the local fetcher. It never
   applies to a fallback: handing internal hostnames to another networked
   service is a leak, not a fetch. See [fetch-safety.md](fetch-safety.md).

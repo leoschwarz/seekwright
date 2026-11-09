@@ -51,6 +51,7 @@ from .factory import (
     ExtractorUnavailable,
     build_extractor,
     build_fetch_stack,
+    build_page_cache,
     build_providers,
 )
 from .fetcher import IMAGE_TYPES
@@ -116,6 +117,13 @@ async def build_app_context(config: Config) -> AsyncGenerator[AppContext]:
         # here, and the `finally` sits below that raise. `build_fetch_stack`
         # closes a stack whose constructor raised.
         fetcher, fallbacks = await build_fetch_stack(config)
+        # Beside the fetch stack, and before the engine: a directory this
+        # process cannot use is a config problem that reads as one, the way the
+        # dashboard history path reads above. `None` is cache off, the default.
+        try:
+            fetch_cache = build_page_cache(config)
+        except OSError as exc:
+            raise SystemExit(f"seekwright: fetch.cache_dir: {exc}") from exc
         monitor = HealthMonitor(
             config=config, providers=providers, client=client, board=board
         )
@@ -149,6 +157,9 @@ async def build_app_context(config: Config) -> AsyncGenerator[AppContext]:
                 fetch_extractor=config.fetch.extractor,
                 fetch_fallbacks=",".join(fallback.name for fallback in fallbacks) or None,
                 fetch_primary=config.fetch.primary,
+                # The directory, or `None` when the cache is off: the one fact
+                # the startup line owes an operator about page content at rest.
+                fetch_cache=getattr(fetch_cache, "directory", None),
                 search_fallbacks=",".join(config.search.fallback or []) or None,
                 # The one fact an operator needs about the new egress point without
                 # reading the config back. `None` when agent mode is off.
@@ -157,7 +168,9 @@ async def build_app_context(config: Config) -> AsyncGenerator[AppContext]:
             # Built before the yield because the agent engine borrows both
             # engines and the same journal the spend lands in.
             fetch_engine = (
-                FetchEngine(config, fetcher, fallbacks, usage=usage)
+                FetchEngine(
+                    config, fetcher, fallbacks, usage=usage, cache=fetch_cache
+                )
                 if fetcher is not None
                 else None
             )

@@ -11,9 +11,9 @@ v0.1.0 freeze boundary honest. It exits 1 when the body below
 the marker line has drifted or this file carries no marker line, and 2 only
 when this file is missing from the tree.
 
-Printed from commit `9061deefdabc6c1a7834c0ad74307d313640b56f` at `2026-10-26T21:00:37Z`.
+Printed from commit `15f17d73830f499925a230a394ce02b53a8b82c6` at `2026-11-09T18:06:44Z`.
 
-3 MCP tools, 3 REST routes, 3 CLI verbs, 10 server flags, 17 provider names, 45 section config keys over 6 tables, 12 per-provider config keys, 4 operational routes.
+3 MCP tools, 3 REST routes, 3 CLI verbs, 10 server flags, 17 provider names, 49 section config keys over 6 tables, 12 per-provider config keys, 4 operational routes.
 
 <!-- surface:body -->
 
@@ -133,7 +133,7 @@ Registered by the same `custom_route` calls, not under `/api/v1/`:
 - `tavily`
 - `tinyfish`
 
-## Config sections (45 keys over 6 tables)
+## Config sections (49 keys over 6 tables)
 
 ### `[agent]` -- `AgentConfig` (11)
 
@@ -154,11 +154,15 @@ Registered by the same `custom_route` calls, not under `/api/v1/`:
 - `enabled`
 - `history_path`
 
-### `[fetch]` -- `FetchConfig` (18)
+### `[fetch]` -- `FetchConfig` (22)
 
 - `allow_images`
 - `allow_private_addresses`
 - `auto_fallback`
+- `cache_dir`
+- `cache_max_bytes`
+- `cache_max_entry_bytes`
+- `cache_ttl_seconds`
 - `cost_per_1k`
 - `crawl4ai_timeout_seconds`
 - `crawl4ai_token`

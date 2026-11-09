@@ -1067,6 +1067,18 @@ def _report_fetch(cfg: Config, *, live: bool) -> int:
                 print(f"  {name:<9} (inactive: no row in the fallback registry)")
                 continue
             print(f"  {name:<9} {_fallback_state(cfg, row)}")
+    # The page cache is an at-rest choice, so it is worth one line either way:
+    # where repeat reads would land, and how big that directory may grow. A
+    # live probe does not consult the cache, so the live line below answers
+    # for the reader, not for a second read of the same page.
+    if cfg.fetch.cache_dir:
+        print(
+            f"  cache     {cfg.fetch.cache_dir} "
+            f"({cfg.fetch.cache_max_bytes / 1_048_576:.0f} MiB cap, "
+            f"ttl {cfg.fetch.cache_ttl_seconds:.0f}s)"
+        )
+    else:
+        print("  cache     off")
     if live:
         line, ok = asyncio.run(_live_fetch_probe(cfg))
         print(f"  {line}")

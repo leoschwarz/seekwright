@@ -15,6 +15,7 @@ import httpx
 from .config import Config, ProviderConfig
 from .extractors.base import KNOWN_EXTRACTORS, Extractor
 from .fetcher import KNOWN_FALLBACKS, ContentFetcher, HttpFetcher
+from .pagecache import DiskPageCache
 from .providers.algolia import AlgoliaProvider
 from .providers.anysearch import AnysearchProvider
 from .providers.base import SearchProvider
@@ -514,3 +515,26 @@ async def build_fetch_stack(
             await owner.aclose()
         raise
     return fetcher, fallbacks
+
+
+def build_page_cache(config: Config) -> DiskPageCache | None:
+    """The disk page cache, or ``None`` when ``fetch.cache_dir`` is unset.
+
+    ``None`` is the operator's "off": every fetch fetches, and nothing of the
+    serving path changes shape. When a directory is named, the bounds ride the
+    same ``[fetch]`` section -- ``cache_max_bytes``, ``cache_max_entry_bytes``,
+    ``cache_ttl_seconds`` -- so a cache tunable is never a second key away.
+
+    The :class:`OSError` a bad directory raises is the caller's to turn into a
+    refusal to start: construction happens at startup, beside the fetch stack,
+    and a cache that cannot live on disk is a config problem, not a runtime
+    degradation to be suffered call by call.
+    """
+    if config.fetch.cache_dir is None:
+        return None
+    return DiskPageCache(
+        config.fetch.cache_dir,
+        max_bytes=config.fetch.cache_max_bytes,
+        max_entry_bytes=config.fetch.cache_max_entry_bytes,
+        ttl_seconds=config.fetch.cache_ttl_seconds,
+    )
