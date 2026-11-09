@@ -11,7 +11,7 @@ v0.1.0 freeze boundary honest. It exits 1 when the body below
 the marker line has drifted or this file carries no marker line, and 2 only
 when this file is missing from the tree.
 
-Printed from commit `15f17d73830f499925a230a394ce02b53a8b82c6` at `2026-11-09T18:06:44Z`.
+Printed from commit `1e2707ab230961b624852fbf40686bc0fa5324e1` at `2026-11-09T18:32:32Z`.
 
 3 MCP tools, 3 REST routes, 3 CLI verbs, 10 server flags, 17 provider names, 49 section config keys over 6 tables, 12 per-provider config keys, 4 operational routes.
 
@@ -31,13 +31,14 @@ Printed from commit `15f17d73830f499925a230a394ce02b53a8b82c6` at `2026-11-09T18
 - `language`
 - `safe_search`
 
-### `fetch` (5 arguments)
+### `fetch` (6 arguments)
 
 - `url`
 - `offset`
 - `query`
 - `path`
 - `provider`
+- `structure`
 
 ### `search` (9 arguments)
 
@@ -65,12 +66,13 @@ Printed from commit `15f17d73830f499925a230a394ce02b53a8b82c6` at `2026-11-09T18
 - `recency`
 - `safe_search`
 
-### `POST /api/v1/fetch` (`FetchRequest`, 5 body keys)
+### `POST /api/v1/fetch` (`FetchRequest`, 6 body keys)
 
 - `offset`
 - `path`
 - `provider`
 - `query`
+- `structure`
 - `url`
 
 ### `POST /api/v1/search` (`SearchRequest`, 9 body keys)

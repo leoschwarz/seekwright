@@ -388,6 +388,19 @@ PDF media types, and `fetch` refuses such a response before downloading it. A
 backend library is missing is a startup error naming the extra. A backend with
 an HTML library and no PDF parser is no error at all: `--check` reports it.
 
+The JSON document may also be read as its shape: `fetch(structure=true)` answers
+with `render_schema` over the rendering — one line per path, containers with
+their sizes and leaves with only their types, uniform arrays collapsed to one
+`[*]` subtree — and the same `path` grammar drills into the part it names. The
+schema is derived from the rendering, never the raw JSON, because the rendering
+is all the serving path carries after extraction; a leaf is classified from its
+first byte alone, so a shape read prints types and never values. The collapse
+refuses when described members disagree, which is what keeps `[*]` truthful, and
+a rendering that had to cut itself past its budget ends in annotation lines that
+ride through at the indices they fell on: the cut is the one fact `[*]` must not
+be allowed to paper over. Any non-JSON page answers whole with a `notice`, the
+same sentence `path` answers with.
+
 An admitted image is no backend's business: with `fetch.allow_images` on,
 `fetcher.py` compares the body's first bytes with the media type the header
 claimed and hands the whole body over unextracted, so nothing in the text layer
@@ -550,7 +563,7 @@ working in the tree; this is the same map for a reader:
 | `agent.py` | agent mode behind `answer`: the model client (one OpenAI-compatible chat call on the shared httpx client — no SDK, no tokenizer) and the fixed retrieval plan. One model call per `answer`; the model never drives retrieval. Contract: [`reference/agent-mode.md`](reference/agent-mode.md) |
 | `fetcher.py` | URL fetching behind the SSRF guardrails; `HttpFetcher` takes the extraction backend injected (no default), and `ScrappaFetcher`, `Crawl4aiFetcher`, `JinaFetcher` and `TavilyFetcher`/`LinkupFetcher` are the fallbacks, declared in the `KNOWN_FALLBACKS` registry beside them |
 | `extractors/` | one module per extraction backend, each implementing `base.py`'s `Extractor` protocol; `base.py` also holds the `KNOWN_EXTRACTORS` registry, the shared plumbing and passage selection |
-| `jsondoc.py` | the JSON half of the fetch path: which media types are JSON, the one-line-per-node rendering a JSON page arrives as, and the `path` grammar that addresses part of it — standard library only |
+| `jsondoc.py` | the JSON half of the fetch path: which media types are JSON, the one-line-per-node rendering a JSON page arrives as, the `path` grammar that addresses part of it, and `render_schema`, the shape-only structure view `fetch(structure=true)` serves — standard library only |
 | `providers/` | one module per provider adapter, all implementing `base.py`'s `SearchProvider` protocol — the contract is [`reference/provider-contract.md`](reference/provider-contract.md) |
 | `health.py` | the per-provider circuit breaker (`HealthBoard`) fed by real traffic, and its periodic probe (`HealthMonitor`) |
 | `logs.py` | loguru setup to stderr, the stdlib `InterceptHandler`, and the `bind`/`query_fields`/`safe` helpers every log call goes through |

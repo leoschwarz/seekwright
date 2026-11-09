@@ -163,8 +163,22 @@ def test_the_fetch_parameter_move_reaches_both_ends_of_the_manifest() -> None:
     reading = surface.read_surface(ROOT)
     tool = next(t for t in reading["tools"] if t["name"] == "fetch")
     route = next(r for r in reading["rest_routes"] if r["path"] == "/api/v1/fetch")
-    assert tool["arguments"] == ["url", "offset", "query", "path", "provider"]
-    assert route["body_keys"] == ["offset", "path", "provider", "query", "url"]
+    assert tool["arguments"] == [
+        "url",
+        "offset",
+        "query",
+        "path",
+        "provider",
+        "structure",
+    ]
+    assert route["body_keys"] == [
+        "offset",
+        "path",
+        "provider",
+        "query",
+        "structure",
+        "url",
+    ]
 
 
 def test_a_manifest_with_no_marker_exits_one(tmp_path: Path) -> None:

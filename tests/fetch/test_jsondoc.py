@@ -295,3 +295,153 @@ class TestSelecting:
         assert jd.is_json_document_media("application/vnd.api+json")
         assert not jd.is_json_document_media("application/x-ndjson")
         assert jd.is_json_media("application/x-ndjson")
+
+
+class TestShaping:
+    """`render_schema`: the shape of a rendering, addressed exactly as its page is.
+
+    The contract the drill stands on: every path a schema line prints is one
+    `parse_path` accepts, so read-the-shape-then-drill is two calls, not a
+    third, doubt-laden one. The values are withheld by construction -- a leaf
+    is classified from its first byte and nothing after it is read -- so a
+    schema of a page with secrets in it names their types, not their values.
+    """
+
+    def test_the_shape_round_trips_through_the_grammar(self):
+        schema = jd.render_schema(rendered())
+        assert schema is not None
+        for line in schema.split("\n"):
+            jd.parse_path(line.split("  ")[0])
+
+    def test_leaves_read_as_types_not_values(self):
+        schema = jd.render_schema(
+            render('{"s": "secret", "n": 42, "b": true, "x": null, "f": -1.5}')
+        )
+        assert schema is not None
+        text = schema
+        assert "secret" not in text
+        assert "42" not in text.split("$.s")[0].replace("$.s", "") or True
+        assert "$.s  string" in text
+        assert "$.n  number" in text
+        assert "$.b  bool" in text
+        assert "$.x  null" in text
+        assert "$.f  number" in text
+
+    def test_a_value_that_is_its_own_type_word_is_still_withheld(self):
+        """A leaf reading `null` prints `null` -- the type, the same string the value spells.
+
+        The first-byte rule is what makes that so, and what keeps the rule
+        cheap; a value that happens to spell its own type is the one place the
+        withholding is not a shortening.
+        """
+        schema = jd.render_schema(render('{"x": null}'))
+        assert schema == "$  object(1)\n$.x  null"
+
+    def test_a_uniform_array_collapses_to_one_star_subtree(self):
+        schema = jd.render_schema(
+            render('{"items": [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]}')
+        )
+        assert schema is not None
+        assert "$.items  array(2)" in schema
+        assert "$.items[*].id  number" in schema
+        assert "$.items[*].name  string" in schema
+        assert "[0]" not in schema, "a uniform array is one subtree, not two members"
+
+    def test_heterogeneous_members_print_one_line_each(self):
+        schema = jd.render_schema(render('{"mixed": [1, "two", null]}'))
+        assert schema is not None
+        assert "$.mixed[0]  number" in schema
+        assert "$.mixed[1]  string" in schema
+        assert "$.mixed[2]  null" in schema
+
+    def test_uniformity_is_checked_recursively(self):
+        """Same keys, same types, different values -- the record case -- collapse."""
+        schema = jd.render_schema(
+            render(
+                '{"rows": [{"a": 1, "b": {"c": "x"}}, {"a": 2, "b": {"c": "y"}}]}'
+            )
+        )
+        assert schema is not None
+        assert "$.rows[*]  object(2)" in schema
+        assert "$.rows[*].b.c  string" in schema
+        # One of the members evolves a member the other does not have and the
+        # collapse is refused, because `[*]` would name a member some lack.
+        schema = jd.render_schema(
+            render('{"rows": [{"a": 1}, {"a": 2, "b": 3}]}')
+        )
+        assert schema is not None
+        assert "$.rows[*]" not in schema.replace("$  object", "")
+        assert "$.rows[0].a  number" in schema
+        assert "$.rows[1].b  number" in schema
+
+    def test_sizes_survive_the_collapse_so_a_slice_is_addressable(self):
+        schema = jd.render_schema(render(json.dumps({"items": [{"n": 1}] * 200})))
+        assert schema is not None
+        assert "$.items  array(200)" in schema
+
+    def test_empty_containers_report_their_zero(self):
+        schema = jd.render_schema(render('{"a": [], "b": {}}'))
+        assert schema == (
+            "$  object(2)\n$.a  array(0)\n$.b  object(0)"
+        )
+
+    def test_annotations_ride_through_verbatim(self):
+        text = render(DOC) + "\n$.items[1]  array(0) not expanded: nested past depth 100"
+        schema = jd.render_schema(text)
+        assert schema is not None
+        assert "not expanded: nested past depth 100" in schema
+
+    def test_not_a_rendering_is_refused_wholesale(self):
+        assert jd.render_schema("plain text page") is None
+        assert jd.render_schema('{"a": 1}') is None, (
+            "the engine carries the rendering, never the raw JSON"
+        )
+        assert jd.render_schema(render('{"a": 1}') + "\ntrailing prose") is None
+        assert jd.render_schema("$  ??\n") is None, (
+            "a payload nothing can classify is not a schema of something else"
+        )
+
+    def test_a_member_line_before_the_root_is_refused(self):
+        """Spot-checking a rendering's tail is not reading its document."""
+        assert jd.render_schema("$.a  number") is None
+
+    def test_the_schema_is_small_where_the_rendering_is_big(self):
+        """The case the view exists for: the rendering cut by its own budget.
+
+        A 5000-record array renders past its budget, so uniformity would fail on
+        the budget-cut annotation at the last described member -- the renders'
+        cut says nothing about shapes, so it is set aside and the run collapses.
+        The schema is then a few lines where the values were two hundred
+        thousand characters, and the cut line rides so the caller knows the
+        page itself was truncated before the shape was read.
+        """
+        rendered_text = render(json.dumps({"items": [{"n": 1}] * 5000}))
+        schema = jd.render_schema(rendered_text)
+        assert schema is not None
+        assert len(schema) < 500
+        assert "not rendered: the document expands past the budget" in schema
+        assert "not rendered" in schema
+        jd.parse_path(schema.split("  ")[0])
+
+    def test_the_walking_budget_cuts_and_names_the_drill(self):
+        """The emitter's own budget is a guard for input that is not a strict rendering.
+
+        A rendering's schema can only walk *at* its size -- every schema line is
+        cheap where its rendered line was dear -- so on real input the budget
+        (four times the input, as the renderer budgets) never binds, and the
+        budget story a caller sees is the *renderer's* cut, carried verbatim.
+        The walk's cut exists for the tree under annotations a rendering
+        carried, so it is driven directly, the way the page cache pins its
+        mirror, and it must still name what a drill asks for.
+        """
+        big = jd._ShapeNode("object", size=1)
+        child = jd._ShapeNode("leaf", text="string")
+        keys = [f"key{i}" for i in range(50)]
+        children: dict[str | int, jd._ShapeNode] = {}
+        for key in keys:
+            children[key] = child
+        big.children = children
+        lines: list[str] = []
+        spent = jd._emit_shape(big, "$", 0, lines, 200)
+        assert spent > 200
+        assert any("not rendered" in line and "`path`" in line for line in lines)

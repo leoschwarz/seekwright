@@ -249,6 +249,292 @@ def render_json(text: str) -> str | None:
     return "\n".join(lines)
 
 
+class _ShapeNode:
+    """One node of the shape tree :func:`render_schema` builds before it speaks.
+
+    ``kind`` is ``object``/``array`` for a container (``size`` its declared child
+    count), ``leaf`` (``text`` the type word), or ``annotation`` (``text`` the
+    marker a rendering printed, e.g. the depth cut) -- a rendering's cut lines
+    are shape facts, so they ride through to the structure output verbatim.
+    """
+
+    __slots__ = ("children", "kind", "size", "text")
+
+    def __init__(self, kind: str, text: str = "", size: int = 0) -> None:
+        self.kind = kind
+        self.text = text
+        self.size = size
+        self.children: dict[str | int, _ShapeNode] | None = None
+
+
+_SHAPE_HEADER = re.compile(r"^(object|array)\((-?\d+)\)\s*(.*)$")
+_SHAPE_LEAF = re.compile(r"^\"|^-?\d|^true|^false|^null")
+
+_MAX_SCHEMA_DEPTH_CUT = "not expanded: nested past depth"
+
+
+def render_schema(rendered: str) -> str | None:
+    """The shape of a *rendered* JSON document: paths and types, no values.
+
+    Input is :func:`render_json`'s one-line-per-node output, which is the only
+    form the fetch path carries -- the raw JSON is gone by the time the engine
+    sees the page, so the shape is derived from the rendering. Output is
+    one line per node again, but every leaf prints only its type --
+    ``$.items  array(20000)``, ``$.items[*].id  number`` -- and a uniform array
+    collapses to one ``[*]`` subtree, so a document that renders to millions of
+    characters reports its shape in a few kilobytes. Uniform means every member
+    describes the same: one leaf type, or one container kind and size with one
+    member shape beneath, checked recursively. Two cuts bound the output, and
+    both print the line naming where they fell, as a rendering does: the depth
+    cap :data:`_MAX_DEPTH`, and a budget -- :data:`_MAX_RENDER_RATIO` times the
+    input's length, since a shape view of a shape-explosive document is still a
+    size the budget exists to bound.
+
+    Every path a line carries round-trips through :func:`parse_path` as a
+    ``path=`` argument -- that round-trip is the point: read the shape, then
+    drill, and one drill costs one read. Containers keep their declared size,
+    so ``$.items[0:5]`` is addressable straight off the ``array(20000)`` line.
+
+    Returns ``None`` when the input is not one rendered document -- any line
+    that does not start at the root, or a line this reader cannot classify --
+    so the caller answers with the page as it is rather than a schema of
+    something else.
+    """
+    root = _shape_tree(rendered)
+    if root is None:
+        return None
+    budget = max(_MIN_RENDER_CHARS, _MAX_RENDER_RATIO * len(rendered))
+    lines: list[str] = []
+    _emit_shape(root, "$", 0, lines, budget)
+    return "\n".join(lines)
+
+
+def _shape_tree(rendered: str) -> _ShapeNode | None:
+    """The shape tree behind one rendering, or ``None`` when it is not one.
+
+    Built by reading lines, never by parsing the leaf values -- the values are
+    what a shape view exists to withhold, so only their first byte is read to
+    classify them. Children land in the order their lines arrive, which is
+    document order, so the walk below emits in document order without sorting.
+    """
+    root: _ShapeNode | None = None
+    for line in rendered.split("\n"):
+        if not line.startswith("$"):
+            return None
+        try:
+            steps, at = _scan_path(line, bare_names=False)
+        except PathSyntax:
+            return None
+        payload = line[at:].strip()
+        node = _classify(payload)
+        if node is None:
+            return None
+        if not steps:
+            if root is not None:
+                return None
+            root = node
+            continue
+        if root is None:
+            # A member before the root's own line is impossible from
+            # render_json, which prints the root header first; treating it
+            # as not-a-rendering is safer than inventing the root's shape.
+            return None
+        parent = root
+        for step in steps[:-1]:
+            if isinstance(step, Key):
+                level: str | int = step.name
+            elif isinstance(step, Position):
+                level = step.ordinal
+            else:
+                return None
+            children = parent.children
+            if children is None:
+                children = parent.children = {}
+            child = children.get(level)
+            if child is None:
+                child = children[level] = _ShapeNode("object", size=0)
+            parent = child
+        last = steps[-1]
+        if not isinstance(last, (Key, Position)):
+            return None
+        key = last.name if isinstance(last, Key) else last.ordinal
+        children = parent.children
+        if children is None:
+            children = parent.children = {}
+        children[key] = node
+    return root
+
+
+def _classify(payload: str) -> _ShapeNode | None:
+    """One line's payload after its path: the node it describes, or ``None``.
+
+    A container header is a shape fact even when the rendering cut beneath it:
+    ``array(20000)`` is what makes ``$.items[0:5]`` addressable, so the size is
+    kept, and an annotation rides in the same line as the rendering printed it.
+    Leaf values are classified by their first byte alone -- reading no further
+    is the point, the value being what this view withholds -- and a payload
+    none of the shapes answer is not a rendering this reader can trust, so the
+    whole tree is refused rather than a schema of something else built.
+    """
+    header = _SHAPE_HEADER.match(payload)
+    if header is not None:
+        node = _ShapeNode(header.group(1), size=int(header.group(2)))
+        rest = header.group(3)
+        if rest:
+            node.kind = "annotation"
+            node.text = f"{header.group(1)}({header.group(2)}) {rest}"
+        return node
+    if payload.startswith("not "):
+        return _ShapeNode("annotation", text=payload)
+    if _SHAPE_LEAF.match(payload) is not None:
+        return _ShapeNode("leaf", text=_leaf_type(payload))
+    return None
+
+
+
+def _leaf_type(value: str) -> str:
+    """The type word for one leaf value, from its first bytes alone.
+
+    The rendering's leaves are compact JSON, so the first byte classes the
+    value: a quote, a true/false/null literal, or a digit-with-optional-sign.
+    Reading no further is the point -- the value is what this view withholds.
+    """
+    first = value[:1]
+    if first == '"':
+        return "string"
+    if value.startswith(("true", "false")):
+        return "bool"
+    if value.startswith("null"):
+        return "null"
+    return "number"
+
+
+def _emit_shape(
+    node: _ShapeNode, path: str, depth: int, lines: list[str], budget: int
+) -> int:
+    """Write the shape of one subtree as one line per node; return the characters spent.
+
+    A uniform array prints one ``[*]`` subtree -- its first member's shape,
+    addressed with ``[*]`` in the members' own place -- and nothing per member,
+    so the cost of a big uniform array is its representative's size, not its
+    length. Non-uniform members print one line each, the way the rendering
+    already did. The depth cut prints the line naming where it fell, as
+    :func:`render_json` reports its own, so a caller reading a shape sees where
+    to drill rather than a silence. The budget is checked per line: past it
+    the walk stops and names what to ask for instead.
+    """
+    if node.kind in ("leaf", "annotation"):
+        lines.append(f"{path}  {node.text}")
+        return len(lines[-1]) + 1
+    if depth >= _MAX_DEPTH:
+        lines.append(
+            f"{path}  {node.kind}({node.size}) {_MAX_SCHEMA_DEPTH_CUT} {_MAX_DEPTH}"
+        )
+        return len(lines[-1]) + 1
+    lines.append(f"{path}  {node.kind}({node.size})")
+    spent = len(lines[-1]) + 1
+    if not node.children:
+        return spent
+    if node.kind == "array":
+        representative = _uniform(node)
+        if representative is None:
+            spent += _emit_children(node, path, depth, lines, budget - spent)
+            return spent
+        body, cut = representative
+        spent += _emit_shape(
+            body, f"{path}[*]", depth + 1, lines, budget - spent
+        )
+        # The rendering's own cut lines ride at the indices they fell on: the
+        # shape is the representative's, and these say the page was cut, which
+        # is the one fact `[*]` must not be allowed to paper over. Their paths
+        # carry real indices, so a drill below the cut is still addressable.
+        for annotation in cut:
+            annotation_path = path
+            children = node.children or {}
+            for key, child in children.items():
+                if child is annotation:
+                    annotation_path = _child_path(path, key)
+                    break
+            lines.append(f"{annotation_path}  {annotation.text}")
+            spent += len(annotation_path) + 3 + len(annotation.text) + 1
+        return spent
+    spent += _emit_children(node, path, depth, lines, budget - spent)
+    return spent
+
+
+def _emit_children(
+    node: _ShapeNode, path: str, depth: int, lines: list[str], budget: int
+) -> int:
+    """Every member of a container, one line per node, budget-bounded."""
+    spent = 0
+    for key, child in (node.children or {}).items():
+        if spent > budget:
+            lines.append(
+                f"{_child_path(path, key)}  not rendered: the structure "
+                f"expands past the budget of {budget} characters; drill into "
+                "one part of it with `path`, as in $.items[0:5]"
+            )
+            break
+        spent += _emit_shape(
+            child, _child_path(path, key), depth + 1, lines, budget - spent
+        )
+    return spent
+
+
+def _uniform(node: _ShapeNode) -> tuple[_ShapeNode, list[_ShapeNode]] | None:
+    """The subtree a uniform array collapses to, and the members it may not silence.
+
+    Uniform means every *described* member describes the same shape: one leaf
+    type, or one container kind and size with recursively the same shape
+    beneath. The comparison is by shape alone, so two members with the same
+    keys and types but different values -- the common case, an array of
+    same-keyed records -- are uniform. A rendering cut by its own budget ends
+    in annotation lines (``not rendered: the document expands past the
+    budget…``): those say nothing about the members' shapes, either way, so
+    they are set aside rather than counted against the uniform run or folded
+    under ``[*]`` -- they come back as their own lines, at their own indices,
+    so the reader sees the page itself was cut rather than a shape that
+    quietly covers it. Two described members that differ still refuse the
+    collapse, then as always.
+    """
+    children = node.children
+    if not children:
+        return None
+    described = [child for child in children.values() if child.kind != "annotation"]
+    cut = [child for child in children.values() if child.kind == "annotation"]
+    if not described:
+        return None
+    first = described[0]
+    for child in described[1:]:
+        if not _same_shape(child, first):
+            return None
+    return first, cut
+
+
+def _same_shape(left: _ShapeNode, right: _ShapeNode) -> bool:
+    """Whether two shape subtrees describe the same, recursively."""
+    if left.kind != right.kind or left.size != right.size:
+        return False
+    if left.kind in ("leaf", "annotation"):
+        return left.text == right.text
+    if (left.children is None) != (right.children is None):
+        return False
+    if left.children is None or right.children is None:
+        return True
+    if len(left.children) != len(right.children):
+        return False
+    for (left_key, left_child), (right_key, right_child) in zip(
+        left.children.items(), right.children.items()
+    ):
+        if not isinstance(left_key, type(right_key)):
+            return False
+        if isinstance(left_key, int) and left_key != right_key:
+            return False
+        if not _same_shape(left_child, right_child):
+            return False
+    return True
+
+
 def _scan_path(raw: str, *, bare_names: bool) -> tuple[list[Step], int]:
     """Read path steps from the start of ``raw``; stop at the first character
     that cannot continue a path.

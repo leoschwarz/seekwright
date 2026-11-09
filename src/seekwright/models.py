@@ -215,6 +215,11 @@ class FetchRequest(WireModel):
     offset: int | None = Field(None, ge=0)
     query: str | None = Field(None, min_length=2, max_length=400)
     path: str | None = Field(None, min_length=1, max_length=400)
+    # Off unless the caller asks for the shape: a structure read replaces the
+    # page's text with one line per path and type, no leaf values, and it is
+    # the engine that refuses the mix with `query`, `path` or `offset` -- the
+    # same one reading of the axes the sentence for the other two refusals gives.
+    structure: bool = False
     provider: str | None = None
 
 
