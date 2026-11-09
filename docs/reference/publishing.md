@@ -70,6 +70,25 @@ remedy. A hotfix release therefore re-cuts the tag after the fix merges.
 after the wheel step, stops exiting non-zero, stops naming `main`, or acquires a branch
 that skips it.
 
+## Dependency scanning and pinned actions
+
+Every pull request runs the `scan` job of
+[`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) beside the gate: Trivy
+reads the manifests and lockfiles the tree pins, `uv.lock` first, and fails the job on
+a `CRITICAL` or `HIGH` vulnerability. `ignore-unfixed` is deliberately not set — an
+unfixed finding is still a fact about the dependency set the pull request ships, and
+the fix is a lockfile bump in that same pull request. On a push to `main` and on a
+dispatch the job also scans the image the `container` job's recipe builds, which is the
+lane where artifact-build minutes are free; a pull request skips that half.
+
+Every `uses:` line in both workflow files names a full commit SHA and carries the
+release it resolves to in a trailing comment. A tag is a pointer its owner can move,
+which is what the 2025 Trivy action incident exploited, so the SHA rather than the tag
+is the pin. A bot may open a pull request that moves a pin, but a human merges it:
+moving the SHA is the act of accepting a new upstream commit.
+`tests/repo/test_ci_workflow_uses_pinned.py` fails the suite when a workflow line
+carries a mutable ref again.
+
 ## A version the release already holds
 
 The wheel is uploaded only when the release named by the tag holds no asset of that
