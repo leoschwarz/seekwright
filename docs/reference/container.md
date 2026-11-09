@@ -30,9 +30,14 @@ run does with the image and the wheel is [publishing.md](publishing.md),
 maintainer-only.
 
 Multi-stage: `uv sync --locked --no-dev --extra trafilatura` resolves into a
-virtualenv on `python:3.14-slim`, and only that virtualenv crosses into the
+virtualenv on `python:3.14-alpine`, and only that virtualenv crosses into the
 runtime stage. No compiler is installed — every locked dependency ships a cp314
-manylinux wheel, `lxml` included. Read the image size off a build of your own; it
+musllinux wheel, `lxml` included. The base is Alpine rather than Debian slim
+because the `scan` job fails the image on a CRITICAL/HIGH finding and the Debian
+trixie base carries OS packages with HIGH CVEs no upstream fix exists for yet;
+the Alpine apk set scans clean. The runtime stage also removes the base image's
+pip — the venv is self-contained — because pip vendors msgpack/urllib3/setuptools
+copies the scanner flags. Read the image size off a build of your own; it
 moves with every dependency bump.
 
 The explicit `--extra trafilatura` is load-bearing: `--no-dev` skips the dev

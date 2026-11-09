@@ -1,7 +1,10 @@
 # Its tag is `uv_build`'s lower bound in pyproject.toml (tests/test_packaging.py).
 FROM ghcr.io/astral-sh/uv:0.12.3 AS uv
 
-FROM python:3.14-slim AS build
+# Alpine, not Debian slim: the scan job fails the image on CRITICAL/HIGH, and the
+# Debian trixie base ships util-linux/systemd/sqlite/ncurses builds carrying HIGH
+# CVEs with no upstream fix released yet. The Alpine apk set scans clean.
+FROM python:3.14-alpine AS build
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
@@ -17,7 +20,7 @@ COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --extra trafilatura --no-editable
 
-FROM python:3.14-slim
+FROM python:3.14-alpine
 # Not at the top of the file: an ARG does not cross a stage boundary.
 ARG SEEKWRIGHT_REVISION
 # image.version copies `seekwright.__version__`: a LABEL cannot read Python.
@@ -28,8 +31,11 @@ LABEL org.opencontainers.image.title="seekwright" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.revision="${SEEKWRIGHT_REVISION}"
 
-# Not `proxy`: Debian already ships a user by that name and useradd exits 9.
-RUN useradd --system --create-home --uid 10001 seekwright
+# busybox adduser, not useradd. The runtime venv is self-contained and needs no
+# pip; the base image's pip ships vendored msgpack/urllib3/setuptools copies the
+# scan flags, so pip and its entry points are removed.
+RUN adduser -S -D -u 10001 seekwright \
+    && rm -rf /usr/local/lib/python3.14/site-packages/pip* /usr/local/bin/pip*
 
 COPY --from=build --chown=seekwright:seekwright /app/.venv /app/.venv
 
