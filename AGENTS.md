@@ -7,16 +7,11 @@ Guidance for AI agents working in this repository.
 An MCP server that fronts web-search providers behind one normalised tool
 surface. Three tools: `search` (one query to one provider), `fetch` (a URL in,
 extracted page text out) and `answer` (agent mode, off by default). Seventeen
-provider names over fifteen adapter modules: Exa and Parallel each appear twice
-(`exa`/`exa:free`, `parallel`/`parallel:free`) because each answers anonymously
-for free and bills with a key. In three groups:
-
-- **billed per call, keyed** — `scrappa`, `serper`, `linkup`, `exa`, `parallel`,
-  `deepseek`;
-- **keyed with a metered free tier** — `algolia`, `tavily`, `tinyfish`,
-  `search1api`, `serpapi`, `querit`;
-- **keyless** — `exa:free`, `parallel:free`, `freeserp`, `anysearch`, and
-  `searxng`, which is gated on a config `url` instead of a key.
+provider names over fifteen adapter modules — the inventory, in its three
+billing groups, is [`docs/reference/providers.md`](docs/reference/providers.md)'s;
+`exa` and `parallel` each appear twice (`exa`/`exa:free`,
+`parallel`/`parallel:free`) because each answers anonymously for free and
+bills with a key.
 
 This is v1: a proxy and nothing else. There is deliberately **no cache** — every
 `search` call reaches a provider. [`VISION.md`](VISION.md) holds the goals,
@@ -77,6 +72,21 @@ deliberately. `ty` is the only type checker; it reads the `[tool.ty.src]` and
 [`tool.ty.rules`] blocks in `pyproject.toml`, so a change there is a change to
 the gate ([`docs/reference/typing.md`](docs/reference/typing.md) explains the
 rules).
+
+## Releases
+
+A release is a tag push, and the version has to be on `main` before the tag is
+cut. The version lives in three places that must agree —
+`src/seekwright/__init__.py`, `pyproject.toml`'s `[project] version`, and the
+Containerfile's `image.version` label — plus `uv lock`, which records the
+project's own version; any `docs/` page quoting the User-Agent version moves
+with it, and `tests/repo/test_packaging.py` fails the suite if they disagree.
+Land the bump on `main` through a pull request, then push the tag at main's
+head: `git push origin refs/tags/v<version>`. `publish.yml`'s first step
+refuses a tag that names any other commit, and the `scan` job on that main
+commit is what security-covers the release — the published wheel and image
+are built from a tree CI scanned green. What a publish run has to show is
+listed in [`docs/reference/publishing.md`](docs/reference/publishing.md).
 
 ## Code style and conventions
 
@@ -187,6 +197,14 @@ explains the request paths and the seams.
   (`search1api`, `serpapi`, `querit`, `deepseek`) names adapters whose live test
   has never run in-repo; the startup line and `--check` say so. A name leaves
   that set only once a live run has passed, and never through a config key.
+- **The image base has to scan clean at CRITICAL/HIGH.** The `scan` job builds
+  the `Containerfile` on main and on dispatch and fails the image on those
+  severities. The runtime base is Alpine because the Debian slim bases carry
+  OS packages with unfixed upstream HIGH CVEs, and the runtime stage removes
+  pip because its vendored msgpack/urllib3/setuptools copies get flagged too.
+  The reasoning is in the `Containerfile` comments and
+  [`docs/reference/container.md`](docs/reference/container.md) — re-run the
+  scan locally before changing either base or that `RUN` line.
 - **The extraction backend is a named opt-in too, and its library is a separate
   install.** `fetch.extractor` picks one module in `extractors/`; the default
   `trafilatura` ships as the `trafilatura` extra, which a bare `uv sync` gets
