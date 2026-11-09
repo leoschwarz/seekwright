@@ -186,7 +186,7 @@ max_download_bytes = 8388608  # memory guardrail; raise it for huge PDFs or JSON
 max_redirects = 3
 allow_private_addresses = false  # true only if you mean to fetch intranet pages
 allow_images = false        # true only where a caller can read image bytes
-user_agent = "seekwright/0.1.0 (+https://github.com/leoschwarz/seekwright)"
+user_agent = "seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright)"
 # A fallback is one named entry in a ladder: the step a search or a fetch
 # walks when the step before it fails. A fetch fallback takes one of the
 # five names pinned under "The fallbacks" in fetch-safety.md -- `crawl4ai`,

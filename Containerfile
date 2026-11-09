@@ -26,7 +26,7 @@ ARG SEEKWRIGHT_REVISION
 # image.version copies `seekwright.__version__`: a LABEL cannot read Python.
 LABEL org.opencontainers.image.title="seekwright" \
       org.opencontainers.image.description="MCP server fronting web-search providers: paid, free-tiered and keyless" \
-      org.opencontainers.image.version="0.1.0" \
+      org.opencontainers.image.version="0.1.1" \
       org.opencontainers.image.source="https://github.com/leoschwarz/seekwright" \
       org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.revision="${SEEKWRIGHT_REVISION}"

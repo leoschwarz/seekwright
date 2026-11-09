@@ -2,7 +2,7 @@
 
 # The single source for the version: `pyproject.toml`'s `version` and the Containerfile's image-version
 # label each carry a copy that cannot read this one, and tests/repo/test_packaging.py asserts they match.
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # The canonical home every shipped URL sits under; `seekwright.dev` stays out of
 # every shipped field (tests/repo/test_packaging.py).
