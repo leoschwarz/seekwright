@@ -9,8 +9,9 @@ job; this module is what keeps a bound from being dropped by the next workflow e
 
 A bound padded far past the work the job does fails the same way: it never fires, so
 the lane stays held. Each job therefore has a ceiling as well as a bound -- the gate
-job, the image build and the wheel build are all minutes of work and bounded at 10;
-a release run builds, uploads, installs and pushes, and is bounded at 30.
+job, the dependency scan, the image build and the wheel build are all minutes of work
+and bounded at 10; a release run builds, uploads, installs and pushes, and is bounded
+at 30.
 
 Like `tests/repo/test_ci_workflow_concurrency.py`,
 `tests/repo/test_ci_workflow_build_jobs.py` and
@@ -39,7 +40,7 @@ TIMEOUT = re.compile(r"^    timeout-minutes: (\d+)\s*$")
 
 # What each job may claim: a bound padded past the work the job does never fires, so
 # it does not release the lane.
-MAX_MINUTES = {"check": 10, "container": 10, "wheel": 10, "publish": 30}
+MAX_MINUTES = {"check": 10, "scan": 10, "container": 10, "wheel": 10, "publish": 30}
 DEFAULT_MAX_MINUTES = 30
 
 

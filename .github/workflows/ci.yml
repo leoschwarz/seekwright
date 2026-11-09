@@ -15,9 +15,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      # Actions are pinned to the commit a release tag resolved to, never the tag
+      # itself: a tag is mutable upstream. A bot may propose a bump, but a human
+      # merges it (docs/reference/publishing.md).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
 
@@ -50,7 +53,7 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Without this job the recipe rots behind a green check; docker builds plain
       # OCI. An unqualified tag names no registry, so nothing here can push it.
@@ -73,6 +76,47 @@ jobs:
           echo "image --check exit code: $?"
           set -e
 
+  # The dependency gate: the manifests and lockfiles the tree pins are scanned on every
+  # pull request, and on the lanes where artifact-build minutes are free the image the
+  # `container` job builds is scanned too. A finding is fixed by the pull request that
+  # introduced it, so the job fails rather than reports.
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # No `needs:` here on purpose: `container` skips a pull request, and a skipped need
+    # skips this job too, which would drop the dependency half exactly on the lane that
+    # needs it. The image half below rebuilds the Containerfile in this job's own runner,
+    # so nothing is consumed from `container` anyway.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # `ignore-unfixed` stays off on purpose: an unfixed CRITICAL/HIGH is still a fact
+      # about the dependency set the pull request ships, and hiding it is how the gate
+      # stops being a gate. The fix is a lockfile bump in that same pull request.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+
+      # Jobs do not share a filesystem, so the image `container` built on its own runner
+      # is not here: build the same Containerfile locally, then scan it. This half runs
+      # only where the artifact lane runs, so the second build costs no merge-check time.
+      - name: build the image to scan
+        if: ${{ github.event_name != 'pull_request' }}
+        run: DOCKER_BUILDKIT=1 docker build --file Containerfile --tag seekwright:ci .
+
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        if: ${{ github.event_name != 'pull_request' }}
+        with:
+          scan-type: image
+          image-ref: seekwright:ci
+          scanners: vuln
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+
   # The four commands a newcomer runs from the README, run to their end: without this job the
   # bundle rots behind a green `check`. No provider search is asserted -- the anonymous tiers are
   # rate-limited and a runner's address is throttled often enough to flake -- so the determinstic
@@ -86,7 +130,7 @@ jobs:
       run:
         working-directory: deploy/compose
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # `--build` replaces the published tag with this checkout's image; the name is
       # registry-qualified but the job never logs in, so nothing here can push it.
@@ -129,9 +173,9 @@ jobs:
     if: ${{ github.event_name != 'pull_request' }}
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
 
