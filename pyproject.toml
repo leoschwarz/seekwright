@@ -1,7 +1,7 @@
 [project]
 name = "seekwright"
 # A copy of `seekwright.__version__`: uv_build rejects `dynamic`.
-version = "0.1.0"
+version = "0.1.1"
 description = "An MCP proxy in front of web-search providers: paid, free-tiered and keyless"
 readme = "README.md"
 license = "Apache-2.0"

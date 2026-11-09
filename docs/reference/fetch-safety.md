@@ -155,7 +155,7 @@ What each one is, and where its facts live:
 - **`crawl4ai`** (`Crawl4aiFetcher`) posts the validated URL to the self-hosted
   [renderer](crawl4ai.md): a real Chromium on the same WAN as this server,
   which defeats fingerprint-based bot walls — it sends
-  `seekwright/0.1.0` — but not IP-based blocks. Where the URL goes is
+  `seekwright/0.1.1` — but not IP-based blocks. Where the URL goes is
   `fetch.crawl4ai_url`, written in this deployment's own config, and under a
   strict egress policy that host belongs on a `fallback=crawl4ai` line of the
   egress list. The tool never opens the config file, because the table holding
