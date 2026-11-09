@@ -83,10 +83,10 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    # `container` skips a pull request, so the dependency half runs when its dependency
-    # was skipped; on a push or a dispatch it waits for the image the other half scans.
-    needs: container
-    if: ${{ github.event_name == 'pull_request' || needs.container.result == 'success' }}
+    # No `needs:` here on purpose: `container` skips a pull request, and a skipped need
+    # skips this job too, which would drop the dependency half exactly on the lane that
+    # needs it. The image half below rebuilds the Containerfile in this job's own runner,
+    # so nothing is consumed from `container` anyway.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
