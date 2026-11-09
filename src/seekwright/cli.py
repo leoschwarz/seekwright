@@ -257,6 +257,7 @@ def client(command: str, argv: list[str]) -> int:
                 query=args.query,
                 offset=args.offset,
                 path=args.path,
+                structure=args.structure,
                 provider=args.provider,
                 as_json=args.as_json,
             )
@@ -377,6 +378,16 @@ def _client_parser(command: str) -> argparse.ArgumentParser:
             "`$.meta`, `$.items[*].name` for one field of every element, "
             "`$.items[0:5]` for a slice. A JSON page prints one line per value "
             "labelled with its path, so the page names the paths to ask for.",
+        )
+        parser.add_argument(
+            "--structure",
+            action="store_true",
+            help="On a JSON page, print its shape instead of its values: one "
+            "line per path, naming each array or object and its size and each "
+            "leaf's type, no values, with uniform arrays collapsed to one "
+            "`[*]` subtree. Every path printed is a valid --path to drill with. "
+            "Not allowed together with --query, --path or --offset: take the "
+            "shape first, then drill.",
         )
         parser.add_argument(
             "--provider",
@@ -509,6 +520,7 @@ def fetch(
     query: str | None = None,
     offset: int | None = None,
     path: str | None = None,
+    structure: bool = False,
     provider: str | None = None,
     as_json: bool = False,
 ) -> int:
@@ -518,10 +530,20 @@ def fetch(
     server sent, not a re-serialisation, so what a caller pipes into `jq` is what
     the server said. A pre-dispatch refusal comes back as its prose on stderr and
     exit `1`: the client writes no wording of its own.
+
+    The body is dump with `exclude_defaults`: `structure` defaults to false on
+    the model, and a body that named it would turn every plain read into one
+    that carries a field the caller never passed -- the same rule that keeps
+    unset flags out of the body entirely.
     """
     body = FetchRequest(
-        url=url, query=query, offset=offset, path=path, provider=provider
-    ).model_dump(mode="json")
+        url=url,
+        query=query,
+        offset=offset,
+        path=path,
+        structure=structure,
+        provider=provider,
+    ).model_dump(mode="json", exclude_defaults=True)
     response, code = _send("fetch", body, server=server)
     if response is None:
         return code

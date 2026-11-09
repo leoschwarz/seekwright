@@ -15,6 +15,7 @@ costs, and the mirror is true only while that test keeps passing.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import time
 from typing import Any, cast
@@ -24,6 +25,7 @@ import pytest
 from seekwright.config import Config, FetchConfig, PolicyConfig, ProviderConfig
 from seekwright.engine import FetchEngine
 from seekwright.fetcher import UNCAPPED, ContentFetcher, FetchedPage, window_text
+from seekwright.jsondoc import render_json
 from seekwright.pagecache import CachedPage, DiskPageCache, _cut, entry_name
 from seekwright.usage import UsageRecorder
 
@@ -33,6 +35,12 @@ URL = "https://example.com/article"
 def usage_snapshot(rec: Any) -> dict[str, Any]:
     """The dashboard state typed loosely, the way tests/test_usage.py reads it."""
     return cast("dict[str, Any]", rec.snapshot())
+
+
+def _rendered(doc: str) -> str:
+    text = render_json(doc)
+    assert text is not None, "a test fixture that is not a document"
+    return text
 
 PAGE_TEXT = (
     "The page body. Every fetch test that means to exercise a successful "
@@ -61,11 +69,18 @@ class CountingFetcher:
     name = "scrappa"
     cost_per_1k: float | None = 0.001
 
-    def __init__(self, *, delay: float = 0.0, text: str = PAGE_TEXT):
+    def __init__(
+        self,
+        *,
+        delay: float = 0.0,
+        text: str = PAGE_TEXT,
+        path_addressable: bool = False,
+    ):
         self.calls = 0
         self.seen: list[tuple[int, int | None]] = []
         self._delay = delay
         self._text = text
+        self._path_addressable = path_addressable
 
     async def fetch(
         self, url: str, *, offset: int = 0, max_chars: int | None = None
@@ -82,6 +97,7 @@ class CountingFetcher:
             status_code=200,
             truncated=False,
             total_chars=len(self._text),
+            path_addressable=self._path_addressable,
         )
 
     async def aclose(self) -> None:
@@ -319,6 +335,30 @@ class TestEngineSeam:
         # A second selection is served from the entry, still uncapped upstream.
         await engine.fetch(URL, query="body")
         assert fetcher.calls == 1
+
+    async def test_a_structure_read_is_uncapped_then_warm(self, tmp_path):
+        """A shape read fills at the whole rendering, and re-reads pay no dispatch.
+
+        The schema replacement happens *after* the read, on the serving path,
+        so the entry keeps the rendering a `path` drill addresses -- a
+        structure read that stored its own output would coral the drill into
+        interpreting a schema's `[*]`, which no document contains.
+        """
+        fetcher = CountingFetcher(
+            # Long enough to clear fetch.min_text_chars: a tiny rendering is
+            # the empty case for a drill, wherever the read came from.
+            text=_rendered(json.dumps({"k": "x" * 220})),
+            path_addressable=True,
+        )
+        engine = cached_engine(tmp_path, fetcher)
+        response = await engine.fetch(URL, structure=True)
+        assert fetcher.seen == [(0, UNCAPPED)]
+        assert response.text is not None and "string" in response.text
+        await engine.fetch(URL, structure=True)
+        assert fetcher.calls == 1
+        # The entry is the rendering, not the schema: a drill still works warm.
+        drill = await engine.fetch(URL, path="$.k")
+        assert drill.matches is not None
 
     async def test_a_paged_read_after_a_selection_read_is_still_warm(self, tmp_path):
         fetcher = CountingFetcher()

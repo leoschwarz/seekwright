@@ -74,7 +74,9 @@ to `ghcr.io`, one tag per release and no moving `latest`.
   results.
 - `fetch` — one URL, the text of that page. Pass `query` for the passages that
   match instead of the whole document; a JSON page arrives as one line per value
-  labelled with its path, and `path` takes one part of it.
+  labelled with its path, `path` takes one part of it, and `structure` reports
+  a document's shape instead of its values — paths, types and sizes, no values —
+  so a document too big to read whole is still drillable.
 - `answer` — a cited answer written over several searches and a few pages. Off by
   default: switching it on names a model and its endpoint in config, because your
   query and the retrieved text go there

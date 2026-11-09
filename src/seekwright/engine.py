@@ -32,7 +32,7 @@ from .fetcher import (
     window_text,
 )
 from .health import HealthBoard
-from .jsondoc import PathSyntax, parse_path, select_paths
+from .jsondoc import PathSyntax, parse_path, render_schema, select_paths
 from .logs import bind, elapsed_ms, host_of, query_fields, result_fields, safe
 from .models import (
     FetchImage,
@@ -681,6 +681,7 @@ class FetchEngine:
         offset: int = 0,
         query: str | None = None,
         path: str | None = None,
+        structure: bool = False,
         provider: str | None = None,
         auto_fallback: bool | None = None,
         run: str | None = None,
@@ -690,6 +691,15 @@ class FetchEngine:
 
         ``path`` reads one part of a JSON document instead of the document --
         `jsondoc` states the grammar.
+
+        ``structure`` reads a JSON page's shape instead of its values: the
+        response's text is :func:`render_schema` over the rendering, one line
+        per path and type with uniform arrays collapsed to one ``[*]``
+        subtree, so a document too big to read whole is still addressable --
+        read the shape, then drill with ``path``. It is refused alongside
+        ``query``, ``path`` and ``offset`` under the one-axis rule, because a
+        shape with a slice of itself at the wrong level is two answers in one
+        call, and each is one read on its own.
 
         ``provider`` names one built fallback and routes this page to it alone:
         no default-route attempt first, no walk behind it, because a price named
@@ -711,6 +721,11 @@ class FetchEngine:
             raise FetchRefused("pass `query` or `offset`, not both")
         if path is not None and (query is not None or offset):
             raise FetchRefused("pass `path`, `query` or `offset`, one at a time")
+        if structure and (query is not None or path is not None or offset):
+            raise FetchRefused(
+                "pass `structure` alone; a shape read and a drill are each "
+                "one read -- take the shape, then pass `path`"
+            )
         # Resolved ahead of any dispatch, as `search` resolves: a name this
         # server cannot serve is refused with the list it can.
         named = self.resolve(provider)
@@ -732,7 +747,11 @@ class FetchEngine:
         notices: list[str] = []
         # A selection by terms or by structure reads the whole document; the
         # budget bounds the response, not the fetch.
-        max_chars = UNCAPPED if query is not None or path is not None else None
+        max_chars = (
+            UNCAPPED
+            if query is not None or path is not None or structure
+            else None
+        )
         log = self._log_for(url)
         started = time.monotonic()
         # Guardrails before the cache gate, mirroring the local reader's own
@@ -772,6 +791,21 @@ class FetchEngine:
         # The ladder is finished and this page is the page, so the escape lands
         # here: everything downstream reads the escaped text. An offset taken from
         # escaped text stays valid across a re-fetch; only a cut-boundary token drifts.
+        if structure:
+            # One shape replaced for one page read, before the escape pass: the
+            # paths a schema carries come out of the page's keys, so its text
+            # escapes in the same pass any other page text would. A page that is
+            # not one this server read as JSON cannot give a schema, and the
+            # whole page is returned under the same sentence `path` answers with.
+            rendered = render_schema(page.text) if page.path_addressable else None
+            if rendered is None:
+                notices.append(
+                    "`structure` reports a JSON document's shape, and this page "
+                    "is not one this server could read as JSON; the whole page "
+                    "is returned"
+                )
+            else:
+                page.text = rendered
         sanitized = 0
         page.text, sanitized = sanitize_text(page.text)
         if page.title is not None:
@@ -792,7 +826,10 @@ class FetchEngine:
             )
             return self._past_end_response(url, page, offset)
 
-        empty_page = offset == 0 and self._is_empty(page.text)
+        # A structure read is a deliberate read of a shape the caller asked for:
+        # the emptiness gate is about a JS shell answering a read meant to find
+        # prose, and it does not apply to one.
+        empty_page = not structure and offset == 0 and self._is_empty(page.text)
         if empty_page:
             log.bind(chars=len(page.text.strip())).info("fetch.empty")
             notices.append(router.empty_notice(self._table, walk))

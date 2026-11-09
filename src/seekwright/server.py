@@ -281,16 +281,19 @@ async def _run_search(engine: SearchEngine, req: SearchRequest) -> SearchRespons
 
 async def _run_fetch(engine: FetchEngine, req: FetchRequest) -> FetchResponse:
     """The `fetch` mapping: `offset` takes its default here, where both
-    encodings reach it, and `query` and `path` go through as given -- the
-    fetcher distinguishes "not narrowed", "narrowed to these terms" and
-    "narrowed to this subtree". `provider` goes through as written, including the
-    null that *is* the local read: `engine.resolve` decides what a name means.
+    encodings reach it, and `query`, `path` and `structure` go through as given
+    -- the engine distinguishes "not narrowed", "narrowed to these terms",
+    "narrowed to this subtree" and "the shape instead of the values", and owns
+    the rule that they arrive one at a time. `provider` goes through as written,
+    including the null that *is* the local read: `engine.resolve` decides what a
+    name means.
     """
     return await engine.fetch(
         req.url,
         offset=req.offset or 0,
         query=req.query,
         path=req.path,
+        structure=req.structure,
         provider=req.provider,
     )
 
@@ -604,6 +607,22 @@ async def fetch(
             ),
         ),
     ] = None,
+    structure: Annotated[
+        bool,
+        Field(
+            False,
+            description=(
+                "Report the shape of a JSON page instead of the page: one line "
+                "per path, naming each array or object and its size and each "
+                "leaf's type, no values. Uniform arrays collapse to one `[*]` "
+                "subtree, so a document that would fill the context reports its "
+                "shape in a few lines; every path printed is a valid `path` "
+                "selector, so read `structure=true` first and then drill with "
+                "`path`. Exchanged with `query`, `path` and `offset` -- one "
+                "reading per call."
+            ),
+        ),
+    ] = False,
 ) -> Annotated[CallToolResult, FetchResponse]:
     app = _ctx(ctx)
     if app.fetch_engine is None:
@@ -612,7 +631,12 @@ async def fetch(
         raise ToolError(_FETCH_DISABLED)
     try:
         req = FetchRequest(
-            url=url, offset=offset, query=query, path=path, provider=provider
+            url=url,
+            offset=offset,
+            query=query,
+            path=path,
+            provider=provider,
+            structure=structure,
         )
         response = await _run_fetch(app.fetch_engine, req)
     except FetchFailed as exc:

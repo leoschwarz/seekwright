@@ -117,6 +117,22 @@ class TestToolSurface:
         assert prop["default"] is None
         assert "enum" not in str(prop)
 
+    async def test_fetch_structure_is_a_boolean_third_axis(self, server):
+        """`structure` is the fourth optional, exchanged with the other axes.
+
+        A boolean, default false, so the reading layers on and every existing
+        caller keeps the schema it got; the description names the exchange,
+        because the refusal -- a `ToolError` carrying the one-axis sentence --
+        is what a mixing call costs, and a description is cheaper than that
+        round trip.
+        """
+        tool = next(t for t in await server.list_tools() if t.name == "fetch")
+        prop = tool.input_schema["properties"]["structure"]
+        assert prop["default"] is False
+        assert "boolean" in str(prop)
+        assert "`path`" in prop["description"]
+        assert "one" in prop["description"], "the exchange rule rides the description"
+
     async def test_no_cache_params_survive(self, server):
         """Nothing in the surface promises caching this version does not do."""
         for tool in await server.list_tools():

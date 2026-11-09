@@ -1467,13 +1467,14 @@ class TestOneMappingPerOperation:
     async def test_the_fetch_mapping_is_one_call_both_ways(
         self, srv: Any, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The URL, the paging offset, the narrowing query and the provider, both ways in.
+        """All five parameters, both ways in.
 
-        Five bodies: `offset` and `query` are mutually exclusive at the engine;
+        Six bodies: `offset` and `query` are mutually exclusive at the engine;
         the fourth leaves both out, since `offset`'s default of 0 is the
         mapping's rather than the surface's and has to come out the same whether
-        the caller wrote it or not; and the fifth names a provider, which is why
-        the served stack carries one built fallback for it to name.
+        the caller wrote it or not; the fifth names a provider, which is why
+        the served stack carries one built fallback for it to name; and the
+        sixth asks for the shape, which rides the mapping as `structure`.
         """
         url = "https://example.com/a"
         bodies: list[dict[str, Any]] = [
@@ -1482,6 +1483,7 @@ class TestOneMappingPerOperation:
             {"url": url, "path": "$.items[0]"},
             {"url": url},
             {"url": url, "provider": "crawl4ai"},
+            {"url": url, "structure": True},
         ]
         seen: list[tuple[str, dict[str, Any]]] = []
 
@@ -1506,27 +1508,65 @@ class TestOneMappingPerOperation:
                 assert route.status_code == 200, body
                 await srv.fetch(_FixedContext(srv._shared), **body)
 
-        assert len(seen) == 10
-        assert seen[0] == seen[1] == (
-            url,
-            {"offset": 120, "query": None, "path": None, "provider": None},
-        )
-        assert seen[2] == seen[3] == (
-            url,
-            {"offset": 0, "query": "wal checkpoint", "path": None, "provider": None},
-        )
-        assert seen[4] == seen[5] == (
-            url,
-            {"offset": 0, "query": None, "path": "$.items[0]", "provider": None},
-        )
-        assert seen[6] == seen[7] == (
-            url,
-            {"offset": 0, "query": None, "path": None, "provider": None},
-        )
-        assert seen[8] == seen[9] == (
-            url,
-            {"offset": 0, "query": None, "path": None, "provider": "crawl4ai"},
-        )
+        assert len(seen) == 12
+        assert seen[0][1]["offset"] == 120
+        assert seen[0] == seen[1], "REST and MCP encodings reach one call"
+        for i in (0, 2, 4, 6, 8, 10):
+            # Both encodings of each body land on one keyword set, and the
+            # keyword set carries the whole parameter table the mapping owns:
+            # what a body leaves out arrives as the *mapping's* default, not
+            # silently absent.
+            assert seen[i] == seen[i + 1]
+            kw = seen[i][1]
+            assert set(kw) == {
+                "offset",
+                "query",
+                "path",
+                "structure",
+                "provider",
+            }, kw
+        assert seen[0][1] == {
+            "offset": 120,
+            "query": None,
+            "path": None,
+            "structure": False,
+            "provider": None,
+        }
+        assert seen[2][1] == {
+            "offset": 0,
+            "query": "wal checkpoint",
+            "path": None,
+            "structure": False,
+            "provider": None,
+        }
+        assert seen[4][1] == {
+            "offset": 0,
+            "query": None,
+            "path": "$.items[0]",
+            "structure": False,
+            "provider": None,
+        }
+        assert seen[6][1] == {
+            "offset": 0,
+            "query": None,
+            "path": None,
+            "structure": False,
+            "provider": None,
+        }
+        assert seen[8][1] == {
+            "offset": 0,
+            "query": None,
+            "path": None,
+            "structure": False,
+            "provider": "crawl4ai",
+        }
+        assert seen[10][1] == {
+            "offset": 0,
+            "query": None,
+            "path": None,
+            "structure": True,
+            "provider": None,
+        }
 
     async def test_the_answer_mapping_is_one_call_both_ways(
         self, srv: Any, monkeypatch: pytest.MonkeyPatch, agent_key: None

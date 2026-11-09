@@ -74,7 +74,10 @@ Highest first. When two collide, the earlier line wins.
 - **No accounts or authentication on the listener.** Forbids sign-in, tokens, OAuth,
   per-caller identity and per-caller quotas; one deployment serves one operator's keys.
 - **No cache and no stored corpus.** Forbids a result cache, a replayed index and a
-  news/corpus operation; every search reaches a provider.
+  news/corpus operation; every search reaches a provider. The `fetch` page cache does
+  not reverse this: it is opt-in (`fetch.cache_dir`), short-TTL storage of one fetched
+  page to save re-reading the same URL, and it never serves a search or outlives its
+  TTL.
 - **No inferred routing from the query.** Forbids a classifier that reads the question and
   silently spends on a vendor; a task route must be declared by the caller.
 - **No silent escalation to a billable rung.** Forbids a walk that hides which vendor
