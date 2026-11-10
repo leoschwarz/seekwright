@@ -158,3 +158,12 @@ and `http`/`cohttp-eio 6.3.0` were already in the M2 set.
   for M3" above, including the `--assume-depexts` and GMP notes the build depends
   on. An `http`-only `Net` would not be a completed M3
   (plans/capability-gated-mcp-server.md §5).
+
+## Gotcha: libgmp for zarith/tls-eio (2026-11-10)
+
+M3 pulled in `tls-eio`/`ca-certs` → `zarith`, whose C stub links `-lgmp`.
+The box has the runtime `libgmp.so.10` but not the dev symlink, and there is
+no sudo. Fix without root: `mkdir -p ~/.local/lib && ln -s
+/usr/lib/x86_64-linux-gnu/libgmp.so.10 ~/.local/lib/libgmp.so` and build with
+`LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH` (or install `libgmp-dev` via
+apt when root is available).
