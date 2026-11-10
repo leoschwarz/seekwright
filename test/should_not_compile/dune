@@ -1,0 +1,124 @@
+; Programs that must not compile, and the diagnostic each one has to produce.
+;
+; These pin the layer's structural claims, which no positive test can: a tool
+; cannot be registered without naming its grant, a grant cannot be built or
+; taken apart outside Policy, one tool's power cannot be swapped for another's,
+; and mcp-kit's result shape is not what a tool returns
+; (plans/capability-gated-mcp-server.md §2, §4, §8). Each snippet is type-checked
+; against the library's interfaces and its whole diagnostic is compared with
+; <name>.expected, so an interface change that would let one of these compile
+; fails the build here instead of waiting for review. Re-bless with
+; [dune promote] when a diagnostic changes for a reason the snippet's own
+; comment still describes.
+;
+; The compile is a plain [ocamlfind ocamlc] over [lib/caps]'s interfaces rather
+; than a dune stanza, because a stanza that does not compile fails the build
+; instead of reporting a diff. Two consequences show up below: the interfaces
+; are copied in first, since [ocamlc] writes a [.cmi] next to its input and dune
+; needs every output declared as a target; and [mcp_caps.ml] mirrors the alias
+; module dune generates for the wrapped library, so the snippets read like the
+; client code they stand for. The interface list is in dependency order, because
+; [ocamlc] compiles its arguments left to right and does no dependency analysis
+; of its own; a module missing from it fails a snippet loudly, not silently.
+;
+; The [sed] in each compile drops this switch's packaging warning (two [seq]
+; definitions) so it stays out of the compared text; it is [sed] rather than
+; [grep] because [grep] exits 1 when it filters everything away, which would
+; read as a compiler failure on a clean run. [set -o pipefail] is what keeps the
+; compiler's own exit code — the half that says a snippet did not compile — and
+; [with-accepted-exit-codes] turns "it compiled" into a build failure. The
+; interface closure is repeated in each [deps] because the project's dune lang
+; version has no user-defined variables to name it once.
+
+(rule
+ (targets error.cmi event.cmi tool.cmi policy_fs.cmi authority.cmi policy.cmi policy_net.cmi
+  registry.cmi server.cmi mcp_caps.cmi)
+ (deps (glob_files ../../lib/caps/*.mli) mcp_caps.ml)
+ (action
+  (progn
+   (copy ../../lib/caps/error.mli error.mli)
+   (copy ../../lib/caps/event.mli event.mli)
+   (copy ../../lib/caps/tool.mli tool.mli)
+   (copy ../../lib/caps/policy_fs.mli policy_fs.mli)
+   (copy ../../lib/caps/authority.mli authority.mli)
+   (copy ../../lib/caps/policy.mli policy.mli)
+   (copy ../../lib/caps/policy_net.mli policy_net.mli)
+   (copy ../../lib/caps/registry.mli registry.mli)
+   (copy ../../lib/caps/server.mli server.mli)
+   (run sh -c
+    "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson -c error.mli event.mli tool.mli policy_fs.mli authority.mli policy.mli policy_net.mli registry.mli server.mli mcp_caps.ml 2>&1 | sed -n '/^findlib:/d;p'"))))
+
+; A tool registered with its grant named, and the same call with the label
+; dropped: the second is the one that must not type-check.
+(rule
+ (targets no_grant_label.out)
+ (deps no_grant_label.ml error.cmi event.cmi tool.cmi policy_fs.cmi authority.cmi policy.cmi
+   policy_net.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to no_grant_label.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson -c no_grant_label.ml 2>&1 | sed -n '/^findlib:/d;p'")))))
+
+; The grant type has no public constructor, so it cannot be minted by the code
+; that holds it.
+(rule
+ (targets mint_grant.out)
+ (deps mint_grant.ml error.cmi event.cmi tool.cmi policy_fs.cmi authority.cmi policy.cmi
+   policy_net.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to mint_grant.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson -c mint_grant.ml 2>&1 | sed -n '/^findlib:/d;p'")))))
+
+; The confinement witness is abstract, so [Authority.Fs.of_confinement] is not
+; a way to build a grant.
+(rule
+ (targets forge_confinement.out)
+ (deps forge_confinement.ml error.cmi event.cmi tool.cmi policy_fs.cmi authority.cmi policy.cmi
+   policy_net.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to forge_confinement.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson -c forge_confinement.ml 2>&1 | sed -n '/^findlib:/d;p'")))))
+
+; A tool that needs the filesystem cannot be registered with someone else's
+; power.
+(rule
+ (targets grant_type_mismatch.out)
+ (deps grant_type_mismatch.ml error.cmi event.cmi tool.cmi policy_fs.cmi authority.cmi policy.cmi
+   policy_net.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to grant_type_mismatch.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson -c grant_type_mismatch.ml 2>&1 | sed -n '/^findlib:/d;p'")))))
+
+; The core's output type is not mcp-kit's, so the transport's result shape
+; cannot become what a tool is allowed to return.
+(rule
+ (targets mcp_kit_result.out)
+ (deps mcp_kit_result.ml error.cmi event.cmi tool.cmi policy_fs.cmi authority.cmi policy.cmi
+   policy_net.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to mcp_kit_result.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson -c mcp_kit_result.ml 2>&1 | sed -n '/^findlib:/d;p'")))))
+
+(rule
+ (alias runtest)
+ (action
+  (progn
+   (diff no_grant_label.expected no_grant_label.out)
+   (diff mint_grant.expected mint_grant.out)
+   (diff forge_confinement.expected forge_confinement.out)
+   (diff grant_type_mismatch.expected grant_type_mismatch.out)
+   (diff mcp_kit_result.expected mcp_kit_result.out))))

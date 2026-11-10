@@ -25,6 +25,15 @@
    (>= 3.0.0))
   (uri
    (>= 4.0))
+  ; The loop runner is only needed by the examples and the filesystem tests: the
+  ; library itself stays loop-agnostic, because Eio_main's own interface says a
+  ; library must not call run (plans/capability-gated-mcp-server.md §6). Its
+  ; version travels with [eio]'s constraint above — this dune lang will not put a
+  ; constraint and a flag on the same dependency. unix is deliberately not
+  ; listed: it ships with the compiler, and no opam package of that name
+  ; resolves.
+  (eio_main
+   :with-test)
   (alcotest
    :with-test)))
 

@@ -23,6 +23,7 @@ it factual, dated, and short.
 
 `dune mcp-kit mcp-kit-eio mcp-kit-cohttp-eio mcp-kit-ppx eio cohttp-eio yojson
 uri alcotest logs toml` — all at mcp-kit 0.2.0 / cohttp(-eio) 6.3.0 / yojson 3.0.0.
+Added for M1: `eio_main` 1.6 (see the M1 section; test and example only).
 
 Gotcha: **`mcp-kit-stdio` is not an opam package.** The stdio adapter ships
 inside `mcp-kit` as the findlib library `mcp-kit.stdio` (module
@@ -121,3 +122,57 @@ pass; both echo servers answer `initialize` → `notifications/initialized` →
   the `.ml` files copied by `(deps (glob_files ../lib/caps/*.ml))`; that lets a
   source guard walk every sibling and exempt only `server.ml`, instead of
   hardcoding a module list. `Filename.check_suffix ".ml"` does not match `.mli`.
+
+## Verified building M1 (2026-11-10)
+
+- `Eio_main` is its **own** opam package (`eio_main` 1.6, which brings
+  `eio_linux`, `eio_posix`, `iomux`, `uring`); `eio` alone does not provide it.
+  `EIO_BACKEND=linux|io-uring|posix` picks the loop, and unset or `""` means
+  "linux, else posix". OCaml 5.3.0 has `Unix.putenv` but **no** `Sys.putenv` and
+  no `unsetenv` anywhere, so a test that wants "unset" puts `""`.
+- Confined-path behaviour, same on both runners: under an
+  `Eio.Path.open_subtree` handle, a `..` component, an absolute component, a
+  symlink pointing out of the root, and a symlinked directory out of the root all
+  raise `Eio.Io (Fs.E (Fs.Permission_denied …))` (on the linux runner that is
+  `openat2` RESOLVE_BENEATH). A symlink that stays inside resolves normally and
+  reads fine. `Eio.Path.kind ~follow:true` reports a missing path — including a
+  dangling symlink — as the `Not_found` **value**, not an exception; a read of a
+  directory raises a plain `Eio.Io` from the flow layer.
+- Bounded reads: `Eio.Buf_read.of_flow flow ~max_size:(limit + 1)` with
+  `Buf_read.take_all` raises `Eio.Buf_read.Buffer_limit_exceeded` and never
+  allocates past the limit; `Eio.Path.load` allocates the whole file.
+  `Eio.Path.with_dir_entries` hands a `Seq`, so an entry ceiling bounds what is
+  allocated, not only what is reported; `Eio.Path.read_dir` builds the whole list.
+- Cancellation is control flow, not a failure: re-raise `Eio.Cancel.Cancelled`
+  and `Eio.Exn.Multiple` at any boundary that otherwise maps `Eio.Io` onto a
+  domain error type.
+- The loop contract in one line: a grant's subtree handle belongs to the loop
+  that opened it, so the transport runs inside `Eio_main.run` under the same
+  `Eio.Switch.t` — `examples/read_source.ml`. `Mcp_kit_stdio.run_channels` reads
+  OCaml channels synchronously, so it parks that loop; fine for one stdio client.
+- `authority.mli` cannot name the confinement witness if that record lives in
+  `policy.mli`, because `policy.mli` names `Authority.Net.t`: dune reports
+  "dependency cycle between … `Policy.intf` / `Authority.intf`". Put the record in
+  its own module (`policy_fs.ml`) with an abstract `t` and let
+  `Authority.Fs.of_confinement` take it.
+- A GADT branch nothing constructs is warning 37, which the dev profile turns
+  into an error. Omit the branch: with no `Net` constructor at all, no `Net`
+  grant exists anywhere — a stronger statement than a stub constructor.
+- Negative compilation on dune 3.24 at `(lang dune 3.11)`: there is no
+  `expect_test` stanza and `(test (name X))` insists that module `X` exists, so
+  use a `(rule … (with-accepted-exit-codes (not (or 0)) (with-outputs-to X.out
+  (run sh -c "set -o pipefail; ocamlfind ocamlc … 2>&1 | sed -n
+  '/^findlib:/d;p'"))))` plus `(rule (alias runtest) (action (diff X.expected
+  X.out)))`, and `dune promote` (it promotes one mismatched file per run).
+  `grep -v` is the wrong filter there: it exits 1 when it filtered every line,
+  which reads as a compiler failure on a clean run. `ocamlc -c dir/x.mli` writes
+  the `.cmi` **next to the input**, so copy the interfaces into the rule's own
+  directory first, and note `ocamlc` compiles its file arguments left to right —
+  the interface list must be in dependency order. `(var …)` needs a newer
+  `(lang dune)` than 3.11, so a repeated dep list is the only option here.
+- In a `dune-project` `(package (depends …))` entry at `(lang dune 3.11)`, a
+  dependency takes a version constraint **or** a flag like `:with-test`, not both:
+  `(eio_main (>= 1.6) :with-test)`, `(eio_main (:with-test (>= 1.6)))` and the
+  other orderings all fail with "Atom or quoted string expected".
+- Seen once: after `dune promote`, a stale `_build` made the diff rule fail with
+  "File ….expected should be deleted". `rm -rf _build` and re-run before chasing it.

@@ -1,0 +1,4 @@
+File "mint_grant.ml", line 11, characters 4-25:
+11 |     Mcp_caps.Authority.Fs confinement -> confinement
+         ^^^^^^^^^^^^^^^^^^^^^
+Error: Unbound constructor "Mcp_caps.Authority.Fs"

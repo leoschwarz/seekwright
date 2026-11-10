@@ -137,6 +137,7 @@ type _ t
 module Fs : sig
   type nonrec t = fs t
 
+  val of_confinement : Policy_fs.t -> t
   val read_file : ?max_bytes:int -> t -> string -> (string, Error.t) result
   val list_dir : ?max_entries:int -> t -> string -> (string list, Error.t) result
 end
@@ -251,24 +252,37 @@ advertised `output_schema` is a JSON-RPC error, not an `isError` result.
 
 ## 4. Filesystem policy: real confinement, not string normalisation
 
-`Policy.with_root` does **not** chroot the process. It opens an Eio subtree and
-returns an `fs Authority.t` whose every operation stays on that handle:
+`Policy.with_root` does **not** chroot the process. It opens an Eio subtree, and
+the grant built from that decision keeps every operation on the handle:
 
 ```ocaml
+(* policy_fs.mli — the confinement decision, abstract outside its module *)
 val with_root :
-  sw:Eio.Switch.t -> _ Eio.Path.t -> string ->
-  (fs Authority.t, Error.t) result
+  sw:Eio.Switch.t ->
+  ?max_read_bytes:int -> ?max_entries:int ->
+  parent:_ Eio.Path.t -> string -> (t, Error.t) result
 ```
 
-Open for M1, noticed at M0: `authority.mli` deliberately exports no constructor,
-and dune shows a module nothing beyond its siblings' `.mli` files, so `Policy`
-cannot build the value `Authority` keeps abstract. Decide this before writing
-`with_root`. The candidates are (a) construct the grants inside `authority.ml`
-and re-export the constructors from `policy.ml`, or (b) expose one clearly
-labelled constructor on `Authority` that takes the subtree handle — the handle
-is what confines the grant, so passing it in cannot widen one. Anything reachable
-by `Policy` is reachable by a caller, so this is a choice between two audit
-stories, not a free option.
+```ocaml
+(* authority.mli — the value a tool is registered with *)
+val of_confinement : Policy_fs.t -> Fs.t
+val read_file : ?max_bytes:int -> Fs.t -> string -> (string, Error.t) result
+val list_dir : ?max_entries:int -> Fs.t -> string -> (string list, Error.t) result
+```
+
+Landed 2026-11-10 as a third shape of candidate (a), forced by a cycle: the
+confinement record (the subtree handle plus the two ceilings) lives in
+`lib/caps/policy_fs.ml`, `t` abstract, and `Policy.with_root` re-exports it,
+because `policy.mli` already names `Authority.Net.t` for the M3 constructors
+while `authority.mli` has to name the witness for `of_confinement`. `policy_net.ml`
+was private-to-`Policy` at M0 for the same reason. `Authority.Fs.of_confinement`
+is the one labelled seam, and it is not a way to build a grant: the only producer
+of a `Policy_fs.t` is `Policy.with_root`. Candidate (b) — a public constructor
+over a subtree handle — compiles just as well and moves the audit question from
+"who called `Policy.with_root`" to "who ever got an `Eio.Path.t`"; with the
+witness abstract the audit answer is one grep, which is what
+`test/should_not_compile/` holds open. Either way this is a design-time and audit
+boundary, not a sandbox (§0).
 
 The base path is operator-supplied (typically under `Eio.Stdenv.fs env`). Open it
 with `Eio.Path.open_subtree ~sw` and keep the switch alive for the server. Tool
@@ -413,6 +427,15 @@ itself. The example must put transport construction and the server loop under th
 same outer `Switch.run` that owns grant resources. Startup/declaration failures
 go to stderr with a nonzero exit; stdio carries only protocol bytes.
 
+Verified at M1 in `examples/read_source.ml`: `Eio_main.run`, then
+`Eio.Switch.run`, the grant opened on that switch, and
+`Mcp_kit_stdio.run_channels server stdin stdout` inside it — which is what gives
+mcp-kit's synchronous classic handler a fiber to do I/O in. `mcp-caps` itself
+never calls `Eio_main.run`: `Eio_main`'s interface says a library must not, and a
+second loop cannot own a handle the first opened. "The transport runs under the
+switch that owns the grants" is therefore an application-side contract, stated in
+`authority.mli` rather than enforced by the layer.
+
 The Cohttp-Eio adapter already bounds request bodies (default 1 MiB), validates
 modern Streamable HTTP routing headers, and handles Origin checks. Pin the body
 limit explicitly in the example. Inbound `Host` policy is application/gateway
@@ -437,12 +460,34 @@ cancellation guarantee.
 - **Grant isolation.** Two tools with the same input but different roots receive
   only their own data under interleaved calls. An unregistered tool cannot be
   called through MCP. This tests closure packing; it does not replace type tests.
+  M1 has this as `test/test_grant_wiring.ml`: one `read_source` declaration
+  registered under two temporary roots answers each root's own file, refuses the
+  other root's file with `unavailable:` and a path walk to a sibling with
+  `invalid:`/`denied:`, and a registry built with only `~grant:()` does not
+  advertise or serve `read_source` at all (the call comes back as a JSON-RPC
+  error naming nothing).
 - **Backend substitution.** Use two temporary roots, or an implementation-only
   test backend below the public `.mli`, to produce identical output with distinct
   fixtures. Public fake constructors must not weaken the external capability
-  boundary.
+  boundary. Landed 2026-11-10: that implementation-only backend is deliberately
+  unavailable at the `Fs` level — there is no fake `Authority.Fs.t`, because
+  `Policy_fs.t` is abstract and only `Policy.with_root` returns one, which is the
+  boundary doing its job rather than an oversight. What M1 substitutes instead is
+  (i) the real backend under two roots, and (ii) an in-memory grant of the
+  *test's own* type registered through the same `Registry.add` path, which pins
+  that nothing between `Registry.add` and the transport inspects a grant.
 - **Filesystem security.** The escape, race, byte/entry-bound, and error contracts
-  in section 4.
+  in section 4. M1 has `test/test_authority_fs.ml`: one table of path shapes run
+  against both loop runners `Eio_main` picks (`EIO_BACKEND=linux`, the
+  `openat2`/RESOLVE_BENEATH path, and `EIO_BACKEND=posix`), covering `..`,
+  absolute paths, empty and `.` components, control characters, a symlink out of
+  the root, a symlinked directory out of the root, a dangling symlink, symlinks
+  that stay inside, the byte ceiling (over-limit files refused without being
+  buffered) and the entry ceiling (counted while streaming). The
+  rename/symlink-replacement race in section 4 is **not** tested at M1: the
+  confinement is at open time, per component, so a rename between the kind check
+  and the open cannot widen a grant, and no deterministic in-repo test for the
+  race is claimed.
 - **Network security.** The DNS/connection-binding, TLS, redirect, timeout,
   bounded-streaming, header, and redaction contracts in section 5.
 - **Concurrency.** Interleaved HTTP requests cannot mix grants, output, policy
@@ -458,12 +503,33 @@ cancellation guarantee.
 - an attempted external constructor for `Authority.Fs.t`;
 - an attempt to call a core tool with an mcp-kit result or to bypass its decoder.
 
-Each fixture has an expected compiler-diagnostic snapshot. The test fails if
-compilation succeeds **or** fails with an unrelated error; merely using a dune
-rule with "any nonzero exit means pass" is inadequate because missing modules and
-syntax errors would make a false-positive test. Positive interface compilation
-must run first. Bare `let _ = Tools.read_source` is valid OCaml and is not a
-negative case.
+Landed 2026-11-10, five fixtures, each with its diagnostic pinned:
+`no_grant_label.ml` (the first bullet), `grant_type_mismatch.ml` (the second —
+with `~grant:()`, since there is no `Net` grant to pass until M3, and the
+property is the same: one tool's power cannot be swapped for another kind),
+`mint_grant.ml` (pattern-matching the grant type to reach the confinement inside
+it), `forge_confinement.ml` (a record with `Policy_fs`'s own field names, which
+is still not a `Policy_fs.t`), and `mcp_kit_result.ml` (a tool returning
+`Mcp_kit.Tool.result`, which is not a `Tool.Output.t`). The **decoder half of the
+fourth bullet is not expressible** through the public interface and is not
+pretended at: `Registry.entry_call` always decodes, and `Tool.run` taking the
+already-decoded input is the documented test seam, not a route a server can be
+built on; the "core never mentions mcp-kit" half is guarded by
+`test/test_core_no_mcp_kit.ml`.
+
+Each fixture has an expected compiler-diagnostic snapshot. The mechanism is a
+dune rule per fixture with `(with-accepted-exit-codes (not (or 0)) …)` writing
+the diagnostic to `<name>.out`, and one `(alias runtest)` rule `(diff …)`-ing it
+against `<name>.expected`, so a snippet that starts compiling fails on its exit
+code and a snippet that fails for a different reason fails on the diff;
+`dune promote` re-blesses. The snippets are type-checked by a plain
+`ocamlfind ocamlc` over `lib/caps`'s interfaces rather than by a dune stanza —
+a stanza that does not compile fails the build instead of reporting a diff — and
+the snapshots are the diagnostics of this compiler (5.3.0), so an OCaml upgrade
+re-blesses them deliberately. The positive half runs first: the interface
+compile is a dependency of every fixture, so a missing module or a syntax error
+cannot be mistaken for the expected refusal. Bare `let _ = Tools.read_source` is
+valid OCaml and is not a negative case.
 
 ### Wire tests and official conformance
 
@@ -505,12 +571,37 @@ suites. Both echo paths answer the legacy
 `initialize` / `notifications/initialized` / `tools/list` / `tools/call`
 transcript and a modern `server/discover` + `_meta` call over stdio; a rejected
 input arrives as `isError`, an unknown tool as a JSON-RPC error. The core
-signatures were built alongside M0 rather than at M1, so M1's own exit criterion
-(typed decode/output/error behaviour, `Fs`, `with_root`, `read_source`) is still
-open.
+signatures were built alongside M0 rather than at M1, so the core half of M1's
+exit criterion (typed decode/output/error behaviour) was already met when M1
+began; `Fs`, `with_root` and `read_source` were its own work.
 
-Implementation order inside M1 is core-with-echo first, then `Fs`; this isolates
-existential/adapter type errors from filesystem security errors. `Proc` is a
+**M1 landed 2026-11-10.** `lib/caps/policy_fs.ml` holds the confinement — the
+subtree handle from `Eio.Path.open_subtree` plus the two ceilings — behind an
+abstract `t`; `Policy.with_root` is the only producer and `Authority.Fs` the only
+consumer (`read_file`, `list_dir`). Ceilings default to 65 536 read bytes and 200
+directory entries; a caller `max_bytes`/`max_entries` clamps down, an operator
+non-positive value is `Error Invalid` at construction, and going over either is
+`Denied` rather than a truncated answer — an over-limit file is refused without
+being buffered in full (`Buf_read.of_flow ~max_size`), and a directory listing is
+counted while it streams (`Eio.Path.with_dir_entries`). `Eio` failures are mapped
+once: `Not_found` → `Unavailable`, `Permission_denied`/`Symlink`/`File_too_large`
+→ `Denied`, other `Eio.Io` → `Failed`, and `Cancel.Cancelled` / `Exn.Multiple`
+propagate; no message carries the operator's root or `Eio`'s native path.
+`Authority`'s GADT has no `Net` branch at all yet, so no `Net` grant exists
+anywhere to register a tool with. `examples/read_source.ml` is the audit surface
+(`ping` with `~grant:()`, `read_source` with the one subtree) and the worked Eio
+contract: `Eio_main.run` → `Eio.Switch.run` → grant → `Server.of_registry` →
+`Mcp_kit_stdio.run_channels`. Checked over stdio: an in-root read answers its
+content, `path="escape"` (a symlink to `/etc/passwd`) answers `denied:`, and
+`path="../../etc/passwd"` and `path="/etc/passwd"` answer `invalid:`; startup
+notes go to stderr. `eio_main` 1.6 (with `eio_posix`/`eio_linux`) is now installed
+in the `default` switch and declared `(eio_main :with-test)` — the examples and
+the filesystem suite own a loop, the library does not. Tests: eight alcotest
+suites (87 cases, the filesystem table run against both `EIO_BACKEND=linux` and
+`EIO_BACKEND=posix`) plus the five negative-compilation fixtures above.
+
+Implementation order inside M1 was core-with-echo (M0) and then `Fs`, which did
+isolate the existential/adapter type errors from the filesystem ones. `Proc` is a
 post-M4 addition with executable allowlisting, no shell, explicit environment,
 working-directory policy, stdin/stdout/stderr caps, timeout, and process-group
 cleanup. Do not add it speculatively.

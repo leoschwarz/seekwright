@@ -24,3 +24,17 @@
  (name test_core_no_mcp_kit)
  (libraries mcp-caps alcotest)
  (deps (glob_files ../lib/caps/*.ml)))
+
+; The filesystem grant is tested against a real backend, so this suite owns an
+; Eio loop and uses stdlib Unix to build its fixture tree. Neither belongs to
+; mcp-caps itself: the library stays loop-agnostic and Unix-free, which
+; test_core_no_mcp_kit.ml guards.
+(test
+ (name test_authority_fs)
+ (libraries mcp-caps alcotest eio eio_main unix))
+
+; Same: this suite serves tools over mcp-kit and builds fixture trees with
+; Unix, so it holds a loop and the transport the core itself never names.
+(test
+ (name test_grant_wiring)
+ (libraries mcp-caps mcp-kit yojson alcotest eio eio_main unix))

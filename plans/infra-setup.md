@@ -62,6 +62,29 @@ mcp-kit.jsonschema-validation  0.2.0
 mcp-kit.stdio       0.2.0
 ```
 
+## `eio_main`, installed for M1 (2026-11-10)
+
+```bash
+opam install -y eio_main     # 1.6; pulled in eio_linux, eio_posix, iomux, uring
+```
+
+- `eio` 1.6 is the library; **`Eio_main` is its own opam package** and is not
+  pulled in by `eio`. Findlib name `eio_main`, module `Eio_main`.
+- `Eio_main.run` chooses the loop from `$EIO_BACKEND`: `linux` or `io-uring` →
+  `eio_linux` (needs `io_uring`; this machine has it, and it is the runner that
+  opens subtree children with `openat2` RESOLVE_BENEATH), `posix` → `eio_posix`,
+  unset **or the empty string** → linux with a posix fallback. An unrecognised
+  value raises `Unknown Eio backend`, and OCaml 5.3.0 has no `Sys.putenv` or
+  `Sys.unsetenv` at all (`Unix.putenv` exists, `unsetenv` does not), so a test
+  that wants to restore "unset" sets `EIO_BACKEND=""`.
+- Only `examples/` and the filesystem suite ask for it. `dune-project` declares
+  `(eio_main :with-test)`: `Eio_main`'s own interface says a library must not
+  call `run`, so `mcp-caps` stays loop-agnostic and the application owns the loop
+  (plans/capability-gated-mcp-server.md §6, §7).
+- `unix` is deliberately **not** in `(depends)`: it ships with the compiler and
+  there is no opam package by that name to resolve, so the test stanzas ask for
+  it in `test/dune` and the generated `mcp-caps.opam` stays installable.
+
 ## Notes for the port
 
 - Provenance to recheck before trusting a version further (seen 2026-11-10): the
