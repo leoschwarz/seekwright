@@ -1,6 +1,11 @@
 # dune's build tree: never committable.
 _build/
 
+# The pinned official conformance runner's Node modules: rendered from
+# test/conformance/package-lock.json by `npm ci`, never committed (that directory's
+# README.md names the version it was rendered at).
+test/conformance/node_modules/
+
 __pycache__/
 *.py[cod]
 .venv/

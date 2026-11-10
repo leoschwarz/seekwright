@@ -391,3 +391,84 @@ because opam's depext pass wants root). Versions now in the switch: `tls-eio` an
   (`http://[64:ff9b::1]/` → `64:ff9b::1`), so a bracketed-literal URL reaches
   `Policy_net.resolve` as the bare address and a scripted `Eio.Net.t` can answer
   it under that bare key.
+
+## Verified running M4 conformance (2026-11-11)
+
+Where mcp-kit's official compliance scenarios actually live — **not in the opam
+package**: the installed `lib/mcp-kit/` ships library sources and no test suite.
+They are in the repo, so clone the tag the switch installs
+(`git clone --branch v0.2.0 https://gitlab.com/nomadic-labs/ai-harness/ocaml-mcp`,
+archive `sha256=43c8319a13be91e323ae952a71ab673533fb3295886029eed9d81e5828de5ef7`):
+
+- `test/conformance/server.ml` (+ `multiple_inputs_fixture.ml`,
+  `multi_round_fixture.ml`) — the fixture the runner scores;
+- `test/conformance/requirements-2026-07-28-server.txt` — the 37 frozen scenario
+  IDs; `expected-failures-2026-07-28-server.json` was empty at that tag, which is
+  where the plan's "37/37" figure comes from;
+- `test/conformance/compare_results.py`, `package.json` (pins
+  `@modelcontextprotocol/conformance@0.2.0-alpha.11`), and
+  `scripts/run_live_mcp_conformance.sh` — the wrapper and the fail-closed gate.
+
+Runner facts, all verified by running it:
+
+- `conformance server` takes `--url` and nothing else: **no stdio mode**. A stdio
+  conformance claim has to be in-tree (see `test/conformance/dune`).
+- Node >= 22. The system `node` 20.19.2 dies at import —
+  `The requested module 'fs' does not provide an export named 'globSync'` — which
+  looks like a broken install, not a version problem. Node 22.23.4 as a tarball
+  under `~/.local/opt/node22` works; see `plans/infra-setup.md`.
+- `--requirements 2026-07-28` runs 50 scenarios: the 37 scored plus **13
+  unscored** (ten `tasks-*` extension, plus the `json-schema-2020-12`,
+  `http-header-validation` and `http-custom-header-server-validation` pending
+  set). A scenario counts as a pass only when no check in its `checks.json` is
+  `FAILURE` or `WARNING`.
+- The comparator is strict in ways that surprise: it demands
+  `run-date-utc.txt`, `server-commit.txt`, `runner-version.txt`,
+  `node-version.txt`, `npm-version.txt`, `required-command.txt` and
+  `working-tree-status.txt` in the output directory or every scenario is
+  *inconclusive*; it fails on a baseline entry whose check now passes (stale);
+  and baseline causes are only `sdk_protocol_defect | fixture_gap | runner_issue
+  | unsupported_feature | unresolved`, with `reason` mandatory and `evidence`
+  mandatory for `unresolved`.
+- Declaration names are the runner's contract: `test_simple_text`,
+  `test_error_handling`, `test_logging_tool`, `test_custom_header`,
+  `json_schema_2020_12_tool`, `test_prompt_with_image`,
+  `test_prompt_with_embedded_resource`, `test://static-text`,
+  `test://template/{id}/data` … A scenario that cannot find its declaration fails
+  with `unknown tool:` / `unknown prompt:` even when the behaviour is fine. So an
+  ordinary server scores **8/37** without implementing anything relevant —
+  `tools-list`, `resources-list`, `prompts-list`, `caching`,
+  `sep-2164-resource-not-found`, `server-sse-multiple-streams`,
+  `input-required-result-unsupported-methods` and
+  `input-required-result-validate-input` all validate an *empty* list.
+- A caps-declared schema reaches the wire unchanged, and that is measurable: the
+  runner's Draft 2020-12 document (`$schema`, `$defs`/`$anchor`, `$ref`,
+  `allOf`, `if`/`then`/`else`, `additionalProperties: false`) passes all eight of
+  its checks, and an `x-mcp-header` annotation on a property passes all ten of
+  `http-custom-header-server-validation`, through `Tool.make` → `Registry.add` →
+  `Server.of_registry`.
+- Control run, so the numbers mean something: mcp-kit's own fixture, copied
+  unmodified into a scratch dune project and built against this switch's
+  installed mcp-kit 0.2.0, scores **37 pass / 0 fail / 0 inconclusive** through
+  our wrapper. Our `test/conformance/fixture.ml` scores **19 / 18 / 0**, all 18
+  classified as v1 surface gaps (`Tool.Output` has no rich content, no progress,
+  no input-required result; `Registry` has no interactive tools).
+
+Build and dune details:
+
+- The control project needs the two fixture *libraries* beside `server.exe`; a
+  root `dune` and a `fixture/dune` that both declare `multi_round_fixture` fail
+  with "Library with name … is already defined" — keep one stanza file.
+- In a transcript rule, `with-outputs-to` merges stdout and stderr, so a stdio
+  fixture's startup notes land in the protocol transcript. Split them with
+  `with-stdout-to` + `with-stderr-to` and pin both by diff.
+- `dune promote` only promotes what a **runtest** diff flagged: after a bare
+  `dune build <target>` it says "Nothing to promote". Run
+  `dune runtest <dir>` first, then `dune promote`. A promoted file lands
+  read-only, so a `cp` over it fails with EACCES.
+- `Mcp_kit.Server.add_resource` / `add_prompt` / `add_resource_template` all take
+  `t -> X -> (t, _) result`, so they compose as `let server = add_resource server r
+  in …`, not with `|>`.
+- Environment hazard for cleanup commands here: `pkill -f <pattern>` matches the
+  `bash -c` line that carries the pattern, so it kills your own shell (exit 143,
+  no output). Kill by PID, or match `/proc/<pid>/exe` instead.

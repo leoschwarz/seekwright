@@ -701,6 +701,48 @@ clean-EOF behaviour, and the pinned official runner, which stays M4.
   server. Report the scenarios applicable to this fixture, with explicit
   exclusions; a separate upstream smoke run may verify the development setup.
 
+Landed at M4, 2026-11-11, in `test/conformance/` and recorded in its `README.md`.
+The pinned runner is `@modelcontextprotocol/conformance@0.2.0-alpha.11` under Node
+22.23.4 (`plans/infra-setup.md`), and the 37-ID required manifest in
+`requirements-2026-07-28-server.txt` is checked against
+`conformance list --server --requirements 2026-07-28` before any scenario runs.
+`run_live.sh` fails closed on missing, extra or duplicate IDs, on a runner error,
+on an unexpected failure and on a stale baseline entry, and keeps the raw
+`checks.json` per scenario.
+
+The measured numbers, with the control run beside them because a number with no
+control is not evidence:
+
+| server | `--requirements 2026-07-28` |
+|---|---|
+| `test/conformance/fixture.ml` — six tools through `Registry.add`/`Server.of_registry`, resources/prompts through the direct seam | **19 pass / 18 fail / 0 inconclusive** |
+| mcp-kit v0.2.0's own conformance fixture, built against this switch's mcp-kit 0.2.0 | **37 pass / 0 fail / 0 inconclusive** |
+| `examples/read_source.exe`, `examples/gated_search.exe` as shipped | 8 pass / 29 fail each |
+
+The 18 failures are classified check-by-check in
+`expected-failures-2026-07-28-server.json`, and all of them name a v1 surface
+this plan declares rather than a mcp-kit defect: rich tool content and progress
+(`Tool.Output`, §3), and the SEP-2322 interactive-tool / `server-stateless`
+diagnostics, which need an input-required result and per-request capability state
+(§0 non-goals, §3, §6). The two shipped-example rows are the reason a fixture is
+needed: all eight of their passes are scenarios that need no named declaration —
+an empty `resources/list` validates — so they measure nothing about the layer.
+The 13 scenarios the same command runs but does not score:
+`http-header-validation`, `http-custom-header-server-validation` and
+`json-schema-2020-12` now pass against the fixture — the last two are the most
+useful unscored checks for this layer, because both are about a declared input
+schema surviving `Tool.make` → `Registry.add` → `Server.of_registry` byte for
+byte — and the ten `tasks-*` extension scenarios fail for the fixture and for
+upstream's fixture alike.
+**The official runner has no stdio mode**: `conformance server` takes `--url`
+and nothing else. The stdio half is therefore in-tree — `transcript.jsonl` of the
+runner's own bodies replayed through `fixture.exe --stdio`, blessed as a diff of
+both streams in `test/conformance/dune` — and it transfers to the HTTP run only
+because `same_transcript_stdio_and_http` pins the two transports' answers as
+byte-identical. Four fixture gaps found this way were closed in the same branch
+(two prompts, `test_logging_tool`, and the two schema-declaration tools), which
+moved the required tally from 17 to 19.
+
 ## 9. Milestones
 
 Every milestone runs `opam exec -- dune build @install` and
@@ -712,7 +754,7 @@ Every milestone runs `opam exec -- dune build @install` and
 | M1 | Core `Error`/`Tool`/`Registry`/`Server`, `Fs`, `with_root`, echo + `read_source` | Core has no mcp-kit imports; typed decode/output/error tests pass; filesystem escape/race/bounds tests pass; negative compilation checks diagnostics, not just exit status |
 | M2 | Same registry over Cohttp-Eio loopback | Same semantic tool transcript over stdio and HTTP; body/routing-header bounds exercised; resource lifetime and concurrent-client tests pass |
 | M3 | `Net`, endpoint/public-web policies, operation timeout, logging | DNS-to-connect binding and HTTPS verification tests pass; redirect/body/time bounds hold; no unimplemented HTTPS path is called complete |
-| M4 | Reusable docs, examples, pinned live conformance | Installable public interfaces documented; threat boundary and grant retention stated; exact applicable scenario baseline green; fallback still builds as an M0-style example |
+| M4 | Reusable docs, examples, pinned live conformance | Installable public interfaces documented; threat boundary and grant retention stated; exact applicable scenario baseline green; fallback still builds as an M0-style example. Landed 2026-11-11 — see the M4 note below and `test/conformance/README.md` |
 
 **M0 landed 2026-11-10.** `dune-project` (two package stanzas; `seekwright` is
 `(allow_empty)` until P1), `lib/caps/` carrying the §3 signatures — `Authority`
@@ -845,6 +887,39 @@ grant. `test/should_not_compile/` gained `confinement_is_not_a_grant.ml`
 (registering the decision instead of the grant) and `grant_type_mismatch.ml` now
 passes a real `Authority.Net.t` to an `Fs` tool. Ten alcotest suites, 118 cases,
 plus the six negative-compilation fixtures.
+
+**M4 landed 2026-11-11.** Two documents and one live run. `lib/caps/README.md` is
+the library's own front door: the guarantee in one sentence and its boundary
+stated as plainly as §0 states it (capability-mediated operations only; nothing
+here stops tool code calling `Unix`, `Eio`, a C binding or `Obj.magic`), the
+grant-retention limitation as a section of its own — OCaml 5.3 has no linear or
+uniqueness types, so a grant captured in a closure stays usable, and v1 offers no
+revocation, no per-request grant and no budget inside a grant, only the caller's
+`Budget.t` — the fallback path (§0's "bind tools to mcp-kit directly", with
+`examples/echo.exe` as the runnable proof and `Server.of_registry`'s
+`Mcp_kit.Server.t` as the seam for resources and prompts), and the API table with
+the suite that verifies each module.
+`test/conformance/` is the pinned live conformance job described in §8: the
+official runner at `0.2.0-alpha.11` under Node 22.23.4, this plan's 37-ID
+manifest, mcp-kit's comparator and wrapper reused so the numbers are comparable
+to its records, and a fail-closed gate over a per-check baseline. Real numbers,
+control first: **mcp-kit v0.2.0's own fixture 37/37 through this wrapper** (so
+the setup is not the variable), **the capability-backed fixture 19 pass /
+18 fail / 0 inconclusive** with every failure classified as a declared v1 surface
+gap, and **`examples/read_source.exe` and `examples/gated_search.exe` 8/37 each**
+— eight passes that need no named declaration, which is why a fixture, not the
+examples, is what measures the layer. Unscored-but-measured: `http-header-validation`,
+`http-custom-header-server-validation` and `json-schema-2020-12` all pass, the
+last two added during M4 because both ask whether a declared input schema reaches
+mcp-kit unchanged, and the ten `tasks-*` extension scenarios fail for our fixture
+and upstream's alike. Two findings to keep: **the official runner has no stdio
+mode**, so the stdio evidence is the pinned transcript rule in
+`test/conformance/dune` plus the transport-parity test, and four fixture gaps
+found by running the suite were closed in this branch (two prompts,
+`test_logging_tool`, and the two schema tools), which is the difference between
+17 and 19. Ten alcotest suites and 119 cases still pass, the six
+negative-compilation fixtures still refuse with their pinned diagnostics, and the
+stdio transcript plus its stderr notes are blessed diffs.
 
 **Open at M3: `Server.profile` is not an enforcement point.** Verified against
 0.2.0's sources, `Capabilities.profile` has three members (`stdio`, `http`,

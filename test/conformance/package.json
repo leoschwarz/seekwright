@@ -1,0 +1,9 @@
+{
+  "name": "ocaml-mcp-live-conformance",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Pinned official MCP 2026 server conformance runner",
+  "dependencies": {
+    "@modelcontextprotocol/conformance": "0.2.0-alpha.11"
+  }
+}

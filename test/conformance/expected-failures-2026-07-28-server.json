@@ -1,0 +1,165 @@
+{
+  "_comment": [
+    "Regression gate for test/conformance/run_live.sh, read by compare_results.py.",
+    "Every entry names an official check ID this fixture does not pass and why. It is",
+    "not a claim that those scenarios pass, and an entry whose check stops failing is a",
+    "stale baseline the comparator refuses. Causes and reasons are mcp-caps v1's declared",
+    "surface (plans/capability-gated-mcp-server.md §0 non-goals and §3), not mcp-kit's:",
+    "upstream's own fixture passes all 37 of these (docs/conformance.md at mcp-kit v0.2.0).",
+    "Recorded 2026-11-11 from /tmp/caps-run2: 19 passes, 18 failures, 0 inconclusive."
+  ],
+  "expected_failures": {
+    "server-stateless": {
+      "checks": {
+        "sep-2575-http-server-no-independent-requests-on-stream": {
+          "cause": "unsupported_feature",
+          "reason": "The scenario drives the diagnostic tool test_streaming_elicitation, which answers an input-required result mid-call. Tool.Output is text plus optional structured content (plan §3) and Registry.add closes a classic handler, so mcp-caps cannot express an MRTR round trip. The sibling check sep-2575-server-no-log-without-loglevel passes: test_logging_tool is a plain ~grant:() tool."
+        },
+        "sep-2575-missing-capability-http-400": {
+          "cause": "unsupported_feature",
+          "reason": "Needs test_missing_capability, a tool that requires the current request's sampling capability and answers -32021 when it is absent. Tool.run receives a grant and a decoded input, never the request's capabilities; per-request context is a v1 non-goal (plan §0)."
+        },
+        "sep-2575-server-rejects-undeclared-capability": {
+          "cause": "unsupported_feature",
+          "reason": "Same prerequisite tool as sep-2575-missing-capability-http-400: rejecting an undeclared capability means the handler sees the current call's clientCapabilities, which the layer's classic handler signature does not carry."
+        }
+      }
+    },
+    "tools-call-image": {
+      "checks": {
+        "tools-call-image": {
+          "cause": "unsupported_feature",
+          "reason": "Mcp_caps.Tool.Output has no image constructor: the v1 output surface is ordered text plus optional structured content, and rich content waits for a concrete use case (plan §3). mcp-kit serves this scenario itself; the gap is the layer's declared surface."
+        }
+      }
+    },
+    "tools-call-audio": {
+      "checks": {
+        "tools-call-audio": {
+          "cause": "unsupported_feature",
+          "reason": "As tools-call-image: no audio content constructor in Tool.Output (plan §3), so no registered tool can answer the scenario."
+        }
+      }
+    },
+    "tools-call-embedded-resource": {
+      "checks": {
+        "tools-call-embedded-resource": {
+          "cause": "unsupported_feature",
+          "reason": "As tools-call-image: no embedded-resource content constructor in Tool.Output (plan §3)."
+        }
+      }
+    },
+    "tools-call-mixed-content": {
+      "checks": {
+        "tools-call-mixed-content": {
+          "cause": "unsupported_feature",
+          "reason": "The scenario needs ordered text, image and embedded JSON in one result. Tool.Output orders text and structured content only, so the ordering claim the scenario makes is not a claim this layer can make (plan §3)."
+        }
+      }
+    },
+    "tools-call-with-progress": {
+      "checks": {
+        "tools-call-with-progress": {
+          "cause": "unsupported_feature",
+          "reason": "Tool.run is (grant -> input -> result) with no progress reporter, and Server.of_registry maps Output to a single Mcp_kit.Tool.text result, so no registered tool can emit request-scoped progress frames. mcp-kit's own fixture declares test_tool_with_progress directly; giving the layer a reporter is the same decision §7 records for whole-handler cancellation, and it is not made here."
+        }
+      }
+    },
+    "input-required-result-basic-elicitation": {
+      "checks": {
+        "sep-2322-elicitation-incomplete": {
+          "cause": "unsupported_feature",
+          "reason": "SEP-2322 needs Mcp_kit.Tool.make_interactive: an input-required result, keyed input requests and requestState. Registry.add closes a classic handler over a grant and Tool.Output has no input-required result, so the layer declares neither (plan §0, §3)."
+        }
+      }
+    },
+    "input-required-result-basic-sampling": {
+      "checks": {
+        "sep-2322-sampling-incomplete": {
+          "cause": "unsupported_feature",
+          "reason": "Same gap as input-required-result-basic-elicitation, over the deprecated Sampling request method; the scenario exists in the pinned set and the layer has no interactive tool to answer it."
+        }
+      }
+    },
+    "input-required-result-basic-list-roots": {
+      "checks": {
+        "sep-2322-list-roots-incomplete": {
+          "cause": "unsupported_feature",
+          "reason": "Same gap as input-required-result-basic-elicitation, over the deprecated list_roots request method."
+        }
+      }
+    },
+    "input-required-result-request-state": {
+      "checks": {
+        "sep-2322-request-state-incomplete": {
+          "cause": "unsupported_feature",
+          "reason": "requestState is request-scoped state handed back on a retry. The layer has no request scope at all: a grant is a server-lifetime value and there is no per-request factory (plan §6), which is the reason §6 declines a per-request budget too."
+        }
+      }
+    },
+    "input-required-result-multiple-input-requests": {
+      "checks": {
+        "sep-2322-multiple-inputs-incomplete": {
+          "cause": "unsupported_feature",
+          "reason": "Three keyed input requests in one input-required result needs the interactive tool API; see input-required-result-basic-elicitation."
+        }
+      }
+    },
+    "input-required-result-multi-round": {
+      "checks": {
+        "sep-2322-multi-round-r1": {
+          "cause": "unsupported_feature",
+          "reason": "Two request-local form rounds over one tool call; see input-required-result-basic-elicitation."
+        }
+      }
+    },
+    "input-required-result-missing-input-response": {
+      "checks": {
+        "sep-2322-missing-response-rerequests": {
+          "cause": "unsupported_feature",
+          "reason": "The runner's WARNING is the same unknown-tool cause: re-requesting missing information is an input-required result, which Tool.Output cannot produce. Not an mcp-kit defect - upstream's fixture answers this with an interactive tool."
+        }
+      }
+    },
+    "input-required-result-non-tool-request": {
+      "checks": {
+        "sep-2322-non-tool-incomplete": {
+          "cause": "unsupported_feature",
+          "reason": "The prerequisite is an interactive prompt (Prompt.make_interactive). The prompts this fixture declares are added directly to the mcp-kit server (fixture.ml), and none of them is interactive; the layer registers no prompts at all (plan §0)."
+        }
+      }
+    },
+    "input-required-result-result-type": {
+      "checks": {
+        "sep-2322-result-type-included": {
+          "cause": "unsupported_feature",
+          "reason": "Checks that resultType is present on an input-required result; see input-required-result-basic-elicitation."
+        }
+      }
+    },
+    "input-required-result-tampered-state": {
+      "checks": {
+        "sep-2322-reject-tampered-state": {
+          "cause": "unsupported_feature",
+          "reason": "Prerequisite is the same interactive tool: with no requestState the tampering case cannot be reached. mcp-kit's request-state verifier is a direct-API extra (Elicitation_form_state, verify_request_state) that the layer does not expose."
+        }
+      }
+    },
+    "input-required-result-capability-check": {
+      "checks": {
+        "sep-2322-respect-client-capabilities": {
+          "cause": "unsupported_feature",
+          "reason": "Needs the current call's clientCapabilities inside the handler; see server-stateless/sep-2575-missing-capability-http-400."
+        }
+      }
+    },
+    "input-required-result-ignore-extra-params": {
+      "checks": {
+        "sep-2322-ignore-unexpected-params": {
+          "cause": "unsupported_feature",
+          "reason": "The runner's WARNING is the same unknown-tool cause as input-required-result-basic-elicitation. The behaviour it asks about - ignoring unrecognised params - is exercised for this layer in test/test_server.ml, where a decoder refusal after schema success answers Error.Invalid as an isError result."
+        }
+      }
+    }
+  }
+}
