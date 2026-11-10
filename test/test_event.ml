@@ -17,7 +17,18 @@ let notes_are_bounded_and_content_free _ =
       (make ~operation:"read_file" Ok)
       (List.init (max_notes + 4) Fun.id)
   in
-  Alcotest.(check int) "notes capped" max_notes (List.length event.notes);
+  Alcotest.(check int) "notes capped" max_notes (List.length (notes event));
+  Alcotest.(check bool)
+    "no second line"
+    false
+    (String.contains (render event) '\n')
+
+let operation_and_keys_cannot_break_the_line _ =
+  let open Mcp_caps.Event in
+  let event =
+    add_note "key\nwith newline" "value" (make ~operation:"read_\nfile" Ok)
+  in
+  Alcotest.(check string) "operation sanitized" "read_ file" (operation event);
   Alcotest.(check bool)
     "no second line"
     false
@@ -30,5 +41,7 @@ let () =
         [
           Alcotest.test_case "rendered one line" `Quick renders_operation_and_outcome;
           Alcotest.test_case "notes stay bounded" `Quick notes_are_bounded_and_content_free;
+          Alcotest.test_case "operation and keys stay one line" `Quick
+            operation_and_keys_cannot_break_the_line;
         ] );
     ]

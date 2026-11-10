@@ -20,5 +20,6 @@ val of_registry :
     request, and no entry may be dropped on the way in.
 
     An entry's [Error.t] becomes an MCP tool result with [isError] set, using
-    only [Error.message]; mcp-kit keeps ownership of JSON-RPC errors and of
-    output-schema contract errors (§3). *)
+    [Error.render] — the sanitized message prefixed by the stable kind, e.g.
+    [denied: …] — and nothing else from the failure; mcp-kit keeps ownership of
+    JSON-RPC errors and of output-schema contract errors (§3). *)

@@ -1,3 +1,6 @@
+# dune's build tree: never committable.
+_build/
+
 __pycache__/
 *.py[cod]
 .venv/

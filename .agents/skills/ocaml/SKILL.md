@@ -109,3 +109,15 @@ pass; both echo servers answer `initialize` → `notifications/initialized` →
   checksum pins — but the tree inside that archive describes itself as "Epure
   Team" / `github.com/epure-team/mcp-kit` (see its `dune-project` and the
   installed `lib/mcp-kit/opam`). Unexplained; worth an upstream question.
+
+## Verified fixing the caps review (2026-11-10)
+
+- A UTF-8 truncation cut is decided from the first **excluded** byte, not the
+  last included one: if `text.[off]` is a continuation byte, back up to that
+  character's lead byte and return its index (exclusive). `Error.sanitize` does
+  this; a test that inspects the last byte after the appended `"..."` is
+  vacuous, so validate the prefix with a real UTF-8 decoder instead.
+- In an alcotest test's dune sandbox, `Sys.readdir "../lib/caps"` lists exactly
+  the `.ml` files copied by `(deps (glob_files ../lib/caps/*.ml))`; that lets a
+  source guard walk every sibling and exempt only `server.ml`, instead of
+  hardcoding a module list. `Filename.check_suffix ".ml"` does not match `.mli`.

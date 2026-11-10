@@ -10,19 +10,29 @@ type outcome =
   | Ok
   | Failed of Error.kind
 
-type t = {
-  operation : string;  (** a constant name from the authority API, never a path or URL *)
-  outcome : outcome;
-  bytes : int option;  (** size of what moved, not what moved *)
-  notes : (string * string) list;  (** bounded; see [add_note] *)
-}
+(** Abstract on purpose: a record literal would let a caller bypass
+    [make]/[add_note] and the sanitising and bounding they apply. *)
+type t
 
 val make : operation:string -> outcome -> t
+(** [operation] is a constant name from the authority API, never a path or URL;
+    it goes through [Error.sanitize] so the rendered line stays one line. *)
+
 val with_bytes : int -> t -> t
 
 val add_note : string -> string -> t -> t
-(** Note values go through [Error.sanitize] and the list is capped at
-    [max_notes], so a note cannot become the log line's length. *)
+(** Both the key and the value go through [Error.sanitize], and the list is
+    capped at [max_notes], so a note cannot become the log line's length. *)
+
+val operation : t -> string
+(** a constant name from the authority API, never a path or URL *)
+
+val outcome : t -> outcome
+val bytes : t -> int option
+(** size of what moved, not what moved *)
+
+val notes : t -> (string * string) list
+(** bounded; see [add_note] *)
 
 val render : t -> string
 val max_notes : int

@@ -25,7 +25,6 @@ repo root, containing two libraries.
 ├── dune-project                 # (lang dune 3.x); generates the two .opam files
 ├── mcp-caps.opam                # generated: mcp-kit, eio, yojson, uri; M3 adds HTTP/TLS deps
 ├── seekwright.opam              # generated: deps = mcp-caps, cohttp-eio, toml, uri, ...
-├── dune                         # root: (dirs lib bin tools test plans) — _build ignored
 ├── lib/
 │   ├── caps/                    # public library mcp-caps (wrapped as Mcp_caps)
 │   │   ├── dune                 # (library (name mcp_caps) (public_name mcp-caps)

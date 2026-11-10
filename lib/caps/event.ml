@@ -13,13 +13,22 @@ type t = {
    our fixed field set, never from what a caller or a provider happened to send. *)
 let max_notes = 8
 
-let make ~operation outcome = { operation; outcome; bytes = None; notes = [] }
+(* The same one-line rule applies to the operation name and to note keys: they
+   are constants chosen by the application, but "constant" is a convention, not
+   a type, so [sanitize] makes the invariant hold even for a mistaken caller. *)
+let make ~operation outcome =
+  { operation = Error.sanitize operation; outcome; bytes = None; notes = [] }
 
 let with_bytes bytes t = { t with bytes = Some bytes }
 
 let add_note key value t =
   if List.length t.notes >= max_notes then t
-  else { t with notes = (key, Error.sanitize value) :: t.notes }
+  else { t with notes = (Error.sanitize key, Error.sanitize value) :: t.notes }
+
+let operation t = t.operation
+let outcome t = t.outcome
+let bytes t = t.bytes
+let notes t = t.notes
 
 let render_outcome = function
   | Ok -> "ok"

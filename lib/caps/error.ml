@@ -15,13 +15,22 @@ let is_control char =
   code < 32 || code = 127
 
 (* Cutting at a byte boundary can split a UTF-8 sequence and put an invalid
-   string into JSON; back off to the start of the sequence being cut. *)
+   string into JSON. The decision is made from the first *excluded* byte: if it
+   starts a character, the cut already lands on a boundary; if it is a
+   continuation byte, that character began earlier and the whole of it has to
+   be excluded, so the cut backs up to its lead byte. *)
 let utf8_start text limit =
-  let rec back off =
-    if off <= 0 || (Char.code text.[off - 1] land 0xC0) <> 0x80 then off
-    else back (off - 1)
-  in
-  back (min limit (String.length text))
+  let length = String.length text in
+  let off = min limit length in
+  let is_continuation char = (Char.code char land 0xC0) = 0x80 in
+  if off >= length || not (is_continuation text.[off]) then off
+  else
+    let rec lead index =
+      if index <= 0 then 0
+      else if is_continuation text.[index - 1] then lead (index - 1)
+      else index - 1
+    in
+    lead off
 
 let sanitize message =
   let buffer = Buffer.create (String.length message) in
