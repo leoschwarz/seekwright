@@ -361,8 +361,10 @@ max_cost_usd = 0.25           # per-call abort, checked after each retrieval ste
   is what bounds what reaches the model. A PDF that hits the download cap is
   refused outright rather than truncated, because a cut PDF is unparseable
   rather than merely shorter — and so is a JSON document, while a JSON Lines
-  stream keeps its text because whole records survive at its head. What a JSON
-  *rendering* costs is bounded separately in `jsondoc`, at four times the body.
+  stream keeps its text because whole records survive at its head. A CSV rides
+  with the streams: cut at the cap it keeps the rows above the cut, and only its
+  last row may be the one the cut split. What a *rendering* costs is bounded
+  separately, in `jsondoc` and `tabledoc` alike, at four times the body.
 - **`fetch.timeout_seconds`** is also the wall-clock bound on turning a fetched
   body into text: extraction runs on a worker thread, and a body still being
   parsed when the timeout expires comes back as a non-retryable

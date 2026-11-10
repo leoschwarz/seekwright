@@ -377,7 +377,13 @@ through trafilatura, PDF through pypdf, JSON through the standard library's
 `fetch` buildable on an install that never fetched the extra. The JSON document
 itself — the rendering a JSON page arrives as, and the `path` grammar
 `fetch(path=...)` selects with — is `jsondoc.py`, beside the backends rather
-than inside one, because a backend swap must not lose it.
+than inside one, because a backend swap must not lose it. A delimited table is
+read by `tabledoc.py`, beside it for the same reason: a table is printed into
+`jsondoc`'s line grammar, so `path`, `structure` and the page cache never learn
+a second family and neither module knows the other's format. The seam is
+`tabledoc._emit`, which takes column names and rows rather than a body — that
+is where the next record format plugs in, behind its own extra the way `pypdf`
+is behind this backend's.
 
 Both of the default backend's libraries ride in the `trafilatura` extra, `pypdf`
 included: it parses bytes a stranger wrote, so it belongs to the backend that
@@ -564,6 +570,7 @@ working in the tree; this is the same map for a reader:
 | `fetcher.py` | URL fetching behind the SSRF guardrails; `HttpFetcher` takes the extraction backend injected (no default), and `ScrappaFetcher`, `Crawl4aiFetcher`, `JinaFetcher` and `TavilyFetcher`/`LinkupFetcher` are the fallbacks, declared in the `KNOWN_FALLBACKS` registry beside them |
 | `extractors/` | one module per extraction backend, each implementing `base.py`'s `Extractor` protocol; `base.py` also holds the `KNOWN_EXTRACTORS` registry, the shared plumbing and passage selection |
 | `jsondoc.py` | the JSON half of the fetch path: which media types are JSON, the one-line-per-node rendering a JSON page arrives as, the `path` grammar that addresses part of it, and `render_schema`, the shape-only structure view `fetch(structure=true)` serves — standard library only |
+| `tabledoc.py` | the CSV half of the fetch path: which media types name a delimited table, and `render_table`, which writes `jsondoc`'s line grammar so `path` and `structure` need no new machinery; `_emit(columns, rows, …)` is the seam the next record format rides on — standard library only |
 | `providers/` | one module per provider adapter, all implementing `base.py`'s `SearchProvider` protocol — the contract is [`reference/provider-contract.md`](reference/provider-contract.md) |
 | `health.py` | the per-provider circuit breaker (`HealthBoard`) fed by real traffic, and its periodic probe (`HealthMonitor`) |
 | `logs.py` | loguru setup to stderr, the stdlib `InterceptHandler`, and the `bind`/`query_fields`/`safe` helpers every log call goes through |

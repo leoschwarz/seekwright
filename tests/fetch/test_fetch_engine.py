@@ -352,7 +352,7 @@ class TestJsonPathTargeting:
         r = await engine.fetch(URL, path="$.items[0]")
         assert r.matches == []
         assert "larger than the selection budget" in r.notice
-        assert "nothing in this JSON document matches" not in r.notice
+        assert "nothing in this document matches" not in r.notice
 
     async def test_a_path_over_budget_reports_what_was_cut_and_how_to_narrow_it(self, make_engine):
         engine = make_engine(

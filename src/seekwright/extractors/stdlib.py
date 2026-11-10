@@ -25,6 +25,7 @@ from html.parser import HTMLParser
 from typing import override
 
 from ..jsondoc import JSON_TYPES, is_json_media, sniffs_json
+from ..tabledoc import TABLE_TYPES, is_table_media
 from .base import (
     HTML_TYPES,
     TEXT_TYPES,
@@ -35,6 +36,7 @@ from .base import (
     media_type,
     normalise,
     sniffs_html,
+    table_extraction,
 )
 
 # Never the answer: what a browser executes or draws, and the sectioning elements
@@ -201,25 +203,29 @@ class _VisibleTextParser(HTMLParser):
 
 
 class StdlibExtractor:
-    """HTML through `html.parser`, JSON through `jsondoc`, plain text passed through."""
+    """HTML through `html.parser`, JSON through `jsondoc`, CSV through `tabledoc`, plain text passed through."""
 
     name = "stdlib"
     # No PDF, and `base.py` makes that claim in the type set rather than in prose:
     # a backend lists only what its `extract` can read, so the fetcher turns a PDF
     # into a named refusal instead of spending a download on it.
-    supported_types = HTML_TYPES | TEXT_TYPES | JSON_TYPES
+    supported_types = HTML_TYPES | TEXT_TYPES | JSON_TYPES | TABLE_TYPES
 
     def extract(self, body: bytes, content_type: str | None) -> ExtractResult:
         """Extract readable text from a fetched body, uncut.
 
         The media type decides the reader; a missing one is sniffed as HTML or
         JSON only when the bytes look like one of them, so an unknown binary is
-        refused rather than fed to the parser to produce nothing.
+        refused rather than fed to the parser to produce nothing. A table type is
+        never guessed at: a delimited line reads as prose.
         """
         kind = media_type(content_type)
 
         if is_json_media(kind) or (not kind and sniffs_json(body)):
             return json_extraction(decode(body, content_type))
+
+        if is_table_media(kind):
+            return table_extraction(decode(body, content_type), kind)
 
         if kind in HTML_TYPES or (not kind and sniffs_html(body)):
             text, title = _from_html(decode(body, content_type))

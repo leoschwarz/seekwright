@@ -689,12 +689,13 @@ class FetchEngine:
     ) -> FetchResponse:
         """Fetch one page, walking the ladder only where the route asks for it.
 
-        ``path`` reads one part of a JSON document instead of the document --
-        `jsondoc` states the grammar.
+        ``path`` reads one part of a JSON document or a CSV table instead of the
+        page -- `jsondoc` states the grammar, and `tabledoc` renders a table into
+        that same grammar, so one selector serves both.
 
-        ``structure`` reads a JSON page's shape instead of its values: the
-        response's text is :func:`render_schema` over the rendering, one line
-        per path and type with uniform arrays collapsed to one ``[*]``
+        ``structure`` reads a JSON page or CSV table's shape instead of its
+        values: the response's text is :func:`render_schema` over the rendering,
+        one line per path and type with uniform arrays collapsed to one ``[*]``
         subtree, so a document too big to read whole is still addressable --
         read the shape, then drill with ``path``. It is refused alongside
         ``query``, ``path`` and ``offset`` under the one-axis rule, because a
@@ -795,14 +796,14 @@ class FetchEngine:
             # One shape replaced for one page read, before the escape pass: the
             # paths a schema carries come out of the page's keys, so its text
             # escapes in the same pass any other page text would. A page that is
-            # not one this server read as JSON cannot give a schema, and the
-            # whole page is returned under the same sentence `path` answers with.
+            # not one this server read as either shape cannot give a schema, and
+            # the whole page is returned under the same sentence `path` answers with.
             rendered = render_schema(page.text) if page.path_addressable else None
             if rendered is None:
                 notices.append(
-                    "`structure` reports a JSON document's shape, and this page "
-                    "is not one this server could read as JSON; the whole page "
-                    "is returned"
+                    "`structure` reports a JSON or CSV table's shape, and this "
+                    "page is not one this server could read as either; the whole "
+                    "page is returned"
                 )
             else:
                 page.text = rendered
@@ -828,8 +829,15 @@ class FetchEngine:
 
         # A structure read is a deliberate read of a shape the caller asked for:
         # the emptiness gate is about a JS shell answering a read meant to find
-        # prose, and it does not apply to one.
-        empty_page = not structure and offset == 0 and self._is_empty(page.text)
+        # prose, and it does not apply to one. Nor to a structure page -- a JSON
+        # rendering or a table -- which is short because it is finished: three
+        # rows of a CSV are an answer, not a page that failed to yield text.
+        empty_page = (
+            not structure
+            and not page.path_addressable
+            and offset == 0
+            and self._is_empty(page.text)
+        )
         if empty_page:
             log.bind(chars=len(page.text.strip())).info("fetch.empty")
             notices.append(router.empty_notice(self._table, walk))
@@ -1130,9 +1138,13 @@ class FetchEngine:
         # this gate exists to catch; escalating would bill a renderer and a
         # scraper to look for prose in a photograph. Off, the walk is not entered
         # here either: `fetch` reports the providers rather than a walk nobody asked for.
+        # A structure page is exempt for the same shape of reason: a three-row
+        # table renders under `fetch.min_text_chars` because the table is short,
+        # and walking the ladder would replace the answer with a vendor's prose.
         if (
             auto_fallback
             and page.image is None
+            and not page.path_addressable
             and offset == 0
             and self._is_empty(page.text)
         ):
@@ -1347,8 +1359,9 @@ class FetchEngine:
             # first character happens to be `$` is not a document.
             if not page.path_addressable:
                 notices.append(
-                    "`path` selects inside a JSON document, and this page is "
-                    "not one this server could read; the whole page is returned"
+                    "`path` selects inside a JSON document or a CSV table, and "
+                    "this page is not one this server could read; the whole page "
+                    "is returned"
                 )
                 return None
             spans, dropped = select_paths(page.text, path, max_chars=budget)
@@ -1361,14 +1374,14 @@ class FetchEngine:
                 # `dropped` counts sections that matched and were cut, so "nothing
                 # matched" must not be said of a document merely over budget.
                 notices.append(
-                    f"the part of this JSON document that `path` addresses is "
-                    f"larger than the selection budget ({budget} chars); ask for "
-                    "a narrower `path`, or a slice of an array, as in [0:5], or "
+                    f"the part of this document that `path` addresses is larger "
+                    f"than the selection budget ({budget} chars); ask for a "
+                    f"narrower `path`, or a slice of an array, as in [0:5], or "
                     "raise fetch.max_match_chars"
                     if dropped
-                    else "nothing in this JSON document matches that `path`; fetch "
-                    "without `path` to read its structure, where every line names "
-                    "the path that addresses it"
+                    else "nothing in this document matches that `path`; fetch "
+                    "without `path` to read its structure, where every line "
+                    "names the path that addresses it"
                 )
             else:
                 notices.append(

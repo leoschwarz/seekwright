@@ -57,10 +57,10 @@ Real documents measured in this work sit under ten; past a hundred the path
 each line carries is longer than the value it labels, so the cut is a
 readability line as much as a memory one.
 
-Depth alone does not answer size, which is what :data:`_MAX_RENDER_RATIO` is for.
+Depth alone does not answer size, which is what :data:`MAX_RENDER_RATIO` is for.
 """
 
-_MAX_RENDER_RATIO = 4
+MAX_RENDER_RATIO = 4
 """How much larger than the body :func:`render_json` is allowed to make it.
 
 Every line carries its whole path, so the cost of a rendering is a function of
@@ -72,7 +72,7 @@ path label longer than the key it addresses without letting one page cost three
 orders of magnitude more than its own download.
 """
 
-_MIN_RENDER_CHARS = 8000
+MIN_RENDER_CHARS = 8000
 """The floor under that budget, so that no small document is ever cut.
 
 Four times a few hundred bytes is less than the same document rendered with
@@ -152,7 +152,7 @@ def sniffs_json(body: bytes) -> bool:
     return body[:512].lstrip()[:1] in (b"{", b"[")
 
 
-def _child_path(parent: str, key: str | int) -> str:
+def child_path(parent: str, key: str | int) -> str:
     """The path of one member of a container, in the syntax `parse_path` reads."""
     if isinstance(key, int):
         return f"{parent}[{key}]"
@@ -183,7 +183,7 @@ def render_json(text: str) -> str | None:
     ``$.items[0:5]`` is from the end. A leaf renders as compact JSON.
 
     Two cuts bound the rendering, both printing a line naming where they fell:
-    :data:`_MAX_DEPTH` on nesting, and :data:`_MAX_RENDER_RATIO` times the body's
+    :data:`_MAX_DEPTH` on nesting, and :data:`MAX_RENDER_RATIO` times the body's
     length on size. Depth alone leaves the wide-under-the-cap shape unbounded,
     since a path label per leaf is a cost the document's *shape* sets. The walk
     is bounded by the same budget: a container goes back onto the stack as one
@@ -199,7 +199,7 @@ def render_json(text: str) -> str | None:
     except (ValueError, RecursionError):
         return None
 
-    budget = max(_MIN_RENDER_CHARS, _MAX_RENDER_RATIO * len(text))
+    budget = max(MIN_RENDER_CHARS, MAX_RENDER_RATIO * len(text))
     lines: list[str] = []
     spent = 0
     # An explicit stack, because the depth of the walk is a stranger's choice
@@ -213,7 +213,7 @@ def render_json(text: str) -> str | None:
         if spent > budget:
             lines.append(
                 f"{path}  not rendered: the document expands past the budget of "
-                f"{budget} characters, {_MAX_RENDER_RATIO} times its own size; "
+                f"{budget} characters, {MAX_RENDER_RATIO} times its own size; "
                 "ask for one part of it with `path`, as in $.items[0:5]"
             )
             break
@@ -225,7 +225,7 @@ def render_json(text: str) -> str | None:
             # The frame goes back under the child: an array of 200k members is
             # one stack entry read one member at a time, not 200k entries.
             stack.append((path, depth, node))
-            stack.append((_child_path(path, key), depth + 1, child))
+            stack.append((child_path(path, key), depth + 1, child))
             continue
         if isinstance(node, (dict, list)):
             kind = "array" if isinstance(node, list) else "object"
@@ -286,7 +286,7 @@ def render_schema(rendered: str) -> str | None:
     describes the same: one leaf type, or one container kind and size with one
     member shape beneath, checked recursively. Two cuts bound the output, and
     both print the line naming where they fell, as a rendering does: the depth
-    cap :data:`_MAX_DEPTH`, and a budget -- :data:`_MAX_RENDER_RATIO` times the
+    cap :data:`_MAX_DEPTH`, and a budget -- :data:`MAX_RENDER_RATIO` times the
     input's length, since a shape view of a shape-explosive document is still a
     size the budget exists to bound.
 
@@ -303,7 +303,7 @@ def render_schema(rendered: str) -> str | None:
     root = _shape_tree(rendered)
     if root is None:
         return None
-    budget = max(_MIN_RENDER_CHARS, _MAX_RENDER_RATIO * len(rendered))
+    budget = max(MIN_RENDER_CHARS, MAX_RENDER_RATIO * len(rendered))
     lines: list[str] = []
     _emit_shape(root, "$", 0, lines, budget)
     return "\n".join(lines)
@@ -453,7 +453,7 @@ def _emit_shape(
             children = node.children or {}
             for key, child in children.items():
                 if child is annotation:
-                    annotation_path = _child_path(path, key)
+                    annotation_path = child_path(path, key)
                     break
             lines.append(f"{annotation_path}  {annotation.text}")
             spent += len(annotation_path) + 3 + len(annotation.text) + 1
@@ -470,13 +470,13 @@ def _emit_children(
     for key, child in (node.children or {}).items():
         if spent > budget:
             lines.append(
-                f"{_child_path(path, key)}  not rendered: the structure "
+                f"{child_path(path, key)}  not rendered: the structure "
                 f"expands past the budget of {budget} characters; drill into "
                 "one part of it with `path`, as in $.items[0:5]"
             )
             break
         spent += _emit_shape(
-            child, _child_path(path, key), depth + 1, lines, budget - spent
+            child, child_path(path, key), depth + 1, lines, budget - spent
         )
     return spent
 
@@ -600,6 +600,17 @@ def _scan_bracket(raw: str, at: int) -> tuple[Step, int]:
     end = index + 1
     if inner == "*":
         return Every(), end
+    # A quoted key first, whatever it holds: a colon inside the quotes is part of
+    # the name, and a slice's bounds are never quoted. Tried in the other order,
+    # the key `["Price: USD"]` -- the spelling :func:`child_path` writes for it --
+    # would be read as a slice with an unparseable bound.
+    if inner[:1] in ('"', "'"):
+        key = _quoted_key(inner)
+        if key is None:
+            raise PathSyntax(f"the quoted key {inner!r} is not readable")
+        if not isinstance(key, str):
+            raise PathSyntax(f"the bracketed key {inner!r} is not a name")
+        return Key(key), end
     if ":" in inner:
         start_text, _, stop_text = inner.partition(":")
         return Bounds(_bound(start_text), _bound(stop_text)), end
@@ -612,13 +623,6 @@ def _scan_bracket(raw: str, at: int) -> tuple[Step, int]:
                 "its header line, so ask for the range you want, as in [0:5]"
             )
         return Position(value), end
-    if inner[:1] in ('"', "'"):
-        key = _quoted_key(inner)
-        if key is None:
-            raise PathSyntax(f"the quoted key {inner!r} is not readable")
-        if not isinstance(key, str):
-            raise PathSyntax(f"the bracketed key {inner!r} is not a name")
-        return Key(key), end
     raise PathSyntax(f"cannot read the bracketed step [{inner!r}]")
 
 

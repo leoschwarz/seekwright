@@ -30,22 +30,23 @@ invented. When the two disagree, the tool surface is wrong.
 | Operation | Input | Output |
 |---|---|---|
 | `search` | `query` (2–400 chars); `provider`?; `mode`? (`free`; not with `provider`); `max_results` (1–20, default 5); `include_domains`? (≤20); `exclude_domains`? (≤20); `recency`? (`day`\|`week`\|`month`\|`year`); `language`? (ISO 639-1, two letters); `safe_search`? (bool) | `SearchResponse` |
-| `fetch` | `url` (8–2048 chars, absolute `http(s)`); `offset`? (≥0); `query`? (2–400); `path`? (1–400, e.g. `$.items[*].name` — one part of a JSON document, named by the caller); `structure`? (bool, default false — a JSON page's shape instead of its values, one line per path: containers with their sizes, leaves with only their types, uniform arrays collapsed to one `[*]` subtree); `provider`? (free text — a fetch provider this server runs; there is no name for the local reader, so omitting it is the default route, the local reader unless `fetch.primary` names a provider) | `FetchResponse` (`image` when the resource is an image and `fetch.allow_images` is on — the bytes unextracted, which is why that field is a body and not a `snippet`) |
+| `fetch` | `url` (8–2048 chars, absolute `http(s)`); `offset`? (≥0); `query`? (2–400); `path`? (1–400, e.g. `$.items[*].name` — one part of a JSON document **or a CSV table**, named by the caller); `structure`? (bool, default false — a JSON page or CSV table's shape instead of its values, one line per path: containers with their sizes, leaves with only their types, uniform arrays collapsed to one `[*]` subtree); `provider`? (free text — a fetch provider this server runs; there is no name for the local reader, so omitting it is the default route, the local reader unless `fetch.primary` names a provider) | `FetchResponse` (`image` when the resource is an image and `fetch.allow_images` is on — the bytes unextracted, which is why that field is a body and not a `snippet`) |
 | `answer` | `query` (2–400 chars) and the `search`-shaped filters, plus `extra_queries`? (≤2, each 2–400) and `depth`? (`brief`\|`report`) — the parameter table is [agent-mode.md](agent-mode.md)'s | `AnswerResponse` |
 
 `models.SearchQuery` also carries `country`, which no tool parameter exposes; it
 stays off the public API until one does, so the encodings cannot drift.
 
 `fetch` names **one axis at a time**: `query` selects passages, `path` selects
-inside a JSON document, `offset` pages through the page, and `structure` reports
-the shape instead of any part. More than one is a `400`, not a precedence: the
-order the server applied them would become contract, and no caller can read an
-order off the two operations. A selection is bounded by `fetch.max_match_chars`
-and reports what the bound cut; `offset` continues a text response that came back
-`truncated`. A `structure` read replaces the response text with the shape: no
-matches come back, `total_chars` still describes the page, and a page that is not
-a JSON rendering this server read as a document is returned whole with a `notice`
-saying so — the `400` is for the parameter *mix*, never for the page.
+inside a JSON document or a CSV table, `offset` pages through the page, and
+`structure` reports the shape instead of any part. More than one is a `400`, not
+a precedence: the order the server applied them would become contract, and no
+caller can read an order off the two operations. A selection is bounded by
+`fetch.max_match_chars` and reports what the bound cut; `offset` continues a text
+response that came back `truncated`. A `structure` read replaces the response
+text with the shape: no matches come back, `total_chars` still describes the
+page, and a page that is not a rendering this server read as a structure is
+returned whole with a `notice` saying so — the `400` is for the parameter *mix*,
+never for the page.
 
 An image is the one place the two encodings of a `fetch` carry a body
 differently, because only one has a place for bytes. Over MCP it arrives as an

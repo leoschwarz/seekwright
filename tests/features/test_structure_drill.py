@@ -202,6 +202,6 @@ def the_prose_is_untouched(result: types.CallToolResult, endpoint: Endpoint) -> 
     assert _envelope(result)["text"] == endpoint.rendering
 
 
-@then("the notice says the page is not one this server could read as JSON")
+@then("the notice says the page is not one this server could read as either")
 def the_notice_names_the_refusal(result: types.CallToolResult) -> None:
-    assert "not one this server could read as JSON" in _text(result)
+    assert "not one this server could read as either" in _text(result)

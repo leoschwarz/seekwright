@@ -80,3 +80,11 @@ lines, four backends, the whole SSRF surface and `KNOWN_FALLBACKS`) and `cli.py`
 complexity 22). The hazard in the second is the freeze: the three client verbs and the ten
 server flags live there, so a split moves `tools/surface.py`'s read table and
 [surface.md](reference/surface.md) must come out byte-identical.
+
+The seam at the other end is built: a CSV is read as a path-addressable table by
+`tabledoc`, and Parquet — or any other columnar format — rides `tabledoc._emit`,
+which takes column names and rows rather than a body. What such a reader owes is
+its own extra, the way `pypdf` sits behind the `trafilatura` one, and its own
+cut-file refusal in `HttpFetcher._read_body`: a columnar footer lives at the end
+of the file, so it belongs with the documents that are refused when cut, not with
+the record streams that keep their heads.

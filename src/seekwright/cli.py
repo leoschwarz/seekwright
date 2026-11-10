@@ -374,15 +374,17 @@ def _client_parser(command: str) -> argparse.ArgumentParser:
         parser.add_argument(
             "--path",
             metavar="P",
-            help="On a JSON page, read only the part this path addresses: "
-            "`$.meta`, `$.items[*].name` for one field of every element, "
-            "`$.items[0:5]` for a slice. A JSON page prints one line per value "
+            help="On a JSON page or a CSV table, read only the part this path "
+            "addresses: `$.meta`, `$.items[*].name` for one field of every "
+            "element, `$.rows[*].price` for one column of every row, "
+            "`$.items[0:5]` for a slice. Such a page prints one line per value "
             "labelled with its path, so the page names the paths to ask for.",
         )
         parser.add_argument(
             "--structure",
             action="store_true",
-            help="On a JSON page, print its shape instead of its values: one "
+            help="On a JSON page or a CSV table, print its shape instead of its "
+            "values: one "
             "line per path, naming each array or object and its size and each "
             "leaf's type, no values, with uniform arrays collapsed to one "
             "`[*]` subtree. Every path printed is a valid --path to drill with. "

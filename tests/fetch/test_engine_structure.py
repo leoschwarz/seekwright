@@ -5,7 +5,7 @@ Network-free, like the rest of the engine suite; the stub carries a
 way out of an extraction backend. What is pinned: one read, one axis -- a
 structure request mixes with nothing else; the schema replaces the page text
 before the escape pass runs, so keys are escaped like any page text; a page
-this server could not read as JSON is answered with the whole page and a
+this server could not read as a structure is answered with the whole page and a
 sentence, the way `path` answers; and the emptiness gate -- about a JS shell
 answering a read meant to find prose -- does not apply to a deliberate shape
 read.
@@ -20,6 +20,7 @@ from seekwright.engine import FetchEngine, FetchRefused
 from seekwright.fetcher import UNCAPPED, ContentFetcher, FetchedPage
 from seekwright.jsondoc import render_json
 from seekwright.sanitize import ZWSP
+from seekwright.tabledoc import render_table
 from seekwright.usage import UsageRecorder
 
 URL = "https://example.com/data.json"
@@ -141,6 +142,30 @@ class TestStructureReads:
         assert ladder[0].calls == 0, "a structure read is never the empty case"
         assert response.text is not None and "number" in response.text
 
+    async def test_a_short_table_is_answered_and_never_walked(self):
+        """A three-row table renders below `fetch.min_text_chars`: it is the answer.
+
+        The emptiness gate reads a short page as the JS-shell symptom, and a
+        table's rendering is short because the table is small. With the walk
+        asked for -- what `answer` passes on every page -- escalating here would
+        bill a fallback and hand back its prose in place of the rows.
+        """
+        tiny = render_table("id,name\n1,Ada\n", delimiter=",")
+        assert tiny is not None and len(tiny) < 200
+        fetcher = StubFetcher(text=tiny, content_type="text/csv")
+        ladder = [StubFetcher(text="the ladder served prose instead. " * 12)]
+        cfg = Config(
+            providers={"serper": ProviderConfig()},
+            policy=PolicyConfig(),
+            fetch=FetchConfig(min_text_chars=len(tiny) + 1),
+        )
+        engine = FetchEngine(cfg, fetcher, cast("list[ContentFetcher]", ladder))
+        response = await engine.fetch(URL, auto_fallback=True)
+        assert fetcher.calls == 1
+        assert ladder[0].calls == 0, "a table page is never the empty case"
+        assert response.text is not None and '$.rows[0].name  "Ada"' in response.text
+        assert "JavaScript" not in (response.notice or "")
+
 
 class TestStructureRefusals:
     async def test_structure_and_query_are_refused(self, make_engine):
@@ -190,7 +215,7 @@ class TestStructurePageKinds:
         assert response.text == plain
         assert response.notice is not None
         assert "structure" in response.notice
-        assert "not one this server could read as JSON" in response.notice
+        assert "not one this server could read as either" in response.notice
 
     async def test_a_json_claim_the_body_does_not_honour_names_what_it_is(
         self, make_engine
@@ -210,7 +235,7 @@ class TestStructurePageKinds:
         engine = make_engine(fetcher)
         response = await engine.fetch(URL, structure=True)
         assert response.text == render_break
-        assert "not one this server could read as JSON" in cast(str, response.notice)
+        assert "not one this server could read as either" in cast(str, response.notice)
 
 
 class TestStructurePassesService:

@@ -34,13 +34,18 @@ from typing import Protocol
 # what a JSON document looks like to a caller.
 from ..jsondoc import JSON_TYPES, render_json
 
+# The table half lives beside it for the same reason: a backend decides *that* a
+# body is a delimited table and hands it to `tabledoc`, which owns what a table
+# looks like to a caller.
+from ..tabledoc import TABLE_TYPES, render_table, table_delimiter
+
 _WS_RUNS = re.compile(r"[ \t]+")
 _BLANK_RUNS = re.compile(r"\n{3,}")
 
 HTML_TYPES = frozenset({"text/html", "application/xhtml+xml"})
 PDF_TYPES = frozenset({"application/pdf", "application/x-pdf"})
 TEXT_TYPES = frozenset({"text/plain", "text/markdown", "text/xml", "application/xml"})
-SUPPORTED_TYPES = HTML_TYPES | PDF_TYPES | TEXT_TYPES | JSON_TYPES
+SUPPORTED_TYPES = HTML_TYPES | PDF_TYPES | TEXT_TYPES | JSON_TYPES | TABLE_TYPES
 
 KNOWN_EXTRACTORS: frozenset[str] = frozenset({"stdlib", "trafilatura"})
 """Every fetch extraction backend this build knows how to construct, by name.
@@ -70,11 +75,12 @@ class ExtractResult:
     """Whether `text` is a structure rendering whose lines `fetch`'s `path` selects.
 
     Only the extraction can say it, so it says it: the engine must not infer
-    "this is a JSON document" from a character of page text. A Makefile whose
-    first line is `$ make all` starts with the root character of a path and is
-    not one, and a body that reached the caller as text because the renderer
-    declined it is not one either. Set by the backend that walked the
-    structure; every other page leaves it False.
+    "this is a structure this server read" from a character of page text. A
+    Makefile whose first line is `$ make all` starts with the root character of
+    a path and is not one, and a body that reached the caller as text because
+    the renderer declined it is not one either. Set by the backend that walked
+    the structure -- a JSON document or a CSV table; every other page leaves it
+    False.
     """
 
 
@@ -181,6 +187,22 @@ def json_extraction(text: str) -> ExtractResult:
     return ExtractResult(rendered, None, len(rendered), path_addressable=True)
 
 
+def table_extraction(text: str, kind: str) -> ExtractResult:
+    """A delimited body as the table it is, or as its own text when it is not one.
+
+    A ``text/csv`` body the reader cannot walk at all -- a header that is nothing
+    but a parse error, a first field over the reader's cap -- has not failed to be
+    fetched: its bytes are the answer, so the bytes come back. A body that walked
+    partway keeps the rows it read, the record-stream rule `jsondoc.JSONL_TYPES`
+    states, and the rendering names where the reader stopped. :func:`normalise`
+    never runs here either; in a quoted cell the whitespace is the data.
+    """
+    rendered = render_table(text, delimiter=table_delimiter(kind, text))
+    if rendered is None:
+        return ExtractResult(text, None, len(text))
+    return ExtractResult(rendered, None, len(rendered), path_addressable=True)
+
+
 _FAMILIES: tuple[tuple[str, frozenset[str]], ...] = (
     ("HTML", HTML_TYPES),
     # The XML media types ride with plain text: a backend reads them decoded and passed
@@ -189,6 +211,9 @@ _FAMILIES: tuple[tuple[str, frozenset[str]], ...] = (
     # JSON is a family of its own because it is read as a structure, not as text;
     # the `+json` suffix types ride with it, through `is_supported` below.
     ("JSON", JSON_TYPES),
+    # CSV is a family of its own because it is read as rows, not as text: the
+    # types are claimed only when the header names them, never sniffed.
+    ("CSV", TABLE_TYPES),
     ("PDF", PDF_TYPES),
 )
 """Media types grouped into the families a model recognises, in display order."""

@@ -147,7 +147,7 @@ class TestRendering:
         assert peak < 20 * 1024 * 1024, (
             f"the walk built {peak / 1e6:.0f} MB of objects for a "
             f"{len(body) // 1024} KiB body that prints at most "
-            f"{jd._MAX_RENDER_RATIO} times itself"
+            f"{jd.MAX_RENDER_RATIO} times itself"
         )
 
     def test_a_document_people_publish_is_never_cut(self):
@@ -184,6 +184,19 @@ class TestGrammar:
         """The renderer writes JSON quoting; a caller typing a path writes JSONPath's."""
         assert jd.parse_path('$["items"]') == jd.parse_path("$['items']") == [Key("items")]
         assert jd.parse_path("$['a b']") == [Key("a b")]
+
+    def test_a_quoted_key_holding_a_colon_is_a_name_not_a_slice(self):
+        """The renderer writes this spelling for a key like `Price: USD`.
+
+        Read in the other order -- bounds before quotes -- the colon turns the
+        name into a slice with an unparseable bound, and one such line makes the
+        whole rendering unreadable to `structure` and to every other `path`.
+        """
+        assert jd.parse_path('$["a: b"]') == [Key("a: b")]
+        rendered = jd.render_json('{"a: b": 1}')
+        assert rendered is not None
+        assert rendered.split("\n")[1] == '$["a: b"]  1'
+        assert jd.parse_path(rendered.split("\n")[1].split("  ")[0]) == [Key("a: b")]
 
     def test_a_blank_path_is_refused_rather_than_read_as_the_root(self):
         """`path=" "` returning the whole document is a typo turning into another request."""

@@ -575,12 +575,13 @@ async def fetch(
             min_length=1,
             max_length=400,
             description=(
-                "On a JSON page, return only the part this path addresses, "
-                "instead of the whole document: `$.meta`, `$.items[0].name`, "
-                "`$.items[*].id` for every element, `$.items[0:5]` for a slice. "
-                "A JSON page arrives as one line per value, each labelled with "
-                "the path that addresses it, so the page you just read names "
-                "the paths you can ask for next."
+                "On a JSON page or a CSV table, return only the part this path "
+                "addresses, instead of the whole document: `$.meta`, "
+                "`$.items[0].name`, `$.items[*].id` for every element, "
+                "`$.rows[*].price` for one column of every row, `$.items[0:5]` "
+                "for a slice. Such a page arrives as one line per value, each "
+                "labelled with the path that addresses it, so the page you just "
+                "read names the paths you can ask for next."
             ),
         ),
     ] = None,
@@ -612,10 +613,11 @@ async def fetch(
         Field(
             False,
             description=(
-                "Report the shape of a JSON page instead of the page: one line "
-                "per path, naming each array or object and its size and each "
+                "Report the shape of a JSON page or a CSV table instead of the "
+                "page: one line per path, naming each array or object and its "
+                "size and each "
                 "leaf's type, no values. Uniform arrays collapse to one `[*]` "
-                "subtree, so a document that would fill the context reports its "
+                "subtree, so a page that would fill the context reports its "
                 "shape in a few lines; every path printed is a valid `path` "
                 "selector, so read `structure=true` first and then drill with "
                 "`path`. Exchanged with `query`, `path` and `offset` -- one "

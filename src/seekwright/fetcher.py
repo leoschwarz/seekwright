@@ -174,8 +174,8 @@ UNCAPPED = 2**31 - 1
 """The ``max_chars`` value meaning "no cap".
 
 Extraction is already memory-bounded -- ``max_download_bytes`` on the body,
-and ``jsondoc``'s own ratio on a JSON rendering -- so an uncut page is a
-bounded thing; this sentinel exists so callers can ask for it
+and the shared rendering ratio of ``jsondoc``/``tabledoc`` on a structure page --
+so an uncut page is a bounded thing; this sentinel exists so callers can ask for it
 explicitly (the query-targeted fetch does, because it selects passages from
 the whole text) without a ``None`` thread through every fallback's signature.
 """
@@ -455,8 +455,11 @@ class HttpFetcher:
                 "User-Agent": user_agent,
                 # JSON rides at q=0.7: it is read here now, and an endpoint that
                 # negotiates should answer with the document rather than a wrapper page.
+                # CSV rides below it at q=0.6 for the same reason: a table is read
+                # here too, and an endpoint with both would otherwise answer with an
+                # HTML page wrapped around the file.
                 "Accept": "text/html,application/xhtml+xml,application/pdf;q=0.9,"
-                "text/plain;q=0.8,application/json;q=0.7,*/*;q=0.1",
+                "text/plain;q=0.8,application/json;q=0.7,text/csv;q=0.6,*/*;q=0.1",
             },
         )
 
@@ -546,7 +549,11 @@ class HttpFetcher:
         document likewise stops parsing, so `path` would answer "not a JSON
         document" about a page that was. A record stream is the exception that
         keeps its text, and an image cut short is a partial picture nothing
-        here can tell apart from the original.
+        here can tell apart from the original. A CSV is that stream case, so it
+        adds no refusal: the rows above the cut are whole and only the last one
+        may be the row the cut split. A columnar format is the other case -- a
+        Parquet footer sits at the end as a PDF's does, so its reader will want
+        this paragraph's refusal rather than the stream's pass.
         """
         body = bytearray()
         capped = False

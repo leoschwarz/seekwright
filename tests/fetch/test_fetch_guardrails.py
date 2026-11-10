@@ -426,6 +426,28 @@ class TestBodyHandling:
         assert page.total_chars >= 10_000, "the head of the stream is still returned"
         await fetcher.aclose()
 
+    async def test_a_truncated_csv_keeps_the_rows_above_the_cut(self):
+        """A table is the record-stream case: its head rows are whole rows.
+
+        Unlike a JSON document, a cut CSV still parses -- only the last row may
+        be the one the download split -- so the cap is not a refusal here.
+        """
+        fetcher = make_fetcher(
+            {
+                "https://big.test/": lambda r: httpx.Response(
+                    200,
+                    content=b"id,name\n" + b"1,Ada\n" * 4_000,
+                    headers={"content-type": "text/csv"},
+                )
+            },
+            max_download_bytes=10_000,
+        )
+        page = await fetcher.fetch("https://big.test/")
+        assert page.path_addressable is True
+        assert "$.rows  array(" in page.text
+        assert '$.rows[0].name  "Ada"' in page.text, "the rows above the cut are whole"
+        await fetcher.aclose()
+
     async def test_a_rendered_json_page_says_its_lines_can_be_selected(self):
         """The flag the engine reads is the extraction's, carried through the fetcher."""
         fetcher = make_fetcher(
@@ -520,7 +542,7 @@ class TestBodyHandling:
         # what this install can read -- JSON is in the set, and a
         # refusal that left it out would send a caller away from a fetchable type.
         assert "image/png" in str(exc.value)
-        assert "this tool reads HTML, plain text, JSON and PDF" in str(exc.value)
+        assert "this tool reads HTML, plain text, JSON, CSV and PDF" in str(exc.value)
         await fetcher.aclose()
 
     async def test_error_status_is_raised_not_returned_as_content(self):

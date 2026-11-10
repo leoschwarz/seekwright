@@ -11,7 +11,13 @@ from typing import override
 import httpx
 import pytest
 
-from seekwright.extractors.base import SUPPORTED_TYPES, ExtractResult
+from seekwright.extractors.base import (
+    SUPPORTED_TYPES,
+    ExtractResult,
+    decode,
+    media_type,
+    table_extraction,
+)
 from seekwright.fetcher import (
     JINA_READER_ENDPOINT,
     KNOWN_FALLBACKS,
@@ -98,6 +104,16 @@ class _JsonReader:
         return ExtractResult(body.decode(), None, len(body))
 
 
+class _CsvReader:
+    """A backend that reads what the default one claims, tables included."""
+
+    name = "csv-reader"
+    supported_types = SUPPORTED_TYPES
+
+    def extract(self, body: bytes, content_type: str | None):
+        return table_extraction(decode(body, content_type), media_type(content_type))
+
+
 def _served(fetcher: HttpFetcher, content_type: str, body: bytes) -> None:
     fetcher._client = httpx.AsyncClient(
         transport=httpx.MockTransport(
@@ -129,6 +145,48 @@ class TestJsonIsFetchable:
         _served(fetcher, "application/vnd.api+xml", b"<root/>")
         with pytest.raises(FetchBlocked, match="JSON"):
             await fetcher.fetch("https://api.test/things")
+        await fetcher.aclose()
+
+
+class TestCsvIsFetchable:
+    """A CSV body is content, not a refusal.
+
+    The gate passes and the extraction's `path_addressable` flag survives the
+    fetcher: both are what makes `path` answer a column on this page.
+    """
+
+    async def test_a_csv_body_is_rendered_as_a_table(self):
+        fetcher = HttpFetcher(extractor=_CsvReader(), allow_private_addresses=True)
+        _served(fetcher, "text/csv", b"id,name\n1,Ada\n")
+        page = await fetcher.fetch("https://api.test/table.csv")
+        assert page.content_type == "text/csv"
+        assert page.path_addressable is True
+        assert page.text.startswith("$  object(1)")
+        await fetcher.aclose()
+
+    async def test_the_request_offers_csv_to_a_negotiating_server(self):
+        """A server that can answer with either reads the offer, not the suffix."""
+        seen: list[httpx.Request] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            return httpx.Response(
+                200,
+                content=b"id,name\n1,Ada\n",
+                headers={"content-type": "text/csv"},
+            )
+
+        fetcher = HttpFetcher(extractor=_CsvReader(), allow_private_addresses=True)
+        # The client's own headers are what is under test, so the mock client
+        # carries them rather than starting from httpx's defaults.
+        headers = fetcher._client.headers
+        fetcher._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            follow_redirects=False,
+            headers=headers,
+        )
+        await fetcher.fetch("https://api.test/table.csv")
+        assert "text/csv" in seen[0].headers["accept"]
         await fetcher.aclose()
 
 

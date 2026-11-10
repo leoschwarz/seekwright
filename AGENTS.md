@@ -148,6 +148,7 @@ explains the request paths and the seams.
 |`fetcher.py`|URL fetching behind SSRF guardrails; `HttpFetcher` (the free primary, the extraction backend **injected**, no default) plus five fallbacks — `Crawl4aiFetcher` (a self-hosted renderer, needs `fetch.crawl4ai_url`), `JinaFetcher` (the keyless third-party reader), and the billable `ScrappaFetcher`, `TavilyFetcher` and `LinkupFetcher` — declared in the `KNOWN_FALLBACKS` registry beside them, one row per fallback giving its name, whether it can bill, the endpoint it dials and how to build it. `fetch.fallback` validates against that registry, `factory.build_fetch_stack` loops it, building only the fallbacks whose row says it has what it needs, and `FetchEngine` walks them in that order|
 |`extractors/`|one module per extraction backend, all implementing the `base.py` protocol; `base.py` holds the protocol, the `KNOWN_EXTRACTORS` registry (`trafilatura`, `stdlib`), the shared plumbing (decode, sniff, normalise, `describe_types`, `is_supported`) and passage selection. The wiring list for adding a backend is in its docstring|
 |`jsondoc.py`|the JSON half of the fetch path: which media types are JSON, the one-line-per-node rendering a JSON page arrives as, the `path` grammar `fetch(path=…)` selects with, and `render_schema`, the shape-only structure view `fetch(structure=true)` answers with — stdlib only, and the reason no dependency was added|
+|`tabledoc.py`|the CSV half of the fetch path: which media types name a delimited table, and `render_table`, which writes `jsondoc`'s line grammar so `path` and `structure` need no new machinery; `_emit(columns, rows, …)` is the seam a later record format rides on — stdlib only, so no dependency was added|
 |`health.py`|the provider board: `HealthBoard` gates a name out of the **fallbacks** for a cooldown after the failures real traffic records, and `HealthMonitor` re-verifies it with the same bodyless GET `--check` uses. The first attempt of any search is never gated: a breaker saves the second attempt, it does not pre-empt the first|
 |`logs.py`|loguru setup to stderr, the stdlib `InterceptHandler`, and the `bind`/`query_fields`/`safe` helpers every log call goes through|
 |`usage.py`|`UsageRecorder`: in-memory aggregation of every terminal call plus the optional append-only JSONL journal the dashboard backfills from — content-free; the journal *file* is never read on the serving path (the dashboard backfills from it, and agent mode's per-call ceiling reads the recorder's in-memory totals, not the file)|
@@ -257,7 +258,8 @@ explains the request paths and the seams.
   `FetchEngine.resolve`, whose refusal lists the names this deployment did build.
 - **A `fetch` page is read three ways, and a fallback's body is never one of
   them.** `offset` continues a truncated page, `query` returns matching passages
-  with their offsets, and `path` addresses a JSON document. A fallback parses its
+  with their offsets, and `path` addresses a JSON document or a CSV table — both
+  `jsondoc` and `tabledoc` write the one line grammar the selector reads. A fallback parses its
   own response and answers in page text, so `path_addressable` stays false for
   every rung: forwarding a vendor's JSON body would make `path` select inside the
   vendor's response rather than inside the page the caller named.

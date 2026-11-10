@@ -27,6 +27,7 @@ from seekwright.extractors.base import (
     HTML_TYPES,
     PDF_TYPES,
     SUPPORTED_TYPES,
+    TABLE_TYPES,
     TEXT_TYPES,
     ExtractionFailed,
     charset_of,
@@ -43,6 +44,7 @@ from seekwright.factory import (
     build_extractor,
     build_fetch_stack,
 )
+from seekwright.tabledoc import is_table_media
 
 _X = TrafilaturaExtractor()
 """The default backend, instantiated once: extraction is stateless."""
@@ -149,8 +151,8 @@ class TestBackendContract:
         assert _X.supported_types == SUPPORTED_TYPES
 
     def test_families_render_in_a_fixed_display_order(self):
-        """Display order is HTML, plain text, JSON, PDF -- always, whatever the set."""
-        assert describe_types(SUPPORTED_TYPES) == "HTML, plain text, JSON and PDF"
+        """Display order is HTML, plain text, JSON, CSV, PDF -- always, whatever the set."""
+        assert describe_types(SUPPORTED_TYPES) == "HTML, plain text, JSON, CSV and PDF"
         assert describe_types(frozenset({"application/pdf"})) == "PDF"
 
     def test_a_type_no_family_claims_is_appended_verbatim(self):
@@ -217,6 +219,81 @@ class TestJson:
         assert is_supported(SUPPORTED_TYPES, "application/vnd.api+json")
         assert not is_supported(HTML_TYPES, "application/vnd.api+json")
         assert not is_supported(SUPPORTED_TYPES, "application/vnd.api+xml")
+
+
+class TestCsv:
+    """A CSV body becomes a table, not a wall of commas.
+
+    The rendering itself is pinned in ``tests/fetch/test_tabledoc.py``; what is
+    pinned here is the backend's half: which bodies reach the table reader, and
+    that a body it cannot walk is still a fetch that answered.
+    """
+
+    @pytest.mark.parametrize("backend", [_X, _S], ids=lambda b: b.name)
+    def test_a_csv_document_arrives_as_row_paths(self, backend):
+        r = backend.extract(b"id,name\n1,Ada\n", "text/csv")
+        assert r.path_addressable is True
+        assert r.text.split("\n")[:3] == [
+            "$  object(1)",
+            "$.rows  array(1)",
+            "$.rows[0]  object(2)",
+        ]
+        assert '$.rows[0].name  "Ada"' in r.text
+        assert r.title is None
+        assert r.total_chars == len(r.text)
+
+    @pytest.mark.parametrize("backend", [_X, _S], ids=lambda b: b.name)
+    def test_a_tab_separated_type_states_its_own_delimiter(self, backend):
+        r = backend.extract(b"id\tname\n1\tAda\n", "text/tab-separated-values")
+        assert r.path_addressable is True
+        assert '$.rows[0].name  "Ada"' in r.text
+
+    @pytest.mark.parametrize("backend", [_X, _S], ids=lambda b: b.name)
+    def test_a_type_parameter_does_not_hide_the_table(self, backend):
+        r = backend.extract(b"id,name\n1,Ada\n", "text/csv; charset=utf-8")
+        assert r.path_addressable is True
+        assert '$.rows[0].name  "Ada"' in r.text
+
+    @pytest.mark.parametrize("backend", [_X, _S], ids=lambda b: b.name)
+    def test_a_declared_charset_decodes_before_the_table_is_read(self, backend):
+        r = backend.extract(b"id,name\n1,caf\xe9\n", "text/csv; charset=cp1252")
+        assert r.path_addressable is True
+        assert '$.rows[0].name  "café"' in r.text
+
+    @pytest.mark.parametrize("backend", [_X, _S], ids=lambda b: b.name)
+    def test_a_body_the_reader_cannot_walk_comes_back_as_its_text(self, backend):
+        """One field past the reader's cap is the body, not a refusal."""
+        body = b"a," + b"x" * 200_000
+        r = backend.extract(body, "text/csv")
+        assert r.path_addressable is False
+        assert r.text == body.decode()
+
+
+    @pytest.mark.parametrize("backend", [_X, _S], ids=lambda b: b.name)
+    def test_a_table_that_stopped_at_its_first_row_comes_back_as_its_text(
+        self, backend
+    ):
+        """Columns and no row say nothing about the file, so the bytes answer."""
+        body = b"id,name\n" + b"x" * 200_000
+        r = backend.extract(body, "text/csv")
+        assert r.path_addressable is False
+        assert r.text == body.decode()
+
+    @pytest.mark.parametrize("backend", [_X, _S], ids=lambda b: b.name)
+    def test_rows_read_before_a_stop_are_the_answer(self, backend):
+        body = b"id,name\n1,Ada\n" + b"x" * 200_000
+        r = backend.extract(body, "text/csv")
+        assert r.path_addressable is True
+        assert '$.rows[0].name  "Ada"' in r.text
+        assert r.text.split("\n")[-1].startswith("$.rows[1]  not rendered:")
+
+    def test_no_body_is_a_table_because_of_its_bytes(self):
+        """Nothing byte-sniffs a table: the media type has to name one."""
+        assert not is_table_media("")
+        assert not is_table_media("text/plain")
+        assert not is_supported(_S.supported_types, "application/vnd.ms-excel")
+        r = _S.extract(b"id,name\n1,Ada\n", "text/plain")
+        assert r.path_addressable is False
 
 
 class TestHtml:
@@ -333,9 +410,9 @@ class TestPdf:
         the phrase in that refusal says what this install can actually read."""
         with _backend_without_pypdf() as module:
             claimed = module.TrafilaturaExtractor.supported_types
-            assert claimed == HTML_TYPES | TEXT_TYPES
+            assert claimed == HTML_TYPES | TEXT_TYPES | TABLE_TYPES
             assert module.PDF_IMPORT_ERROR, "the guard must name the reason"
-        assert describe_types(claimed) == "HTML and plain text"
+        assert describe_types(claimed) == "HTML, plain text and CSV"
 
     def test_a_missing_library_costs_pdf_reading_not_the_backend(self):
         """A partial extra must not take HTML and plain text down with it."""
@@ -361,7 +438,7 @@ class TestStdlibBackend:
         assert _S.name == "stdlib"
         assert _S.supported_types & PDF_TYPES == frozenset()
         assert not is_supported(_S.supported_types, "application/pdf")
-        assert describe_types(_S.supported_types) == "HTML, plain text and JSON"
+        assert describe_types(_S.supported_types) == "HTML, plain text, JSON and CSV"
 
     def test_the_article_survives_and_its_chrome_does_not(self):
         r = _S.extract(article(), "text/html")

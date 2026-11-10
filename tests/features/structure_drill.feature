@@ -27,4 +27,4 @@ Feature: Reading a JSON document's shape, then drilling into it
     Given a server whose fetch endpoint answers prose
     When the agent fetches its shape
     Then the response text is the prose itself
-    And the notice says the page is not one this server could read as JSON
+    And the notice says the page is not one this server could read as either

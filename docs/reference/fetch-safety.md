@@ -52,9 +52,12 @@ Enforced in `fetcher.py`, before and during every request:
   back as the same non-retryable refusal an unreadable PDF produces. The deadline
   abandons the thread without stopping what it already allocated, so an
   extraction's own build has to be bounded inside the extraction — which is why
-  the JSON walk below is bounded, not merely its output.
-- Only HTML, plain text, JSON and PDF are extracted — the configured extractor's
-  own supported set, with the RFC 6839 `+json` suffixes riding with JSON. That set
+  the structure renderings below are bounded, not merely their output.
+- Only HTML, plain text, JSON, CSV and PDF are extracted — the configured extractor's
+  own supported set, with the RFC 6839 `+json` suffixes riding with JSON. A table
+  type is claimed only when the `Content-Type` names it: unlike JSON's braces, a
+  delimited line is indistinguishable from prose, so a body served with no header
+  stays text and a `.csv` link served as `text/plain` comes back as commas. That set
   is the backend's claim, so the `stdlib` backend refuses a PDF before a byte of
   one is downloaded: it has no PDF reader. Anything else is refused rather than
   handed over as bytes, with one opt-in exception — the four image types returned
@@ -62,19 +65,46 @@ Enforced in `fetcher.py`, before and during every request:
   below). A JSON body that is not one document — an HTML error page under a JSON
   type, a JSON Lines stream — comes back as its text, since its bytes are the
   content. A document that hits the byte cap mid-file is refused naming the cap,
-  as a cut PDF is: cut in half it is no longer one document. A response with a
+  as a cut PDF is: cut in half it is no longer one document. A CSV that meets the
+  same cap is not refused, because it is the other family — a record stream, like
+  JSON Lines: the rows above the cut are whole, and only the last one may be the
+  row the cut split. A columnar format would belong with the documents instead,
+  since its footer sits at the end where a PDF's does. A response with a
   4xx/5xx status is an error, not content — an error page's body is not the
   article.
-- The rendering of a JSON document carries its own budget, beside the depth cap
-  and beside the byte cap: at most four times the body being rendered, floored
-  at 8000 characters. Every rendered line carries the path that addresses it,
-  so a document's *shape* sets what printing it costs — 400 KB nested 99 levels
+- The rendering of a JSON document or a CSV table carries its own budget, beside
+  the depth cap and beside the byte cap: at most four times the body being
+  rendered, floored at 8000 characters — one ceiling for both, because both print
+  one line per node and every line carries the path that addresses it. So a
+  body's *shape* sets what printing it costs: 400 KB of JSON nested 99 levels
   deep, with 200k leaves under them, is inside the depth cap and renders to 61
-  million characters. The cut prints a line naming where it stopped. The walk
-  that builds the rendering is bounded by that same budget, not by the document's
-  shape: a container sits on the walk's stack as one frame over its own members,
-  read one at a time, rather than queueing an entry and a full path label for
-  every member of every container it opened.
+  million characters, and a table's cost is set by its column names, which every
+  row repeats. The cut prints a line naming where it stopped and, for a table,
+  how many rows did print. The walk that builds a JSON rendering is bounded by
+  that same budget, not by the document's shape: a container sits on the walk's
+  stack as one frame over its own members, read one at a time, rather than
+  queueing an entry and a full path label for every member of every container it
+  opened.
+- A table is parsed by the standard library's `csv` reader and by nothing else:
+  no second parser walks bytes a stranger wrote, and the reader's own 128 KiB
+  per-field cap is not raised — `csv.field_size_limit` is process-global state,
+  so raising it to read one file spends memory on every request. A file whose
+  field crosses that cap stops parsing there: the rows above it are returned and
+  the rendering names what the reader said, and if no row had printed the bytes
+  come back instead, because a header alone says nothing about the file. The
+  delimiter of an unqualified `text/csv` body is chosen by the width *every* row
+  of the head agrees on, not the widest row anywhere: a cell merely containing a
+  semicolon would otherwise outvote the real separator and re-cut an ordinary
+  comma file into one truncated column, losing the rest of each row from the
+  page, from `query` and from `structure` without a trace. A column name is
+  capped at 128 characters, because a header cell becomes the path label of
+  every cell under it and one hostile name of a megabyte would make every row's
+  label longer than the row. The parse runs on the worker thread under
+  `fetch.timeout_seconds`, like every other extraction.
+- A fetched table is never re-emitted. It arrives as path-labelled text and
+  leaves as that same text, so nothing this proxy writes to a caller can be
+  re-parsed as a spreadsheet or start a cell with a formula: the CSV-injection
+  problem a CSV-in/CSV-out tool has to solve is out of scope by construction.
 
 ## Images: only when the operator says so
 
@@ -115,7 +145,10 @@ Whether the ladder behind that first read is walked at all is
 `fetch.auto_fallback`, off by default: with it off, a failed or nearly-empty read
 names the configured fallbacks to the caller as `provider` values to retry on,
 and with it on the walk runs in config order, at most once each, the one billable
-name last. Both sentences, and the `answer` plan's per-call ask for the walk, are
+name last. A read whose extraction came back as a structure — a JSON rendering or
+a table — is never the nearly-empty case whatever its length: a three-row table is
+short because it is finished, and escalating would pay a vendor to replace those
+rows with prose. Both sentences, and the `answer` plan's per-call ask for the walk, are
 [fetch-provider-selection.md](fetch-provider-selection.md) §2 and §3. What this
 page adds is the security half: **a read these guarantees refuse ends at the
 reason and names no provider to retry it on**. Every remote fallback applies the

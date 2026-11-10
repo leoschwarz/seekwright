@@ -33,6 +33,7 @@ import trafilatura
 from trafilatura.metadata import extract_metadata
 
 from ..jsondoc import is_json_media, sniffs_json
+from ..tabledoc import TABLE_TYPES, is_table_media
 from .base import (
     HTML_TYPES,
     PDF_TYPES,
@@ -45,6 +46,7 @@ from .base import (
     media_type,
     normalise,
     sniffs_html,
+    table_extraction,
 )
 
 
@@ -79,13 +81,16 @@ exists to surface.
 
 
 class TrafilaturaExtractor:
-    """HTML through trafilatura, PDF through pypdf, JSON as structure, plain text passed through."""
+    """HTML through trafilatura, PDF through pypdf, JSON and CSV as structure, plain text passed through."""
 
     name = "trafilatura"
     # Honest by construction: PDF drops out exactly when the guarded import failed,
-    # so the fetcher's media-type gate refuses a PDF it cannot read.
+    # so the fetcher's media-type gate refuses a PDF it cannot read. The table
+    # reader is stdlib, so a missing pypdf costs this backend nothing.
     supported_types = (
-        SUPPORTED_TYPES if PdfReader is not None else HTML_TYPES | TEXT_TYPES
+        SUPPORTED_TYPES
+        if PdfReader is not None
+        else HTML_TYPES | TEXT_TYPES | TABLE_TYPES
     )
 
     def extract(self, body: bytes, content_type: str | None) -> ExtractResult:
@@ -99,6 +104,9 @@ class TrafilaturaExtractor:
 
         if is_json_media(kind) or (not kind and sniffs_json(body)):
             return json_extraction(decode(body, content_type))
+
+        if is_table_media(kind):
+            return table_extraction(decode(body, content_type), kind)
 
         if kind in PDF_TYPES:
             text, title = _from_pdf(body)
