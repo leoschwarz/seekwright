@@ -1,0 +1,6 @@
+File "confinement_is_not_a_grant.ml", line 36, characters 66-74:
+36 |   Mcp_caps.Registry.add Mcp_caps.Registry.empty search_web ~grant:decision
+                                                                       ^^^^^^^^
+Error: The value "decision" has type "(Policy_net.t, Error.t) result"
+       but an expression was expected of type
+         "Mcp_caps.Authority.Net.t" = "Authority.net Authority.t"

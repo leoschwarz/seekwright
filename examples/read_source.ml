@@ -166,7 +166,7 @@ let build ~sw env root =
     | Ok confinement -> Ok confinement
     | Error error -> invalid (Error.render error)
   in
-  let grant = Authority.Fs.of_confinement confinement in
+  let grant = Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement in
   let* registry =
     Registry.add Registry.empty ping ~grant:()
     >>= (fun registry -> Registry.add registry read_source ~grant)

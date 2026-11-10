@@ -16,10 +16,11 @@
 
     {1 Where a grant comes from}
 
-    [Policy.with_root] is the only producer of an [Fs] grant. It hands back a
-    [Policy_fs.t] — the confinement decision, with the subtree handle inside it
-    — and [Fs.of_confinement] wraps that decision in the grant type a tool is
-    registered with. The split is not decoration: an abstract type's
+    [Policy.with_root] is the only producer of an [Fs] grant and
+    [Policy.with_endpoints] / [Policy.with_public_web] the only producers of a
+    [Net] one. Each hands back a confinement decision — [Policy_fs.t],
+    [Policy_net.t] — and [of_confinement] wraps that decision in the grant type
+    a tool is registered with. The split is not decoration: an abstract type's
     constructors cannot cross a module boundary, so "one public producer" is
     enforced by making every other path need a value that only [Policy] can
     make. [test/should_not_compile] pins exactly that.
@@ -31,7 +32,8 @@
     mcp-kit 0.2.0's classic tool handler is a synchronous function, so it gets
     that context from the application: the transport loop is started inside
     [Eio_main.run], under the same [Eio.Switch.t] that owns the grants
-    (§7) — [examples/read_source.ml] is the worked example.
+    (§7) — [examples/read_source.ml] and [examples/gated_search.ml] are the
+    worked examples.
 
     Two alternatives were rejected. [Eio_main.run] inside the handler would put
     a second loop around a handle opened by the first: [Eio] resources belong to
@@ -40,7 +42,19 @@
     grant — a background domain that the handler posts work to — works from any
     context, but it adds a cross-domain handoff and a second confinement story,
     and it is unnecessary: putting the transport under the grant's loop already
-    gives the handler a fiber. *)
+    gives the handler a fiber.
+
+    {1 Bounds that apply to every kind}
+
+    A grant also carries a [Controls.t]: the audit sink, the per-operation time
+    bound and the operation budget
+    ({!val:with_operation_budget}). [with_log],
+    [with_operation_timeout] and [with_operation_budget] below are generic over
+    ['kind] — they change that part of the grant and nothing else, so they apply
+    to a filesystem grant and a network grant alike (§3, §6). Each grant is
+    built with a bound already in it: [of_confinement] installs its kind's
+    default operation timeout unless the application supplies its own
+    [~controls]. *)
 
 type fs
 type net
@@ -50,12 +64,19 @@ type _ t
 module Fs : sig
   type nonrec t = fs t
 
-  val of_confinement : Policy_fs.t -> t
-  (** [of_confinement decision] turns a confinement decision — the opened
-      subtree and its ceilings — into a grant. This is not a way to build a
-      grant: [Policy_fs.t] is abstract and [Policy.with_root] is the only thing
+  val of_confinement :
+    mono_clock:_ Eio.Time.Mono.t -> ?controls:Controls.t -> Policy_fs.t -> t
+  (** [of_confinement ~mono_clock decision] turns a confinement decision — the
+      opened subtree and its ceilings — into a grant. This is not a way to build
+      a grant: [Policy_fs.t] is abstract and [Policy.with_root] is the only thing
       that returns one, so the audit answer to "who gave this tool the
-      filesystem" is one grep, and [test/should_not_compile] holds the line. *)
+      filesystem" is one grep, and [test/should_not_compile] holds the line.
+
+      [mono_clock] is what the operation bound is measured on: a wall clock that
+      steps (an NTP correction, a VM resume) would otherwise lengthen or shorten
+      every deadline at once. With [~controls] absent the grant carries
+      [Policy_fs]'s default operation bound and no audit sink; passing
+      [~controls:Controls.none] is how an operator asks for an unbounded grant. *)
 
   val read_file : ?max_bytes:int -> t -> string -> (string, Error.t) result
   (** [read_file ~max_bytes t path] reads a root-relative path. [path] must be
@@ -79,24 +100,80 @@ end
 module Net : sig
   type nonrec t = net t
 
-  type method_ = [ `GET | `POST | `PUT | `PATCH | `DELETE ]
+  type method_ = Policy_net.method_
+  (** [ `GET | `POST | `PUT | `PATCH | `DELETE ]. *)
 
-  type request = {
+  (* Destructive aliases: the grant's request type {e is} the one [Policy_net]
+     checks — a restated record would be a second nominal type, and the request a
+     caller built for this grant would not be it — while the field list here is
+     what lets a caller write [Authority.Net.meth] rather than reaching past the
+     grant into [Policy_net] for the labels. *)
+  type request = Policy_net.request = {
     meth : method_;
     uri : Uri.t;
     headers : (string * string) list;
     body : string option;
   }
 
-  type response = {
+  type response = Policy_net.response = {
     status : int;
     headers : (string * string) list;
     body : string;
   }
 
+  val of_confinement :
+    mono_clock:_ Eio.Time.Mono.t -> ?controls:Controls.t -> Policy_net.t -> t
+  (** [of_confinement ~mono_clock decision] wraps the endpoint decision — the
+      allowlisted destinations, the byte ceiling and the TLS configuration — in a
+      grant. Not a way to build a grant: [Policy.with_endpoints] and
+      [Policy.with_public_web] are the only producers of [Policy_net.t].
+
+      With [~controls] absent the grant carries [Policy_net]'s default
+      whole-operation bound (DNS, connect, TLS, headers and body together) and no
+      audit sink. The TLS configuration is not added here: it lives inside
+      [decision], because reading the trust anchors is part of deciding whether
+      this grant can speak https at all (§5). *)
+
   val request :
     ?max_response_bytes:int -> t -> request -> (response, Error.t) result
-  (** Implemented at M3 (§5). It answers [Error Unavailable] until then, rather
-      than returning an unconfined response, because a stub that worked would be
-      a wider grant than the operator configured. *)
+  (** One bounded HTTP exchange, and the only way a tool can reach a network.
+      The guarantees are [Policy_net]'s, in one line each here:
+
+      - the (scheme, host, effective port) must be one the grant allows,
+        decided before any DNS query is sent;
+      - the connection goes to one of the vetted answers for that name, so the
+        HTTP client cannot resolve it again behind the check (DNS rebinding);
+      - https speaks TLS with the endpoint's own name, against the system trust
+        anchors — verification is never bypassed;
+      - a 3xx is returned, never followed, and a [Location] this grant would
+        refuse is itself a [Denied];
+      - the response body is streamed against min(grant, caller) bytes and is
+        [Denied] rather than truncated.
+
+      [max_response_bytes] lowers the grant's ceiling, never raises it. A
+      request body or header the authority owns (Host, Content-Length,
+      Transfer-Encoding, Connection, Upgrade) is [Invalid]. *)
 end
+
+val with_log : sink:(Event.t -> unit) -> 'kind t -> 'kind t
+(** [with_log ~sink grant] reports every operation of [grant] to [sink] — one
+    bounded, content-free [Event.t] per operation (§6). The application owns the
+    sink, so it owns where the line goes: [examples/gated_search.ml] writes it
+    to stderr, because stdout is the protocol channel. *)
+
+val with_operation_timeout : Eio.Time.Timeout.t -> 'kind t -> 'kind t
+(** One bound per operation, not one per grant or per tool call: an [analyzer]
+    that makes four requests gets four bounds (§6). [Eio.Time.Timeout.none]
+    removes it. *)
+
+val with_operation_budget : Budget.t -> 'kind t -> 'kind t
+(** [with_operation_budget budget grant] spends the {b caller's} counter once per
+    operation and refuses with [Denied] once it is spent, doing no I/O at all on
+    a refused call.
+
+    This is the one budget shape this layer can honestly offer: the counter is
+    created by the code that wants a ceiling — per request, per plan — so its
+    scope is that code's, while the grant stays a server-lifetime value (§6
+    refuses a counter {b inside} a grant, because that would be a
+    server-lifetime budget wearing a per-request name). Retaining the result
+    keeps spending the same counter; that is the point of it. *)

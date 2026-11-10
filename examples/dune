@@ -28,3 +28,21 @@
   cohttp-eio
   eio
   eio_main))
+
+(executable
+ (name gated_search)
+ ; The network authority's audit surface: two tools registered with one [Net]
+ ; grant, one of them taking its destination from the caller so the allowlist
+ ; refusal is visible from outside. The TLS pieces belong here and not in
+ ; mcp-caps' [mcp-caps] library stanza for the same reason the loop does: the
+ ; application decides whether it speaks https and which entropy source it uses.
+ (libraries
+  mcp-caps
+  mcp-kit
+  mcp-kit.stdio
+  mcp-kit-cohttp-eio
+  cohttp-eio
+  eio
+  eio_main
+  uri
+  mirage-crypto-rng.unix))

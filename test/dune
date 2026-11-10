@@ -58,3 +58,22 @@
   eio_main
   alcotest
   unix))
+
+; M3: the network grant. The fixture is a real loopback HTTP server (so it needs
+; the transport and the message model) and a scripted [Eio.Net.t] (so it needs
+; [ipaddr] to write addresses down in the form the policy thinks in). Installing
+; a random generator belongs to the caller, and that caller-side library needs
+; stdlib unix — which is why it is here and not in mcp-caps.
+(test
+ (name test_authority_net)
+ (libraries
+  mcp-caps
+  alcotest
+  eio
+  cohttp-eio
+  http
+  uri
+  ipaddr
+  cstruct
+  mirage-crypto-rng.unix
+  eio_main))

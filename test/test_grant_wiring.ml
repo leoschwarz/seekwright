@@ -84,14 +84,14 @@ let with_grant ~root f =
   Eio.Switch.run @@ fun sw ->
   match Policy.with_root ~sw ~parent:(Eio.Stdenv.fs env) root with
   | Error error -> Alcotest.failf "with_root %s: %s" root (Error.render error)
-  | Ok confinement -> f (Authority.Fs.of_confinement confinement)
+  | Ok confinement -> f (Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement)
 
 let with_two_grants f =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let open_root root =
     match Policy.with_root ~sw ~parent:(Eio.Stdenv.fs env) root with
-    | Ok confinement -> Ok (Authority.Fs.of_confinement confinement)
+    | Ok confinement -> Ok (Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement)
     | Error error -> Error (Printf.sprintf "with_root %s: %s" root (Error.render error))
   in
   match (open_root root_a, open_root root_b) with

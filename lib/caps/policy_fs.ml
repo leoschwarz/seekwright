@@ -17,6 +17,12 @@ type t = {
 let default_max_read_bytes = 65_536
 let default_max_entries = 200
 
+(* A local read inside an opened subtree, so the bound is here for a wedged
+   filesystem or a pathological pipe, not for a slow peer — which is why it sits
+   well below the network default in policy_net.ml, and still high enough that
+   ordinary disk contention cannot make it fire. *)
+let default_operation_timeout_seconds = 5.0
+
 let ( / ) = Eio.Path.( / )
 let ( >>= ) = Result.bind
 
@@ -149,7 +155,11 @@ let read_capped flow limit =
   let reader = Eio.Buf_read.of_flow flow ~max_size:(limit + 1) in
   Eio.Buf_read.take_all reader
 
-let read_file ?max_bytes t path =
+(* The two bodies below are the operation logic; the public [read_file] and
+   [list_dir] wrap one in [Controls.run], which is where the time bound, the
+   budget and the audit line come from (§3, §6). Keeping them apart is what stops
+   the bounds from being re-implemented per operation. *)
+let read_file_body t ~max_bytes path =
   let ( let* ) = Result.bind in
   let limit = ceiling ~grant_max:t.max_read_bytes max_bytes in
   let* target = resolve t.root path in
@@ -173,7 +183,7 @@ let read_file ?max_bytes t path =
                     path limit))
       | ex -> classify ex ~path)
 
-let list_dir ?max_entries t path =
+let list_dir_body t ~max_entries path =
   let ( let* ) = Result.bind in
   let limit = ceiling ~grant_max:t.max_entries max_entries in
   let* target = resolve t.root path in
@@ -210,6 +220,18 @@ let list_dir ?max_entries t path =
                     path limit))
         else Ok (List.sort String.compare !found)
       with ex -> classify ex ~path)
+
+let read_file ~controls ?max_bytes t path =
+  Controls.run controls ~operation:"fs.read_file"
+    ~measure:(fun content -> Some (String.length content))
+    (fun () -> read_file_body t ~max_bytes path)
+
+(* [entries=] is a count, so the audit line stays content-free whatever the
+   directory holds; a listing of names would be content, and it is not logged. *)
+let list_dir ~controls ?max_entries t path =
+  Controls.run controls ~operation:"fs.list_dir"
+    ~notes:(fun entries -> [("entries", string_of_int (List.length entries))])
+    (fun () -> list_dir_body t ~max_entries path)
 
 let with_root ~sw ?max_read_bytes ?max_entries ~parent name =
   let ( let* ) = Result.bind in

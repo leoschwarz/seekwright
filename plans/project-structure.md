@@ -23,21 +23,30 @@ repo root, containing two libraries.
 
 ```
 ├── dune-project                 # (lang dune 3.x); generates the two .opam files
-├── mcp-caps.opam                # generated: mcp-kit, eio, yojson, uri (+ eio_main
-│                                #   :with-test for the examples and fs tests);
-│                                #   M3 adds HTTP/TLS deps
+├── mcp-caps.opam                # generated: mcp-kit, eio, uri, yojson, http, cohttp-eio,
+│                                #   ipaddr, domain-name, tls, tls-eio, ca-certs,
+│                                #   mirage-crypto-rng (+ eio_main :with-test for the
+│                                #   examples and the fs tests)
 ├── seekwright.opam              # generated: deps = mcp-caps, cohttp-eio, toml, uri, ...
 ├── lib/
 │   ├── caps/                    # public library mcp-caps (wrapped as Mcp_caps)
 │   │   ├── dune                 # (library (name mcp_caps) (public_name mcp-caps)
-│   │   │                        #   (libraries eio mcp-kit uri yojson)) — no dependency on seekwright
+│   │   │                        #   (libraries eio mcp-kit uri yojson http cohttp-eio
+│   │   │                        #   ipaddr domain-name tls tls-eio ca-certs
+│   │   │                        #   mirage-crypto-rng)) — no dependency on seekwright
 │   │   ├── error.ml / .mli      # structured, safely renderable failures
 │   │   ├── event.ml / .mli      # bounded, content-free policy audit events
-│   │   ├── authority.ml / .mli  # '_kind t plus Fs/Net operations; Proc deferred
+│   │   ├── authority.ml / .mli  # 'kind t GADT (fs, net) + Fs/Net operations, the
+│   │   │                        #   of_confinement that turns a decision into a grant,
+│   │   │                        #   and the generic with_log, with_operation_timeout
+│   │   │                        #   and with_operation_budget; Proc deferred
 │   │   ├── tool.ml / .mli       # ('caps, 'input) Tool.t, schema + decode + Output.t
 │   │   ├── registry.ml / .mli   # add ~grant — the only place a grant meets a tool
-│   │   ├── policy.ml / .mli     # with_root, with_endpoints, with_public_web,
-│   │   │                        #   with_operation_timeout, with_log
+│   │   ├── policy.ml / .mli     # with_root, with_endpoints, with_public_web — the
+│   │   │                        #   confinement decisions, never the grants
+│   │   ├── budget.ml / .mli     # caller-owned atomic call counter the wrappers spend
+│   │   ├── controls.ml / .mli   # audit sink + operation timeout + budget, the shared
+│   │   │                        #   plumbing behind Authority's three wrappers
 │   │   ├── policy_fs.ml / .mli  # private subtree confinement and the byte/entry
 │   │   │                        #   ceilings; its abstract t is what Authority
 │   │   │                        #   cannot forge or widen

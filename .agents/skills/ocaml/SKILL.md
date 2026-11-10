@@ -24,6 +24,10 @@ it factual, dated, and short.
 `dune mcp-kit mcp-kit-eio mcp-kit-cohttp-eio mcp-kit-ppx eio cohttp-eio yojson
 uri alcotest logs toml` — all at mcp-kit 0.2.0 / cohttp(-eio) 6.3.0 / yojson 3.0.0.
 Added for M1: `eio_main` 1.6 (see the M1 section; test and example only).
+Added for M3: `tls-eio`/`tls` 2.1.5, `ca-certs` 1.0.3, `x509` 1.2.0,
+`mirage-crypto-rng`/`mirage-crypto-pk` 2.4.1, `zarith` 1.14 — library
+dependencies of `mcp-caps` now, and see the M3 section for the GMP/`PATH` dance
+they need on this machine.
 
 Gotcha: **`mcp-kit-stdio` is not an opam package.** The stdio adapter ships
 inside `mcp-kit` as the findlib library `mcp-kit.stdio` (module
@@ -256,3 +260,113 @@ Odds and ends: OCaml 5.3 has no `String.drop`; `Atomic.set t v` takes the atomic
 first; Eio 1.6's `Promise` has `await` and `await_exn` but no `await_ok`; dune's
 dev profile turns warning 69 (`unused-field`) into an error, so a test harness
 must not carry a record field only its wrapper reads.
+
+## Verified building M3 (2026-11-10)
+
+The network grant (`lib/caps/policy_net.ml`) and its suite
+(`test/test_authority_net.ml`) are the source of every fact in this section.
+
+Environment — **every build shell needs this**, or zarith (pulled by `tls`) fails
+to link. `libgmp-dev` is absent and `sudo` needs a password, so GMP lives in
+`~/.local/opt/gmp-dev` (see the "TLS stack for M3" section of
+`plans/infra-setup.md`):
+
+```bash
+eval $(opam env --switch=default --set-switch)
+export CPATH=/home/leo/.local/opt/gmp-dev/usr/include:/home/leo/.local/opt/gmp-dev/usr/include/x86_64-linux-gnu
+export LIBRARY_PATH=/home/leo/.local/opt/gmp-dev/usr/lib/x86_64-linux-gnu
+export PKG_CONFIG_PATH=/home/leo/.local/opt/gmp-dev/usr/lib/x86_64-linux-gnu/pkgconfig
+```
+
+Install was `opam install -y --assume-depexts tls-eio ca-certs` (`--assume-depexts`
+because opam's depext pass wants root). Versions now in the switch: `tls-eio` and
+`tls` 2.1.5, `ca-certs` 1.0.3, `x509` 1.2.0, `mirage-crypto-{rng,pk}` 2.4.1,
+`zarith` 1.14, `ipaddr` 5.6.2, `domain-name` 0.5.0.
+
+### cohttp-eio's client, when you supply the connection
+
+- `Cohttp_eio.Client.make_generic : (sw:Eio.Switch.t -> Uri.t ->
+  [> Eio.Resource.close_ty ] Eio.Flow.two_way) -> t`. The `Uri.t` is handed to
+  *your* connector, so a connector that ignores it and returns the socket it
+  already vetted is the whole DNS-rebinding fix — the client never resolves the
+  name again. `Client.call client ~sw ~headers ?body meth uri` then writes that
+  URI on that socket. `set_proxies` is process-global and only feeds `make`, so a
+  `make_generic` client ignores it.
+- The connector's return type is spelled `[ Eio.Flow.two_way_ty |
+  Eio.Resource.close_ty ] Eio.Resource.t` in a **type declaration**: `Eio`'s
+  `two_way` alias cannot be applied to a row there (its own row is bound by an
+  `as` pattern), and `Eio.Resource.t` is contravariant in the tag row, so an open
+  row in the declaration is rejected. cohttp-eio's own `client.ml` spells it the
+  same way. Both an `Eio.Net` stream socket and a `Tls_eio` flow then reach it
+  with `(x :> connection)`.
+- Response **headers** are read by cohttp-eio at `Buf_read.of_flow
+  ~max_size:max_int` — the body ceiling is ours, the header block is only
+  timeout-bounded. That is a known limit, recorded in `policy_net.mli`.
+- Server side, for a fixture: `Cohttp_eio.Server.make ~callback ()` with
+  `callback : conn -> Http.Request.t -> Body.t -> response IO.t`,
+  `conn = Eio.Switch.t * Eio.Net.Sockaddr.stream`. `Http.Request.t` carries
+  `resource` (path **and** query) and no assembled URI — a `Location` has to be
+  built from the `Host` header. `Http.Method.to_string` takes the concrete
+  `Http.Method.t` (no coercion needed).
+
+### TLS (client side only)
+
+- `Ca_certs.authenticator ()` → `(authenticator, [> `Msg of string]) result`;
+  `Tls.Config.client ~authenticator ()` → `(config, [> `Msg of string]) result`;
+  `Tls_eio.client_of_flow config ~host:(`host name) flow` / `~ip:(`ip addr)`.
+  Never `accept_any`. Build the config once, at grant construction, so a missing
+  trust store is a startup failure.
+- **The RNG is process-global and must be installed by the application**
+  (`Mirage_crypto_rng_unix.use_default ()`, from the `mirage-crypto-rng.unix`
+  findlib library inside the `mirage-crypto-rng` package). `tls` throws
+  `Mirage_crypto_rng.No_default_generator` at *handshake* time, not at
+  `Tls.Config.client`, so the check has to call
+  `Mirage_crypto_rng.default_generator ()` — `try Ok () with
+  No_default_generator` is dead code that looks like a guard.
+- `mirage-crypto-rng.unix` pulls stdlib `unix`, so it belongs in example and test
+  stanzas, never in `mcp-caps` (`test/test_core_no_mcp_kit.ml` guards that).
+
+### Eio 1.6 network and time
+
+- A scripted `Eio.Net.t` for tests: `Eio.Net.Pi.network (module M)` where `M`
+  declares **`type tag = [ `Generic ]`** — `type tag = unit` produces
+  `[ `Network | `Platform of unit ] r`, which fails the
+  `[> [> `Generic ] ty]` constraint the real API expects. `connect` can raise
+  instead of returning a socket, which is how a test proves both "refused, so no
+  I/O" and "allowed, and here is the address it asked for".
+- `Eio.Net.getaddrinfo_stream net ~service host` never returns `[]` — an
+  unknown name raises `Address_lookup_failed`. Answers carry
+  `Eio.Net.Ipaddr.v4v6`; go through `Ipaddr` with
+  `Eio.Net.Ipaddr.of_raw (Ipaddr.to_octets ip)` and back.
+- `Eio.Time.Timeout.run` widens the body's error row with `` `Timeout ``, which
+  cannot unify with an abstract error channel, so the shared wrapper uses
+  `Timeout.run_exn` and turns `Eio.Time.Timeout` back into a classified error.
+  `Eio.Cancel.Cancelled` is a *different* exception and keeps propagating, which
+  is what "cancellation must not become a provider failure" needs.
+- Timeouts are measured on a monotonic clock: `Eio.Time.Mono.t`,
+  `Eio.Stdenv.mono_clock env`, `Eio.Time.Timeout.seconds clock s`.
+- `Eio.Promise.create ()` returns `(t, u)`, not `(u, t)`: `Cohttp_eio.Server.run
+  ~stop` wants the `t`, `Eio.Promise.resolve` takes the `u`, `await` the `t`.
+  Getting it backwards is a type error that reads like a naming problem.
+
+### ipaddr and the address table
+
+- `Ipaddr.is_global` is **not** the public-web policy: it calls `fc00::/7`,
+  `128.0.0.0/16`, the whole of `0.0.0.0/8` and the three TEST-NET blocks global.
+  `Policy_net.special_use` is the RFC 6890 table that closes those gaps.
+- A prefix test over `Ipaddr.to_octets` needs the mask on the **high** bits of
+  the partial octet: `(0xff lsl (8 - rest)) land 0xff`. `lsr` silently allows
+  half the range — `fd12:3456::1` got through `fc00::/7` until the test table
+  caught it, so keep one row per boundary (`fc00::1` *and* `fd12:3456::1`).
+
+### OCaml 5.3 stdlib, again
+
+- No `String.rsplit2` (that's `CCStrings`); no `Atomic.modify` (5.5) — a
+  compare-and-set loop. `String.index_from_opt` is what you want for "last
+  colon in a Host header" on 5.3.
+- `Alcotest.fail` takes optional `~here`/`~pos`, so `Format.kasprintf
+  Alcotest.fail fmt` does not typecheck; wrap it:
+  `Format.kasprintf (fun message -> Alcotest.fail message) fmt`.
+- The dev profile's warning 69 (`unused-field`) kills a test fixture record whose
+  fields only the wrapper reads — so make the assertions read them
+  (`method_`, `host`, `body_bytes` in the net fixture).
