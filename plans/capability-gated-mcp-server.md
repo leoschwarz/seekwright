@@ -54,21 +54,26 @@ tool, and the line names the grant.
 
 ## 2. Layout
 
+Root dune workspace (decided in `project-structure.md`); `mcp-caps` is the
+package, `seekwright` comes later and depends on it:
+
 ```
-dune-project
-lib/
-  error.ml        error.mli        Denied | Invalid | Failed
-  authority.ml    authority.mli    Fs, Net, Proc: abstract types, no constructors
-  tool.ml         tool.mli         ('caps, 'a) t and make
-  registry.ml     registry.mli     add ~grant, uniform element type
-  policy.ml       policy.mli       with_root, with_host_allowlist, with_deadline, ...
-  server.ml       server.mli       Registry.t -> Mcp_kit.Server.t
-tools/
-  read_source.ml  search_web.ml
-bin/main.ml
+dune-project                     # (package (name mcp-caps) ...) — generates mcp-caps.opam
+mcp-caps.opam                    # generated, committed, never hand-edited
+lib/caps/                        # (library (name caps) (public_name mcp-caps)) → Mcp_caps
+  error.ml / .mli                # Denied | Invalid | Failed
+  authority.ml / .mli            # Fs, Net, Proc: abstract types, no constructors
+  tool.ml / .mli                 # ('caps, 'a) Tool.t and make
+  registry.ml / .mli             # add ~grant, uniform element type
+  policy.ml / .mli               # with_root, with_host_allowlist, with_deadline, ...
+  server.ml / .mli               # the only module that knows mcp-kit:
+                                 #   Registry.t -> Mcp_kit.Server.t via Server.create/add_tool
+examples/                        # demo server (echo, then gated read_source) —
+                                 #   one Registry.add line per tool, the audit surface;
+                                 #   bin/main.ml belongs to the seekwright package later
 test/
-  dune                           alcotest suites
-  should_not_compile/            dune rule expecting failure
+  dune                           # alcotest suites
+  should_not_compile/            # dune rules expecting failure
 ```
 
 ## 3. The capability model
@@ -126,7 +131,7 @@ val add : t -> ('caps, 'a) Tool.t -> grant:'caps -> t
     coexist in one registry without the grants escaping. *)
 ```
 
-Usage in `bin/main.ml`, which is now the audit surface:
+Usage in the demo server under `examples/`, which is the audit surface:
 
 ```ocaml
 let tools =
@@ -139,9 +144,15 @@ let tools =
 let () =
   let server = Server.of_registry ~name:"example" ~version:"1.0" tools in
   match Sys.getenv_opt "MCP_TRANSPORT" with
-  | Some "http" -> Mcp_kit_cohttp_eio.serve ~port:8787 server
+  | Some "http" -> Mcp_kit_cohttp_eio.handler server  (* cohttp-eio route wiring *)
   | _ -> Mcp_kit_stdio.run_channels server
 ```
+
+(Transport entry points verified against the mcp-kit 0.2.0 README:
+`Mcp_kit.Server.create ~name ~version ()`, then `Mcp_kit.Server.add_tool`
+per tool — `Server.of_registry` folds the registry over `add_tool`, closing
+each tool's handler over its grant. Note the README's "a server value can
+serve concurrent clients": per-session servers are open question 1 below.)
 
 What this buys: a tool cannot read a file unless `Registry.add` was given an
 `Fs.t`; you cannot obtain an `Fs.t` except through a policy constructor; widening
@@ -218,10 +229,13 @@ Because every grant is an abstract record of closures, `with_deadline` and
 
 ## 8. Open questions as spikes
 
-1. **Per-session grants.** `mcp-kit` builds a session per connection. If
-   authority must vary per client, the `Mcp_kit.Server.t` must be built per
-   session, not per process. Confirm this is supported before M2 — the one item
-   that can invalidate the design.
+1. **Per-session grants (blocking M2).** The mcp-kit README states one server
+   value serves concurrent clients, with a session per connection. If authority
+   must vary per client, the `Mcp_kit.Server.t` must be built per connection,
+   not per process. Spike this before M2 — the one item that can invalidate the
+   design. (v1 does not need per-client authority: one deployment, one
+   operator's keys — but the spike decides whether the library can ever offer
+   it.)
 2. **Context threading.** Whether `Registry` can be parameterised by a request
    context, or whether grant-fixing must happen at server construction.
 3. **Inbound header access.** The host allowlist is outbound. If inbound `Host`
@@ -231,10 +245,11 @@ Because every grant is an abstract record of closures, `with_deadline` and
 
 ## 9. Dependencies
 
-OCaml 5.1+ (mcp-kit's floor), dune, `mcp-kit` 0.2.0, `mcp-kit-stdio`,
-`mcp-kit-cohttp-eio`, `eio` 1.6, `cohttp-eio` 6.3.0, `yojson`, `alcotest`,
-`logs`. TLS is the gateway's job, which is also what mcp-kit's own docs
-recommend.
+OCaml 5.1+ (mcp-kit's floor), dune, `mcp-kit` 0.2.0 (the stdio adapter ships
+inside it as the `mcp-kit.stdio` library / `Mcp_kit_stdio` — it is **not** a
+separate opam package), `mcp-kit-cohttp-eio` 0.2.0, `eio`, `cohttp-eio` 6.3.0,
+`yojson`, `alcotest`, `logs`. Exact verified install: `plans/infra-setup.md`.
+TLS is the gateway's job, which is also what mcp-kit's own docs recommend.
 
 ## 10. The honest comparison to the Flix version
 
