@@ -24,4 +24,7 @@ docs/internal/
 .research/
 
 # `.eval/`, `.research/`, `.agents/` are mirrored in `.containerignore`.
-.agents/
+.agents/*
+
+# ocaml-port branch: the project skill is committed; the rest of .agents/ stays ignored
+!.agents/skills/
