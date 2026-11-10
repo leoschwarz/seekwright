@@ -1,0 +1,11 @@
+File "no_grant_label.ml", line 17, characters 2-52:
+17 |   Mcp_caps.Registry.add Mcp_caps.Registry.empty ping
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: This expression has type
+         "grant:unit ->
+         (Mcp_caps.Registry.t, Mcp_caps.Registry.add_error) result"
+       but an expression was expected of type
+         "(Mcp_caps.Registry.t, Mcp_caps.Registry.add_error) result"
+       Hint: Did you forget to provide "()" as argument?
+  Hint: This function application is partial,
+  maybe some arguments are missing.

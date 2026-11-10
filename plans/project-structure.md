@@ -23,7 +23,9 @@ repo root, containing two libraries.
 
 ```
 ├── dune-project                 # (lang dune 3.x); generates the two .opam files
-├── mcp-caps.opam                # generated: mcp-kit, eio, yojson, uri; M3 adds HTTP/TLS deps
+├── mcp-caps.opam                # generated: mcp-kit, eio, yojson, uri (+ eio_main
+│                                #   :with-test for the examples and fs tests);
+│                                #   M3 adds HTTP/TLS deps
 ├── seekwright.opam              # generated: deps = mcp-caps, cohttp-eio, toml, uri, ...
 ├── lib/
 │   ├── caps/                    # public library mcp-caps (wrapped as Mcp_caps)
@@ -36,6 +38,9 @@ repo root, containing two libraries.
 │   │   ├── registry.ml / .mli   # add ~grant — the only place a grant meets a tool
 │   │   ├── policy.ml / .mli     # with_root, with_endpoints, with_public_web,
 │   │   │                        #   with_operation_timeout, with_log
+│   │   ├── policy_fs.ml / .mli  # private subtree confinement and the byte/entry
+│   │   │                        #   ceilings; its abstract t is what Authority
+│   │   │                        #   cannot forge or widen
 │   │   ├── policy_net.ml / .mli # private checked DNS/connect/redirect/response bounds
 │   │   └── server.ml / .mli     # the one module that knows mcp-kit:
 │   │                            #   Registry.t -> Mcp_kit.Server.t; transports in apps

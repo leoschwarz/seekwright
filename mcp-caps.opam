@@ -11,6 +11,7 @@ depends: [
   "eio" {>= "1.6"}
   "yojson" {>= "3.0.0"}
   "uri" {>= "4.0"}
+  "eio_main" {with-test}
   "alcotest" {with-test}
   "odoc" {with-doc}
 ]

@@ -1,25 +1,27 @@
-(** The abstract representation behind ['kind Authority.t].
+(** The abstract grant type, and the operations that ride on it.
 
-    M0 carries the interface only: the operations below answer
-    [Error Unavailable] rather than performing I/O, so nothing in this tree can
-    yet be mistaken for a working grant. [Fs] arrives at M1 and [Net] at M3
-    (plans/capability-gated-mcp-server.md §4, §5). *)
+    [Fs.t] is [Policy.fs_grant] wrapped in the phantom kind, and the two
+    operations are one line each: what a grant can do is decided when it is
+    built, in [policy.ml], which is where an audit starts (§2, §4). See
+    authority.mli for why the type stays constructor-free and for the Eio
+    context the operations need. *)
 
 type fs
 type net
 
-type _ t
+(* There is no [Net] branch yet, and that is the point: with no constructor, no
+   value of type [net Authority.t] exists anywhere, so no tool can be
+   registered with a power this tree cannot build. M3 adds the branch beside
+   [Fs]'s when [Policy] can produce one (§5). *)
+type _ t = Fs : Policy_fs.t -> fs t
 
 module Fs = struct
   type nonrec t = fs t
 
-  let unimplemented feature milestone =
-    Error
-      (Error.make Error.Unavailable
-         ~message:(feature ^ " is implemented at " ^ milestone))
+  let of_confinement decision = Fs decision
 
-  let read_file ?max_bytes:_ _t _path = unimplemented "Authority.Fs.read_file" "M1"
-  let list_dir ?max_entries:_ _t _path = unimplemented "Authority.Fs.list_dir" "M1"
+  let read_file ?max_bytes (Fs grant) path = Policy_fs.read_file ?max_bytes grant path
+  let list_dir ?max_entries (Fs grant) path = Policy_fs.list_dir ?max_entries grant path
 end
 
 module Net = struct

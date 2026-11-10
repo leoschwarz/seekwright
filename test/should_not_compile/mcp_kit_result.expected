@@ -1,0 +1,6 @@
+File "mcp_kit_result.ml", line 13, characters 26-52:
+13 |     ~run:(fun () () -> Ok (Mcp_kit.Tool.text "pong"))
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error: This expression has type "Mcp_kit.Tool.result" = "Mcp_kit__Tool.result"
+       but an expression was expected of type
+         "Mcp_caps.Tool.Output.t" = "Tool.Output.t"
