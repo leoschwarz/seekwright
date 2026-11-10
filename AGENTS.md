@@ -1,5 +1,17 @@
 # AGENTS.md
 
+> **Branch notice (ocaml-port only).** This branch is a **port of seekwright to
+> OCaml**. Everything Python below — `src/`, `tests/`, `docs/`, `tools/`,
+> `pyproject.toml` — is the *existing implementation*, kept as a read-only
+> reference and differential oracle; do not modify it for port work. The port's
+> plans live in `plans/` and are the only editable planning area; they are the
+> authority for the OCaml side: `plans/capability-gated-mcp-server.md` (the
+> `mcp-caps` capability layer over `mcp-kit`), `plans/seekwright-ocaml-port.md`
+> (the P1–P8 port plan) and `plans/project-structure.md` (root dune workspace;
+> packages `mcp-caps` and `seekwright`). New OCaml code lands in `lib/`, `bin/`,
+> `test/` at the root. `VISION.md` remains the spec both implementations steer
+> by; a conflict with it is raised in `plans/`, never resolved by editing it.
+
 Guidance for AI agents working in this repository.
 
 ## Project overview
