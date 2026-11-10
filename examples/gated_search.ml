@@ -46,7 +46,7 @@
 
     {v
     python3 -m http.server 8099 --bind 127.0.0.1
-    ./_build/default/examples/gated_search.exe 127.0.0.1:8099
+    ./_build/default/examples/gated_search.exe http://127.0.0.1:8099
     {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"manual","version":"0"}}}
     {"jsonrpc":"2.0","method":"notifications/initialized","params":{}}
     {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_web","arguments":{"query":"the answer"}}}
@@ -170,7 +170,7 @@ type transport = Transport_stdio | Transport_http of int
 
 let usage () =
   note "usage: gated_search <endpoint> [--http [<port>]] [--max-calls <n>]";
-  note "  endpoint: [scheme://]host[:port], e.g. 127.0.0.1:8099 or https://api.example.com";
+  note "  endpoint: [scheme://]host[:port], e.g. http://127.0.0.1:8099 or https://api.example.com";
   exit 2
 
 let port_of = function

@@ -370,3 +370,24 @@ because opam's depext pass wants root). Versions now in the switch: `tls-eio` an
 - The dev profile's warning 69 (`unused-field`) kills a test fixture record whose
   fields only the wrapper reads — so make the assertions read them
   (`method_`, `host`, `body_bytes` in the net fixture).
+
+## Verified fixing the M3 address-policy gap (2026-11-11)
+
+- `Ipaddr.is_global` (ipaddr 5.6.2) returns **true** for these IPv6 literals even
+  though their low 32 bits name a private/link-local IPv4 destination:
+  `64:ff9b::a9fe:a9fe` and `64:ff9b::10.0.0.1` (NAT64 well-known, RFC 6052),
+  `64:ff9b:1::a9fe:a9fe` (NAT64 local-use, RFC 8215), and `::ffff:0:7f00:1`
+  (IPv4-translated, RFC 2765's `0::ffff:0:a.b.c.d`). `Policy_net.special_use`
+  now carries `64:ff9b::/96`, `64:ff9b:1::/48` and `::ffff:0:0:0/96`.
+- IPv4-*mapped* is different: `is_global` computes scope from the embedded v4, so
+  `::ffff:127.0.0.1` is non-global while `::ffff:93.184.216.34` is global. The
+  mapped range needs no blanket row; the translated prefix gets no such
+  treatment, which is why it needs one.
+- The RFC prefixes are easy to mistype because the textual forms differ by one
+  group: mapped `::ffff:0:0/96` is octets `00*10 ff ff`, while translated is
+  `::ffff:0:0:0/96` = `00*8 ff ff 00 00`; `::ffff:0:7f00:1` matches only the
+  latter. Both spellings parse in ipaddr.
+- `Uri.host` strips the brackets from an IPv6 literal
+  (`http://[64:ff9b::1]/` → `64:ff9b::1`), so a bracketed-literal URL reaches
+  `Policy_net.resolve` as the bare address and a scripted `Eio.Net.t` can answer
+  it under that bare key.

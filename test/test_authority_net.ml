@@ -489,6 +489,12 @@ let address_rows : (string * address_case) list =
     refuses "2001:0::1";
     refuses "::ffff:127.0.0.1";
     allows "::ffff:93.184.216.34";
+    (* NAT64 and the IPv4-translated prefix embed an IPv4 destination in their
+       low 32 bits, and [Ipaddr.is_global] does not look inside them. *)
+    refuses "64:ff9b::a9fe:a9fe";
+    refuses "64:ff9b::10.0.0.1";
+    refuses "64:ff9b:1::a9fe:a9fe";
+    refuses "::ffff:0:7f00:1";
   ]
 
 let public_web_address_table () =
@@ -516,6 +522,52 @@ let public_web_address_table () =
         | Ok response ->
             failf "%s: %s was served a response (status %d)" name testCase.answer response.status))
     address_rows
+
+(* The same smuggled forms as IP-literal URLs, which is the shape §5 is about:
+   an address literal skips DNS, so [satisfies_address] is the only check between
+   the caller and a connect. Each has to be refused as an address, not after a
+   lookup. *)
+let public_web_refuses_smuggled_ip_literals () =
+  let literals =
+    [
+      ("64:ff9b::a9fe:a9fe", "NAT64 well-known, 169.254.169.254");
+      ("64:ff9b::10.0.0.1", "NAT64 well-known, 10.0.0.1");
+      ("64:ff9b:1::a9fe:a9fe", "NAT64 local-use, 169.254.169.254");
+      ("::ffff:0:7f00:1", "IPv4-translated, 127.0.0.1");
+      ("::ffff:0:0a00:0001", "IPv4-translated, 10.0.0.1");
+    ]
+  in
+  List.iter
+    (fun (literal, name) ->
+      Eio_main.run @@ fun env ->
+      Eio.Switch.run @@ fun sw ->
+      let state, net = scripted_net ~answers:[ (literal, [ literal ]) ] () in
+      with_public_web ~net ~sw (fun decision ->
+        let grant = grant_of ~env decision in
+        match request grant (Printf.sprintf "http://[%s]/" literal) with
+        | Error error ->
+            check_kind Error.Denied error;
+            check_one_line error;
+            Alcotest.(check (list address_testable)) (name ^ ": no connection") []
+              (Atomic.get state.connects)
+        | Ok response -> failf "%s: %s was served (status %d)" name literal response.status
+        | exception Simulated address ->
+            failf "%s: %s was allowed, to %s" name literal (show_address address)))
+    literals;
+  (* The literal that really is public passes the same single check, so the rows
+     above prove a refusal of the smuggled forms rather than of IPv6 at all. *)
+  Eio_main.run @@ fun env ->
+  Eio.Switch.run @@ fun sw ->
+  let literal = "2001:4860:4860::8888" in
+  let _state, net = scripted_net ~answers:[ (literal, [ literal ]) ] () in
+  with_public_web ~net ~sw (fun decision ->
+    let grant = grant_of ~env decision in
+    match request grant (Printf.sprintf "http://[%s]/" literal) with
+    | exception Simulated address ->
+        Alcotest.(check address_testable) "the public literal" (`Tcp (eio_address literal, 80))
+          address
+    | Error error -> failf "a public literal was refused: %s" (Error.render error)
+    | Ok response -> failf "a public literal was served (status %d)" response.status)
 
 (* The port policy of [with_public_web] is one rule: the scheme's default port,
    and an explicit port is [with_endpoints]' business. *)
@@ -909,6 +961,8 @@ let () =
           [
             Alcotest.test_case "an unlisted name asks no DNS question" `Quick unlisted_name_asks_nothing;
             Alcotest.test_case "the public-web address table" `Quick public_web_address_table;
+            Alcotest.test_case "smuggled addresses in IPv6 literals" `Quick
+              public_web_refuses_smuggled_ip_literals;
             Alcotest.test_case "the public-web grant uses the scheme's port" `Quick
               public_web_refuses_other_ports;
             Alcotest.test_case "connect uses the vetted answer" `Quick connect_uses_the_vetted_answer;

@@ -296,6 +296,17 @@ let special_use : (string * int) list =
     ("2001::", 32); (* Teredo *)
     ("2002::", 16); (* 6to4 *)
     ("100::", 64); (* discard *)
+    (* Transition prefixes that carry an IPv4 destination in their low 32 bits.
+       An IP literal skips DNS, so the address policy is the only check it meets —
+       and [is_global] calls every one of these global ([64:ff9b::10.0.0.1],
+       [64:ff9b:1::a9fe:a9fe] and [::ffff:0:7f00:1] were all verified global in
+       ipaddr 5.6.2). The IPv4-mapped prefix is handled instead by [is_global],
+       which computes its scope from the embedded v4 address; the IPv4-translated
+       prefix ([0::ffff:0:a.b.c.d], RFC 2765) sits one [ffff] group earlier and
+       gets no such treatment. *)
+    ("64:ff9b::", 96); (* NAT64 well-known prefix, RFC 6052 *)
+    ("64:ff9b:1::", 48); (* NAT64 local-use prefix, RFC 8215 *)
+    ("::ffff:0:0:0", 96); (* IPv4-translated, RFC 2765 *)
   ]
 
 (* [mem_network "100.64.0.0" 10 ip] compares the leading [bits] of the two
