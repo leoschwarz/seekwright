@@ -36,7 +36,14 @@ inside `mcp-kit` as the findlib library `mcp-kit.stdio` (module
 - Make a tool: `Mcp_kit.Tool.make ~description ~input_schema name handler`;
   input is JSON-Schema-validated before the handler runs. PPX alternative:
   `mcp-kit-ppx` with `ppx_deriving_yojson`/`ppx_deriving_jsonschema`.
-- Transports: `Mcp_kit_stdio.run_channels server` (stdio),
+- `Schema.t` is a plain alias for `Yojson.Safe.t`, so a schema can be written by
+  hand or built with `Schema.object_ ~properties ~required ()`.
+- Handler errors: return `Ok (Tool.text …)` for success, `Ok (Tool.error_text
+  …)` for a tool failure (arrives as `isError: true`), and reserve the handler's
+  `Error` channel for JSON-RPC-level problems. A result that does not match the
+  advertised `output_schema` comes back as a JSON-RPC error, not a tool error.
+- Transports: `Mcp_kit_stdio.run_channels server stdin stdout` (stdio, line
+  delimited, creates its own session, stops at EOF),
   `Mcp_kit_cohttp_eio.handler server` (Streamable HTTP; wire it into a
   cohttp-eio route yourself), `Mcp_kit_eio.run_flow` (raw Eio flow).
 - One server value serves concurrent clients; sessions are per connection.
@@ -62,3 +69,43 @@ inside `mcp-kit` as the findlib library `mcp-kit.stdio` (module
 - Commit style: one lowercase line, area first (`plans: …`, `caps: …`).
 - Verify with `eval $(opam env --switch=default) && dune build && dune runtest`
   from the repo root before reporting done.
+
+## Verified building the M0 workspace (2026-11-10)
+
+`dune-project`, `lib/caps/`, `examples/{echo,caps_echo}.ml`, `test/` build and
+pass; both echo servers answer `initialize` → `notifications/initialized` →
+`tools/call` and a modern `server/discover` + `_meta` call over stdio.
+
+- **Dune derives the wrapped module from `(name)`, not `(public_name)`.**
+  `(library (name caps) (public_name mcp-caps))` gives `Caps`. `Mcp_caps` needs
+  `(name mcp_caps)`.
+- With one `(package)` stanza, dune requires the package name to equal the
+  project `(name)`; with two stanzas (`mcp-caps`, `seekwright`) that check is
+  off. A package with no stanzas attached yet (the `seekwright` placeholder)
+  needs `(allow_empty)`.
+- Don't write `(dune (>= 3.11))` in `(depends)`: dune adds the constraint from
+  `(lang dune 3.11)` and the result is `"dune" {>= "3.11" & >= "3.11"}`.
+- `(deps (glob_files ../lib/caps/*.ml))` — one atom, not a list — puts the
+  library sources in a test's sandbox; a `(test)` action's cwd is its own
+  directory, so it reads them as `../lib/caps/…`.
+- The dev profile treats warnings as errors: an unused variable, an unused
+  value not in the `.mli`, or an unused operator binding fails the build.
+- **OCaml 5.3.0 has no `Result.Syntax`.** Use `let ( let* ) = Result.bind` and
+  `let ( >>= ) = Result.bind` in the module that needs them.
+- `Mcp_kit.Schema.check_input_schema` only rejects a schema *document* that is
+  not a JSON object: `{"type":"string"}` passes it. `Schema.require_input_object`
+  is the one that insists the root describes an object, and it **raises**
+  `Invalid_argument` — catch it and turn it into a value when validating a
+  declaration. `Schema.empty_object` is `{"type":"object","properties":{}}`, so
+  it survives that check.
+- `Server.add_tool`'s error has four constructors (`Duplicate_tool` plus three
+  more), so a match on it needs a fallthrough case.
+- An MCP tool name that reaches `Server.of_registry` must be a usable string;
+  the layer accepts `[A-Za-z0-9-_.:]`, which covers `backend:flavour` provider
+  names.
+- Provenance to recheck before any mcp-kit upgrade: the opam-repository entry
+  for `mcp-kit.0.2.0` names Mathias Bourgoin (Nomadic Labs) and
+  `gitlab.com/nomadic-labs/ai-harness/ocaml-mcp`, and that is the archive the
+  checksum pins — but the tree inside that archive describes itself as "Epure
+  Team" / `github.com/epure-team/mcp-kit` (see its `dune-project` and the
+  installed `lib/mcp-kit/opam`). Unexplained; worth an upstream question.

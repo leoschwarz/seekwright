@@ -1,0 +1,12 @@
+(executable
+ (name echo)
+ ; The M0 baseline: an MCP server built directly on mcp-kit, with no capability
+ ; code. The capability plan keeps this path as its fallback, so it stays
+ ; runnable through M4 (plans/capability-gated-mcp-server.md §0, §9).
+ (libraries mcp-kit mcp-kit.stdio))
+
+(executable
+ (name caps_echo)
+ ; The same echo tool registered through mcp-caps, so the layer's own path is
+ ; exercised end to end over a real transport.
+ (libraries mcp-caps mcp-kit mcp-kit.stdio))

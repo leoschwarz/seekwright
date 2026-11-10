@@ -64,6 +64,14 @@ mcp-kit.stdio       0.2.0
 
 ## Notes for the port
 
+- Provenance to recheck before trusting a version further (seen 2026-11-10): the
+  opam-repository entry for `mcp-kit.0.2.0` names Mathias Bourgoin (Nomadic
+  Labs) and `gitlab.com/nomadic-labs/ai-harness/ocaml-mcp`, and the checked
+  archive is that project's `v0.2.0` tag — but the tree inside it describes
+  itself as "Epure Team" / `github.com/epure-team/mcp-kit` (its own
+  `dune-project`, and the `opam` file installed under `lib/mcp-kit/`). The
+  checksum is fine; the self-description is unexplained. Ask upstream before an
+  upgrade widens the trust boundary.
 - mcp-kit 0.2.0 requires OCaml >= 5.1 and dune >= 3.11 — satisfied.
 - Constrain every mcp-kit component to `= 0.2.0` in `dune-project`. An opam
   switch pin, if needed, is a separate environment operation, not a dune stanza.

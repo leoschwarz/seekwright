@@ -1,0 +1,26 @@
+(test
+ (name test_error)
+ (libraries mcp-caps alcotest))
+
+(test
+ (name test_event)
+ (libraries mcp-caps alcotest))
+
+(test
+ (name test_tool)
+ (libraries mcp-caps yojson alcotest))
+
+(test
+ (name test_registry)
+ (libraries mcp-caps alcotest))
+
+; The suite may speak mcp-kit: only the library's own core may not.
+(test
+ (name test_server)
+ (libraries mcp-caps mcp-kit yojson alcotest))
+
+; Reads the library's sources, so they have to be in the build sandbox.
+(test
+ (name test_core_no_mcp_kit)
+ (libraries mcp-caps alcotest)
+ (deps (glob_files ../lib/caps/*.ml)))

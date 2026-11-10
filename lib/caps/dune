@@ -1,0 +1,8 @@
+(library
+ ; The wrapped module is Mcp_caps: dune derives it from the library name, so the
+ ; name carries the underscore spelling of the hyphenated public name.
+ (name mcp_caps)
+ (public_name mcp-caps)
+ ; Only server.ml may import mcp-kit (plans/capability-gated-mcp-server.md §2);
+ ; the transports belong to the application, so mcp-kit.stdio is not here.
+ (libraries eio mcp-kit uri yojson))

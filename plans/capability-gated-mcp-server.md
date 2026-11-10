@@ -97,7 +97,8 @@ lib/caps/                        # (library (name caps) (public_name mcp-caps)) 
   server.ml / .mli               # the only module importing Mcp_kit
 examples/
   dune
-  mcp_kit_echo.ml                # direct fallback baseline, retained through M4
+  echo.ml                        # direct fallback baseline, retained through M4
+  caps_echo.ml                   # registry echo with ~grant:(); built at M0
   main.ml                        # registry echo + gated read_source; the audit surface
 test/
   dune                           # alcotest suites
@@ -215,6 +216,14 @@ val add :
 No-capability tools use `~grant:()`. The `'caps` existential is packed only after
 the grant and tool have been paired; it must not escape into the registry type.
 
+Verified at M0: once `add` closes the grant *and* the decoder over `run`, the
+stored entry needs no existential packaging at all — its handler is
+`Yojson.Safe.t -> (Tool.Output.t, Error.t) result`, a type that mentions no
+application type. `registry.mli` keeps `entry` abstract and exposes `entry_call`
+plus the metadata accessors, which is all `Server` needs. A decoder refusal
+after the schema passed becomes `Error.Invalid`, so it reaches the caller as a
+tool result with `isError`, never as a JSON-RPC failure.
+
 ```ocaml
 (* server.mli *)
 type build_error =
@@ -232,6 +241,14 @@ per-request errors. The adapter maps `Output.text` to `Mcp_kit.Tool.text` plus
 `structured_content`, and maps `run` errors to `Mcp_kit.Tool.error_text` using
 only the sanitized message.
 
+Verified at M0: `Mcp_kit.Schema.check_input_schema` only rejects a schema
+*document* that is not a JSON object, so `{"type":"string"}` passes it.
+`Schema.require_input_object` is the check that insists the root describes an
+object, and it raises `Invalid_argument` — declaration validation catches that
+and returns `Invalid_declaration` rather than letting the exception escape.
+mcp-kit keeps the output-schema contract: a result that does not match an
+advertised `output_schema` is a JSON-RPC error, not an `isError` result.
+
 ## 4. Filesystem policy: real confinement, not string normalisation
 
 `Policy.with_root` does **not** chroot the process. It opens an Eio subtree and
@@ -242,6 +259,16 @@ val with_root :
   sw:Eio.Switch.t -> _ Eio.Path.t -> string ->
   (fs Authority.t, Error.t) result
 ```
+
+Open for M1, noticed at M0: `authority.mli` deliberately exports no constructor,
+and dune shows a module nothing beyond its siblings' `.mli` files, so `Policy`
+cannot build the value `Authority` keeps abstract. Decide this before writing
+`with_root`. The candidates are (a) construct the grants inside `authority.ml`
+and re-export the constructors from `policy.ml`, or (b) expose one clearly
+labelled constructor on `Authority` that takes the subtree handle — the handle
+is what confines the grant, so passing it in cannot widen one. Anything reachable
+by `Policy` is reachable by a caller, so this is a choice between two audit
+stories, not a free option.
 
 The base path is operator-supplied (typically under `Eio.Stdenv.fs env`). Open it
 with `Eio.Path.open_subtree ~sw` and keep the switch alive for the server. Tool
@@ -344,6 +371,11 @@ val with_operation_timeout :
 val with_log :
   sink:(Event.t -> unit) -> 'kind Authority.t -> 'kind Authority.t
 ```
+
+Verified at M0: these two decorators are declared when they are implemented, not
+before. An endo-function on an abstract grant can always be written as the
+identity, so a stub would compile, match the signature, and promise a bound it
+never applies.
 
 An operation timeout is not a whole-tool deadline: several sequential operations
 each get their own bound. `Event.t` contains constant operation names and bounded
@@ -463,6 +495,20 @@ Every milestone runs `opam exec -- dune build @install` and
 | M3 | `Net`, endpoint/public-web policies, operation timeout, logging | DNS-to-connect binding and HTTPS verification tests pass; redirect/body/time bounds hold; no unimplemented HTTPS path is called complete |
 | M4 | Reusable docs, examples, pinned live conformance | Installable public interfaces documented; threat boundary and grant retention stated; exact applicable scenario baseline green; fallback still builds as an M0-style example |
 
+**M0 landed 2026-11-10.** `dune-project` (two package stanzas; `seekwright` is
+`(allow_empty)` until P1), `lib/caps/` carrying the §3 signatures — `Authority`
+and `Policy` answer `Error Unavailable` naming the milestone that implements
+them, rather than handing back an unconstrained grant — `examples/echo.ml`
+(direct mcp-kit, the fallback path) and `examples/caps_echo.ml` (the same tool
+through `Registry.add ~grant:()` and `Server.of_registry`), and six alcotest
+suites. Both echo paths answer the legacy
+`initialize` / `notifications/initialized` / `tools/list` / `tools/call`
+transcript and a modern `server/discover` + `_meta` call over stdio; a rejected
+input arrives as `isError`, an unknown tool as a JSON-RPC error. The core
+signatures were built alongside M0 rather than at M1, so M1's own exit criterion
+(typed decode/output/error behaviour, `Fs`, `with_root`, `read_source`) is still
+open.
+
 Implementation order inside M1 is core-with-echo first, then `Fs`; this isolates
 existential/adapter type errors from filesystem security errors. `Proc` is a
 post-M4 addition with executable allowlisting, no shell, explicit environment,
@@ -472,7 +518,10 @@ cleanup. Do not add it speculatively.
 ## 10. Dependency and compatibility policy
 
 Use OCaml >= 5.1, dune >= 3.11, and exact `= 0.2.0` dependencies for every
-mcp-kit component in `dune-project`. Dune package constraints pin the dependency
+mcp-kit component in `dune-project`. Verified at M0: the stdio adapter is the
+`mcp-kit.stdio` findlib library shipped inside the `mcp-kit` package, not an opam
+package of its own, so the exact `mcp-kit` constraint is what pins it, and an
+executable asks for it with `(libraries mcp-kit.stdio)`. Dune package constraints pin the dependency
 version; an opam switch pin is a separate environment operation, not a dune
 stanza. Keep the installed core/adapter versions in lockstep. Recheck the public
 interfaces and conformance evidence before any upgrade rather than accepting a

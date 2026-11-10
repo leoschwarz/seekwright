@@ -28,8 +28,8 @@ repo root, containing two libraries.
 ├── dune                         # root: (dirs lib bin tools test plans) — _build ignored
 ├── lib/
 │   ├── caps/                    # public library mcp-caps (wrapped as Mcp_caps)
-│   │   ├── dune                 # (library (name caps) (public_name mcp-caps)
-│   │   │                        #   (modules ...)) — no dependency on seekwright
+│   │   ├── dune                 # (library (name mcp_caps) (public_name mcp-caps)
+│   │   │                        #   (libraries eio mcp-kit uri yojson)) — no dependency on seekwright
 │   │   ├── error.ml / .mli      # structured, safely renderable failures
 │   │   ├── event.ml / .mli      # bounded, content-free policy audit events
 │   │   ├── authority.ml / .mli  # '_kind t plus Fs/Net operations; Proc deferred
@@ -114,6 +114,13 @@ installed binary is `seekwright`, matching the Python entry point. Inside
 never refers back, which is what keeps the fallback (dropping the layer) a
 `seekwright`-side change.
 
+Verified at M0, three mechanics details the sketch above leaves open:
+dune derives the wrapped module from the library's `(name)`, not its
+`public_name`, so the layer needs `(name mcp_caps)` to be `Mcp_caps`; with a
+single `(package)` stanza dune requires it to equal the project `(name)`, which
+the two stanzas above sidestep; and the `seekwright` package needs
+`(allow_empty)` until P1 attaches its first library to it.
+
 `mcp-caps` is the public name future MCP servers will depend on, so it is the
 one name worth getting right; `mcp-kit` sets the local precedent (hyphenated,
 short, noun). Alternatives considered: `mcp-policy`, `capmcp` — rejected as
@@ -124,3 +131,10 @@ either too generic or against the hyphenation norm.
 1. Whether `tools/surface.ml` should emit the exact format `tools/surface.py`
    prints (so the manifests diff clean) or its own format with a mapping —
    prefer exact-format, decide at P8.
+2. The tree above puts `tools/surface.ml` in the same root directory as the
+   frozen Python `tools/` (`surface.py`, `egress_lists.py`, `value_sets.json`).
+   The branch notice makes that directory read-only, so the OCaml instrument
+   cannot land there without editing the oracle. Decide at P8: give it its own
+   directory, fold it into `bin/`, or leave the Python one as the only printer
+   and diff against its output. Found at M0, where the collision was harmless
+   because dune ignores a directory with no `dune` file in it.
