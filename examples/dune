@@ -17,4 +17,14 @@
  ; transport loop has to run inside the Eio loop that opened the subtree.
  ; eio_main is the loop runner and belongs to the example, not to mcp-caps: the
  ; library stays runnable from an application that picks its own loop.
- (libraries mcp-caps mcp-kit mcp-kit.stdio eio eio_main))
+ ; The same server value also serves Streamable HTTP (M2), and the Cohttp-Eio
+ ; transport is linked here for the same reason the loop is: transports belong to
+ ; the application, never to mcp-caps (plans/capability-gated-mcp-server.md §7).
+ (libraries
+  mcp-caps
+  mcp-kit
+  mcp-kit.stdio
+  mcp-kit-cohttp-eio
+  cohttp-eio
+  eio
+  eio_main))

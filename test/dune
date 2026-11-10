@@ -38,3 +38,23 @@
 (test
  (name test_grant_wiring)
  (libraries mcp-caps mcp-kit yojson alcotest eio eio_main unix))
+
+; M2: the same server over Streamable HTTP. This is the only place in the tree
+; that runs a cohttp-eio listener and a client, and it uses real loopback TCP
+; because that is what the adapter's own bounds (body size, routing headers,
+; Origin) are only observable through.
+(test
+ (name test_http_transport)
+ (libraries
+  mcp-caps
+  mcp-kit
+  mcp-kit.stdio
+  mcp-kit-cohttp-eio
+  cohttp-eio
+  http
+  yojson
+  uri
+  eio
+  eio_main
+  alcotest
+  unix))

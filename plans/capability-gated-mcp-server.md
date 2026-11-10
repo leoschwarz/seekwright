@@ -409,8 +409,11 @@ another fiber. Operation timeouts still apply after retention, but v1 does not
 revoke per-request authority or impose per-request budgets because registration
 closes over one server-lifetime grant and mcp-kit owns its sessions internally.
 Per-session/request grant factories require an mcp-kit request-construction hook
-and a real use case; they are not promised by this plan. OxCaml uniqueness and
-locality modes are out of scope, not a substitute for that missing lifecycle.
+and a real use case; they are not promised by this plan. (Read at M2: the
+per-connection half is available without any mcp-kit change, through
+`Cohttp_eio.Server.callback`; the per-request half is not — see the M2 spike in
+§7.) OxCaml uniqueness and locality modes are out of scope, not a substitute for
+that missing lifecycle.
 
 ## 7. Transport and lifecycle contract
 
@@ -442,12 +445,79 @@ limit explicitly in the example. Inbound `Host` policy is application/gateway
 code, not the outbound `Net` authority; inspect the request at the surrounding
 Cohttp route when seekwright ports its Host allowlist.
 
+Verified through the real adapter at M2 rather than read off the mli, and
+exercised by `test/test_http_transport.ml`, so none of it gets re-written here:
+a body over `~max_body_size` is a 413 with an empty body and is never parsed; a
+`~max_body_size` outside `1 … pred max_int` is an `Invalid_argument` at handler
+construction. A modern request needs `Content-Type: application/json` and an
+`Accept` that names both `application/json` and `text/event-stream`, plus
+`MCP-Protocol-Version` equal to `params._meta["io.modelcontextprotocol/protocolVersion"]`,
+`Mcp-Method` equal to the JSON-RPC method, and `Mcp-Name` equal to `params.name`
+for `tools/call`, `prompts/get` and `resources/read`; a mismatch is HTTP 400 with
+JSON-RPC -32020 and a missing protocol block is -32602, while a tool refusal is a
+result and stays a 200. A schema property annotated `x-mcp-header` must also
+arrive as an `Mcp-Param-<name>` header matching the argument — the adapter
+derives that check from the input schema, so a widened schema can tighten the
+wire contract with no server-code change. `GET`, `DELETE` and every other method
+are 405. An `Origin` header is refused 403 unless it is in `~allowed_origins`
+(default: none), the connection is then closed with `Rejected_origin` reported to
+`Cohttp_eio.Server.run`'s `on_error`, and a request that sends no `Origin` is
+unaffected — the allowlist is browser protection, not authentication, which is
+where the Python server's Host allowlist stands too. A server with HTTP
+subscriptions enabled needs a `~clock` or handler construction raises, and that
+clock is also what drives 15-second SSE keepalives.
+
 mcp-kit 0.2.0's HTTP adapter dispatches on the shared server and does not expose
 a callback to build authority per session. This is compatible with v1's
 server-lifetime policy. Cancellation notifications and arbitrary handler
 cancellation are not threaded through classic tool callbacks either, so only
 Eio cancellation plus authority operation bounds may be claimed; no whole-handler
 cancellation guarantee.
+
+**M2 spike (resolved 2026-11-10): can a `Server.t` be built per connection, so a
+grant could vary per client?** Read from the installed 0.2.0 sources, and now
+pinned by `test/test_http_transport.ml`:
+
+- Not through mcp-kit. `Mcp_kit_cohttp_eio.handler ~max_body_size server` closes
+  over one `Mcp_kit.Server.t` chosen at handler-construction time, and the cohttp
+  callback it builds is `fun _conn request body -> …` — the connection argument
+  is discarded, so there is no per-connection hook, let alone a per-request one.
+- Nothing about the type forbids per-connection construction. `Mcp_kit.Server.t`
+  is an immutable record (`info`, the four registration lists, `subscriptions`,
+  `subscription_hub`); `add_*` returns a copy, and only `create` allocates a hub,
+  which copies share. `Server.of_registry` is a fold of `add_tool`, so it costs
+  list appends and no I/O — cheap for a tool surface this size, and still a cost
+  per accepted connection.
+- The hook exists one layer down, and using it reimplements nothing.
+  `Cohttp.Generic.Server.S` exports `callback : t -> IO.conn -> IO.ic -> IO.oc ->
+  unit IO.t`, which is the per-connection driver `Cohttp_eio.Server.run` hands a
+  connection to. An application that runs its own accept loop — `Eio.Net.run_server`,
+  which `Server.run` wraps thinly — can choose which `handler` value owns that
+  connection. `one_listener_can_route_connections_to_different_grants` does
+  exactly that: one listening socket, two servers, two filesystem grants, one
+  connection each, and the library still owns the body bound, the routing
+  headers, and the Origin check.
+- What that choice cannot be based on is the request. At accept time the only
+  fact about the caller is its address, so per-client authority is
+  per-connection authority keyed on transport-level identity — a port per
+  policy, a TLS client certificate, or a header a gateway adds, which would mean
+  parsing the request before the adapter does. Deciding it per tool-call would
+  mean duplicating the adapter's validation, and the paragraph above refuses
+  that.
+- The reason no per-connection state exists today is that the HTTP path is
+  stateless: the adapter dispatches legacy bodies with `Server.dispatch_string`
+  and modern ones with `dispatch_http_json_frames`, both on the shared value, and
+  never calls `create_session`. A `session` is `{ server; mutable phase }` —
+  unsynchronised mutable state, so it must never be shared across connections;
+  stdio's `run_channels` makes exactly one per call, which is why the legacy
+  initialize/initialized lifecycle is enforced over stdio and absent over HTTP
+  (`stdio_enforces_the_legacy_lifecycle_and_http_does_not`).
+- So v1 keeps server-lifetime grants, and the honest way to vary them today is
+  one listener per policy. The upstream ask, if per-client authority ever becomes
+  a goal rather than a non-goal (§0), is a `handler` that takes the server as
+  `conn -> request -> Mcp_kit.Server.t` or exposes its callback so an application
+  can compose per-connection dispatch without re-writing the validation. Revisit
+  at M3, where the `Net` grant makes caller identity concrete.
 
 ## 8. Testing and acceptance
 
@@ -492,7 +562,13 @@ cancellation guarantee.
   bounded-streaming, header, and redaction contracts in section 5.
 - **Concurrency.** Interleaved HTTP requests cannot mix grants, output, policy
   counters (if added later), or log events. One denied/slow/timed-out operation
-  does not poison another request.
+  does not poison another request. M2 has the grant-sharing half of this:
+  `concurrent_clients_do_not_mix_answers` runs a read and a refusal
+  simultaneously on one listener with one grant, and each answer stays itself;
+  `two_listeners_do_not_share_a_grant` and
+  `one_listener_can_route_connections_to_different_grants` pin which shapes do
+  and do not vary a grant. The slow/timed-out half waits for M3, where the
+  timeouts live.
 
 ### Negative compilation that cannot pass for the wrong reason
 
@@ -540,6 +616,16 @@ valid OCaml and is not a negative case.
 - Include the legacy initialize/initialized lifecycle if the example advertises
   it, and test body-size/routing-header boundaries through the actual HTTP
   adapter.
+
+Landed at M2: the seven-body legacy transcript is replayed over a stdio session
+and over a loopback HTTP POST and compared as JSON (every answer byte-identical;
+the notification is the only divergence — no line on stdio, an empty 204 over
+HTTP), a modern `tools/call` is replayed over both with the routing headers the
+adapter requires, and the body-size, `MCP-Protocol-Version`/`Mcp-Method`/
+`Mcp-Name`, `Content-Type`/`Accept`, Origin and method boundaries are exercised
+through the adapter rather than around it. Still open here: the decoder/tool-error
+and unknown-tool cases over HTTP (pinned at M1 through the in-process dispatch),
+clean-EOF behaviour, and the pinned official runner, which stays M4.
 - Pin `@modelcontextprotocol/conformance@0.2.0-alpha.11` and Node 22 for the live
   job. Record the exact scenario IDs and results, fail on runner errors, and
   compare against a checked-in baseline with no unexpected missing/extra IDs.
@@ -605,6 +691,38 @@ isolate the existential/adapter type errors from the filesystem ones. `Proc` is 
 post-M4 addition with executable allowlisting, no shell, explicit environment,
 working-directory policy, stdin/stdout/stderr caps, timeout, and process-group
 cleanup. Do not add it speculatively.
+
+**M2 landed 2026-11-10.** `examples/read_source.ml` now speaks two transports
+from one `build`: stdio by default, Streamable HTTP on loopback with `--http
+[<port>]`, where the listener is registered on the same `Eio.Switch.t` that owns
+the subtree, `Mcp_kit_cohttp_eio.handler ~max_body_size` is wired in with the
+body limit named in the example (1 MiB, the library default, pinned so an
+upstream default change becomes a visible diff), and `on_error` renders
+`Rejected_origin` as a named stderr event rather than an exception dump. The
+same seven legacy JSON-RPC bodies answered byte-identically over both
+transports, run against the binary and asserted in
+`test/test_http_transport.ml` (`same_transcript_stdio_and_http`); the
+initialized notification is the only divergence — no line on stdio, an empty
+204 over HTTP — and it is framing. A modern `tools/call` answers the same JSON
+over both once the HTTP routing headers are supplied
+(`a_modern_call_answers_the_same_way_over_both_transports`).
+`test/test_http_transport.ml` is the tree's only cohttp-eio listener and client
+(ephemeral loopback port, `Eio.Net.listening_addr` to learn it, `~stop` promise
+to close it, because `Eio.Switch.run` waits for the fibers it registered): 11
+cases, covering the two-transcript parity, the adapter's body bound (413, empty
+body, nothing parsed), its routing-header checks (400 with JSON-RPC -32020 on a
+wrong `Mcp-Method`), its Origin allowlist (403, `Rejected_origin` in `on_error`,
+and 405 rather than 403 once the Origin is listed) and method gate, two
+listeners with two roots that cannot see each other's file, concurrent clients
+on one listener that do not mix answers, and — for the open question in §7 —
+one listening socket that hands different connections to different grants
+through `Cohttp_eio.Server.callback`. mcp-kit owns every one of those checks;
+the layer adds none of them. `dune-project` gains
+`mcp-kit-cohttp-eio`, `cohttp-eio` and `http` as `:with-test` package
+dependencies, matching how `eio_main` is handled: transports belong to
+examples and tests, never to `mcp-caps` (§10). Neither inbound TLS nor a wider
+Host allowlist belongs to the example; both stay gateway/application policy,
+and seekwright's Host port is P8 work at the surrounding route.
 
 ## 10. Dependency and compatibility policy
 

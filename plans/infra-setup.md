@@ -85,6 +85,17 @@ opam install -y eio_main     # 1.6; pulled in eio_linux, eio_posix, iomux, uring
   there is no opam package by that name to resolve, so the test stanzas ask for
   it in `test/dune` and the generated `mcp-caps.opam` stays installable.
 
+## Nothing new for M2 (2026-11-10)
+
+Streamable HTTP on loopback was already installable from the M0 package set:
+`mcp-kit-cohttp-eio` 0.2.0 needs no TLS stack, and `cohttp-eio` pulls `http`
+(v6.3.0) and `ipaddr` in as its own dependencies. `dune-project` now names
+`mcp-kit-cohttp-eio`, `cohttp-eio` and `http` as `(… :with-test)` for
+`mcp-caps`, because the example and the HTTP suite are the only stanzas that
+link a transport (plans/capability-gated-mcp-server.md §7, §10) — and at
+`(lang dune 3.11)` a dependency entry takes a flag or a version constraint, not
+both, so these carry no `= 0.2.0` and ride the switch.
+
 ## Notes for the port
 
 - Provenance to recheck before trusting a version further (seen 2026-11-10): the
