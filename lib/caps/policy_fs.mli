@@ -21,6 +21,13 @@ val default_max_read_bytes : int
 val default_max_entries : int
 (** The directory-entry ceiling likewise. *)
 
+val default_operation_timeout_seconds : float
+(** The whole-operation bound an [Fs] grant carries when the operator does not
+    choose one (§5's "one total operation timeout" applied to a local read). It
+    is far shorter than the network default: a read inside an opened subtree is
+    local I/O, and a bound that only fires on a wedged filesystem or a pathological
+    pipe needs to be small to be worth having. *)
+
 val with_root :
   sw:Eio.Switch.t ->
   ?max_read_bytes:int ->
@@ -35,9 +42,11 @@ val with_root :
     is not itself confined — it defines the confinement. [sw] must outlive every
     server that can serve a tool holding the grant. *)
 
-val read_file : ?max_bytes:int -> t -> string -> (string, Error.t) result
+val read_file : controls:Controls.t -> ?max_bytes:int -> t -> string -> (string, Error.t) result
 (** The operation behind [Authority.Fs.read_file]; see that interface for the
-    contract. *)
+    contract. [controls] is not optional on purpose: it is where the operation's
+    time bound, budget and audit event come from, and a call site that can name
+    no controls is a call site that has not decided them (§3, §6). *)
 
-val list_dir : ?max_entries:int -> t -> string -> (string list, Error.t) result
+val list_dir : controls:Controls.t -> ?max_entries:int -> t -> string -> (string list, Error.t) result
 (** The operation behind [Authority.Fs.list_dir]. *)

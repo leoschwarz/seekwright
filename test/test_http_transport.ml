@@ -160,7 +160,7 @@ let build_server ~sw env ~root =
   match Policy.with_root ~sw ~parent:(Eio.Stdenv.fs env) root with
   | Error error -> Alcotest.failf "with_root %s: %s" root (Error.render error)
   | Ok confinement ->
-      let grant = Authority.Fs.of_confinement confinement in
+      let grant = Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement in
       let ( >>= ) = Result.bind in
       match
         Registry.add Registry.empty ping ~grant:()

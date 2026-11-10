@@ -42,10 +42,32 @@
   ; here; the exact pin that matters is mcp-kit's own, above.
   (mcp-kit-cohttp-eio
    :with-test)
+  ; M3: the network grant. These are library dependencies of mcp-caps itself,
+  ; not test-only: outbound https behind a Net grant is the library's job
+  ; (plans/capability-gated-mcp-server.md §5, "an http-only implementation is not
+  ; a completed M3"). The versions are the ones the switch carries
+  ; (plans/infra-setup.md), chosen as "at least" rather than exact pins because
+  ; unlike mcp-kit none of them owns a wire contract we reproduce.
   (cohttp-eio
-   :with-test)
+   (>= 6.0))
   (http
-   :with-test)
+   (>= 6.0))
+  (ipaddr
+   (>= 5.5))
+  (domain-name
+   (>= 0.4))
+  (tls
+   (>= 2.0))
+  (tls-eio
+   (>= 2.0))
+  (ca-certs
+   (>= 1.0))
+  (mirage-crypto-rng
+   (>= 1.5))
+  ; Installing a random generator is the application's job, and doing it uses the
+  ; [mirage-crypto-rng.unix] findlib library inside the package above; that is
+  ; why the library itself only names the package, never the unix sublibrary
+  ; (§5, policy_net.ensure_rng).
   (alcotest
    :with-test)))
 

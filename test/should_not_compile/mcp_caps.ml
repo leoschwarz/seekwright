@@ -6,6 +6,8 @@
     fail with [Unbound module], which is a loud failure, not a silent pass. *)
 
 module Authority = Authority
+module Budget = Budget
+module Controls = Controls
 module Error = Error
 module Event = Event
 module Policy = Policy

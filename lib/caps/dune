@@ -5,4 +5,26 @@
  (public_name mcp-caps)
  ; Only server.ml may import mcp-kit (plans/capability-gated-mcp-server.md §2);
  ; the transports belong to the application, so mcp-kit.stdio is not here.
- (libraries eio mcp-kit uri yojson))
+ ;
+ ; M3's network grant brings the rest: [http]/[uri] for the message model,
+ ; [cohttp-eio] for the client whose connector we supply, [ipaddr] and
+ ; [domain-name] for the address and hostname decisions, and [tls]/[tls-eio]/
+ ; [ca-certs] for outbound https — the outbound half is ours even when an
+ ; inbound TLS gateway is someone else's (§5). [mirage-crypto-rng] is named only
+ ; to *detect* a missing generator at construction; installing one is the
+ ; application's job, and the package that installs one (mirage-crypto-rng.unix)
+ ; is deliberately absent here — it pulls stdlib unix, which test_core_no_mcp_kit
+ ; keeps out of this library.
+ (libraries
+  eio
+  mcp-kit
+  uri
+  yojson
+  http
+  cohttp-eio
+  ipaddr
+  domain-name
+  tls
+  tls-eio
+  ca-certs
+  mirage-crypto-rng))

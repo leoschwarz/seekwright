@@ -1,6 +1,8 @@
-File "grant_type_mismatch.ml", line 18, characters 80-82:
-18 | let registry = Mcp_caps.Registry.add Mcp_caps.Registry.empty read_source ~grant:()
-                                                                                     ^^
-Error: The constructor "()" has type "unit"
+File "grant_type_mismatch.ml", line 24, characters 67-76:
+24 |   Mcp_caps.Registry.add Mcp_caps.Registry.empty read_source ~grant:net_grant
+                                                                        ^^^^^^^^^
+Error: The value "net_grant" has type
+         "Mcp_caps.Authority.Net.t" = "Authority.net Authority.t"
        but an expression was expected of type
          "Mcp_caps.Authority.Fs.t" = "Authority.fs Authority.t"
+       Type "Authority.net" is not compatible with type "Authority.fs"

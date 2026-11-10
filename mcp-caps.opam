@@ -13,8 +13,14 @@ depends: [
   "uri" {>= "4.0"}
   "eio_main" {with-test}
   "mcp-kit-cohttp-eio" {with-test}
-  "cohttp-eio" {with-test}
-  "http" {with-test}
+  "cohttp-eio" {>= "6.0"}
+  "http" {>= "6.0"}
+  "ipaddr" {>= "5.5"}
+  "domain-name" {>= "0.4"}
+  "tls" {>= "2.0"}
+  "tls-eio" {>= "2.0"}
+  "ca-certs" {>= "1.0"}
+  "mirage-crypto-rng" {>= "1.5"}
   "alcotest" {with-test}
   "odoc" {with-doc}
 ]

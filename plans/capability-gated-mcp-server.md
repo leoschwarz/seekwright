@@ -284,6 +284,15 @@ witness abstract the audit answer is one grep, which is what
 `test/should_not_compile/` holds open. Either way this is a design-time and audit
 boundary, not a sandbox (§0).
 
+Read at M3: the `Net` branch arrived with the same seam —
+`Authority.Net.of_confinement ~mono_clock ?controls decision` — and `Authority`'s
+`_ t` is a GADT over two empty-variant kind tags (`fs`, `net`) with `Fs`/`Net`
+submodules whose `t` is `nonrec`. The grant's `request`/`response` records are
+*destructive* aliases of `Policy_net`'s (`type request = Policy_net.request = {…}`):
+a restated record would be a second nominal type, and a value built for one would
+not be accepted by the other's operations. `confinement_is_not_a_grant.ml` is the
+new guard: registering the decision rather than the grant is a type error.
+
 The base path is operator-supplied (typically under `Eio.Stdenv.fs env`). Open it
 with `Eio.Path.open_subtree ~sw` and keep the switch alive for the server. Tool
 paths are root-relative; reject absolute paths and `..` for a clear API, but do
@@ -336,6 +345,31 @@ routable unicast IP destinations, with loopback/private/link-local/multicast/
 unspecified/special-use addresses, IPv4-mapped IPv6 variants, and non-default or
 explicitly disallowed ports denied according to one documented policy.
 
+**Landed 2026-11-10, in two shapes.** The constructors take no clock and return
+the confinement *decision* — `(Policy_net.t, Error.t)`, exactly the `with_root`
+shape §4 settled — because the monotonic clock belongs to the grant, not to the
+allowlist: `Authority.Net.of_confinement ~mono_clock` is where the clock and the
+kind's default per-operation bound enter, and `Eio.Time.Timeout.t` measures a
+deadline on a monotonic clock so an NTP step or a VM resume cannot move every
+deadline at once. A `clock:_ Eio.Time.clock` argument on the constructor would
+have put a wall clock in a value whose only use for it is a timeout. `Policy_net.t`
+is an existential (`T : 'tag confinement -> t`) because `Eio.Net.t` is
+parameterised by the backend's resource tag, which a record type cannot bind.
+
+The two constructors are two *trust models*, not two spellings of one check, and
+that asymmetry is deliberate (§5's "one documented policy" is two documented
+policies): `with_endpoints` pins **names**, so an operator who lists
+`searxng.internal` or `127.0.0.1` has decided that destination is reachable and
+this layer's job is only to make the connection really go to what that name
+resolves to — which is how a self-hosted provider on a private network works at
+all, and why a loopback test server is an ordinary `with_endpoints` fixture.
+`with_public_web` decides **addresses**: every answer must be globally routable
+unicast, outside `Policy_net.special_use`. `Ipaddr.is_global` alone is not that
+policy — it calls `fc00::/7`, `128.0.0.0/16`, the whole of `0.0.0.0/8` and the
+TEST-NET blocks global — so the table is hand-rolled over RFC 6890 and
+`to_octets`, and the IPv6 unique-local row is what proved the table's prefix mask
+keeps the *high* bits of the partial octet (`fd12:3456::1` was being allowed).
+
 For both constructors:
 
 - Resolve and validate on each new connection. Pass one of those **same vetted
@@ -352,6 +386,13 @@ For both constructors:
 - Treat caller `max_response_bytes` as a further restriction, not an override.
   Stream with a hard decoded-byte cap and abort when it is exceeded; a
   `Content-Length` precheck is only an optimization.
+  (Read at M3: the body cap is exact — `Eio.Buf_read.of_flow ~max_size:(limit+1)`,
+  refused rather than truncated, no `Content-Length` consulted. The response
+  *header* block is the one bound in `Net` that is timeout-bounded rather than
+  byte-bounded: `Cohttp_eio.Client` reads it at `max_size:max_int`, and closing
+  that gap means capping at the flow level. Recorded in `policy_net.mli` as a
+  known limit rather than fixed by patching upstream in a milestone that did not
+  ask for it.)
 - Apply a total operation timeout with `Eio.Time.Timeout`, covering DNS, connect,
   TLS, headers, and body. Use the per-request `Switch.t` required by Cohttp-Eio
   and close flows/resources on every result path.
@@ -397,6 +438,32 @@ metadata, never secrets or content; the application supplies the stderr sink.
 Do not add a generic operation budget until there is a genuine request/factory
 scope. A counter stored in a server-lifetime grant is a server-lifetime budget,
 not a per-request one.
+
+**Read at M3, resolved.** What landed is the shape that sentence permits and not
+the one it refuses: `Authority.with_operation_budget : Budget.t -> 'kind t ->
+'kind t` where `Budget.t` is an atomic counter the *caller* makes (`Budget.make n`)
+and hands over, so the thing that runs out has the caller's scope while the grant
+stays a server-lifetime value carrying no counter of its own. It is spent once per
+operation and a spent budget refuses with `Denied` before any I/O, which is what
+makes the ceiling observable at the far end. What the counter bounds is the
+*count* of operations, never their cost: a 1-byte read and a 1 MiB read each spend
+one. Still not built, and still needing the mcp-kit request hook §7 says is
+missing: a per-request or per-plan *factory* that hands a tool a fresh grant.
+`examples/gated_search.exe --max-calls N` is the honest demo of a counter whose
+scope is the process, and it prints that scope at startup rather than implying a
+per-request one.
+
+The three decorators are generic over `['kind]` because a grant is a confinement
+decision *plus* a shared `Controls.t` (the sink, the timeout, the budget); they are
+declared in `Authority`, beside the grant type they rewrite, for the reason §6
+gives — an endo-function on an abstract grant that returns its argument compiles
+and promises nothing — and `Policy` deliberately does not re-export them. Every
+`Fs` and `Net` operation runs inside `Controls.run`, the one place the budget is
+spent, the timeout applied and the audit event written, so no operation can be
+bounded differently from its siblings by a forgotten line. `of_confinement`
+installs the kind's default bound (5 s for `Fs`, 15 s for `Net`) unless the
+application supplies `~controls`; `~controls:Controls.none` is how an operator
+asks for an unbounded grant.
 
 Do not introduce an `Effect.Deep` test handler: plain closure calls perform no
 custom effect to intercept. Tests use recording sinks and deterministic network/
@@ -724,6 +791,79 @@ examples and tests, never to `mcp-caps` (§10). Neither inbound TLS nor a wider
 Host allowlist belongs to the example; both stay gateway/application policy,
 and seekwright's Host port is P8 work at the surrounding route.
 
+**M3 landed 2026-11-10.** `lib/caps/policy_net.ml` holds the network confinement
+behind an abstract existential `t`, with `Policy.with_endpoints` and
+`Policy.with_public_web` the only producers and `Authority.Net` the only consumer
+(`request`, one bounded HTTP exchange). An endpoint is matched as
+(scheme, normalised host, effective port) *before* any name is looked up, so an
+unlisted host costs no resolver traffic; `with_endpoints` normalises the list and
+refuses a duplicate or a case-collision at construction rather than applying a
+first-match rule. `Eio.Net.getaddrinfo_stream` answers the listed name, every
+answer is filtered (`with_public_web` by the RFC 6890 table above), and
+`Eio.Net.connect` is then called with one of **those vetted addresses**; the
+`Cohttp_eio.Client.make_generic` connector ignores the URI it is handed and
+returns that already-checked socket, so the client has no way to resolve the name
+a second time — the DNS-rebinding fix §5 names, and
+`connect_uses_the_vetted_answer` is the test that says so (one query per request,
+and the connect's address is the vetted one). HTTPS is implemented, not stubbed:
+`tls-eio` over the vetted flow with `ca-certs` as the trust anchor store and the
+endpoint's own name as the peer name, so SNI and certificate hostname
+verification stay on; both the trust store and `Mirage_crypto_rng` are read at
+*construction*, so a deployment that cannot find them fails there instead of
+holding a grant whose https path throws (§5). Installing a generator remains the
+application's job, and `mirage-crypto-rng.unix` is therefore not linked into
+`mcp-caps`: it pulls stdlib `unix`, which `test_core_no_mcp_kit` keeps out. One
+`Eio.Switch.t` per operation closes the socket on every result path, including
+when the byte ceiling or the timeout unwinds out of it. Redirects are never
+followed; a 3xx whose `Location` names a target this grant would refuse is itself
+`Denied`, naming only the target's host, because a `Location` can carry a query
+string. The response body is streamed against `min(grant, caller)` bytes with
+`Eio.Buf_read` and refused rather than truncated, with `Content-Length` trusted in
+neither direction. Request headers and bodies are validated before they leave:
+`host`, `content-length`, `transfer-encoding`, `connection`, `upgrade` and
+`keep-alive` are the authority's, so a caller setting one is `Invalid`, and a name
+or value that could split a request is `Invalid` without quoting the value.
+`examples/gated_search.ml` is the network audit surface — `search_web` (the
+operator's endpoint) and `fetch_url` (caller-chosen destination, same grant), both
+registered with one `Net` grant through `Registry.add ~grant`. Checked over stdio
+against a loopback target: the search answers with the authority's own `Host`
+header, an in-list `fetch_url` is served, `http://localhost:8099/` answers
+`denied:` because `localhost` is not the listed name, `http://169.254.169.254/…`
+answers `denied:` before any lookup, and `--max-calls 2` answers `denied:` on the
+third call with no I/O at all; every call leaves one line on stderr
+(`caps.net.request ok bytes=120 status=200`) and none on stdout.
+`test/test_authority_net.ml` is 20 cases over two fixtures: a real
+`Cohttp_eio.Server` on loopback, which is where a round trip, the chunked-body
+ceiling, a 3xx, an owned header and a cancelled wait are observable, and a
+scripted `Eio.Net.Pi.network` whose `connect` raises `Simulated` carrying the
+address it was asked for, which is the only way to prove the address binding and
+that a refusal sends nothing at all. Nothing in the suite touches a real provider
+or the machine's resolver (§5). `Authority`'s GADT now has both branches (`fs`,
+`net`), and the grant's request/response types are destructive aliases of
+`Policy_net`'s so a caller writes `Authority.Net.meth` without reaching past the
+grant. `test/should_not_compile/` gained `confinement_is_not_a_grant.ml`
+(registering the decision instead of the grant) and `grant_type_mismatch.ml` now
+passes a real `Authority.Net.t` to an `Fs` tool. Ten alcotest suites, 118 cases,
+plus the six negative-compilation fixtures.
+
+**Open at M3: `Server.profile` is not an enforcement point.** Verified against
+0.2.0's sources, `Capabilities.profile` has three members (`stdio`, `http`,
+`net`), `Server.profile` narrows them — and the profile only ever reaches the
+client through `server_capabilities` (`server.ml`'s `?profile`, defaulting to
+`Profile.default`, and `Server.Stdio.serve ~profile`). `Tool.Registry.add` keeps
+`permanent` and a closure and never consults a profile, and nothing in `Tool`,
+`Handler` or `Server` rejects a registration outside it. So a `Net` grant is
+scoped by the confinement and the grant wrappers, not by the profile: passing
+`~profile` to a server that then registers a networked tool is a promise to the
+client that the server does not keep. `Capability_set.of_list ["net"]` has no
+validator either — the profile names the transports it will *try* to serve
+(`net` is not one of them), it does not authorise a capability — and a name in
+`Server.Flags.custom` is simply never advertised, not an error. Two options, both
+for M5 rather than M3: the server filters registrations against its profile, or
+the profile stops advertising what the process has not registered and the flags
+are validated. Nothing here is a bug in mcp-kit — it is a field with no
+consumer, and seekwright is the first caller to care.
+
 ## 10. Dependency and compatibility policy
 
 Use OCaml >= 5.1, dune >= 3.11, and exact `= 0.2.0` dependencies for every
@@ -737,11 +877,19 @@ interfaces and conformance evidence before any upgrade rather than accepting a
 pre-1.0 minor bump silently.
 
 Initial dependencies: `mcp-kit`, `eio`, `yojson`, `uri`, `alcotest` (tests), and
-the Cohttp-Eio transport only in examples/applications. M3 adds `cohttp-eio` to
-`mcp-caps`, `ipaddr` for address classification, `tls-eio`, and `ca-certs`.
-Avoid a logging-framework dependency by exposing the bounded `Event.t` sink.
-TLS for inbound HTTP remains gateway/application policy; that does not remove
-the outbound HTTPS requirement above.
+the Cohttp-Eio transport only in examples/applications. M3 added to `mcp-caps`
+itself: `cohttp-eio` and `http` (the message model and the client whose connector
+the policy supplies), `ipaddr` and `domain-name` (the address and hostname
+decisions), `tls`, `tls-eio` and `ca-certs` (outbound https — the outbound half is
+ours even when an inbound TLS gateway is someone else's), and `mirage-crypto-rng`,
+named only to *detect* a missing generator at construction. Those carry `>=`
+constraints rather than exact pins: unlike mcp-kit, none of them owns a wire
+contract this tree reproduces, so the version that travels is the switch's
+(`plans/infra-setup.md`), and `mirage-crypto-rng.unix` — the sublibrary that would
+actually install one — is deliberately absent from the library because it pulls
+stdlib `unix`. Avoid a logging-framework dependency by exposing the bounded
+`Event.t` sink. TLS for inbound HTTP remains gateway/application policy; that does
+not remove the outbound HTTPS requirement above.
 
 `plans/infra-setup.md` records the current M0–M2 environment and the additional
 M3 TLS requirement. Package constraints belong in `dune-project`; setup

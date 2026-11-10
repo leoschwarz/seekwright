@@ -69,7 +69,7 @@ let with_grant ?max_read_bytes ?max_entries ?backend f =
       Eio.Switch.run @@ fun sw ->
       match Policy.with_root ?max_read_bytes ?max_entries ~sw ~parent:(Eio.Stdenv.fs env) root with
       | Error error -> Alcotest.failf "with_root %s failed: %s" root (Error.render error)
-      | Ok confinement -> f (Authority.Fs.of_confinement confinement))
+      | Ok confinement -> f (Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement))
 
 (* The same, for the cases where construction is expected to refuse. *)
 let with_root_result ?max_read_bytes ?max_entries ~name f =

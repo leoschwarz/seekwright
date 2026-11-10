@@ -96,6 +96,50 @@ link a transport (plans/capability-gated-mcp-server.md §7, §10) — and at
 `(lang dune 3.11)` a dependency entry takes a flag or a version constraint, not
 both, so these carry no `= 0.2.0` and ride the switch.
 
+## TLS stack for M3 (2026-11-10)
+
+```bash
+opam install -y --assume-depexts tls-eio ca-certs
+```
+
+Installed into the `default` switch: `tls-eio 2.1.5`, `tls 2.1.5`,
+`ca-certs 1.0.3`, `x509 1.2.0`, `mirage-crypto-pk 2.4.1`,
+`mirage-crypto-rng 2.4.1`, `zarith 1.14`, plus `asn1-combinators 0.3.3`,
+`digestif 1.4.2`, `eqaf 0.10`, `kdf 1.1.2`. `ipaddr 5.6.2`, `domain-name 0.5.0`
+and `http`/`cohttp-eio 6.3.0` were already in the M2 set.
+
+- **`--assume-depexts` is required on this machine.** `zarith` and `tls` ask opam
+  for GMP through depext, and `sudo` here needs a password, so opam's own depext
+  pass fails the install. The packages themselves are fine; only the automatic
+  system-package step is unavailable.
+- **GMP was placed by hand, not by the package manager.** `libgmp-dev` is absent
+  and uninstallable without root:
+  1. download the `libgmp-dev` `.deb` into `/tmp/opencode/gmp` (no install);
+  2. `dpkg -x libgmp-dev_*.deb /home/leo/.local/opt/gmp-dev`;
+  3. the tree's `libgmp.so` symlink dangled, so it was repointed at the runtime
+     library that *is* present, `/usr/lib/x86_64-linux-gnu/libgmp.so.10`;
+  4. a hand-written `gmp.pc` lives in
+     `/home/leo/.local/opt/gmp-dev/usr/lib/x86_64-linux-gnu/pkgconfig/`.
+- **Every build in this switch needs that tree on the search path**, or zarith
+  fails to link (and with it `mcp-caps`, `tls` and the net suite):
+
+  ```bash
+  eval $(opam env --switch=default --set-switch)
+  export CPATH=/home/leo/.local/opt/gmp-dev/usr/include:/home/leo/.local/opt/gmp-dev/usr/include/x86_64-linux-gnu
+  export LIBRARY_PATH=/home/leo/.local/opt/gmp-dev/usr/lib/x86_64-linux-gnu
+  export PKG_CONFIG_PATH=/home/leo/.local/opt/gmp-dev/usr/lib/x86_64-linux-gnu/pkgconfig
+  ```
+
+  A CI image that can install `libgmp-dev` properly needs none of this.
+- `Mirage_crypto_rng_unix.use_default ()` — the call that installs a random
+  generator, which `Policy_net` requires before it will build an https-capable
+  grant — comes from the `mirage-crypto-rng.unix` findlib library inside the
+  `mirage-crypto-rng` package above, so no extra opam package. Examples and tests
+  link it; `mcp-caps` does not, because it pulls stdlib `unix`
+  (plans/capability-gated-mcp-server.md §10).
+- Nothing was added for *inbound* TLS: the transport stays loopback cleartext and
+  `tls-eio` is used on the client side only (`Tls_eio.client_of_flow`).
+
 ## Notes for the port
 
 - Provenance to recheck before trusting a version further (seen 2026-11-10): the
@@ -109,6 +153,8 @@ both, so these carry no `= 0.2.0` and ride the switch.
 - mcp-kit 0.2.0 requires OCaml >= 5.1 and dune >= 3.11 — satisfied.
 - Constrain every mcp-kit component to `= 0.2.0` in `dune-project`. An opam
   switch pin, if needed, is a separate environment operation, not a dune stanza.
-- M0–M2 need no OCaml TLS stack: inbound TLS belongs to the gateway. M3's
-  outbound `Net` authority does need verified HTTPS and adds `tls-eio` and
-  `ca-certs`; the current package set is therefore not sufficient for M3.
+- M0–M2 needed no OCaml TLS stack: inbound TLS belongs to the gateway. M3's
+  outbound `Net` authority does, and the stack is now installed — see "TLS stack
+  for M3" above, including the `--assume-depexts` and GMP notes the build depends
+  on. An `http`-only `Net` would not be a completed M3
+  (plans/capability-gated-mcp-server.md §5).
