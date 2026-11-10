@@ -47,7 +47,11 @@ inside `mcp-kit` as the findlib library `mcp-kit.stdio` (module
   delimited, creates its own session, stops at EOF),
   `Mcp_kit_cohttp_eio.handler server` (Streamable HTTP; wire it into a
   cohttp-eio route yourself), `Mcp_kit_eio.run_flow` (raw Eio flow).
-- One server value serves concurrent clients; sessions are per connection.
+- `Server.t` is an immutable record (`info`, four registration lists, the
+  subscription support and hub): safe to share across concurrent clients, cheap
+  to copy. `add_*` returns a copy that shares the hub; only `create` allocates
+  one. Sessions are per connection **only where something builds one** — stdio's
+  `run_channels` does, the Cohttp-Eio adapter does not (M2 section below).
 - Outbound HTTPS (needed for provider calls at M3) additionally needs
   `tls-eio` and `ca-certs` (see `plans/infra-setup.md`).
 
@@ -176,3 +180,79 @@ pass; both echo servers answer `initialize` → `notifications/initialized` →
   other orderings all fail with "Atom or quoted string expected".
 - Seen once: after `dune promote`, a stale `_build` made the diff rule fail with
   "File ….expected should be deleted". `rm -rf _build` and re-run before chasing it.
+
+## Verified building M2 (2026-11-10)
+
+Serving plain HTTP on loopback needs nothing new installed: `mcp-kit-cohttp-eio`
+0.2.0, `cohttp-eio`/`http` 6.3.0 and `uri` were already in the switch, and
+`tls-eio`/`ca-certs` are only for **outbound** HTTPS (M3). `http` is its own
+findlib package, so a stanza that touches `Http.Header` / `Http.Status` asks for
+`http` by name next to `cohttp-eio`.
+
+Wiring, from `examples/read_source.ml`:
+
+- `Mcp_kit_cohttp_eio.handler ~max_body_size ~allowed_origins ?clock server`
+  returns a `Cohttp_eio.Server.t`; run it with
+  `Cohttp_eio.Server.run ~stop ~on_error socket handler`. `handler` raises
+  `Invalid_argument` at construction if `max_body_size < 1` or `= max_int`, or if
+  the server has HTTP subscriptions enabled and no `~clock` was given.
+- Ephemeral loopback: `Eio.Net.listen ~backlog:128 ~sw env#net
+  (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))`, then `Eio.Net.listening_addr socket`
+  to read the port back. `~backlog` is a **mandatory** labelled argument.
+- `Cohttp_eio.Server.run` returns only once its `~stop` promise is filled, and
+  filling it waits for open connections to finish; `Eio.Switch.run` waits for
+  every fiber registered on it. A test that forks a listener must stop it with
+  that promise before its switch body returns, or the suite hangs instead of
+  failing.
+- Client: `Cohttp_eio.Client.make ~https:None env#net` — `~https` is a required
+  labelled argument, not an optional one. One socket per call, closed with the
+  switch handed to the call. Request and response bodies are `Cohttp_eio.Body.t`
+  = `Eio.Flow.source_ty Eio.Resource.t`: `Body.of_string` out,
+  `Eio.Buf_read.(take_all (of_flow …))` back in; `Http.Status.to_int` for the code.
+
+What the adapter owns — verified through it in `test/test_http_transport.ml`, so
+do not re-implement any of it:
+
+- Body bound: `Buf_read.of_flow ~max_size:(max_body_size + 1)` plus a length
+  check → 413 with an empty body, and the oversized body is never parsed.
+- A request is "modern" if it carries `MCP-Protocol-Version`, or calls
+  `server/discover`, or has an `io.modelcontextprotocol/*` key in `params._meta`.
+  Modern requests need `Content-Type: application/json` and an `Accept` naming
+  both `application/json` and `text/event-stream`, plus `MCP-Protocol-Version` ==
+  `params._meta["io.modelcontextprotocol/protocolVersion"]`, `Mcp-Method` == the
+  JSON-RPC method, and `Mcp-Name` == `params.name` for `tools/call`,
+  `prompts/get` and `resources/read`. A mismatch is 400 with JSON-RPC -32020, a
+  missing protocol block is -32602, and a *tool* refusal is a result so it stays
+  a 200. A schema property annotated `x-mcp-header` must also arrive as
+  `Mcp-Param-<name>` matching the argument — derived from the input schema, so a
+  schema change can tighten the wire contract on its own.
+- `GET`, `DELETE` and every other method are 405. An `Origin` header that is not
+  in `~allowed_origins` (default: none) gets 403 and then the adapter raises
+  `Rejected_origin` after flushing, so the connection closes without reading the
+  body: expect it in `on_error`, do not log it as a fault. A request with no
+  `Origin` at all is ordinary non-browser traffic.
+- HTTP dispatch is stateless: `dispatch_string` for a legacy body,
+  `dispatch_http_json_frames` for a modern one, never `create_session`.
+  `Server.session` is `{ server; mutable phase }` — unsynchronised, so never
+  share one across connections. Consequence: the legacy initialize/initialized
+  gate exists only over stdio (`run_channels` builds the session), and over HTTP
+  a `tools/list` before `initialize` is answered.
+- Framing differences to expect in a transcript: a legacy notification is no line
+  on stdio and an empty 204 over HTTP; a modern request with no frames is 202.
+
+Per-connection servers (the M2 spike behind `plans/capability-gated-mcp-server.md`
+§7): `handler` closes over one `Mcp_kit.Server.t` and its cohttp callback
+discards `_conn`, so mcp-kit cannot vary a server per client. No mcp-kit change
+is needed either: `Cohttp_eio.Server.callback : t -> IO.conn -> IO.ic -> IO.oc ->
+unit` is public and is the per-connection driver `Server.run` calls, so an
+application that accepts with `Eio.Net.run_server` itself chooses which handler
+value owns the connection (`one_listener_can_route_connections_to_different_grants`
+— one socket, two servers, two filesystem grants). At accept time the only fact
+about the caller is its peer address, so per-*request* authority would mean
+re-entering the adapter's validation, and `Mcp_kit.Server.t` copies are cheap
+(immutable record; `Server.of_registry` is a fold of `add_tool`, no I/O).
+
+Odds and ends: OCaml 5.3 has no `String.drop`; `Atomic.set t v` takes the atomic
+first; Eio 1.6's `Promise` has `await` and `await_exn` but no `await_ok`; dune's
+dev profile turns warning 69 (`unused-field`) into an error, so a test harness
+must not carry a record field only its wrapper reads.

@@ -34,6 +34,18 @@
   ; resolves.
   (eio_main
    :with-test)
+  ; M2: the Streamable HTTP transport, like the loop runner, is linked only by
+  ; the examples and the tests — never by mcp-caps itself, which stays a library
+  ; an application puts its own transport around (§7, §10). At this dune lang a
+  ; package dependency entry takes a version constraint or a flag, never both, so
+  ; these ride the switch's pins (plans/infra-setup.md) rather than a "= 0.2.0"
+  ; here; the exact pin that matters is mcp-kit's own, above.
+  (mcp-kit-cohttp-eio
+   :with-test)
+  (cohttp-eio
+   :with-test)
+  (http
+   :with-test)
   (alcotest
    :with-test)))
 

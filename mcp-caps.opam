@@ -12,6 +12,9 @@ depends: [
   "yojson" {>= "3.0.0"}
   "uri" {>= "4.0"}
   "eio_main" {with-test}
+  "mcp-kit-cohttp-eio" {with-test}
+  "cohttp-eio" {with-test}
+  "http" {with-test}
   "alcotest" {with-test}
   "odoc" {with-doc}
 ]
