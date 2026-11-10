@@ -32,26 +32,27 @@ The Python architecture already separates *decide* (pure `router.py`) from
 *execute* (`engine.py`, providers, fetcher). The capability layer from the
 companion plan maps onto that split:
 
-- **Provider adapters are tools with a `Net` grant.** Each of the seventeen names
-  becomes a registered tool whose grant is a `Net.t` scoped to that vendor's
-  endpoint(s). The grant is built by `Policy`, so an adapter cannot dial anything
-  its `Registry.add` line did not name — this enforces, structurally, the vision
-  rule that "which hosts are reachable follows from which names are enabled"
-  without adding an in-app egress allow-list key.
-- **`fetch` is a tool with a validated `Net` grant plus optionally `Fs`.**
-  The SSRF guardrails (scheme check, public-IP-only resolution, manual redirect
-  re-validation, byte cap) become the *grant's* validation, not the tool's — the
-  tool cannot even ask for `file://` or a private address. `fetch.cache_dir`
-  becomes an `Fs.t` from `Policy.with_root`, which is what makes the page cache
-  path-safe by construction.
-- **`Proc`** is needed only if the port keeps `exa`-as-MCP-client or the crawl4ai
-  renderer as subprocesses; in v1 those stay plain HTTP calls, so `Proc` may not
-  be needed at all — decide at M3.
-- **Grants per session, not per process**, resolves the vision rule that one
-  deployment serves one operator's keys: keys come from the environment at
-  startup, the registry is built once, and every session shares it. (Open
-  question 1 in the companion plan only matters if per-client authority is ever
-  wanted — it is a non-goal.)
+- **Provider adapters receive endpoint-scoped `Net` grants.** The enabled
+  provider set is assembled into the search engine's authority record, and that
+  record is supplied to the `search` tool's `Registry.add`; each adapter receives
+  only its own vendor grant. Only the frozen `search`, `fetch`, and `answer` tools
+  are registered — providers never become MCP tools. An adapter cannot use the
+  authority API to dial outside its endpoint set. Trusted OCaml code can still
+  bypass the API directly; this is an audit boundary, not a sandbox. Endpoint
+  sets follow enabled provider names rather than adding an egress config key.
+- **`fetch` is a tool with a public-web `Net` grant plus optionally `Fs`.**
+  The SSRF guardrails (scheme check, public-IP-only resolution bound to the actual
+  connection, manually re-validated redirects, byte cap) become the *grant's*
+  validation, not the tool's — the authority API cannot be asked for `file://` or
+  a private address. `fetch.cache_dir` becomes an `Authority.Fs.t` from
+  `Policy.with_root`, whose Eio subtree handle confines page-cache paths.
+- **`Proc`** is not in the capability layer's v1. Reconsider it only if a real
+  port requirement introduces subprocesses; Exa and crawl4ai remain HTTP calls.
+- **Grants have server lifetime.** This matches one deployment serving one
+  operator's keys: keys come from the environment at startup, the registry is
+  built once under the transport's enclosing switch, and every session shares
+  the same confined policies. Per-client authority and per-client quotas remain
+  non-goals.
 
 ## 2. Port order — follow the repo's own seam order
 
@@ -72,11 +73,12 @@ has a working oracle above it:
 
 ## 3. Cross-cutting decisions
 
-- **Concurrency.** OCaml 5 effects + Eio. One fiber per request; the shared HTTP
-  client becomes a single Eio-backed connection pool. The Python rule "the
-  fetcher owns its own client so no provider key rides to a third-party site"
-  becomes two grant instances with disjoint host sets — the capability layer
-  makes the leak unrepresentable.
+- **Concurrency.** OCaml 5 effects + Eio direct style, with bounded operations
+  under an enclosing switch. Provider HTTP clients and the fetch client are owned
+  by separate authority grants. Provider credentials are attached only by the
+  adapter holding its fixed-endpoint grant; `fetch` receives a public-web grant
+  and no provider credentials. This prevents credential forwarding through the
+  capability API without claiming to sandbox arbitrary OCaml code.
 - **JSON Schema.** mcp-kit compiles 2020-12 locally and has a PPX for typed tool
   declarations — the `search(provider=…)` `Literal` of seventeen names becomes a
   PPX-generated variant, which is *stricter* than Python's runtime `Literal`.
@@ -93,10 +95,12 @@ has a working oracle above it:
   config keys move only together.
 - **Testing.** (a) Ported unit suites per module (alcotest). (b) Differential
   corpus: recorded Python requests → expected JSON, replayed against the OCaml
-  binary over both transports. (c) `should_not_compile` dune rules for the
-  capability claims. (d) mcp-kit's 37 compliance scenarios against the OCaml
-  server. (e) Live provider tests behind the same `*_LIVE_TESTS` gate, keyless
-  ones first (`exa:free`, `parallel:free`, `freeserp`, `anysearch`).
+  binary over both transports. (c) `should_not_compile` checks that also match
+  the expected diagnostic. (d) The pinned official MCP runner against an explicit
+  scenario baseline for the fixture's advertised features; mcp-kit's full
+  37-scenario fixture is not evidence about this application by itself. (e) Live
+  provider tests behind the same `*_LIVE_TESTS` gate, keyless ones first
+  (`exa:free`, `parallel:free`, `freeserp`, `anysearch`).
 
 ## 4. Milestones
 
@@ -107,9 +111,9 @@ has a working oracle above it:
 | P3 | `config.ml` | `docs/reference/configuration.md` example loads; keyless default resolves to `exa:free`, `parallel:free`, `freeserp` — "a fresh clone searches before any configuration exists" |
 | P4 | provider protocol + first adapters (freeserp, anysearch, exa:free, parallel:free) | Keyless live tests pass; "every response names the provider that served it" |
 | P5 | engines + health + usage + journal | Fallback ladders behave identically to Python over the differential corpus; "no silent escalation to a billable rung" |
-| P6 | fetch stack + SSRF grant + jsondoc/tabledoc | Escape/differential tests green; "what leaves the server stays safe" — now enforced by the grant, not convention |
+| P6 | fetch stack + SSRF grant + jsondoc/tabledoc | Escape/differential tests green; "what leaves the server stays safe" — enforced by the grant's network/filesystem boundaries |
 | P7 | `answer` | One model call per answer, validated citations; "answers that can be checked" |
-| P8 | server, both transports, dashboard, REST, CLI | mcp-kit 37/37 conformance + surface manifest identical to Python's; "one person can run it" |
+| P8 | server, both transports, dashboard, REST, CLI | Applicable official conformance scenarios green against the checked baseline + surface manifest identical to Python's; "one person can run it" |
 
 ## 5. Open questions / spikes
 

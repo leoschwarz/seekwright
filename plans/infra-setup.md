@@ -65,7 +65,8 @@ mcp-kit.stdio       0.2.0
 ## Notes for the port
 
 - mcp-kit 0.2.0 requires OCaml >= 5.1 and dune >= 3.11 — satisfied.
-- Pin `mcp-kit` to 0.2.0 in `dune-project` (constraints or pin) per the
-  capability plan's open question 4.
-- TLS is out of scope (gateway's job), so no `libssl-dev`-linked OCaml TLS
-  stack is needed; `libssl-dev` is only for system packages that want it.
+- Constrain every mcp-kit component to `= 0.2.0` in `dune-project`. An opam
+  switch pin, if needed, is a separate environment operation, not a dune stanza.
+- M0–M2 need no OCaml TLS stack: inbound TLS belongs to the gateway. M3's
+  outbound `Net` authority does need verified HTTPS and adds `tls-eio` and
+  `ca-certs`; the current package set is therefore not sufficient for M3.

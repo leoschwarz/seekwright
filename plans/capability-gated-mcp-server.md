@@ -1,262 +1,499 @@
 # Capability-Gated MCP Server: OCaml 5 Plan
 
-Status: draft, v1. Iterate here before building.
+Status: revised implementation plan, v2. The API details below were checked against
+locally installed mcp-kit 0.2.0 and Eio 1.6, not just the upstream README.
 
-## 0. Framing and fallback
+## 0. Framing, scope, and fallback
 
 This layer is partly a learning exercise — a first OCaml MCP server — and its
 success shape is a **library others can build MCP servers on**, not a one-off.
-So the design rule is: keep the registry/policy layer separable from `mcp-kit`,
-with mcp-kit behind one adapter module. If the capability layer turns out not to
-earn its keep, the exit is planned, not improvised: drop `registry.ml`/`policy.ml`
-and bind tools to `mcp-kit` directly, keeping the transports and conformance
-baseline. The milestones are sized so M0–M1 alone already produce a working
-server, which is what makes that exit cheap at any point.
+Keep the registry/policy core free of mcp-kit imports, with mcp-kit behind one
+adapter module. If the capability layer does not earn its keep, drop
+`registry.ml`/`policy.ml` and bind tools to mcp-kit directly, keeping the
+transports and protocol baseline. M0 deliberately proves that direct path first.
 
-Correction that shapes the plan: there **is** a maintained OCaml MCP library —
-`mcp-kit` by Mathias Bourgoin at Nomadic Labs (GitLab), MIT licensed, opam 0.2.0,
-last activity 2026-11-07 ([opam](https://opam.ocaml.org/packages/mcp-kit/),
-[README](https://gitlab.com/nomadic-labs/ai-harness/ocaml-mcp/-/raw/main/README.md),
-retrieved 2026-11-10). It supports the 2026-07-28 request model, ships
-`mcp-kit-stdio`, `mcp-kit-eio` and `mcp-kit-cohttp-eio` adapters, compiles JSON
-Schema 2020-12 locally, has a PPX for typed tool declarations, and records 37
-passes / 0 failures against the official compliance scenarios.
+There is a maintained OCaml MCP library: `mcp-kit` by Mathias Bourgoin at
+Nomadic Labs (GitLab), MIT licensed, opam 0.2.0, published 2026-11-07
+([package](https://opam.ocaml.org/packages/mcp-kit/0.2.0/),
+[README](https://gitlab.com/nomadic-labs/ai-harness/ocaml-mcp/-/blob/v0.2.0/README.md),
+checked 2026-11-10). It supports the 2026-07-28 request model and the
+2025-11-25 initialization lifecycle, ships stdio, Eio-flow and Cohttp-Eio
+adapters, compiles JSON Schema 2020-12 locally, and has a PPX for typed tool
+declarations. Its recorded full-fixture result is 37 passes / 0 failures / 0
+inconclusive scenarios.
 
-So the plan is not "write an MCP server in OCaml". It is "write the capability
-layer that nobody has, on top of the transport and protocol that somebody does".
+The task is therefore to write the capability layer, not another protocol or
+transport implementation.
 
-**Goal.** A policy layer over `mcp-kit` where a tool cannot perform I/O unless
-the registry supplies an unforgeable grant, enforced by the module system rather
-than by convention. Transport, protocol, schema validation and conformance come
-from `mcp-kit`.
+**Goal.** Tools declare the authority their capability-mediated operations need;
+registration supplies an abstract grant of exactly that type. Policy constructors
+own filesystem and network confinement. The mcp-kit adapter closes each tool
+handler over its grant and delegates protocol handling, schema validation,
+transports, and wire conformance to mcp-kit.
 
-**Non-goals.** Protocol implementation. Transports. JSON Schema. OAuth (out of
-scope, gateway). Resources, prompts, subscriptions (mcp-kit has them; we do not
-gate them in v1).
+**Threat-model boundary.** This is a design-time and audit guarantee for trusted
+OCaml tool implementations using `mcp-caps`, not a sandbox. It does not stop tool
+code from calling `Unix`, `Sys`, Eio, a C binding, `Obj.magic`, or a network
+library directly. Abstract types make grants unforgeable only in ordinary safe
+OCaml that respects the interfaces. No claim of "a tool cannot perform I/O" is
+valid without that qualification. The guarantee is narrower and useful: a tool
+cannot invoke **`Authority` operations** without a suitable grant, and widening
+those operations is visible at registration.
 
-## 1. Architecture
+**Non-goals for v1.** Protocol implementation, new transports, JSON Schema,
+OAuth/authentication, caller identity, per-client authority, per-request quotas,
+resources/prompts/subscriptions in `Registry`, custom effect handlers, and
+sandboxing arbitrary tool code. Resources/prompts/subscriptions remain available
+by adding them directly to the `Mcp_kit.Server.t` returned by the adapter.
+`Proc` is deferred until a real caller needs it; seekwright's v1 does not.
+
+## 1. Architecture and ownership
 
 ```
 mcp-kit-cohttp-eio ─┐
-mcp-kit-stdio ──────┼─→ mcp-kit Server ──→ Registry (ours)
-mcp-kit-eio ────────┘                        │
-                                             ↓ looked up at call
-                                    ('caps, 'a) Tool.t
-                                             │ applied to
-                                        grant : 'caps
-                                    built only by Policy
-                                             │
-                                     Fs | Net | Proc (abstract)
+mcp-kit.stdio ──────┼─→ Mcp_kit.Server.t ←── Server (the only mcp-kit adapter)
+mcp-kit-eio ────────┘                              ↑
+                                      one existential registered entry per tool
+                                                   │
+                                      Tool.run applied to grant : 'caps
+                                                   │
+                     Policy constructors ─→ 'caps Authority.t
+                                                   │
+                                    Fs | Net (closed authority kinds in v1)
 ```
 
-The registry is the only place where a grant is applied to a tool. One line per
-tool, and the line names the grant.
+`Registry.add` is the only core operation that pairs a grant with a tool. The
+registry stores an existential record containing mcp-independent tool metadata
+and a JSON handler already closed over that grant. This is why differently typed
+tools coexist without `Obj.magic`, casts, or a universal authority value. The
+server adapter folds those entries into mcp-kit declarations.
+
+A tool requiring two grants uses an ordinary product such as
+`Authority.Fs.t * Authority.Net.t` as its `'caps`; do not add a "union of all
+powers" grant.
+
+In v1, grants are **server-lifetime values**. Their resource-owning `Switch.t`
+must enclose server construction and the transport loop. A server value may serve
+concurrent clients, so policy implementations must not use unsynchronized mutable
+per-request state. Concurrent calls sharing a grant must also share only the
+intended confinement policy.
 
 ## 2. Layout
 
 Root dune workspace (decided in `project-structure.md`); `mcp-caps` is the
-package, `seekwright` comes later and depends on it:
+reusable package, `seekwright` comes later and depends on it:
 
 ```
-dune-project                     # (package (name mcp-caps) ...) — generates mcp-caps.opam
+dune-project                     # package stanzas; exact mcp-kit dependency constraints
 mcp-caps.opam                    # generated, committed, never hand-edited
 lib/caps/                        # (library (name caps) (public_name mcp-caps)) → Mcp_caps
-  error.ml / .mli                # Denied | Invalid | Failed
-  authority.ml / .mli            # Fs, Net, Proc: abstract types, no constructors
-  tool.ml / .mli                 # ('caps, 'a) Tool.t and make
-  registry.ml / .mli             # add ~grant, uniform element type
-  policy.ml / .mli               # with_root, with_host_allowlist, with_deadline, ...
-  server.ml / .mli               # the only module that knows mcp-kit:
-                                 #   Registry.t -> Mcp_kit.Server.t via Server.create/add_tool
-examples/                        # demo server (echo, then gated read_source) —
-                                 #   one Registry.add line per tool, the audit surface;
-                                 #   bin/main.ml belongs to the seekwright package later
+  error.ml / .mli                # structured, safely renderable failures
+  event.ml / .mli                # bounded, content-free policy audit events
+  authority.ml / .mli            # 'kind t plus Fs/Net operations; implementation closed
+  tool.ml / .mli                 # metadata, typed input decoder, Output.t
+  registry.ml / .mli             # existential entries; add ~grant
+  policy.ml / .mli               # confined Fs/Net constructors and generic decorators
+  policy_net.ml / .mli           # private DNS/connect/redirect/response-bound machinery
+  server.ml / .mli               # the only module importing Mcp_kit
+examples/
+  dune
+  mcp_kit_echo.ml                # direct fallback baseline, retained through M4
+  main.ml                        # registry echo + gated read_source; the audit surface
 test/
   dune                           # alcotest suites
-  should_not_compile/            # dune rules expecting failure
+  should_not_compile/            # checked negative-compilation cases
+  conformance/                   # live official-runner fixture and result comparator
 ```
 
-## 3. The capability model
+The core modules must not import `Mcp_kit`; a dependency test or simple source
+guard enforces this. The package still depends on mcp-kit for `Server`, but the
+core remains algorithmically and source-level separable. Transports belong in
+examples/applications, not in `Registry` or `Server`.
 
-`authority.mli` exports types with no constructors and functions that only
-consume them. Nothing in the program can make an `Fs.t` except
-`Policy.with_root`.
+Error mapping lives at two boundaries:
+
+- decoder failures and `Error.t` from `run` become MCP tool results with
+  `isError = true`, never JSON-RPC transport failures;
+- malformed declarations/duplicates fail server construction;
+- mcp-kit retains ownership of JSON-RPC errors and output-schema contract errors.
+
+`Error.t` must carry a stable kind (`Denied | Invalid | Unavailable | Timeout |
+Failed`) and a sanitized message. Do not expose raw exceptions, backtraces,
+headers, credentials, response bodies, or local variable values in it.
+
+## 3. Core API
+
+Use a phantom kind on one abstract authority representation so decorators can be
+generic without pretending that `'a -> 'a` can wrap arbitrary OCaml values:
 
 ```ocaml
 (* authority.mli *)
-module Fs : sig
-  type t
-  (** Abstract. The only producer is [Policy.with_root]. *)
+type fs
+type net
 
-  val read_file : t -> string -> (string, Error.t) result
-  val list_dir  : t -> string -> (string list, Error.t) result
+type _ t
+
+module Fs : sig
+  type nonrec t = fs t
+
+  val read_file : ?max_bytes:int -> t -> string -> (string, Error.t) result
+  val list_dir : ?max_entries:int -> t -> string -> (string list, Error.t) result
 end
 
 module Net : sig
-  type t
-  val get : t -> Uri.t -> (string, Error.t) result
-end
+  type nonrec t = net t
 
-module Proc : sig
-  type t
-  val run : t -> string list -> (string, Error.t) result
+  type method_ = [ `GET | `POST | `PUT | `PATCH | `DELETE ]
+  type request = {
+    meth : method_;
+    uri : Uri.t;
+    headers : (string * string) list;
+    body : string option;
+  }
+  type response = {
+    status : int;
+    headers : (string * string) list;
+    body : string;
+  }
+
+  val request :
+    ?max_response_bytes:int -> t -> request -> (response, Error.t) result
 end
 ```
 
-A tool declares the authority it needs in its type:
+The implementation uses a GADT or equivalent private record for the `fs`/`net`
+operations plus a shared controls record. Every operation goes through that
+controls record. Generic policy decorators preserve `'kind`; there is no public
+`with_deadline : float -> 'a -> 'a`, which could not inspect or wrap an arbitrary
+value and would be an unimplementable API.
+
+Tool input and output are explicit. The former plan's arbitrary result type could
+not be serialized by `Server`, and its string-to-string validator did not provide
+a decoded value to `run`:
 
 ```ocaml
 (* tool.mli *)
-type ('caps, 'a) t
+module Output : sig
+  type t
+  val text : ?structured_content:Yojson.Safe.t -> string -> t
+end
+
+type ('caps, 'input) t
 
 val make :
   ?title:string ->
-  description:string ->
-  input:Yojson.Safe.t ->
-  validate:(Yojson.Safe.t -> (string, string) result) ->
-  run:('caps -> Yojson.Safe.t -> ('a, Error.t) result) ->
+  ?description:string ->
+  ?output_schema:Yojson.Safe.t ->
+  input_schema:Yojson.Safe.t ->
+  decode:(Yojson.Safe.t -> ('input, string) result) ->
+  run:('caps -> 'input -> (Output.t, Error.t) result) ->
   string ->
-  ('caps, 'a) t
+  ('caps, 'input) t
 ```
 
-Registration is the grant:
+mcp-kit validates the input JSON Schema before invoking the adapter handler, then
+`decode` produces the typed application input. `Output` is deliberately small in
+v1: ordered text plus optional structured content. Add an mcp-independent rich
+content constructor only with a concrete image/audio/resource use case; do not
+leak `Mcp_kit.Tool.result` through the core just to avoid that future addition.
+When `output_schema` is present, the adapter supplies `structuredContent` and
+mcp-kit validates it. A schema/result mismatch is a server contract failure, not
+a caller-denial result.
+
+Registration is explicit and fallible:
 
 ```ocaml
 (* registry.mli *)
 type t
+type add_error = Duplicate_tool of string
+
 val empty : t
-
-val add : t -> ('caps, 'a) Tool.t -> grant:'caps -> t
-(** ['caps] is instantiated per call, so tools with different authority
-    coexist in one registry without the grants escaping. *)
+val add :
+  t -> ('caps, 'input) Tool.t -> grant:'caps -> (t, add_error) result
 ```
 
-Usage in the demo server under `examples/`, which is the audit surface:
+No-capability tools use `~grant:()`. The `'caps` existential is packed only after
+the grant and tool have been paired; it must not escape into the registry type.
 
 ```ocaml
-let tools =
-  Registry.empty
-  |> Registry.add Tools.read_source
-       ~grant:(Policy.with_root "/srv/project")
-  |> Registry.add Tools.search_web
-       ~grant:(Policy.with_host_allowlist [ "api.example.com" ])
+(* server.mli *)
+type build_error =
+  | Duplicate_tool of string
+  | Invalid_declaration of string
 
-let () =
-  let server = Server.of_registry ~name:"example" ~version:"1.0" tools in
-  match Sys.getenv_opt "MCP_TRANSPORT" with
-  | Some "http" -> Mcp_kit_cohttp_eio.handler server  (* cohttp-eio route wiring *)
-  | _ -> Mcp_kit_stdio.run_channels server
+val of_registry :
+  name:string -> version:string -> Registry.t ->
+  (Mcp_kit.Server.t, build_error) result
 ```
 
-(Transport entry points verified against the mcp-kit 0.2.0 README:
-`Mcp_kit.Server.create ~name ~version ()`, then `Mcp_kit.Server.add_tool`
-per tool — `Server.of_registry` folds the registry over `add_tool`, closing
-each tool's handler over its grant. Note the README's "a server value can
-serve concurrent clients": per-session servers are open question 1 below.)
+`Server.of_registry` validates all declarations before returning a usable server.
+It must not silently drop an invalid entry or turn startup declaration bugs into
+per-request errors. The adapter maps `Output.text` to `Mcp_kit.Tool.text` plus
+`structured_content`, and maps `run` errors to `Mcp_kit.Tool.error_text` using
+only the sanitized message.
 
-What this buys: a tool cannot read a file unless `Registry.add` was given an
-`Fs.t`; you cannot obtain an `Fs.t` except through a policy constructor; widening
-a tool's power is a visible edit to a `Registry.add` line.
+## 4. Filesystem policy: real confinement, not string normalisation
 
-What it does not buy (write this down rather than discover it): a tool handed an
-`Fs.t` can retain it in a closure and use it later or from another fiber. OCaml
-has no linear types, so "cannot call without a grant" is enforced but "cannot
-hoard a grant" is not. Two partial mitigations: make every grant a wrapper that
-checks a deadline and a per-request budget at each operation, and scope grants
-per session rather than per process. Closing the hole properly is OxCaml's
-uniqueness and locality modes — a larger commitment than this project warrants.
-
-## 4. Where effects go, and where they don't
-
-In v1, nowhere custom. Use Eio's structured concurrency for cancellation and
-line-per-connection, and implement deadline, budget and logging as plain values
-carried in the grant record. `Effect.Deep` is available and untyped; hand-rolling
-a handler stack buys syntax, not guarantees, at the cost of one-shot continuation
-discipline.
-
-The one place a custom handler earns its keep is the test harness: an
-`Effect.Deep` handler that intercepts grant operations to record a trace, so
-"this tool tried to open `/etc/passwd` and was denied" becomes an assertion
-rather than a mock.
-
-## 5. Policy combinators
+`Policy.with_root` does **not** chroot the process. It opens an Eio subtree and
+returns an `fs Authority.t` whose every operation stays on that handle:
 
 ```ocaml
-(* policy.mli *)
-val with_root : string -> Authority.Fs.t
-(** Chroots. [..] and absolute escapes rejected after normalisation. *)
-
-val with_host_allowlist : string list -> Authority.Net.t
-(** Scheme and host checked per request; redirects to unlisted hosts refused. *)
-
-val with_deadline : float -> 'a -> 'a
-(** Wraps any grant so each operation checks the clock. *)
-
-val with_budget : int -> 'a -> 'a
-(** Caps operations per grant instance. *)
-
-val with_log : 'a -> 'a
-(** Every operation to stderr. Never stdout. *)
+val with_root :
+  sw:Eio.Switch.t -> _ Eio.Path.t -> string ->
+  (fs Authority.t, Error.t) result
 ```
 
-Because every grant is an abstract record of closures, `with_deadline` and
-`with_budget` are generic wrappers, not per-authority code.
+The base path is operator-supplied (typically under `Eio.Stdenv.fs env`). Open it
+with `Eio.Path.open_subtree ~sw` and keep the switch alive for the server. Tool
+paths are root-relative; reject absolute paths and `..` for a clear API, but do
+not rely on lexical normalisation for security. `Eio.Path.open_subtree`, not
+`realpath`/string prefix checks, is what prevents `..`, symlinks, and component
+replacement races from escaping the subtree. Never convert the confined path to
+a native string and pass it to `Unix` or another string-based filesystem API.
 
-## 6. Testing
+Reads are streamed with a policy maximum and stop before allocating beyond the
+limit; `Eio.Path.load` and a `stat` size check alone are not sufficient. A caller
+`max_bytes`/`max_entries` may lower, never raise, the grant's configured ceiling.
+Normalize expected Eio/Unix failures at this boundary into sanitized `Error.t`
+values; cancellation exceptions must propagate through Eio rather than being
+converted into ordinary provider failures.
 
-- **Capability behaviour, alcotest.** `with_root "/tmp/x"` plus
-  `read_file "../../etc/passwd"` returns `Denied`. Table-driven over path shapes.
-- **Grant isolation.** Two registries, one with `Fs`, one without; assert the
-  second cannot call a tool that needs it.
-- **Handler swap.** Same tool, grant backed by a real root and by an in-memory
-  fake; identical JSON out, different side effects.
-- **Should-not-compile.** `test/should_not_compile/` holds snippets like
-  `let _ = Tools.read_source` (unapplied) and `Registry.add r t` (missing
-  `~grant`), with a dune rule that compiles each and expects failure. This is the
-  only test that checks the actual claim.
-- **Conformance.** Run the official scenarios against your binary and compare to
-  mcp-kit's 37/37 baseline. Any regression is your layer, not theirs.
+Security tests include internal symlinks, symlinks escaping the root, symlinked
+parent directories, absolute paths, `..`, over-limit files, and repeated
+rename/symlink replacement during reads. Passing only lexical `../../etc/passwd`
+tests is not an escape-proof filesystem implementation.
 
-## 7. Milestones
+## 5. Network policy: connection, redirect, and resource bounds
+
+`Net` is a bounded HTTP authority, not just a string-to-string `get`. It supports
+the methods, headers, and optional request bodies provider adapters need.
+Constructors are explicit about the two different trust models:
+
+```ocaml
+type endpoint = {
+  scheme : [ `Http | `Https ];
+  host : string;
+  port : int option;
+}
+
+val with_endpoints :
+  sw:Eio.Switch.t -> net:_ Eio.Net.t -> clock:_ Eio.Time.clock ->
+  max_response_bytes:int -> endpoint list ->
+  (net Authority.t, Error.t) result
+
+val with_public_web :
+  sw:Eio.Switch.t -> net:_ Eio.Net.t -> clock:_ Eio.Time.clock ->
+  max_response_bytes:int -> unit ->
+  (net Authority.t, Error.t) result
+```
+
+`with_endpoints` is for operator-selected vendor/self-hosted endpoints and pins
+scheme, normalized host, and effective port. In seekwright those sets are derived
+from enabled providers, never exposed as a second egress config file.
+`with_public_web` is for `fetch`: HTTP(S) only, no userinfo, only globally
+routable unicast IP destinations, with loopback/private/link-local/multicast/
+unspecified/special-use addresses, IPv4-mapped IPv6 variants, and non-default or
+explicitly disallowed ports denied according to one documented policy.
+
+For both constructors:
+
+- Resolve and validate on each new connection. Pass one of those **same vetted
+  IP addresses** to `Eio.Net.connect`; checking DNS and then letting Cohttp
+  resolve the hostname again leaves a DNS-rebinding race.
+- Use `Cohttp_eio.Client.make_generic` with that checked connector. Preserve the
+  original hostname for HTTP `Host` and TLS SNI/certificate hostname verification.
+  Never bypass certificate verification, and do not honor proxy settings that
+  could move the actual destination outside the checked connector.
+- Disable automatic redirects in v1. Return a 3xx response or a policy denial;
+  any later redirect-following helper must re-enter the same URI/DNS/connect
+  checks per hop, have a hop cap, and must not forward credentials to a new
+  origin.
+- Treat caller `max_response_bytes` as a further restriction, not an override.
+  Stream with a hard decoded-byte cap and abort when it is exceeded; a
+  `Content-Length` precheck is only an optimization.
+- Apply a total operation timeout with `Eio.Time.Timeout`, covering DNS, connect,
+  TLS, headers, and body. Use the per-request `Switch.t` required by Cohttp-Eio
+  and close flows/resources on every result path.
+- Reject malformed/header-injection values. Never log authorization/cookie/proxy
+  headers, request or response bodies, URI userinfo, or query strings.
+
+Outbound HTTPS is not supplied by an inbound TLS gateway. M3 must add and pin an
+OCaml TLS implementation (`tls-eio`) and certificate roots (`ca-certs`), or keep
+HTTPS unimplemented and fail construction loudly; an `http`-only implementation
+is not a completed M3 and cannot serve seekwright's providers.
+
+Unit tests use real loopback endpoints for the fixed-endpoint policy, a mock or
+vendored DNS/connect layer for deterministic rebinding/IP tests, oversized and
+chunked bodies, slow headers/bodies under a mock clock where possible, redirect
+chains, and credential/redaction cases. Public-web tests must not depend on the
+machine's actual resolver or the public internet.
+
+## 6. Decorators, effects, and retention limits
+
+Use Eio direct style and structured concurrency. mcp-kit 0.2.0 classic tool
+handlers are synchronous `Yojson.Safe.t -> (result, string) result`; Eio's direct
+style lets an authority operation perform bounded I/O in the calling fiber.
+There is no `Lwt`/async result in the core API.
+
+v1 provides only decorators with well-defined scope:
+
+```ocaml
+val with_operation_timeout :
+  Eio.Time.Timeout.t -> 'kind Authority.t -> 'kind Authority.t
+
+val with_log :
+  sink:(Event.t -> unit) -> 'kind Authority.t -> 'kind Authority.t
+```
+
+An operation timeout is not a whole-tool deadline: several sequential operations
+each get their own bound. `Event.t` contains constant operation names and bounded
+metadata, never secrets or content; the application supplies the stderr sink.
+Do not add a generic operation budget until there is a genuine request/factory
+scope. A counter stored in a server-lifetime grant is a server-lifetime budget,
+not a per-request one.
+
+Do not introduce an `Effect.Deep` test handler: plain closure calls perform no
+custom effect to intercept. Tests use recording sinks and deterministic network/
+filesystem fixtures. If custom effects are reconsidered later, their cancellation,
+one-shot continuation, typed-error, and composition semantics need a separate
+design.
+
+Grants can be retained in closures by trusted tool code and used later or from
+another fiber. Operation timeouts still apply after retention, but v1 does not
+revoke per-request authority or impose per-request budgets because registration
+closes over one server-lifetime grant and mcp-kit owns its sessions internally.
+Per-session/request grant factories require an mcp-kit request-construction hook
+and a real use case; they are not promised by this plan. OxCaml uniqueness and
+locality modes are out of scope, not a substitute for that missing lifecycle.
+
+## 7. Transport and lifecycle contract
+
+Verified mcp-kit 0.2.0 entry points:
+
+```ocaml
+Mcp_kit_stdio.run_channels server stdin stdout
+Mcp_kit_cohttp_eio.handler ~max_body_size:1_048_576 server
+```
+
+The stdio adapter needs channels. The HTTP adapter returns a `Cohttp_eio.Server.t`
+callback to pass to `Cohttp_eio.Server.run`; it is not a runnable server by
+itself. The example must put transport construction and the server loop under the
+same outer `Switch.run` that owns grant resources. Startup/declaration failures
+go to stderr with a nonzero exit; stdio carries only protocol bytes.
+
+The Cohttp-Eio adapter already bounds request bodies (default 1 MiB), validates
+modern Streamable HTTP routing headers, and handles Origin checks. Pin the body
+limit explicitly in the example. Inbound `Host` policy is application/gateway
+code, not the outbound `Net` authority; inspect the request at the surrounding
+Cohttp route when seekwright ports its Host allowlist.
+
+mcp-kit 0.2.0's HTTP adapter dispatches on the shared server and does not expose
+a callback to build authority per session. This is compatible with v1's
+server-lifetime policy. Cancellation notifications and arbitrary handler
+cancellation are not threaded through classic tool callbacks either, so only
+Eio cancellation plus authority operation bounds may be claimed; no whole-handler
+cancellation guarantee.
+
+## 8. Testing and acceptance
+
+### Core and capability tests
+
+- **Tool adaptation.** Input schema failure, decoder failure after schema
+  success, successful structured output, output-schema mismatch, duplicate tool,
+  invalid declaration, and sanitized `run` error each have the MCP behavior
+  specified above.
+- **Grant isolation.** Two tools with the same input but different roots receive
+  only their own data under interleaved calls. An unregistered tool cannot be
+  called through MCP. This tests closure packing; it does not replace type tests.
+- **Backend substitution.** Use two temporary roots, or an implementation-only
+  test backend below the public `.mli`, to produce identical output with distinct
+  fixtures. Public fake constructors must not weaken the external capability
+  boundary.
+- **Filesystem security.** The escape, race, byte/entry-bound, and error contracts
+  in section 4.
+- **Network security.** The DNS/connection-binding, TLS, redirect, timeout,
+  bounded-streaming, header, and redaction contracts in section 5.
+- **Concurrency.** Interleaved HTTP requests cannot mix grants, output, policy
+  counters (if added later), or log events. One denied/slow/timed-out operation
+  does not poison another request.
+
+### Negative compilation that cannot pass for the wrong reason
+
+`test/should_not_compile/` contains at least:
+
+- `Registry.add registry read_source` with no `~grant`;
+- `Registry.add registry read_source ~grant:net` with the wrong authority kind;
+- an attempted external constructor for `Authority.Fs.t`;
+- an attempt to call a core tool with an mcp-kit result or to bypass its decoder.
+
+Each fixture has an expected compiler-diagnostic snapshot. The test fails if
+compilation succeeds **or** fails with an unrelated error; merely using a dune
+rule with "any nonzero exit means pass" is inadequate because missing modules and
+syntax errors would make a false-positive test. Positive interface compilation
+must run first. Bare `let _ = Tools.read_source` is valid OCaml and is not a
+negative case.
+
+### Wire tests and official conformance
+
+- Replay modern requests over stdio and real loopback HTTP: modern request
+  dispatch, `tools/list`, `tools/call`, decoder/tool errors, unknown tools,
+  concurrent calls, and clean EOF. Compare JSON semantics rather than unrelated
+  transport framing bytes.
+- Include the legacy initialize/initialized lifecycle if the example advertises
+  it, and test body-size/routing-header boundaries through the actual HTTP
+  adapter.
+- Pin `@modelcontextprotocol/conformance@0.2.0-alpha.11` and Node 22 for the live
+  job. Record the exact scenario IDs and results, fail on runner errors, and
+  compare against a checked-in baseline with no unexpected missing/extra IDs.
+- The mcp-kit 37/37 result belongs to its full conformance fixture, including
+  features outside `mcp-caps` v1. Do not claim 37/37 for an echo/read-source
+  server. Report the scenarios applicable to this fixture, with explicit
+  exclusions; a separate upstream smoke run may verify the development setup.
+
+## 9. Milestones
+
+Every milestone runs `opam exec -- dune build @install` and
+`opam exec -- dune runtest`; later milestones retain all earlier tests.
 
 | | Deliverable | Exit criterion |
 |---|---|---|
-| M0 | `mcp-kit` echo server on stdio | Inspector connects. Half a day, because the protocol is not yours. |
-| M1 | `Authority.Fs` + `Policy.with_root` + `read_source` | Escape tests pass; the missing-grant snippet fails to compile |
-| M2 | HTTP via `mcp-kit-cohttp-eio` | Same transcript over HTTP; confirm body bounds and routing headers are the library's |
-| M3 | `Net`, `Proc`, wrappers, logging | Budget and deadline enforced under a looping client |
-| M4 | Conformance + docs | 37/37 or better; README states the retention limitation |
+| M0 | Workspace + direct mcp-kit echo over stdio | Exact `mcp-kit` constraints resolve; modern discover/list/call and legacy initialize/initialized/call transcripts work through a real client or Inspector; no capability code yet |
+| M1 | Core `Error`/`Tool`/`Registry`/`Server`, `Fs`, `with_root`, echo + `read_source` | Core has no mcp-kit imports; typed decode/output/error tests pass; filesystem escape/race/bounds tests pass; negative compilation checks diagnostics, not just exit status |
+| M2 | Same registry over Cohttp-Eio loopback | Same semantic tool transcript over stdio and HTTP; body/routing-header bounds exercised; resource lifetime and concurrent-client tests pass |
+| M3 | `Net`, endpoint/public-web policies, operation timeout, logging | DNS-to-connect binding and HTTPS verification tests pass; redirect/body/time bounds hold; no unimplemented HTTPS path is called complete |
+| M4 | Reusable docs, examples, pinned live conformance | Installable public interfaces documented; threat boundary and grant retention stated; exact applicable scenario baseline green; fallback still builds as an M0-style example |
 
-## 8. Open questions as spikes
+Implementation order inside M1 is core-with-echo first, then `Fs`; this isolates
+existential/adapter type errors from filesystem security errors. `Proc` is a
+post-M4 addition with executable allowlisting, no shell, explicit environment,
+working-directory policy, stdin/stdout/stderr caps, timeout, and process-group
+cleanup. Do not add it speculatively.
 
-1. **Per-session grants (blocking M2).** The mcp-kit README states one server
-   value serves concurrent clients, with a session per connection. If authority
-   must vary per client, the `Mcp_kit.Server.t` must be built per connection,
-   not per process. Spike this before M2 — the one item that can invalidate the
-   design. (v1 does not need per-client authority: one deployment, one
-   operator's keys — but the spike decides whether the library can ever offer
-   it.)
-2. **Context threading.** Whether `Registry` can be parameterised by a request
-   context, or whether grant-fixing must happen at server construction.
-3. **Inbound header access.** The host allowlist is outbound. If inbound `Host`
-   rejection is also wanted, confirm the cohttp-eio adapter exposes headers.
-4. **`mcp-kit` 0.2.0 API stability.** One maintainer, pre-1.0. Vendor or pin it.
-5. **OxCaml modes**, only if grant retention turns out to matter in practice.
+## 10. Dependency and compatibility policy
 
-## 9. Dependencies
+Use OCaml >= 5.1, dune >= 3.11, and exact `= 0.2.0` dependencies for every
+mcp-kit component in `dune-project`. Dune package constraints pin the dependency
+version; an opam switch pin is a separate environment operation, not a dune
+stanza. Keep the installed core/adapter versions in lockstep. Recheck the public
+interfaces and conformance evidence before any upgrade rather than accepting a
+pre-1.0 minor bump silently.
 
-OCaml 5.1+ (mcp-kit's floor), dune, `mcp-kit` 0.2.0 (the stdio adapter ships
-inside it as the `mcp-kit.stdio` library / `Mcp_kit_stdio` — it is **not** a
-separate opam package), `mcp-kit-cohttp-eio` 0.2.0, `eio`, `cohttp-eio` 6.3.0,
-`yojson`, `alcotest`, `logs`. Exact verified install: `plans/infra-setup.md`.
-TLS is the gateway's job, which is also what mcp-kit's own docs recommend.
+Initial dependencies: `mcp-kit`, `eio`, `yojson`, `uri`, `alcotest` (tests), and
+the Cohttp-Eio transport only in examples/applications. M3 adds `cohttp-eio` to
+`mcp-caps`, `ipaddr` for address classification, `tls-eio`, and `ca-certs`.
+Avoid a logging-framework dependency by exposing the bounded `Event.t` sink.
+TLS for inbound HTTP remains gateway/application policy; that does not remove
+the outbound HTTPS requirement above.
 
-## 10. The honest comparison to the Flix version
+`plans/infra-setup.md` records the current M0–M2 environment and the additional
+M3 TLS requirement. Package constraints belong in `dune-project`; setup
+instructions record the verified switch separately.
 
-The Flix spec said "it does not compile otherwise" and meant it in the
-type-and-effect sense, including through higher-order code. This plan gets the
-first half of that claim honestly, via abstraction, and explicitly gives up the
-second half. If the second half is the thing that interested you, this plan will
-feel like a compromise — and that is the correct feeling. If the first half plus
-a maintained, conformance-tested protocol layer is enough, this is the version
-that ships.
+## 11. The honest comparison to the Flix version
+
+The Flix spec's "it does not compile otherwise" is a type-and-effect claim
+through higher-order code. This plan gets a narrower first half: capability API
+misuse fails to type-check, authority constructors centralize confinement, and
+registration makes widening visible. It explicitly does not track arbitrary
+effects, revoke retained grants, or sandbox malicious tool code. That boundary
+belongs in the README and API docs so the useful guarantee is not oversold.
