@@ -70,22 +70,6 @@ inside `mcp-kit` as the findlib library `mcp-kit.stdio` (module
 - Verify with `eval $(opam env --switch=default) && dune build && dune runtest`
   from the repo root before reporting done.
 
-## Agent orchestration on this branch (verified 2026-11-10)
-
-Two orchestration paths exist; pick by task shape:
-
-- **Orca workers** (`orca orchestration worker-start --agent opencode --model
-  litellm/<id>`) for build/fix/review cycles that need worktrees and gates:
-  `litellm/andromeda-llm` (slow, smart, cheap — core design work),
-  `litellm/deepseek-v4.1-flash` (faster — fixes and independent reviews).
-  Workers never push or open PRs; the coordinator merges into `ocaml-port`.
-- **Vibe child agents** (spawn via `agents.spawn`) for review-only or advisory
-  passes where no worktree/gate is needed — no Orca run required. Select the
-  model by alias from `~/.vibe/config.toml`; `glm-5-3` is registered there and
-  was smoke-tested (child answered on glm-5-3 without litellm). Prefer glm-5-3
-  over glm-5.3-flash for reviews. Kimi Code is the most expensive option —
-  use only if genuinely blocked.
-
 ## Verified building the M0 workspace (2026-11-10)
 
 `dune-project`, `lib/caps/`, `examples/{echo,caps_echo}.ml`, `test/` build and
