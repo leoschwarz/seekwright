@@ -8,6 +8,7 @@ depends: [
   "ocaml" {>= "5.1"}
   "mcp-caps"
   "yojson" {>= "3.0.0"}
+  "toml" {>= "7.0"}
   "alcotest" {with-test}
   "odoc" {with-doc}
 ]

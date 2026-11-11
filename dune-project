@@ -84,5 +84,9 @@
   mcp-caps
   (yojson
    (>= 3.0.0))
+  ; P3: the config file's format. The parser is stdlib-only in the Python tree
+  ; ([tomllib]); OCaml needs the library.
+  (toml
+   (>= 7.0))
   (alcotest
    :with-test)))

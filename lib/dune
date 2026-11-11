@@ -2,11 +2,12 @@
 ; to as [Seekwright.Model] is [lib/model.ml]. The Python tree's own src/ is not
 ; part of this workspace.
 ;
-; [yojson] is the wire codec (P2). The routing core [router] (P1) is stdlib-only
-; by design — not by the absence of a [libraries] field (yojson is here for
-; model.ml) but by the [ocamldep] diff in test/dune, which pins the router's
-; dependencies and fails runtest if it reaches for any sibling module.
+; [yojson] is the wire codec (P2), [toml] the config file's parser (P3). The
+; routing core [router] (P1) is stdlib-only by design — not by the absence of a
+; [libraries] field (yojson and toml are here for other modules) but by the
+; [ocamldep] diff in test/dune, which pins the router's dependencies and fails
+; runtest if it reaches for any sibling module.
 (library
  (name seekwright)
  (public_name seekwright)
- (libraries yojson))
+ (libraries toml yojson))

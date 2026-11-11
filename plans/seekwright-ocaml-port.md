@@ -141,6 +141,16 @@ Three things worth recording for the phases behind it:
   `FREE_PROVIDER_ORDER`) because `config.ml` is P3, and pins the sentences that
   quote it literally. When P3 lands, its constants feed the tables; the pinned
   sentences stay, which is what makes a moved name fail a run.
+- Corrected when P3 landed (2026-11-11): the constants feed the *callers'* tables,
+  never the router module's source. `lib/router.ml` may not reference
+  `Seekwright.Config` — the stdlib-only rule is enforced by the `ocamldep` pin in
+  `test/dune`, which fails the diff on any dependency line — so the router's
+  caller (the engine, P5) builds a `search_table` from `Config`'s lists, and the
+  two frozen copies stay copies. They agree today: `Config.free_provider_order` is
+  `exa:free, parallel:free, freeserp, searxng, tinyfish` and
+  `Config.free_providers` is that set sorted, matching what
+  `test/test_router.ml` re-declares. Keeping them equal is a test someone has to
+  write down; nothing enforces it across the two suites yet.
 
 ## 5. Open questions / spikes
 

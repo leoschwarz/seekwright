@@ -116,3 +116,16 @@
 (test
  (name test_sanitize)
  (libraries seekwright yojson alcotest))
+
+; P3: config loading and validation, ported from tests/test_config.py. The
+; suite reads the two operator pages beside the model — the documented example
+; and the two role blocks are load-tested rather than quoted, so a renamed key
+; fails here instead of at an operator's first start — and it writes one config
+; file per case, which needs Unix. Those pages are deps, so the suite runs
+; against the same text a reader of the repo sees.
+(test
+ (name test_config)
+ (libraries seekwright alcotest unix)
+ (deps
+  ../docs/reference/configuration.md
+  ../docs/reference/deploying.md))

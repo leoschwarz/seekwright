@@ -1,5 +1,20 @@
+../lib/config.cmo : \
+    ../lib/config.cmi
+../lib/config.cmx : \
+    ../lib/config.cmi
+../lib/config.cmi :
+../lib/model.cmo : \
+    ../lib/model.cmi
+../lib/model.cmx : \
+    ../lib/model.cmi
+../lib/model.cmi :
 ../lib/router.cmo : \
     ../lib/router.cmi
 ../lib/router.cmx : \
     ../lib/router.cmi
 ../lib/router.cmi :
+../lib/sanitize.cmo : \
+    ../lib/sanitize.cmi
+../lib/sanitize.cmx : \
+    ../lib/sanitize.cmi
+../lib/sanitize.cmi :
