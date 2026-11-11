@@ -2,12 +2,22 @@
 ; to as [Seekwright.Model] is [lib/model.ml]. The Python tree's own src/ is not
 ; part of this workspace.
 ;
-; [yojson] is the wire codec (P2), [toml] the config file's parser (P3). The
-; routing core [router] (P1) is stdlib-only by design — not by the absence of a
-; [libraries] field (yojson and toml are here for other modules) but by the
+; The provider adapters are NOT in this library: they sit in [lib/providers/],
+; which carries its own stanza because [(include_subdirs qualified)] here would
+; forbid the [lib/caps/] stanza that defines mcp-caps. The direction is the one
+; that matters — [seekwright.providers] depends on this library and nothing here
+; depends on it, so the engine holds [Seekwright.Provider.t] values without ever
+; naming an adapter.
+;
+; [yojson] is the wire codec (P2), [toml] the config file's parser (P3),
+; [mcp-caps] and [uri] the provider seam (P4): a provider adapter reaches its
+; endpoint only through a [Mcp_caps.Authority.Net] grant, and [uri] names that
+; endpoint. The routing core [router] (P1) is stdlib-only by design — not by the
+; absence of a [libraries] field (these are here for other modules) but by the
 ; [ocamldep] diff in test/dune, which pins the router's dependencies and fails
 ; runtest if it reaches for any sibling module.
 (library
  (name seekwright)
  (public_name seekwright)
- (libraries toml yojson))
+ (libraries mcp-caps toml uri yojson))
+

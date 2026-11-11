@@ -152,6 +152,42 @@ Three things worth recording for the phases behind it:
   `test/test_router.ml` re-declares. Keeping them equal is a test someone has to
   write down; nothing enforces it across the two suites yet.
 
+P4 landed on `p4-providers`: the contract as `lib/provider.ml`/`.mli`
+(`Seekwright.Provider`: `module type S`, the `error`/`outcome`/`hit` rows, the
+JSON payload readers, the caps, the constraint report, and `Provider.Net` as the
+HTTP seam) plus `lib/providers/{freeserp,anysearch}.ml/.mli`, and four alcotest
+suites (`test_provider`, `test_freeserp`, `test_anysearch`,
+`test_provider_contract`, 98 cases) ported from `tests/providers/`. Four things
+for the phases behind it:
+
+- The adapters are their **own dune library** — `seekwright_providers`, public
+  name `seekwright.providers`, module path `Seekwright_providers.Freeserp` —
+  because the dependency direction is now fixed: `Provider` needs the `Net`
+  grant from `mcp-caps`, and an adapter needs `Seekwright` for the wire models.
+  P5's factory therefore cannot be `lib/factory.ml`: a factory that builds
+  adapters would close a cycle. It needs its own stanza (or the adapters move
+  into it). A `lib/dune` `(include_subdirs qualified)` was tried and does not
+  work while `lib/caps/` has its own stanza.
+- The exit criterion is **half met**. "Every response names the provider that
+  served it" is pinned for both adapters, and the failure rows are driven over
+  every adapter module on disk; but the *keyless live* half has no OCaml
+  harness yet, so nothing here proves the two endpoints still answer as the
+  Python oracle recorded. Open question 4 covers that corpus, and the P4 suites
+  would take it directly: each adapter is driven through an injected
+  `Provider.Net.t`, which is where a recorded-response Net would sit.
+- `test_provider_contract.ml` ports the Python suite's *driving*, not its
+  document parser. That suite reads the Failures table out of
+  `docs/reference/provider-contract.md` so code and prose cannot drift; the
+  table's *signals* are spelled in httpx vocabulary (`httpx.TimeoutException`,
+  `httpx.HTTPStatusError`), which the port does not raise — its signals are the
+  two kinds a `Net` grant answers with. Sharing the table across both trees
+  means revising that page's wording, which is a Python-tree change and so out
+  of scope here; the row names are pinned in OCaml meanwhile.
+- `test/router_dependencies.expected` was already stale on the branch base: P2
+  added `lib/model.ml` and `lib/sanitize.ml` without re-pinning, so `dune
+  runtest` failed there before P4 started. P4 re-pinned it (`dune runtest test`
+  then `dune promote`), and P3 will move it again.
+
 ## 5. Open questions / spikes
 
 1. **HTML extraction backend.** Is there an OCaml equivalent of trafilatura worth
