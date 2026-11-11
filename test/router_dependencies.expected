@@ -1,0 +1,5 @@
+../lib/router.cmo : \
+    ../lib/router.cmi
+../lib/router.cmx : \
+    ../lib/router.cmi
+../lib/router.cmi :

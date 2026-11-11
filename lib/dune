@@ -1,0 +1,15 @@
+(library
+ ; The port's own library, wrapped: the routing core is [Seekwright.Router] to
+ ; its callers (plans/project-structure.md). It depends on [mcp-caps] rather
+ ; than the other way round, which is what keeps dropping the capability layer
+ ; a seekwright-side change — and today it depends on nothing at all.
+ ;
+ ; No [libraries] field is deliberate: the routing core stands only on the
+ ; standard library, which is what makes it the module a compiled rewrite
+ ; implements 1:1. That is checked, not promised, and by two things: this
+ ; absence means a reference to [Mcp_caps] or any other out-of-library module
+ ; fails the compile, and the [ocamldep] diff in test/dune pins the router's
+ ; dependencies inside the library, so reaching for a later seekwright module
+ ; fails the runtest alias rather than passing review.
+ (name seekwright)
+ (public_name seekwright))

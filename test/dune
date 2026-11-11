@@ -6,6 +6,35 @@
  (name test_event)
  (libraries mcp-caps alcotest))
 
+; P1: the routing core, ported from tests/test_router.py as the first
+; differential proof. The suite needs no transport and no loop — the router is
+; pure — and lib/dune gives the library no [libraries], so this is the whole
+; dependency story.
+(test
+ (name test_router)
+ (libraries seekwright alcotest))
+
+; The port of tests/test_router.py's stdlib-only case, as a dependency fact.
+; Two checks, and each catches what the other cannot: [lib/dune] carries no
+; [libraries] field, so a reference to [Mcp_caps] or any other out-of-library
+; module fails the compile with "Unbound module"; and [ocamldep] run over the
+; whole library resolves references *inside* it, so a reference from the router
+; to a sibling module adds a dependency line here and fails this diff. Both
+; facts come from the tools that resolve modules, which a grep of the source
+; text cannot match. The pin lists every file the library has, so a new module
+; re-pins two lines even when the router ignores it: that is deliberate, it is
+; what makes a router that reaches for a sibling visible.
+(rule
+ (targets router_dependencies.actual)
+ (deps (glob_files ../lib/*.ml) (glob_files ../lib/*.mli))
+ (action
+  (with-outputs-to router_dependencies.actual
+   (run ocamldep %{deps}))))
+
+(rule
+ (alias runtest)
+ (action (diff router_dependencies.expected router_dependencies.actual)))
+
 (test
  (name test_tool)
  (libraries mcp-caps yojson alcotest))
