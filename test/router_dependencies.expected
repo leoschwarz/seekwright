@@ -1,3 +1,25 @@
+../lib/agent.cmo : \
+    ../lib/usage.cmi \
+    ../lib/sanitize.cmi \
+    ../lib/provider.cmi \
+    ../lib/model.cmi \
+    ../lib/engine.cmi \
+    ../lib/config.cmi \
+    ../lib/agent.cmi
+../lib/agent.cmx : \
+    ../lib/usage.cmx \
+    ../lib/sanitize.cmx \
+    ../lib/provider.cmx \
+    ../lib/model.cmx \
+    ../lib/engine.cmx \
+    ../lib/config.cmx \
+    ../lib/agent.cmi
+../lib/agent.cmi : \
+    ../lib/usage.cmi \
+    ../lib/provider.cmi \
+    ../lib/model.cmi \
+    ../lib/engine.cmi \
+    ../lib/config.cmi
 ../lib/config.cmo : \
     ../lib/config.cmi
 ../lib/config.cmx : \
