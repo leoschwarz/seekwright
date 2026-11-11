@@ -1,0 +1,21 @@
+; The provider adapters: one module per adapter, the way
+; [src/seekwright/providers/] is laid out, and every one of them satisfies
+; [Seekwright.Provider.S].
+;
+; This is a separate library rather than a subdirectory of [seekwright] because
+; [(include_subdirs qualified)] in the parent directory would not allow the
+; [lib/caps/] stanza, and a library stanza here is the alternative that keeps the
+; directory. The public name puts it inside the same artifact: findlib sees
+; [seekwright.providers], the build sees [Seekwright_providers], and the opam
+; package stays one.
+;
+; The dependency direction is the constraint worth remembering: these adapters
+; depend on [seekwright] (the contract in [../provider.ml] and the wire models in
+; [../model.ml]), never the reverse. Nothing in [lib/] may name an adapter, so
+; the module that builds a name into a provider — Python's [factory._PROVIDERS] —
+; needs its own stanza (P5) rather than a [lib/factory.ml] here, which would
+; close a cycle.
+(library
+ (name seekwright_providers)
+ (public_name seekwright.providers)
+ (libraries seekwright mcp-caps uri yojson))

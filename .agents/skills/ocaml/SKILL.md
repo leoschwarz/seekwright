@@ -588,3 +588,70 @@ Facts worth not rediscovering:
   then `python3 compare.py`. It caught three real port bugs here (the quoted
   table key, an unsorted `enabled_providers`, and the whole lax-scalar question).
   Current: 99/102 agree, the 3 flagged being the parser divergences above.
+
+## Verified building P4 — provider contract + keyless adapters (2026-11-11)
+
+`lib/provider.ml{,i}`, `lib/providers/{freeserp,anysearch}.ml{,i}` and
+`test/test_{provider,freeserp,anysearch,provider_contract}.ml` build and pass
+(23 + 38 + 33 + 4 alcotest cases). Facts worth not rediscovering:
+
+- **`lib/providers/` is its own library**, `(name seekwright_providers) (public_name
+  seekwright.providers)` → `Seekwright_providers.Freeserp`. A
+  `(include_subdirs qualified)` in `lib/dune` is rejected with "cannot be used
+  in the same directory as directories with dune rules" as soon as a sibling
+  (`lib/caps/`) has a stanza, and even without one, a qualified subdir of a
+  *public* library must be `(package seekwright)` — which then makes its module
+  path `Seekwright.Providers.Freeserp` and puts it in the `seekwright` package
+  where P5's factory needs to depend *back* on it. Keep the separate stanza;
+  dependency direction is `mcp-caps → seekwright → seekwright.providers`.
+- **Adapters → `seekwright` means P5's factory cannot be `lib/factory.ml`**: a
+  factory that builds adapters closes the cycle. It needs its own library.
+- `lib/dune` gained `(libraries mcp-caps uri yojson)`; `dune build` regenerated
+  `seekwright.opam` with `"uri" {>= "4.0"}` after `dune-project`'s `seekwright`
+  package gained `(uri (>= 4.0))`. `dune-project` takes `(uri (>= 4.0))` — a
+  version constraint and `:with-test` cannot share an entry (M1 note still holds).
+- **An optional labelled argument whose declared type is an option gets wrapped
+  again**, so `?language:bool option` reaches the implementation as
+  `bool option option` and every call site would have to write
+  `~language:(Some (Some true))`. Python's `language: bool | None = None` ports
+  as a **mandatory labelled arg** `language:bool option` — the caller still
+  writes `~language:None` for "not answered", which keeps the same visibility
+  the four required buckets have.
+- **A trailing `()` after optional args is unit-dropped.** `let f ?a ?b () = …`
+  is called `f ~a:x ()`, never `f ~a:x () ()` — the extra unit gives "This
+  argument cannot be applied without label". Same for a fixture builder with a
+  `?query:` optional: `search_of ()`, not `search_of () ()`.
+- **`Policy_net` declares `body` *and* `headers` on both `request` and
+  `response`**, so `request.body` in a function whose argument is not annotated
+  fails with "Unbound record field". Annotate the binding:
+  `let body_of (request : Caps.Authority.Net.request) = …` and the labels resolve
+  for the rest of the body.
+- **Uri 4.4 has no `Uri.Query` module** for what adapters need: use
+  `Uri.with_query u [("q", ["x"])]` (values are `string list`), `Uri.query`,
+  `Uri.get_query_param`. A query built with `Uri.with_query` round-trips through
+  `Uri.to_string` with the same ordering.
+- **`Yojson.Safe.from_string` accepts bare scalars and arrays** — `[]`, `null`,
+  `42`, `"a string"` all parse — so a "decodes to a non-object" guard is
+  load-bearing, not a formality; and it *raises* `Yojson.Json_error` on empty or
+  truncated input, so decode is `try … with Json_error` and the caller's error
+  row, never a `result` returning `Ok`.
+- **`Alcotest.float` takes the absolute error positionally**: `A.float 1e-9`,
+  there is no `~abs_tol` (its signature is `float : float -> float testable`).
+- **OCaml 5.3 has `Option.get`, not `Option.value_exn`.** `Int64.sign` is also
+  absent; compare against `0L`.
+- Source-reading tests (the "every adapter on disk is driven" guard, the
+  source-discipline guard) only work under `dune runtest`: the `(deps
+  (glob_files ../lib/providers/*.ml))` sandbox is what makes `Sys.readdir
+  "../lib/providers"` resolve, and `dune exec test/x.exe` fails with
+  `Sys_error("../lib/providers: No such file or directory")`. Do not chase that
+  as a bug.
+- Date arithmetic without a `unix` dependency: days-since-civil is Hinnant's
+  `civil_from_days` (~15 lines), and a pinned clock fixture makes the assertion
+  exact. `now () = 1_700_000_000.` → `2023-11-14`, and the Python-verified
+  recency starts are day `2023-11-13`, week `2023-11-07`, month `2023-10-15`,
+  year `2022-11-14`.
+- **`test/router_dependencies.expected` was stale on the branch base** (P2 added
+  `model`/`provider`-era modules without re-pinning), so `dune runtest` failed
+  before P4 started. `dune runtest test` then `dune promote test`; the pin now
+  lists `model`, `provider`, `router`, `sanitize` and keeps
+  `../lib/router.cmi :` dependency-free.

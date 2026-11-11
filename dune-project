@@ -82,6 +82,10 @@
   (ocaml
    (>= 5.1))
   mcp-caps
+  ; P4: the provider adapters. [uri] names the endpoint each adapter dials and is
+  ; also what the [Net] grant's request carries; [mcp-caps] is the grant itself.
+  (uri
+   (>= 4.0))
   (yojson
    (>= 3.0.0))
   ; P3: the config file's format. The parser is stdlib-only in the Python tree

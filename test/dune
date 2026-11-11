@@ -129,3 +129,37 @@
  (deps
   ../docs/reference/configuration.md
   ../docs/reference/deploying.md))
+
+; P4: the provider contract's machinery — the constraint report, the caps, and
+; the failure rows provider-contract.md's Failures table fixes. It reads the
+; adapter sources from the sandbox as well, which is what the (deps) line is:
+; the source-discipline guard is worthless if the files it scans are not inputs
+; to the test, and dune would otherwise let it read a tree it did not declare.
+(test
+ (name test_provider)
+ (libraries seekwright mcp-caps yojson alcotest)
+ (deps
+  (glob_files ../lib/provider.ml)
+  (glob_files ../lib/provider.mli)
+  (glob_files ../lib/providers/*.ml)
+  (glob_files ../lib/providers/*.mli)))
+
+; The adapter suites. Each drives its adapter through a fake Provider.Net.t, the
+; position httpx.MockTransport holds in the Python suites, so no socket is opened
+; and the request that would have gone out is asserted on instead.
+(test
+ (name test_freeserp)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest))
+
+(test
+ (name test_anysearch)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest))
+
+; The shared failure rows, driven over every adapter module on disk. The
+; (deps) line is what lets the suite count those modules rather than trust the
+; list in its own source.
+(test
+ (name test_provider_contract)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest)
+ (deps (glob_files ../lib/providers/*.ml)))
+

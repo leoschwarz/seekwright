@@ -8,6 +8,11 @@
 ../lib/model.cmx : \
     ../lib/model.cmi
 ../lib/model.cmi :
+../lib/provider.cmo : \
+    ../lib/provider.cmi
+../lib/provider.cmx : \
+    ../lib/provider.cmi
+../lib/provider.cmi :
 ../lib/router.cmo : \
     ../lib/router.cmi
 ../lib/router.cmx : \
