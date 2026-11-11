@@ -472,3 +472,101 @@ Build and dune details:
 - Environment hazard for cleanup commands here: `pkill -f <pattern>` matches the
   `bash -c` line that carries the pattern, so it kills your own shell (exit 143,
   no output). Kill by PID, or match `/proc/<pid>/exe` instead.
+
+## Verified porting P1, the pure router (2026-11-11)
+
+The seam and how it is pinned:
+
+- `lib/dune` is `(library (name seekwright) (public_name seekwright))` with **no
+  `[libraries]` field**, so the routing core is `Seekwright.Router` and stands on
+  the stdlib only. `dune build lib/seekwright.a` and
+  `dune build test/test_router.exe` therefore need **no GMP/zarith env** — the
+  `CPATH`/`LIBRARY_PATH`/`PKG_CONFIG_PATH` lines above are only what the
+  `mcp-caps` libraries and their suites need.
+- Python's "this module imports nothing of seekwright" AST case ports as a
+  dependency fact, not a grep, and it takes **two** checks because each tool sees
+  a different half. `ocamldep` is lexical: it reports a module dependency only for
+  a name it can resolve among the files it is given, so
+  `ocamldep router.ml` prints nothing about a reference to `Mcp_caps` or to a
+  module whose file was not passed (verified: `Model.foo` in `router.ml` with
+  `model.ml` absent prints no dependency; with `model.ml` in the same directory
+  and on the command line it prints `router.cmo : \ model.cmo`). So:
+  - the missing `[libraries]` field in `lib/dune` is what refuses an
+    out-of-library reference — adding `Mcp_caps.Error.message` fails the compile
+    with `Unbound module "Mcp_caps"`, which is enough of a guard because
+    `mcp-caps` is the only thing outside `seekwright` the router could want;
+  - the rule runs `ocamldep` over **the whole library** (`(deps (glob_files
+    ../lib/*.ml) (glob_files ../lib/*.mli))`, `(run ocamldep %{deps})`) and a
+    `(rule (alias runtest) (action (diff expected actual)))` pins the answer.
+    Verified negative test: a sibling `lib/model.ml` plus
+    `let probe_sibling = Model.probe` in `lib/router.ml` fails `runtest` with
+    `+../lib/model.cmo :` in that diff. `ocamldep` is on `PATH` in a dune action.
+    For a wrapped library's own files the answer includes the self lines
+    `../lib/router.cmo : \ ../lib/router.cmi` and `../lib/router.cmx : …` plus
+    `../lib/router.cmi :`, so the expected file carries them, and every new module
+    in the library re-pins two lines even when the router ignores it — the price
+    of a pin that catches the router leaning on a sibling.
+- `grep` on `dune build @runtest` output can report *binary file matches* —
+  alcotest colours its output. Use `grep -a`.
+
+Running the Python oracle as a differential oracle (the method, worth reusing):
+
+- Load the module standalone: `importlib.util.spec_from_file_location("name",
+  "src/seekwright/router.py")`, then **register it before executing**:
+  `sys.modules["name"] = mod` before `spec.loader.exec_module(mod)`. Without it
+  `@dataclass(frozen=True, slots=True)` dies inside `dataclasses._is_type` with a
+  traceback about `sys.modules.get(cls.__module__).__dict__`, not anything about
+  the real cause. `uv run python <probe>.py` from the repo root; the first run
+  creates `.venv/` there, which is gitignored, so `git status` stays clean.
+- Read the frozen constants from the real module (`sys.path.insert(0, "src")` +
+  `from seekwright.config import FREE_PROVIDERS, FREE_PROVIDER_ORDER`), not by
+  `ast.literal_eval` of `config.py`: `FREE_PROVIDERS = frozenset(...)` is a call,
+  so a literal-eval extractor silently has no key. Verified values:
+  `FREE_PROVIDER_ORDER = ('exa:free', 'parallel:free', 'freeserp', 'searxng', 'tinyfish')`,
+  `sorted(FREE_PROVIDERS)` puts `freeserp` between the two flavours.
+- Print both sides as `label<TAB>value` — refusal as `str(exc)`, a rung as
+  `name:status`, an answer as `repr` — and `diff` the two files. Case lists must
+  be the *same order and count*; a driver with one more case than its twin
+  compares the wrong rows silently.
+- Scratch compile against the built library:
+  `ocamlfind ocamlc -I $B -o probe $B/seekwright.cmo $B/seekwright__Router.cmo probe.ml`
+  with `B=_build/default/lib/.seekwright.objs/byte`. Link order is checked: the
+  wrapper `.cmo` and the unit `.cmo` before the probe source, or the compiler
+  stops with "Wrong link order". `seekwright.cma` in `_build/default/lib/` has no
+  matching `.cmi` beside it, so `-I`-ing it fails to find the signatures.
+- What this caught, once: **Python's truthiness is not OCaml's `option`.**
+  `fallback_served_notice(..., notice="")` takes the bare sentence there (`if
+  notice` is false for `""`) and took the sentence *plus a dangling `"; "`* here.
+  Every `if x` / `x or y` over an optional or a sequence in `router.py` is a
+  truthiness test to re-read when porting — `table.permitted or ()`,
+  `", ".join(providers) or "none"`, `table.free_fallback if table.free_fallback else
+  table.free_order` are the same shape. The empty-notice case is now matched and
+  pinned in `test/test_router.ml`, though the Python suite does not have it.
+
+OCaml details:
+
+- Warning 8 (`partial-match`) is an error in this profile, and a guard arm does
+  not close a match: `Some s when s <> "" -> … | Some "" | None -> …` still
+  reports "not exhaustive: `Some "*"`". Put the emptiness test in the arm body:
+  `| Some s -> if s = "" then … else …`.
+- An optional argument in the middle of a signature is fine —
+  `search_table -> ?mode:search_mode -> name option -> name` compiles under the
+  project's flags and both call forms (`t ~mode:Free None`, `t None`) typecheck.
+  The earlier note blaming warning 16 for a signature like that was wrong.
+- A doc comment in a record signature is accepted before the first field, after a
+  field's `;`, and inline after the `;` (all three verified with `ocamlc -c` on
+  isolated shapes). So when an `.mli` is rejected, don't guess from the message's
+  line number: dune attributes those errors to a generated file
+  (`lib/<name>_impl._i/.mli-lang-impl/<file>.mli:6:6-6:7`) whose numbering is not
+  your source's, and that directory is not left behind in `_build`. Reproduce the
+  construct in a minimal `.mli` with `ocamlc -c` to find it.
+- OCaml's string line continuation (`\` at end of line) strips the newline *and*
+  the following indentation, so a Python f-string split over lines ports to one
+  space where the source shows many — the byte-identical oracle diff is what makes
+  that safe to rely on.
+- Python renders a quoted name in an f-string through `repr`, so the sentence
+  carries single quotes: port as `let quoted name = "'" ^ name ^ "'"` and note in
+  the file that a provider name is never a quote or a backslash.
+- A Python `frozenset` that a sentence prints needs dedupe **and** sort; a list
+  models it badly. `sorted_names` (dedupe, then `List.sort String.compare`) is
+  what makes `sorted(free)` sentences match.
