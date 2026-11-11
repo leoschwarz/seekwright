@@ -59,8 +59,9 @@ those eight are not evidence of a feature.
 
 Unscored for this revision (13 scenarios, never in the 37): `http-header-validation`
 (14 checks), `http-custom-header-server-validation` (10) and `json-schema-2020-12`
-(8) all pass against this fixture; the ten `tasks-*` extension scenarios fail,
-and fail identically for the upstream control fixture, because mcp-kit 0.2.0
+(8) all pass against this fixture; nine of the ten `tasks-*` extension scenarios fail
+(`tasks-status-notifications` reports all checks skipped), and they fail
+identically for the upstream control fixture, because mcp-kit 0.2.0
 implements no tasks extension.
 
 ## What the fixture declares, and what reaches it
@@ -148,8 +149,10 @@ Recorded 2026-11-11, in the order they were found:
 and `compare_results.py` are copied from mcp-kit v0.2.0 (`test/conformance/`),
 and `run_live.sh` follows its `scripts/run_live_mcp_conformance.sh` — same
 pinned runner, same manifest, same comparator, so the numbers above are
-comparable to upstream's records rather than a new measuring stick. Both sides
-are MIT-licensed (`LICENSE` here, the same in that archive). The archive the
+comparable to upstream's records rather than a new measuring stick. This
+repository is Apache-2.0 (root `LICENSE`); the copied/derived upstream files
+are MIT-licensed by the Epure Team and carry that notice in
+`UPSTREAM-LICENSE.md`, which lists them. The archive the
 switch installs is
 `https://gitlab.com/nomadic-labs/ai-harness/ocaml-mcp/-/archive/v0.2.0/ocaml-mcp-v0.2.0.tar.gz`,
 `sha256=43c8319a13be91e323ae952a71ab673533fb3295886029eed9d81e5828de5ef7`

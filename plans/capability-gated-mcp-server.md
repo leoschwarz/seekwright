@@ -732,7 +732,7 @@ The 13 scenarios the same command runs but does not score:
 `json-schema-2020-12` now pass against the fixture — the last two are the most
 useful unscored checks for this layer, because both are about a declared input
 schema surviving `Tool.make` → `Registry.add` → `Server.of_registry` byte for
-byte — and the ten `tasks-*` extension scenarios fail for the fixture and for
+byte — and nine of the ten `tasks-*` extension scenarios fail for the fixture and for
 upstream's fixture alike.
 **The official runner has no stdio mode**: `conformance server` takes `--url`
 and nothing else. The stdio half is therefore in-tree — `transcript.jsonl` of the
@@ -911,7 +911,7 @@ gap, and **`examples/read_source.exe` and `examples/gated_search.exe` 8/37 each*
 examples, is what measures the layer. Unscored-but-measured: `http-header-validation`,
 `http-custom-header-server-validation` and `json-schema-2020-12` all pass, the
 last two added during M4 because both ask whether a declared input schema reaches
-mcp-kit unchanged, and the ten `tasks-*` extension scenarios fail for our fixture
+mcp-kit unchanged, and nine of the ten `tasks-*` extension scenarios fail for our fixture (one reports all checks skipped)
 and upstream's alike. Two findings to keep: **the official runner has no stdio
 mode**, so the stdio evidence is the pinned transcript rule in
 `test/conformance/dune` plus the transport-parity test, and four fixture gaps
