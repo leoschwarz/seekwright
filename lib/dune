@@ -1,0 +1,10 @@
+; The port's library. Wrapped as Seekwright: the module a test or bin/ refers
+; to as [Seekwright.Model] is [lib/model.ml]. The Python tree's own src/ is not
+; part of this workspace.
+;
+; [yojson] is the wire codec (P2); [router] (P1) is stdlib-only but lives in the
+; same library, so a module added later needs no new stanza.
+(library
+ (name seekwright)
+ (public_name seekwright)
+ (libraries yojson))
