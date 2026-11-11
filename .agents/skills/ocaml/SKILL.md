@@ -655,3 +655,41 @@ Facts worth not rediscovering:
   before P4 started. `dune runtest test` then `dune promote test`; the pin now
   lists `model`, `provider`, `router`, `sanitize` and keeps
   `../lib/router.cmi :` dependency-free.
+
+## Verified fixing the P4 clip (2026-11-11)
+
+`Provider.clip`'s fast-path guard was `String.length text <= limit`, a byte
+length against a codepoint cap; it is now `codepoint_count text <= limit`.
+Measured over the review's 209-pair differential corpus
+(`/tmp/opencode/p4diff/py.py` against `truncate_snippet`/`truncate_text`): 8
+mismatches before, 0 after.
+
+- **The mismatch only exists where the two lengths straddle the cap**: bytes
+  `> limit` while codepoints `<= limit`. A fixture whose byte *and* character
+  counts both exceed the limit never reaches the bug — the pre-existing
+  `the_cap_counts_characters_not_bytes` ("éééé éééé" at 5) is exactly that, so
+  it passed with the guard broken. Pin the straddle explicitly; the crossing
+  rows now live in `test_provider.ml` as `the_crossing_pairs_match_the_oracle`
+  (plus an ASCII `ascii_caps_match_the_oracle` for the boundary/rstrip rules).
+- The eight rows, as the oracle answers them (text, limit): `"héllo. x"` 8,
+  `"éabcd"` 5, `"naïve café. next sentence here"` 30,
+  `"日本語のテキストです。次"` 12/20/30, `"emoji 😀 test"` 12, 30×`"é"` 30 — all
+  returned whole, `cut = false`. A byte guard sliced at a boundary (the first
+  row) or appended `"…"` (the rest).
+- Consequence worth naming in P5/P6: `truncate_text`'s `cut` flag (what a caller
+  uses to decide whether `fetch` is worth it) was *true* for an uncut page, so
+  this was a correctness bug on the flag as well as the text.
+- **`git rebase --continue` still wants a commit message editor** once conflicts
+  are resolved and staged, even when the message is unchanged: a non-tty run
+  dies with `problem with the editor 'editor'`. Use
+  `GIT_EDITOR=true git rebase --continue`.
+- Rebasing P4 onto P3 conflicted in four files, all mechanical: `lib/dune`
+  (libraries union → `mcp-caps toml uri yojson`), `test/dune` (keep the P3
+  `test_config` stanza *and* the P4 suites), `test/router_dependencies.expected`
+  (ocamldep order: `config, model, provider, router, sanitize`) and this file
+  (both dated sections). `dune-project` auto-merged (both `(toml …)` and
+  `(uri …)` under `seekwright`), and a plain `dune build` regenerated
+  `seekwright.opam` with both — never hand-edit it.
+- After the rebase `dune runtest` is green at config 170, provider 25, freeserp
+  38, anysearch 33, provider-contract 4; no `dune promote` needed once the pin
+  above is right.
