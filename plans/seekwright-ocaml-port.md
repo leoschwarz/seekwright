@@ -116,6 +116,32 @@ tree; decided 2026-11-10) — or reuse the Python printer
 | P7 | `answer` | One model call per answer, validated citations; "answers that can be checked" |
 | P8 | server, both transports, dashboard, REST, CLI | Applicable official conformance scenarios green against the checked baseline + surface manifest identical to Python's; "one person can run it" |
 
+P1 landed on `p1-router`: `lib/router.ml`/`.mli` (so `Seekwright.Router`) and
+`test/test_router.ml`, one alcotest case per case of `tests/test_router.py`.
+Three things worth recording for the phases behind it:
+
+- The router's seam is machine-checked as a dependency fact, not a source grep,
+  and it takes two checks: `lib/dune` has no `[libraries]` field, which is what
+  makes an out-of-library reference (`Mcp_caps`, say) a compile error, and
+  `test/dune` diffs `ocamldep`'s answer for the whole library against
+  `test/router_dependencies.expected`, which is what makes the router leaning on
+  a sibling module fail `runtest`. `ocamldep` is lexical — it reports only the
+  module names it can resolve among the files it is handed — so scanning the
+  whole library is what gives the pin its teeth. Verified both ways: a reference
+  to `Mcp_caps` refuses to compile, and a reference to a temporary
+  `lib/model.ml` lands in the pin and fails the diff.
+- The differential ran against the live oracle rather than a recorded corpus
+  (open question 4 stays open for the phases that need responses, not decisions):
+  the suite's case matrix plus edges it does not pin, printed identically from
+  `src/seekwright/router.py` and from the compiled library. One divergence came
+  out of that and is now matched and pinned: Python's truthiness makes an
+  empty-string fallback notice read as unset, so a suffix ending in `"; "` never
+  ships. P5 should assume that rule when it builds the sentence.
+- The suite re-declares the frozen free vocabulary (`FREE_PROVIDERS` /
+  `FREE_PROVIDER_ORDER`) because `config.ml` is P3, and pins the sentences that
+  quote it literally. When P3 lands, its constants feed the tables; the pinned
+  sentences stay, which is what makes a moved name fail a run.
+
 ## 5. Open questions / spikes
 
 1. **HTML extraction backend.** Is there an OCaml equivalent of trafilatura worth

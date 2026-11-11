@@ -27,8 +27,13 @@ repo root, containing two libraries.
 │                                #   ipaddr, domain-name, tls, tls-eio, ca-certs,
 │                                #   mirage-crypto-rng (+ eio_main :with-test for the
 │                                #   examples and the fs tests)
-├── seekwright.opam              # generated: deps = mcp-caps, cohttp-eio, toml, uri, ...
+├── seekwright.opam              # generated: today mcp-caps (+ alcotest :with-test);
+│                                #   cohttp-eio, toml, uri arrive with their phases
 ├── lib/
+│   ├── dune                     # (library (name seekwright) (public_name seekwright));
+│   │                            #   no [libraries] field while the only module in it is
+│   │                            #   the routing core, so an outside reference is a
+│   │                            #   compile error and test/dune pins the inside ones
 │   ├── caps/                    # public library mcp-caps (wrapped as Mcp_caps)
 │   │   ├── dune                 # (library (name mcp_caps) (public_name mcp-caps)
 │   │   │                        #   (libraries eio mcp-kit uri yojson http cohttp-eio
@@ -81,7 +86,10 @@ repo root, containing two libraries.
 │                                #   diffed against the Python tools/surface.py output
 └── test/
     ├── dune                     # alcotest suites, one per lib module
-    ├── router/                  # ported tests/test_router.py — first differential proof
+    ├── test_router.ml           # ported tests/test_router.py — first differential proof
+    ├── router_dependencies.expected
+    │                            # the seam guard: the pinned ocamldep answer that
+    │                            #   lib/router.ml references no other module
     ├── should_not_compile/      # missing/wrong grant and external Fs constructor;
     │                            #   compilation must fail with the expected diagnostic
     ├── differential/            # recorded Python request/response corpus + replayer
@@ -90,8 +98,10 @@ repo root, containing two libraries.
 
 ## Conventions carried over from the Python tree
 
-- **Module-per-concern, tests mirror modules** (`test/router/` ↔ `lib/router.ml`),
-  same as `tests/` mirrors `src/seekwright/`.
+- **Module-per-concern, tests mirror modules** (`test/test_router.ml` ↔
+  `lib/router.ml`), same as `tests/` mirrors `src/seekwright/`. One alcotest
+  suite per module, named `test_<module>` — dune's `(test (name test_router))`
+  stanza makes the file name, so the mirror is by name rather than by directory.
 - **Interfaces everywhere** (`.mli` per module): the abstract-type trick in
   `authority.mli` is the whole capability claim, and every other module gets an
   interface so the public surface is deliberate, not incidental.
@@ -131,8 +141,9 @@ Verified at M0, three mechanics details the sketch above leaves open:
 dune derives the wrapped module from the library's `(name)`, not its
 `public_name`, so the layer needs `(name mcp_caps)` to be `Mcp_caps`; with a
 single `(package)` stanza dune requires it to equal the project `(name)`, which
-the two stanzas above sidestep; and the `seekwright` package needs
-`(allow_empty)` until P1 attaches its first library to it.
+the two stanzas above sidestep; and the `seekwright` package needed
+`(allow_empty)` from M0 until P1 attached `lib/router.ml` to it, which dropped
+the field again.
 
 `mcp-caps` is the public name future MCP servers will depend on, so it is the
 one name worth getting right; `mcp-kit` sets the local precedent (hyphenated,

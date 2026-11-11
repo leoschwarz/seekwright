@@ -71,8 +71,10 @@
   (alcotest
    :with-test)))
 
-; The port's own package stanza. It carries the P2 wire library; P1's router
-; attaches to the same library rather than a second one.
+; The port's own package stanza. It carries the P1 router and the P2 wire
+; library in one library; it depends on mcp-caps rather than the other way
+; round, which is what keeps dropping the capability layer a seekwright-side
+; change. The router itself stays stdlib-only via the ocamldep pin in test/dune.
 (package
  (name seekwright)
  (synopsis "An MCP server fronting web-search providers behind one tool surface")

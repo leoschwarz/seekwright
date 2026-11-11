@@ -1,9 +1,11 @@
-; The port's library. Wrapped as Seekwright: the module a test or bin/ refers
+; The port's library, wrapped as Seekwright: the module a test or bin/ refers
 ; to as [Seekwright.Model] is [lib/model.ml]. The Python tree's own src/ is not
 ; part of this workspace.
 ;
-; [yojson] is the wire codec (P2); [router] (P1) is stdlib-only but lives in the
-; same library, so a module added later needs no new stanza.
+; [yojson] is the wire codec (P2). The routing core [router] (P1) is stdlib-only
+; by design — not by the absence of a [libraries] field (yojson is here for
+; model.ml) but by the [ocamldep] diff in test/dune, which pins the router's
+; dependencies and fails runtest if it reaches for any sibling module.
 (library
  (name seekwright)
  (public_name seekwright)
