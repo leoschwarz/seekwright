@@ -693,3 +693,87 @@ mismatches before, 0 after.
 - After the rebase `dune runtest` is green at config 170, provider 25, freeserp
   38, anysearch 33, provider-contract 4; no `dune promote` needed once the pin
   above is right.
+
+## Verified porting P5 (2026-11-11)
+
+`lib/engine.ml` (Search + Fetch), `lib/health.ml`, `lib/usage.ml` and their
+alcotest suites. Gate: `dune build` clean, `dune runtest --force` green —
+22 suites, engine 82, fetch engine 73, usage 65, health 26 cases.
+
+Three real bugs in `lib/`, each found by a ported case rather than by review:
+
+- **`match … | _ -> ();` inside a sequence swallows the statements after it.**
+  `|` binds looser than `;`, so `match x with A -> foo () | _ -> (); bar ();`
+  puts `bar ()` in the last arm. `Usage.fold_days` had this and never set the
+  endpoint's `last_seen`/`last_at`. Parenthesise a `match` that is a statement:
+  `(match … with …)`.
+- **A dict-assignment helper has to insert, not only overwrite.** `Usage.set`
+  rebuilt the association list from the keys it already had, so the *first*
+  write of a new key was dropped — invisible while every fixture pre-seeded it.
+  Python's `d[key] = value` appends; the helper now does.
+- **Binding log fields is not emitting an event.** `Engine.Search.log_ok` built
+  the `search.ok` field list and returned it without an `emit`, so the event did
+  not exist. It also has to return the *base* bound fields, not the extended
+  ones — that is what keeps `search.cap`/`search.result`/`search.answer`
+  carrying only provider/qlen/qhash.
+
+OCaml traps, all paid for:
+
+- `!s.field` parses as `(!s).field`. For a ref inside a record write
+  `!(s.kwargs)`; `incr s.calls` is fine.
+- An optional argument **without a default takes the bare value**, so the type
+  in the signature is what you pass, wrapped: `?image` over a field typed
+  `image : image option` wants `~image:{ … }`, not `~image:(Some …)`. A field
+  that is itself `string option` (like `title`) then takes `~title:None`.
+- Opening a module can steal your binder names. With `open Logs`, the sink
+  `fun level event fields -> …` parsed `fields` as the value
+  `Logs.String.fields`, and the error was the cryptic "This function has type
+  `string -> Yojson.Safe.t list` but it is given an argument of type
+  `(string * 'a) list`". Alias instead (`module LS = Logs.String`).
+- Don't `open Alcotest` in a suite that reads `Yojson` loosely: the local
+  readers named `int`/`bool`/`str` shadow the testables `check` needs. The
+  pattern the P4/P5 suites use is local aliases — `let check_string =
+  A.(check string)` — plus `A.failf`.
+- `String.split_on_str`, `String.prefix`, `String.is_suffix` and
+  `String.index_opt ~sub` are not in this stdlib. `test_engine.ml` carries
+  `find_sub_from ?start`, `is_prefix`, `is_suffix`; `test_fetch_engine.ml` adds
+  `split_on_string`.
+- Warning 21 (non-returning statement): a `failwith` arm followed by `;` and
+  more checks. Put the shared check before the `match`.
+- Warnings 32/69 are errors here: an unused fixture helper or a `mutable`
+  record field no case assigns fails the build. Stub state that only the
+  fixture mutates belongs in `ref` fields (`calls`, `kwargs`), and unused
+  helpers get deleted rather than kept for symmetry.
+- A fixture with only optional arguments still needs a trailing positional
+  `()`, and every call site pays it: `make_engine ~local:(stub ()) ()`.
+
+Fetch fixture shape, for whoever wires the real readers in P6:
+
+- `Engine.Fetch.create` returns a `result` (Python's constructor `ValueError`
+  for a `fetch.primary` this deployment did not build), so the fixture fails
+  the test on `Error`; `~readers` is mandatory, and the suite hands a stub.
+- The stub `Readers` owns the *budget* arithmetic the engine only reports:
+  sections are filled in order and the walk **stops at the first section that
+  does not fit** (the rest are the count in the notice), and a subtree block
+  over budget is offered a line at a time. Without those two rules the
+  "larger than the selection budget" and "selection budget … reached"
+  sentences cannot be tested before `jsondoc` exists.
+- `test_usage.exe` writes its journal fixtures into a cwd-relative
+  `usage-journal/`; it is not in `.gitignore`, so delete it before committing.
+- `test/dune` takes one stanza per exe; the fetch suite needs only
+  `seekwright yojson alcotest` (no adapters, no network, no `unix`).
+
+## Verified fixing the P5 review findings (2026-11-11)
+
+The P5 review's CRITICAL: `Engine.Search` composed the zero-results notice
+with the first attempt's name; Python passes `result.provider`, so after a
+fallback walk the sentence must name the fallback that served. The call site
+now passes `outcome.Provider.provider`, pinned by a regression case (fallback
+serves zero results → the notice names the fallback) that fails on the old
+line. The review's three suggestions: `dune-project` now declares `digestif`
+and `eio` (the opam file regenerates from it — never hand-edit);
+`ocamldep` in `test/dune` needs `-I ../lib` to resolve sibling modules at
+all, without which the router pin was vacuous (every cross-module line was
+empty); and the `structure=true` fetch path got its engine-half coverage in
+`test_fetch_engine.ml` via a `schema_readers` stub, including that a
+structure read never escalates to the fallback ladder over emptiness.

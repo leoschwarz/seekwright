@@ -3,16 +3,57 @@
 ../lib/config.cmx : \
     ../lib/config.cmi
 ../lib/config.cmi :
+../lib/engine.cmo : \
+    ../lib/usage.cmi \
+    ../lib/sanitize.cmi \
+    ../lib/router.cmi \
+    ../lib/provider.cmi \
+    ../lib/model.cmi \
+    ../lib/health.cmi \
+    ../lib/config.cmi \
+    ../lib/engine.cmi
+../lib/engine.cmx : \
+    ../lib/usage.cmx \
+    ../lib/sanitize.cmx \
+    ../lib/router.cmx \
+    ../lib/provider.cmx \
+    ../lib/model.cmx \
+    ../lib/health.cmx \
+    ../lib/config.cmx \
+    ../lib/engine.cmi
+../lib/engine.cmi : \
+    ../lib/usage.cmi \
+    ../lib/router.cmi \
+    ../lib/provider.cmi \
+    ../lib/model.cmi \
+    ../lib/health.cmi \
+    ../lib/config.cmi
+../lib/health.cmo : \
+    ../lib/provider.cmi \
+    ../lib/config.cmi \
+    ../lib/health.cmi
+../lib/health.cmx : \
+    ../lib/provider.cmx \
+    ../lib/config.cmx \
+    ../lib/health.cmi
+../lib/health.cmi : \
+    ../lib/provider.cmi \
+    ../lib/config.cmi
 ../lib/model.cmo : \
+    ../lib/sanitize.cmi \
     ../lib/model.cmi
 ../lib/model.cmx : \
+    ../lib/sanitize.cmx \
     ../lib/model.cmi
 ../lib/model.cmi :
 ../lib/provider.cmo : \
+    ../lib/model.cmi \
     ../lib/provider.cmi
 ../lib/provider.cmx : \
+    ../lib/model.cmx \
     ../lib/provider.cmi
-../lib/provider.cmi :
+../lib/provider.cmi : \
+    ../lib/model.cmi
 ../lib/router.cmo : \
     ../lib/router.cmi
 ../lib/router.cmx : \
@@ -23,3 +64,11 @@
 ../lib/sanitize.cmx : \
     ../lib/sanitize.cmi
 ../lib/sanitize.cmi :
+../lib/usage.cmo : \
+    ../lib/config.cmi \
+    ../lib/usage.cmi
+../lib/usage.cmx : \
+    ../lib/config.cmx \
+    ../lib/usage.cmi
+../lib/usage.cmi : \
+    ../lib/config.cmi

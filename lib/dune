@@ -12,12 +12,13 @@
 ; [yojson] is the wire codec (P2), [toml] the config file's parser (P3),
 ; [mcp-caps] and [uri] the provider seam (P4): a provider adapter reaches its
 ; endpoint only through a [Mcp_caps.Authority.Net] grant, and [uri] names that
-; endpoint. The routing core [router] (P1) is stdlib-only by design — not by the
-; absence of a [libraries] field (these are here for other modules) but by the
-; [ocamldep] diff in test/dune, which pins the router's dependencies and fails
+; endpoint. [digestif] is [hashlib.sha256] for the [qhash] correlation handle the
+; engine binds (P5). The routing core [router] (P1) is stdlib-only by design — not
+; by the absence of a [libraries] field (these are here for other modules) but by
+; the [ocamldep] diff in test/dune, which pins the router's dependencies and fails
 ; runtest if it reaches for any sibling module.
 (library
  (name seekwright)
  (public_name seekwright)
- (libraries mcp-caps toml uri yojson))
+ (libraries digestif mcp-caps eio toml uri yojson))
 
