@@ -1,0 +1,11 @@
+; The stdlib extraction backend: the one backend this build can always
+; construct, in its own library so a future backend with its own dependencies
+; (Python's trafilatura extra) is a sibling stanza rather than a new import in
+; [seekwright.fetch] itself. It depends on the fetch library for the backend
+; contract ([Seekwright_fetch.Extractor.S]); nothing in the fetch library
+; names it, so a fetcher holds an injected [Extractor.backend] and never a
+; concrete module.
+(library
+ (name seekwright_fetch_stdlib)
+ (public_name seekwright.fetch.stdlib)
+ (libraries seekwright.fetch))

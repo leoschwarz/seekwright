@@ -693,3 +693,52 @@ mismatches before, 0 after.
 - After the rebase `dune runtest` is green at config 170, provider 25, freeserp
   38, anysearch 33, provider-contract 4; no `dune promote` needed once the pin
   above is right.
+
+## Verified building P6 — the fetch stack (2026-11-12)
+
+`lib/fetch/` is its own library `(name seekwright_fetch) (public_name
+seekwright.fetch)` → `Seekwright_fetch`, and `lib/fetch/extractors/` carries
+its own stanza `(name seekwright_fetch_stdlib) (public_name
+seekwright.fetch.stdlib)` → `Seekwright_fetch_stdlib.Stdlib`, mirroring
+`lib/providers/`. `(include_subdirs …)` is **not** a library field on dune
+3.24 ("Unknown field") — a subdirectory needs its own stanza. The new public
+libraries attach to the `seekwright` package by public-name prefix, so
+`dune-project` and `seekwright.opam` needed no change (its deps — mcp-caps,
+uri, yojson — were already declared).
+
+- **Docstring placement is a hard error in the dev profile**: warning 50 makes
+  a `(** … *)` that follows an item ambiguous unless a blank line separates it
+  from the next item; the reliable form is the doc *before* the `val`.
+- **`String.contains_substring` does not exist**; a hand-rolled scan whose
+  past-the-end base case returns `true` instead of `false` is a one-character
+  bug that flips every negative assertion — write `if i + m > n then false
+  else …`.
+- **Dangling else**: `if tag = "br" then
+  (* comment *)
+  if not closing then …` followed by `else if …` binds the `else` to the
+  inner `if`; wrap each arm in `begin … end`.
+- **`raise Exit` inside a helper needs its own `try … with Exit`** — the raise
+  does not stop at the `let` binding that calls the helper.
+- **The Net grant refuses a redirect's off-list Location itself**, answering
+  the 3xx with `Denied` ("the endpoint answered %d with a redirect to a host
+  this grant does not allow …"), pinned in `test_authority_net.ml`. The
+  fetcher maps that to `Redirect_blocked` by matching that pinned substring;
+  a `Denied` for the requested URL at hop 0 is `Url_blocked`. DNS/address
+  blocking is entirely the grant's (public-web policy in `policy_net`), so
+  the fetcher tests drive a real loopback `with_endpoints` grant instead of
+  stubbing DNS.
+- **The download cap is enforced on the grant-delivered body** (sliced, with
+  the PDF/JSON-document/image refusals), because `Authority.Net.request`
+  refuses rather than truncates at `max_response_bytes`; the grant's own
+  ceiling is the streaming bound and is set where the grant is built. The
+  fetcher's chain budget is per-hop via the grant's operation timeout plus
+  `max_redirects`; Python's single 2× wall-clock chain budget is deferred to
+  the engine (P5). Extraction runs inline on the fiber (no worker-thread
+  timeout in v1).
+- **`Uri.resolve : string -> t -> t -> t`** is `resolve scheme base rel`.
+- Tests: `test_fetch` (54), `test_fetch_http` (17, loopback fixture +
+  grant), `test_jsondoc` (49), `test_tabledoc` (27); a differential spot-check
+  of `render_json`/`render_schema`/`render_table`/`select_paths` against the
+  Python oracle over five documents, three CSVs and five paths diffed clean.
+- `test/router_dependencies.expected` is untouched: its ocamldep glob covers
+  only `../lib/*.ml`, and `lib/fetch/` is a subdirectory.
