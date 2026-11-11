@@ -1,0 +1,7 @@
+conformance-fixture: serves test_simple_text
+conformance-fixture: serves test_error_handling
+conformance-fixture: serves test_logging_tool
+conformance-fixture: serves test_custom_header
+conformance-fixture: serves json_schema_2020_12_tool
+conformance-fixture: serves test_read_granted_file
+conformance-fixture: test_read_granted_file is confined to root

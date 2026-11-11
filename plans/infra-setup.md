@@ -167,3 +167,32 @@ no sudo. Fix without root: `mkdir -p ~/.local/lib && ln -s
 /usr/lib/x86_64-linux-gnu/libgmp.so.10 ~/.local/lib/libgmp.so` and build with
 `LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH` (or install `libgmp-dev` via
 apt when root is available).
+
+## Node 22 for the M4 conformance run (2026-11-11)
+
+No new OCaml packages: M4 adds no library dependency, only the official
+`@modelcontextprotocol/conformance@0.2.0-alpha.11` runner under
+`test/conformance/node_modules/`, rendered from the committed
+`package-lock.json` by `npm ci --prefix test/conformance --ignore-scripts`
+(the runner's own `postinstall` is not run — the pinned package needs no build).
+
+The system `node` is v20.19.2 and **cannot run that runner**: it imports
+`globSync` from `fs`, which Node 20 does not export, so it dies at import with a
+`SyntaxError` that reads like a broken install rather than a version problem.
+`test/conformance/run_live.sh` gates the version and says so. Node 22 without
+root, verified:
+
+```sh
+cd ~/.local/opt
+curl -sfLO https://nodejs.org/dist/v22.23.4/node-v22.23.4-linux-x64.tar.xz
+tar -xf node-v22.23.4-linux-x64.tar.xz && mv node-v22.23.4-linux-x64 node22
+export PATH="$HOME/.local/opt/node22/bin:$PATH"   # node v22.23.4, npm 10.9.9
+```
+
+The live job also needs outbound HTTPS to `registry.npmjs.org` (the `npm ci`) and
+nothing else: the fixture listens on an OS-assigned loopback port and the runner
+connects to it, so no scenario reaches the public internet. `run_live.sh` records
+`node-version.txt`, `npm-version.txt` and `runner-version.txt` in its output
+directory beside the raw results. See `test/conformance/README.md` for what the
+run is and what it measured.
+

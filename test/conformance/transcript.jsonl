@@ -1,0 +1,16 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"official-runner-shape","version":"0.2.0-alpha.11"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"test_simple_text"}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"test_error_handling"}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"test_read_granted_file","arguments":{"path":"note.txt"}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"test_read_granted_file","arguments":{"path":"../dune"}}}
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"unknown_tool"}}
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"test_read_granted_file","arguments":{"path":42}}}
+{"jsonrpc":"2.0","id":9,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
+{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"test_simple_text","_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}
+{"jsonrpc":"2.0","id":11,"method":"resources/list","params":{}}
+{"jsonrpc":"2.0","id":12,"method":"resources/read","params":{"uri":"test://static-text"}}
+{"jsonrpc":"2.0","id":13,"method":"prompts/list","params":{}}
+{"jsonrpc":"2.0","id":14,"method":"prompts/get","params":{"name":"test_simple_prompt"}}
+{"jsonrpc":"2.0","id":15,"method":"prompts/get","params":{"name":"test_prompt_with_arguments","arguments":{"arg1":"test-value","arg2":"second"}}}
