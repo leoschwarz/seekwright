@@ -179,6 +179,76 @@ let the_cap_counts_characters_not_bytes () =
   check_int "the source is seventeen bytes" 17 (String.length "éééé éééé");
   check_opt_int "measured in characters" (Some 9) uncapped
 
+(* Differential, driven over the corpus the P4 review diffed against
+   [src/seekwright/providers/base.py]. These eight pairs are the ones where the
+   byte length and the codepoint length fall on opposite sides of the cap, so a
+   byte-wise guard clips or ellipsises what Python returns whole — and reports
+   the cut where Python reports none. Rows are (text, limit, snippet, uncapped
+   length, cut); every value is the oracle's own answer. *)
+let the_crossing_pairs_match_the_oracle () =
+  let thirty_e = String.concat "" (List.init 30 (fun _ -> "é")) in
+  let cases =
+    [
+      ("héllo. x", 8, "héllo. x", 8);
+      ("éabcd", 5, "éabcd", 5);
+      ("naïve café. next sentence here", 30, "naïve café. next sentence here", 30);
+      ("日本語のテキストです。次", 12, "日本語のテキストです。次", 12);
+      ("日本語のテキストです。次", 20, "日本語のテキストです。次", 12);
+      ("日本語のテキストです。次", 30, "日本語のテキストです。次", 12);
+      ("emoji 😀 test", 12, "emoji 😀 test", 12);
+      (thirty_e, 30, thirty_e, 30);
+    ]
+  in
+  (* The fixtures have to be the ones the cap cannot settle: bytes past the cap,
+     codepoints not. Otherwise the guard under test is never reached. *)
+  check_int "the Japanese snippet is 36 bytes" 36 (String.length "日本語のテキストです。次");
+  check_int "the thirty-é snippet is 60 bytes" 60 (String.length thirty_e);
+  List.iter
+    (fun (text, limit, expected, uncapped) ->
+      let what = Printf.sprintf "%S at %d" text limit in
+      check_bool "the byte length passes the cap" true (String.length text > limit);
+      let snippet, measured = Provider.truncate_snippet (Some text) limit in
+      check_opt (what ^ " snippet") (Some expected) snippet;
+      check_opt_int (what ^ " measured") (Some uncapped) measured;
+      let text_out, cut, text_measured = Provider.truncate_text (Some text) limit in
+      check_opt (what ^ " text") (Some expected) text_out;
+      check_bool (what ^ " not cut") false cut;
+      check_opt_int (what ^ " text measured") (Some uncapped) text_measured)
+    cases
+
+(* The ASCII half of the same differential: the boundary preference, the plain
+   cut, the rstrip before the ellipsis, and the [limit / 2] threshold all have to
+   land where Python's [str] slicing does. *)
+let ascii_caps_match_the_oracle () =
+  let cases =
+    [
+      ("hello", 5, "hello", 5, false);
+      ("hello", 3, "hel…", 5, true);
+      ("hello", 0, "…", 5, true);
+      ("hello world", 8, "hello wo…", 11, true);
+      ("a. b. c. d. e.", 5, "a. b.", 14, true);
+      ("a. b. c. d. e.", 8, "a. b. c.", 14, true);
+      ("a. b. c. d. e.", 12, "a. b. c. d.", 14, true);
+      ("One. and then more words", 20, "One. and then more w…", 24, true);
+      ("alpha beta. gamma delta", 12, "alpha beta.", 23, true);
+      ("aaaaaaaaaa. bbbbbbbbbb", 12, "aaaaaaaaaa.", 22, true);
+      ("no period at all", 5, "no pe…", 16, true);
+      ("tab\there and  spaces", 8, "tab here…", 19, true);
+      ("ends with period.", 20, "ends with period.", 17, false);
+    ]
+  in
+  List.iter
+    (fun (text, limit, expected, uncapped, expected_cut) ->
+      let what = Printf.sprintf "%S at %d" text limit in
+      let snippet, measured = Provider.truncate_snippet (Some text) limit in
+      check_opt (what ^ " snippet") (Some expected) snippet;
+      check_opt_int (what ^ " measured") (Some uncapped) measured;
+      let text_out, cut, text_measured = Provider.truncate_text (Some text) limit in
+      check_opt (what ^ " text") (Some expected) text_out;
+      check_bool (what ^ " cut") expected_cut cut;
+      check_opt_int (what ^ " text measured") (Some uncapped) text_measured)
+    cases
+
 let text_reports_whether_it_was_cut () =
   let text, cut, uncapped = Provider.truncate_text (Some "short") 500 in
   check_opt "whole" (Some "short") text;
@@ -360,6 +430,9 @@ let () =
               test_case "a sentence boundary beats mid-word" `Quick a_sentence_boundary_beats_mid_word;
               test_case "a boundary too early is not used" `Quick a_boundary_too_early_is_not_used;
               test_case "the cap counts characters, not bytes" `Quick the_cap_counts_characters_not_bytes;
+              test_case "the crossing pairs match the oracle" `Quick
+                the_crossing_pairs_match_the_oracle;
+              test_case "ASCII pairs match the oracle" `Quick ascii_caps_match_the_oracle;
               test_case "inline text reports whether it was cut" `Quick text_reports_whether_it_was_cut;
               test_case "empty text is absent, not empty" `Quick empty_text_is_absent_not_empty;
             ] );

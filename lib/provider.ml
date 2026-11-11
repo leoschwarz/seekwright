@@ -128,8 +128,11 @@ let rstrip text =
 let clip text limit =
   (* Prefer a sentence boundary to mid-word, but only one far enough in to be
      worth more than the plain cut — otherwise a two-word snippet ends at its
-     first period. *)
-  if String.length text <= limit then text
+     first period. The guard counts {b characters}, as Python's [len] does: a
+     byte-wise comparison would ellipsise a snippet whose bytes pass the cap but
+     whose codepoints do not, and would report [text_truncated] for a page that
+     was never cut. *)
+  if codepoint_count text <= limit then text
   else begin
     let chars = codepoints text in
     let n = Array.length chars in
