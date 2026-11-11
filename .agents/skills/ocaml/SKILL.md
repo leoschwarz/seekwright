@@ -472,3 +472,49 @@ Build and dune details:
 - Environment hazard for cleanup commands here: `pkill -f <pattern>` matches the
   `bash -c` line that carries the pattern, so it kills your own shell (exit 143,
   no output). Kill by PID, or match `/proc/<pid>/exe` instead.
+
+## Verified building P2 — wire models and sanitize (2026-11-11)
+
+`lib/{model,sanitize}.ml{,i}` and `test/test_{model,sanitize}.ml` build and pass
+(24 + 18 alcotest cases). Facts worth not rediscovering:
+
+- **`Yojson.Safe.t` in yojson 3.0.0 has `\`Intlit`, not `\`Tuple`/`\`Variant`.**
+  Its constructors are `Null | Bool | Int | Intlit | Float | String | Assoc |
+  List`; an exhaustive match copied from an older yojson example fails with
+  "The second variant type does not allow tag(s) `Tuple`". Treat `Intlit` as an
+  integer in a type-error describer.
+- **A local type named `result` shadows Stdlib's `result` in a module.** A `.mli`
+  line `Yojson.Safe.t -> (result, string) result` then fails with "type
+  constructor result expects 0 argument(s)"; spell the builtin
+  `(x, string) Stdlib.result` instead. `Result.bind` still resolves to the
+  stdlib module.
+- **A JSON decoder inferred without an argument annotation narrows to a
+  polymorphic-variant subtype** (`[< ... > \`Assoc ]`) in the generated
+  signature, so it no longer matches `Yojson.Safe.t -> …`. Annotate the decoder
+  argument `(json : Yojson.Safe.t)` (and the shared `as_assoc`/`json_kind`
+  helpers) before matching; inference then keeps the closed type.
+- **`let rec` whose only recursion is inside an inner loop is warning 39**
+  ("unused rec flag"), an error in the dev profile; use `let f … = … let rec
+  loop` and drop the outer `rec`.
+- **Attaching the first library regenerates the opam file.** With
+  `(generate_opam_files true)`, adding `lib/dune` with `(library (name
+  seekwright) (public_name seekwright))`, removing `(allow_empty)` from the
+  `seekwright` package and listing the new deps (`yojson`, `alcotest
+  :with-test`) in that package's `(depends)` makes `dune build` rewrite
+  `seekwright.opam` in the source tree (committed, never hand-edited).
+  `LIBRARY_PATH=$HOME/.local/lib` is enough to link the whole tree on this
+  machine (the GMP symlink lives there).
+- **Pinning a golden oracle string in an OCaml test:** embed it in a `{|…|}`
+  quoted literal (terminates only at `|}`; check that no `|}` occurs) and assert
+  `Digest.to_hex (Digest.string payload) = "<python md5>"`. Python's `len()` is
+  codepoints while `String.length` is bytes, so a length assertion would not
+  catch a transposition of the multibyte characters.
+- **pydantic's default-vs-null rule needs two decoders.** A field declared
+  `int = 5` / `bool = False` treats absent as the default and an explicit
+  `null` as an error; only an `Optional` field maps `null` to `None`. Sharing
+  one `opt_*` helper for both silently accepts bodies pydantic refuses.
+- The sanitizer's `{1,64}` ceilings are counted in **codepoints**, so a
+  byte-wise scan diverges on multibyte token names (`▁` is three bytes): both
+  angle passes advance with a UTF-8 `next_index`. `<|…|>` content excludes only
+  ASCII `< > | \n`, so a fullwidth `｜` is ordinary content inside the ASCII
+  shape; the fullwidth shape excludes both bars.
