@@ -69,7 +69,7 @@ has a working oracle above it:
 | P5 | `engine.py` + `health.py` + `usage.py` | `lib/engine.ml`, `lib/health.ml`, `lib/usage.ml` | Execution around the ported router. asyncio → Eio fibers; circuit breaker and JSONL journal are plain data structures + a writer fiber. |
 | P6 | `fetcher.py` + `extractors/` + `jsondoc.py` + `tabledoc.py` | `lib/fetch/*.ml` | HTTP behind the capability grant. Extraction backends: `stdlib` HTML parser first (no dependency), trafilatura equivalent is an open spike (no mature OCaml trafilatura port — decide: call the Python one via a sidecar, or accept a simpler extractor in v1). `jsondoc`/`tabledoc` are stdlib-only in Python and port directly. |
 | P7 | `agent.py` | `lib/agent.ml` | Fixed plan + exactly one model call; the plan's fetches reuse the gated fetch tool, so `answer` inherits SSRF bounds for free. |
-| P8 | `server.py` + `cli.py` + `factory.py` + `dashboard.py` + REST routes | `bin/main.ml`, `lib/server.ml` | mcp-kit transports (stdio + cohttp-eio) replace FastMCP; `/healthz`, `/dashboard`, `/dashboard/data`, `POST /api/v1/{search,fetch,answer}` port onto cohttp-eio routes with the same Host allowlist semantics. CLI client verbs over REST, no keys. |
+| P8 | `server.py` + `cli.py` + `factory.py` + `dashboard.py` + REST routes | `bin/main.ml`, `lib/server.ml` | mcp-kit transports (stdio + cohttp-eio) replace FastMCP; `/healthz`, `/dashboard`, `/dashboard/data`, `/dashboard/metrics`, `POST /api/v1/{search,fetch,answer}` port onto cohttp-eio routes with the same Host allowlist semantics. CLI client verbs over REST, no keys. |
 
 ## 3. Cross-cutting decisions
 
@@ -89,7 +89,8 @@ has a working oracle above it:
 - **Config/secrets.** TOML from `SEEKWRIGHT_CONFIG` or the platform default;
   keys from `SEEKWRIGHT_*` env only. Startup-fatal on enabled-without-key,
   exactly as Python.
-- **Surface freeze.** Write `tools/surface.ml` (or reuse the Python printer
+- **Surface freeze.** Write `ocaml-tools/surface.ml` (root `tools/` belongs to the read-only Python
+tree; decided 2026-11-10) — or reuse the Python printer
   against the OCaml manifest) so the frozen name set is checked the same way:
   any drift fails CI. The seventeen provider names, three tools, routes and
   config keys move only together.
@@ -109,7 +110,7 @@ has a working oracle above it:
 | P1 | `router.ml` + ported router tests | Differential suite green; "surface is enumerable and checked" |
 | P2 | `model.ml` + `sanitize.ml` | Round-trip + idempotence properties; "what leaves the server stays safe" |
 | P3 | `config.ml` | `docs/reference/configuration.md` example loads; keyless default resolves to `exa:free`, `parallel:free`, `freeserp` — "a fresh clone searches before any configuration exists" |
-| P4 | provider protocol + first adapters (freeserp, anysearch, exa:free, parallel:free) | Keyless live tests pass; "every response names the provider that served it" |
+| P4 | provider protocol + first adapters (freeserp, anysearch; exa:free/parallel:free deferred — see open question 3) | Keyless live tests pass for freeserp/anysearch; "every response names the provider that served it" |
 | P5 | engines + health + usage + journal | Fallback ladders behave identically to Python over the differential corpus; "no silent escalation to a billable rung" |
 | P6 | fetch stack + SSRF grant + jsondoc/tabledoc | Escape/differential tests green; "what leaves the server stays safe" — enforced by the grant's network/filesystem boundaries |
 | P7 | `answer` | One model call per answer, validated citations; "answers that can be checked" |
@@ -123,14 +124,14 @@ has a working oracle above it:
    before P6.
 2. **PDF.** pypdf has no OCaml counterpart in scope; v1 likely claims no PDF
    media types (the protocol already supports a backend that claims none).
-3. **`exa` as MCP client.** Python reaches Exa through an MCP client adapter.
+3. **`exa`/`parallel` as MCP clients (blocks their :free adapters in P4).** Python reaches Exa and Parallel's hosted MCP through MCP client adapters; mcp-kit 0.2.0 ships no client (verified against the installed package). Decide: hand-rolled streamable-HTTP MCP client over the `Net` grant, plain REST where the MCP tool merely wraps REST (parallel.py), or defer both :free names. P4 starts with freeserp + anysearch meanwhile.
    In OCaml, mcp-kit can be the client too — confirm the client side exists in
    0.2.0, else that adapter becomes plain REST or waits.
 4. **Differential corpus capture.** Record Python responses now (before the
    branch diverges) so P1–P8 have a fixed oracle: a script that runs the Python
    server over a scripted session and stores request/response pairs.
-5. **TOML library choice** (`toml` vs `otoml`) — pick at P3 with a spike on
-   error-message quality, since startup errors are operator-facing.
+5. **TOML library: decided — `toml`** (installed in the default switch,
+   recorded in plans/infra-setup.md).
 6. **Whether the capability layer lives in the same repo** as the port (one
    dune workspace, `lib/` for the layer, `bin/` for seekwright) or a separate
    package the port depends on. Recommendation: same repo, separate library
