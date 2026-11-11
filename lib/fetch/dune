@@ -1,0 +1,21 @@
+; The fetch stack (P6): URL fetching behind the Net authority grant, the
+; extraction-backend contract, and the JSON/table renderers a page can take.
+; It is its own library — [seekwright.fetch], wrapped as [Seekwright_fetch] —
+; the way [lib/providers/] is [seekwright.providers], because the dependency
+; direction is fixed the same way: nothing in [lib/] may name a fetch backend,
+; so whatever builds one (the engine, P5, or the factory) depends on this
+; library, never the reverse.
+;
+; All HTTP goes through a [Mcp_caps.Authority.Net] grant — no raw cohttp — and
+; the fetcher receives the grant plus the extraction backend injected, with no
+; default backend, so importing this library never imports a backend's
+; dependencies. There is no page cache in v1 (deferred by plan review).
+;
+; The stdlib extraction backend sits in [extractors/] with its own stanza
+; ([seekwright.fetch.stdlib]) for the same reason [lib/providers/] has one:
+; a backend is a separate install unit — Python ships trafilatura as an
+; extra — and the directory keeps the layout the Python tree has.
+(library
+ (name seekwright_fetch)
+ (public_name seekwright.fetch)
+ (libraries mcp-caps uri yojson))

@@ -195,3 +195,38 @@
 (test
  (name test_fetch_engine)
  (libraries seekwright yojson alcotest))
+
+; P6: the fetch stack's pure half — URL validation, windowing, image sniffing,
+; the extractor plumbing, passage selection and the stdlib backend. Ported from
+; tests/fetch/test_fetcher.py, test_fetch_guardrails.py (the URL-shape and
+; signature-table classes) and test_extractors.py.
+(test
+ (name test_fetch)
+ (libraries seekwright.fetch seekwright.fetch.stdlib alcotest))
+
+; P6: the fetcher over a real loopback fixture and a [Policy.with_endpoints]
+; grant — the networked guardrail cases. The grant's own address policy is
+; pinned by test_authority_net; this suite owns what the fetcher adds on top.
+(test
+ (name test_fetch_http)
+ (libraries
+  seekwright.fetch
+  seekwright.fetch.stdlib
+  mcp-caps
+  cohttp-eio
+  http
+  eio
+  eio_main
+  uri
+  yojson
+  alcotest))
+
+; P6: the JSON and table halves of the fetch path — the renderers' cases from
+; tests/fetch/test_jsondoc.py and test_tabledoc.py.
+(test
+ (name test_jsondoc)
+ (libraries seekwright.fetch alcotest))
+
+(test
+ (name test_tabledoc)
+ (libraries seekwright.fetch alcotest))
