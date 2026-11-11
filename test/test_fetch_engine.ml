@@ -352,8 +352,9 @@ let doc_readers : Engine.Fetch.Readers.t =
         if find_sub_from selector "[?(" <> None
         then Error "a filter is not a path this server can read"
         else Ok ());
-    (* No [structure] case here: a shape read is a [render_schema] question, and
-       the shape grammar is pinned with the readers that build it. *)
+    (* [doc_readers] renders no schema: the shape grammar is a [render_schema]
+       question pinned with the readers that build it, so the [structure] cases
+       below hand the engine [schema_readers] instead. *)
     render_schema = (fun _text -> None);
     select_paths =
       (fun ~text ~path ~max_chars -> within_sections (sections_at text ~max_chars path) max_chars);
@@ -427,7 +428,8 @@ type board = {
    block is the implicit keyless set: this suite never dispatches a search
    provider, and [Config] needs a non-empty set to resolve. *)
 let make_engine ?(fetch = Config.default_fetch_config)
-    ?(logging = Config.default_logging_config) ?usage ?(fallbacks = []) ?(local = stub ()) () =
+    ?(logging = Config.default_logging_config) ?usage ?(readers = doc_readers) ?(fallbacks = [])
+    ?(local = stub ()) () =
   let lines = ref [] in
   let config =
     match Config.resolve ~fetch ~logging () with
@@ -436,7 +438,7 @@ let make_engine ?(fetch = Config.default_fetch_config)
   in
   let usage = Option.map (fun (u : Usage.t) -> u) usage in
   match
-    Engine.Fetch.create config (make_fetcher local) ~readers:doc_readers ?usage
+    Engine.Fetch.create config (make_fetcher local) ~readers ?usage
       ~log:(sink lines) ~fallbacks:(List.map make_fetcher fallbacks) ~clock ~now ()
   with
   | Error message -> A.failf "the engine refused the fixture: %s" message
@@ -460,8 +462,8 @@ let served board ?offset ?query ?path ?(structure = false) ?provider ?auto_fallb
   | Error (Engine.Fetch.Refused sentence) -> A.failf "the fetch was refused: %s" sentence
   | Error (Engine.Fetch.Failed sentence) -> A.failf "the fetch failed: %s" sentence
 
-let refused board ?offset ?query ?path ?provider target =
-  match Engine.Fetch.fetch board.engine ?offset ?query ?path ?provider target with
+let refused board ?offset ?query ?path ?(structure = false) ?provider target =
+  match Engine.Fetch.fetch board.engine ?offset ?query ?path ~structure ?provider target with
   | Ok response -> A.failf "expected a refusal, got a page: %s" (say response.Model.notice)
   | Error (Engine.Fetch.Refused sentence) -> sentence
   | Error (Engine.Fetch.Failed sentence) -> A.failf "expected a refusal, got a failure: %s" sentence
@@ -765,6 +767,84 @@ let an_unreadable_path_is_refused_before_anything_is_fetched () =
   let board = make_engine ~local () in
   includes "the refusal names the parameter" "`path` is not readable"
     (refused board ~path:"$.items[?(@.id)]" url);
+  check_int "nothing was fetched" 0 !(local.calls)
+
+(* {1 TestStructureReads}
+
+   The engine's half of [tests/fetch/test_engine_structure.py]: that a shape
+   read replaces the page's text with the schema before the escape pass, that it
+   reads the whole document, that it never escalates to the fallback ladder over
+   emptiness, and that it refuses to share an axis with a drill. The shape
+   grammar itself is P6 and stays pinned with the readers that build it, so the
+   schema text here is a stand-in for what [render_schema] would render. *)
+
+let schema =
+  "$.total  number\n\
+   $.query  string\n\
+   $.items  array(2)\n\
+   $.items[*].id  number\n\
+   $.items[*].name  string"
+
+let schema_readers : Engine.Fetch.Readers.t =
+  { doc_readers with render_schema = (fun _text -> Some schema) }
+
+let a_structure_read_returns_the_schema_not_the_page () =
+  let board = make_engine ~readers:schema_readers ~local:(json ()) () in
+  let r = served board ~structure:true url in
+  check_opt_string "the shape replaces the page" (Some schema) r.Model.text;
+  check_bool "no matches ride a shape read" true (r.Model.matches = None);
+  excludes "no values ride a shape read" "\"alpha\"" (say r.Model.text)
+
+let a_structure_read_fetches_uncapped () =
+  (* A selection is one whole read; the budget bounds the response, not the fetch. *)
+  let board = make_engine ~readers:schema_readers ~local:(json ()) () in
+  ignore (served board ~structure:true url);
+  check_kw board "fetch" ~offset:0 ~max_chars:Engine.Fetch.Uncapped
+
+let a_tiny_structure_page_is_answered_without_a_walk () =
+  (* The emptiness gate is about a JS shell, not a small but real document: a
+     structure read of a page rendering below [fetch.min_text_chars] is a
+     deliberate read of the shape and must not bill a fallback over emptiness,
+     even with the walk asked for. *)
+  let tiny = "$.n  1" in
+  let local =
+    stub ~text:tiny ~content_type:(Some "application/json") ~path_addressable:true ()
+  in
+  let ladder = stub ~name:"crawl4ai" ~text:"the ladder served prose instead" () in
+  let fetch = { Config.default_fetch_config with min_text_chars = String.length tiny + 1 } in
+  let board = make_engine ~fetch ~readers:schema_readers ~local ~fallbacks:[ ladder ] () in
+  let r = served board ~structure:true ~auto_fallback:true url in
+  check_int "the ladder was never dialed" 0 !(ladder.calls);
+  check_opt_string "the shape is the answer" (Some schema) r.Model.text;
+  excludes "no shell diagnosis" "JavaScript" (say r.Model.notice)
+
+let a_structure_read_on_a_page_with_no_structure_returns_the_page () =
+  let board = make_engine ~local:(stub ()) () in
+  let r = served board ~structure:true url in
+  check_opt_string "the whole page" (Some page_text) r.Model.text;
+  includes "the constraint is named"
+    "`structure` reports a JSON or CSV table's shape, and this page is not one"
+    (say r.Model.notice)
+
+let a_structure_read_with_a_query_is_refused_before_anything_is_fetched () =
+  let local = stub () in
+  let board = make_engine ~local () in
+  includes "one axis at a time" "pass `structure` alone"
+    (refused board ~structure:true ~query:"walrus" url);
+  check_int "nothing was fetched" 0 !(local.calls)
+
+let a_structure_read_with_a_path_is_refused_before_anything_is_fetched () =
+  let local = stub () in
+  let board = make_engine ~local () in
+  includes "one axis at a time" "pass `structure` alone"
+    (refused board ~structure:true ~path:"$.items" url);
+  check_int "nothing was fetched" 0 !(local.calls)
+
+let a_structure_read_with_an_offset_is_refused_before_anything_is_fetched () =
+  let local = stub () in
+  let board = make_engine ~local () in
+  includes "one axis at a time" "pass `structure` alone"
+    (refused board ~structure:true ~offset:8 url);
   check_int "nothing was fetched" 0 !(local.calls)
 
 (* {1 TestOffsetPaging} *)
@@ -1442,6 +1522,16 @@ let () =
           A.test_case "a path with a query is refused" `Quick a_path_with_a_query_is_refused;
           A.test_case "a path with an offset is refused" `Quick a_path_with_an_offset_is_refused;
           A.test_case "an unreadable path is refused before anything is fetched" `Quick an_unreadable_path_is_refused_before_anything_is_fetched;
+        ] );
+      ( "structure reads"
+      , [
+          A.test_case "a structure read returns the schema not the page" `Quick a_structure_read_returns_the_schema_not_the_page;
+          A.test_case "a structure read fetches uncapped" `Quick a_structure_read_fetches_uncapped;
+          A.test_case "a tiny structure page is answered without a walk" `Quick a_tiny_structure_page_is_answered_without_a_walk;
+          A.test_case "a structure read on a page with no structure returns the page" `Quick a_structure_read_on_a_page_with_no_structure_returns_the_page;
+          A.test_case "a structure read with a query is refused before anything is fetched" `Quick a_structure_read_with_a_query_is_refused_before_anything_is_fetched;
+          A.test_case "a structure read with a path is refused before anything is fetched" `Quick a_structure_read_with_a_path_is_refused_before_anything_is_fetched;
+          A.test_case "a structure read with an offset is refused before anything is fetched" `Quick a_structure_read_with_an_offset_is_refused_before_anything_is_fetched;
         ] );
       ( "offset paging"
       , [

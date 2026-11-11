@@ -92,5 +92,13 @@
   ; ([tomllib]); OCaml needs the library.
   (toml
    (>= 7.0))
+  ; P5: [digestif] is hashlib.sha256 for the engine's [qhash] correlation
+  ; handle, and [eio] the journal appends and the backfill read through
+  ; ([Usage.backfill]). Both are library dependencies the opam file has to
+  ; carry or a bare `opam install seekwright` builds nothing.
+  (digestif
+   (>= 1.2))
+  (eio
+   (>= 1.6))
   (alcotest
    :with-test)))

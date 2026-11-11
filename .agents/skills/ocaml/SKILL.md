@@ -762,3 +762,18 @@ Fetch fixture shape, for whoever wires the real readers in P6:
   `usage-journal/`; it is not in `.gitignore`, so delete it before committing.
 - `test/dune` takes one stanza per exe; the fetch suite needs only
   `seekwright yojson alcotest` (no adapters, no network, no `unix`).
+
+## Verified fixing the P5 review findings (2026-11-11)
+
+The P5 review's CRITICAL: `Engine.Search` composed the zero-results notice
+with the first attempt's name; Python passes `result.provider`, so after a
+fallback walk the sentence must name the fallback that served. The call site
+now passes `outcome.Provider.provider`, pinned by a regression case (fallback
+serves zero results → the notice names the fallback) that fails on the old
+line. The review's three suggestions: `dune-project` now declares `digestif`
+and `eio` (the opam file regenerates from it — never hand-edit);
+`ocamldep` in `test/dune` needs `-I ../lib` to resolve sibling modules at
+all, without which the router pin was vacuous (every cross-module line was
+empty); and the `structure=true` fetch path got its engine-half coverage in
+`test_fetch_engine.ml` via a `schema_readers` stub, including that a
+structure read never escalates to the fallback ladder over emptiness.

@@ -1064,6 +1064,24 @@ let an_adapter_notice_is_joined_with_the_zero_notice () =
   includes "the adapter first" "cannot filter by domain" notice;
   includes "then the diagnostic" "; No results from serper." notice
 
+let a_fallback_serving_zero_results_names_the_fallback () =
+  (* The diagnostic reads the serving provider, which after a walk is the
+     fallback — Python passes [result.provider], not the first attempt — so the
+     sentence names linkup and the "other providers" list names serper. *)
+  let board =
+    make_engine ~default:"serper" ~fallback:[ "linkup" ]
+      [
+        rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") ();
+        rig ~name:"linkup" ~results:(`List []) ();
+      ]
+  in
+  let r = served board (query "asdkjhasdkjh") in
+  check_string "the fallback served" "linkup" r.Model.provider;
+  let notice = Option.value ~default:"" r.Model.notice in
+  includes "the walk is named first" "serper failed (upstream 503); served by linkup instead" notice;
+  includes "the diagnostic names the fallback" "; No results from linkup." notice;
+  includes "the alternatives name the default" "Other enabled providers: serper." notice
+
 (* {1 TestObservability} *)
 
 let a_search_records_cost_and_latency () =
@@ -1496,6 +1514,7 @@ let zero_results_cases =
     A.test_case "a solo provider zero results says it is alone" `Quick a_solo_provider_zero_results_says_it_is_alone;
     A.test_case "an answered zero result gets no notice" `Quick an_answered_zero_result_gets_no_notice;
     A.test_case "an adapter notice is joined with the zero notice" `Quick an_adapter_notice_is_joined_with_the_zero_notice;
+    A.test_case "a fallback serving zero results names the fallback" `Quick a_fallback_serving_zero_results_names_the_fallback;
   ]
 
 let observability_cases =

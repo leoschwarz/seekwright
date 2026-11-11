@@ -611,7 +611,10 @@ module Search = struct
         match served with
         | Error refused -> Error refused
         | Ok (outcome, fell_back) ->
-          let notice = compose_notice t outcome name in
+          (* The serving provider, not the first attempt: after a walk the
+             zero-results sentence names the fallback that answered, the way
+             Python passes [result.provider]. *)
+          let notice = compose_notice t outcome outcome.Provider.provider in
           (* Escaped once: the decision line, the content log, and the agent's
              retrieval material all read this one escaped object. The notice is
              composed {i before} the pass and is not itself escaped, as in Python,
