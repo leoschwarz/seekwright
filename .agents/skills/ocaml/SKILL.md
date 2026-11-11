@@ -518,3 +518,73 @@ Build and dune details:
   angle passes advance with a UTF-8 `next_index`. `<|…|>` content excludes only
   ASCII `< > | \n`, so a fullwidth `｜` is ordinary content inside the ASCII
   shape; the fullwidth shape excludes both bars.
+
+## Verified building P3 — TOML config and validation (2026-11-11)
+
+`lib/config.ml{,i}` and `test/test_config.ml` build and pass (170 alcotest cases,
+against 145 `def test_...` in `tests/test_config.py`: the `parametrize` families
+are lists expanded by the runner, so a moved name fails one case in each tree).
+Facts worth not rediscovering:
+
+- **`toml` 7.1.0's parser and key printer.** `Toml.Parser.from_string : string ->
+  (Toml.Types.value, string) result`; the value constructors are `TBool | TInt |
+  TFloat | TString | TDate | TArray | TTable`. `Toml.Types.Table.fold` hands over
+  `Table.Key.t`, and `Key.to_string` **re-quotes a non-bare key** — `[providers."exa:free"]`
+  comes back as `"exa:free"` with the quotes. The library escapes nothing inside
+  those quotes, so stripping exactly one matched pair at each end recovers the
+  name (`Config.key_name`). Reading `Key.to_string` verbatim turns every flavoured
+  provider into an unknown-provider error.
+- **The `toml` array is typed; `tomllib`'s is not.** `fallback = ["serper", 3]`
+  is a TOML *parse* error in OCaml where pydantic reaches a `string_type` error on
+  element 1. Both refuse; the sentence differs. Same for a TOML integer above
+  `int64` (parse error) and a decimal string above `int63` (this build refuses,
+  Python carries the big int). These three are the accepted divergences and are
+  named in the test module's header.
+- **pydantic 2.14.3's lax scalar coercion is worth porting, and was measured
+  rather than guessed** (`uv run python` over the real models): `int` takes
+  `TInt`, `TBool`, an integral `TFloat`, and a string read as `" 400 "`, `"+7"`,
+  `"1_000"`, `"500.0"` — and refuses `"1."`, `"1e2"`, `"0x10"`, non-ASCII digits,
+  and anything past `int63`. `float` takes those plus `inf`/`+Infinity`/`nan` in
+  any case and `1_0.5`/`1e_2`, refusing `x`-hex and an underscore not between
+  digits. `bool` takes `TBool`, the numbers 0 and 1 (also `0.0`/`1.0`), and the
+  twelve spellings `true/t/yes/y/on/1` and `false/f/no/n/off/0`,
+  case-insensitively, with **no trimming** (`" true "` is refused). A port that
+  types TOML scalars straight into fields refuses an operator's `max_chars = "400"`.
+- **`permitted_providers` and a provider name print different sets.** The
+  provider-name refusal lists the 17 providers; the permission-set refusal lists
+  those **plus** the fetch-only names it has to vouch for (`jina`), sorted. One
+  sentence constant reused for both fails the second.
+- **alcotest 1.9.1 idioms:** `Alcotest.testable fmt equal` takes *two* arguments
+  (no name label); cases are `Alcotest.test_case "label" `Quick fn` — the older
+  `test `Quick, fn` tuple form does not exist, and a `(label, test)` tuple is not a
+  `unit test`. Suites are `(string * unit test list)`, so concatenating built
+  suites needs `@ [ cases … ]`, not `@ cases …`. `Alcotest.run` has no
+  `~exn_exit_code` here. To re-run one suite: `./_build/default/test/x.exe test
+  "<suite name>"` (a bare positional argument is read as a command).
+- **A test's cwd is `_build/default/<dir>`, not the source directory.** A suite
+  that reads repo files needs them in `(deps ../docs/reference/configuration.md …)`
+  and the path `../docs/…`; running the built exe from the repo root instead makes
+  exactly those cases fail, which looks like a port bug and is not one.
+- **`Float.class` is a syntax error** — `class` is a keyword, so the accessor
+  parses as module-then-keyword. Compare with `Float.is_nan` and
+  `Float.equal v Float.infinity` instead (or `Float."class"`).
+- **There is no `unsetenv` in the stdlib**; `Unix.putenv name ""` is the
+  workaround, and it is sound here only because `Config.api_key` reads `""` as
+  absent the way Python's `os.environ.get(...) or None` does.
+- **`test/router_dependencies.expected` is a mechanical re-pin.** Any module added
+  to `lib/` adds two `ocamldep` lines; `dune promote test/` fixes it. It was stale
+  at `7fa7a5c` (only the `router` lines, though `model.ml` and `sanitize.ml` were
+  already in the tree), so `dune runtest` failed on P3's checkout before any P3
+  code was involved — check `git show HEAD:test/router_dependencies.expected`
+  before reading a red runtest as your own breakage.
+- **The differential harness works and is worth re-running.** With
+  `/tmp/opencode/{gencases.py,oracle.py,dump.ml,compare.py}`:
+  `python3 gencases.py` (102 files in `/tmp/opencode/cases`), then *both* drivers
+  take the case paths as argv —
+  `uv run python oracle.py $(ls /tmp/opencode/cases/*.toml | sort) > py.out`, and
+  `ocamlfind ocamlopt -package toml -linkpkg -I _build/default/lib
+  -I _build/default/lib/.seekwright.objs/byte _build/default/lib/seekwright.cmxa
+  -o dump dump.ml && ./dump $(ls /tmp/opencode/cases/*.toml | sort) > ocaml.out`,
+  then `python3 compare.py`. It caught three real port bugs here (the quoted
+  table key, an unsorted `enabled_providers`, and the whole lax-scalar question).
+  Current: 99/102 agree, the 3 flagged being the parser divergences above.
