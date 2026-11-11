@@ -163,3 +163,33 @@
  (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest)
  (deps (glob_files ../lib/providers/*.ml)))
 
+; P5: the health board and its probe. The board's clock is injected, so the
+; cooldown cases move a reference rather than sleeping, and the probe's net seam
+; is a fake Provider.Net.t. The key cases set and clear environment variables,
+; which needs Unix.
+(test
+ (name test_health)
+ (libraries seekwright mcp-caps uri yojson alcotest unix))
+
+; P5: the usage recorder. The journal is a real file, so each case owns a
+; directory under a scratch root and the suite holds an Eio loop (the recorder's
+; appends go through Eio.Path) and Unix (the fixture, and the chmod that stands
+; in for a broken volume).
+(test
+ (name test_usage)
+ (libraries seekwright alcotest eio eio_main unix yojson))
+
+; P5: the search engine. The stub providers are [Provider.S] modules closing over
+; mutable state, the log is an injected sink, and one case drives a real adapter
+; through a fake [Provider.Net.t] — so the suite needs the adapter library, the
+; capability layer the fake speaks, and [uri] for its request records.
+(test
+ (name test_engine)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest))
+
+; P5: the fetch engine. The page readers and the document grammars are P6, so the
+; suite hands [Engine.Fetch] a stub [Readers] and drives the route, the notices,
+; the escape pass and the journal around it; no adapter and no network is built.
+(test
+ (name test_fetch_engine)
+ (libraries seekwright yojson alcotest))

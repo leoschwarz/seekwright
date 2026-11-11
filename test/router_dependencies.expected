@@ -3,6 +3,16 @@
 ../lib/config.cmx : \
     ../lib/config.cmi
 ../lib/config.cmi :
+../lib/engine.cmo : \
+    ../lib/engine.cmi
+../lib/engine.cmx : \
+    ../lib/engine.cmi
+../lib/engine.cmi :
+../lib/health.cmo : \
+    ../lib/health.cmi
+../lib/health.cmx : \
+    ../lib/health.cmi
+../lib/health.cmi :
 ../lib/model.cmo : \
     ../lib/model.cmi
 ../lib/model.cmx : \
@@ -23,3 +33,8 @@
 ../lib/sanitize.cmx : \
     ../lib/sanitize.cmi
 ../lib/sanitize.cmi :
+../lib/usage.cmo : \
+    ../lib/usage.cmi
+../lib/usage.cmx : \
+    ../lib/usage.cmi
+../lib/usage.cmi :
