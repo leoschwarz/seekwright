@@ -230,3 +230,12 @@
 (test
  (name test_tabledoc)
  (libraries seekwright.fetch alcotest))
+
+; P7: agent mode. The real search and fetch engines run over stub providers and
+; a stub fetcher; only the model endpoint is stubbed, through a fake
+; [Provider.Net.t] — the same position httpx.MockTransport holds in the Python
+; suite. The agent key cases set and clear an environment variable, which needs
+; Unix.
+(test
+ (name test_agent)
+ (libraries seekwright mcp-caps uri yojson alcotest unix))

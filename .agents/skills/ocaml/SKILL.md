@@ -826,3 +826,60 @@ uri, yojson — were already declared).
   Python oracle over five documents, three CSVs and five paths diffed clean.
 - `test/router_dependencies.expected` is untouched: its ocamldep glob covers
   only `../lib/*.ml`, and `lib/fetch/` is a subdirectory.
+
+## Verified porting P7 — agent mode (2026-11-12)
+
+`lib/agent.ml{,i}` (`Seekwright.Agent`) and `test/test_agent.ml` build and pass:
+48 alcotest cases ported from `tests/test_agent.py`'s engine-level classes (the
+MCP-server classes are P8). Gate: `dune build` clean, `dune runtest --force`
+exit 0 — 916 cases green (868 at the base plus these 48). No new dependency:
+the model client rides the existing `Provider.Net.t` seam (`uri`/`yojson`/
+`mcp-caps` were already deps), so `dune-project`/`seekwright.opam` are
+untouched.
+
+Design decisions worth not rediscovering:
+
+- **The model call goes through `Provider.Net.t`, not a new client.** That is
+  the port's "shared HTTP client": in a running server P8 wires
+  `Provider.Net.of_grant` over an endpoint-scoped `Authority.Net` grant for
+  `[agent] base_url`, so the model endpoint is behind the same capability layer
+  as providers. In tests a stub `request` record answers canned bodies — the
+  `httpx.MockTransport` position. Grant errors map: `Timeout` → "did not answer
+  within Ns", every other kind → "could not be reached (<Kind>)" with only the
+  kind name, never the grant's message.
+- **Failure is an `Error string` result, not an exception** (the P4/P5 rule).
+  Internally a `failure` variant (`Agent_failed`/`Timed_out`) carries the
+  journal's error class ("AgentFailed"/"TimeoutError") separately from the
+  caller-facing message.
+- **The whole-call timeout is cooperative, not a canceller.** The port is
+  synchronous, so `[agent] timeout_seconds` is checked at phase boundaries
+  (each retrieval step, after the walk, after the model call) against the
+  injected monotonic clock, and the phase named in the message is the check
+  that fired ("retrieving" / "calling the model"). The test drives it by having
+  the stubbed model call advance the fake clock — the sync answer to
+  `asyncio.sleep` in a mock.
+- **The citation marker is a hand-rolled scan, not a regex** (`re` is not a
+  dependency): `\[[^\[\]\n]{1,32}\](?!\()`. The char class excludes `]` itself,
+  so "maximal run length in 1..32 followed by `]`" is exactly the regex's match;
+  the `(?!\()` lookahead is a one-char check after the closing bracket.
+  `str.isdigit`/`int()` port as "all ASCII digits" — the only set where Python's
+  digit test and its parse agree anyway.
+- **All length/slice arithmetic on material, bodies and prose counts
+  codepoints**, because Python's `len`/`s[:n]` are codepoint-indexed; local
+  `cp_count`/`cp_take` UTF-8 walks (same shape as `Provider`'s clip helpers —
+  `lib/fetch/utf8.ml` is in the fetch library and not reachable from here).
+- **Record-field ambiguity:** `Model.result` and `Model.fetch_response` both
+  carry `text`/`url`; annotate the binding `((result : Model.result), _)` where
+  the two meet or inference picks the wrong one.
+- **Optional-arg wrapping:** a `?notice:string` parameter is forwarded with
+  `?notice`, not `~notice` (which wants the bare `string`); a stub field that
+  is itself an option takes `?(body = None)` so call sites write `~body:None`.
+- **`test/router_dependencies.expected` re-pins mechanically** when `lib/`
+  gains a module: `dune runtest test` then `dune promote test` (the ocamldep
+  glob covers `../lib/*.ml`, so `agent.ml` adds its three lines).
+- The system prompt is embedded in `agent.ml` verbatim from
+  `src/seekwright/resources/answer_system.txt` (trailing newline included, as
+  `prompts.ANSWER_SYSTEM_PROMPT` reads it) — the port has no resources dir;
+  `Agent.answer_system_prompt` exposes it.
+- The run id is `Random.State.make_self_init ()` + 8 bytes hex (16 chars), stdlib
+  only — a random per-call id, never a hash of the query.
