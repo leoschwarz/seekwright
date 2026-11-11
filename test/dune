@@ -106,3 +106,13 @@
   cstruct
   mirage-crypto-rng.unix
   eio_main))
+
+; P2: wire models and the sanitize pass. Both are pure, so alcotest and yojson
+; are the only libraries.
+(test
+ (name test_model)
+ (libraries seekwright yojson alcotest))
+
+(test
+ (name test_sanitize)
+ (libraries seekwright yojson alcotest))

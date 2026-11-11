@@ -71,13 +71,10 @@
   (alcotest
    :with-test)))
 
-; The port's own package stanza. P1 attached its first library: lib/router.ml
-; (plans/project-structure.md), and the package depends on mcp-caps rather than
-; the other way round, which is what keeps dropping the capability layer a
-; seekwright-side change. The router itself names no dependency at all — lib/dune
-; carries no [libraries] field, and test/dune pins that with an ocamldep diff —
-; so the mcp-caps constraint below is what the P2–P8 modules inherit, not what
-; the routing core stands on.
+; The port's own package stanza. It carries the P1 router and the P2 wire
+; library in one library; it depends on mcp-caps rather than the other way
+; round, which is what keeps dropping the capability layer a seekwright-side
+; change. The router itself stays stdlib-only via the ocamldep pin in test/dune.
 (package
  (name seekwright)
  (synopsis "An MCP server fronting web-search providers behind one tool surface")
@@ -85,5 +82,7 @@
   (ocaml
    (>= 5.1))
   mcp-caps
+  (yojson
+   (>= 3.0.0))
   (alcotest
    :with-test)))
