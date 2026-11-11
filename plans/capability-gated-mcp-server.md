@@ -93,7 +93,10 @@ lib/caps/                        # (library (name caps) (public_name mcp-caps)) 
   tool.ml / .mli                 # metadata, typed input decoder, Output.t
   registry.ml / .mli             # existential entries; add ~grant
   policy.ml / .mli               # confined Fs/Net constructors and generic decorators
-  policy_net.ml / .mli           # private DNS/connect/redirect/response-bound machinery
+  policy_fs.ml / .mli            # Fs grant impl (Eio.Path.open_subtree confinement) — M1
+  policy_net.ml / .mli           # Net grant impl: allowlist, vetted connect, redirect refusal — M3
+  budget.ml / controls.ml        # deadline/budget/log wrappers — M3
+  README.md                      # library docs: real guarantees + grant-retention limit — M4
   server.ml / .mli               # the only module importing Mcp_kit
 examples/
   dune
