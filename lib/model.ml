@@ -135,7 +135,7 @@ type provider_result = {
   notice : string option;
 }
 
-(* ---------- small JSON helpers ---------- *)
+(* {1 Small JSON helpers} *)
 
 let json_kind (json : Yojson.Safe.t) = match json with
   | `Null -> "null"
@@ -278,7 +278,7 @@ let check_exact_length ~name ~expected value =
     Error (Printf.sprintf "field %S must be exactly %d characters" name expected)
   else Ok value
 
-(* ---------- variants ---------- *)
+(* {1 Variants} *)
 
 let string_of_recency = function
   | Day -> "day"
@@ -327,7 +327,7 @@ let opt_mode name kvs =
       let* value = mode_of_yojson json in
       Ok (Some value)
 
-(* ---------- serialisation: only set fields, escaped text ---------- *)
+(* {1 Serialisation: only set fields, escaped text} *)
 
 let escaped text = fst (Sanitize.sanitize_text text)
 
@@ -530,7 +530,7 @@ let provider_result_to_yojson (r : provider_result) : Yojson.Safe.t =
       ("notice", match r.notice with None -> `Null | Some s -> `String s);
     ]
 
-(* ---------- deserialisation ---------- *)
+(* {1 Deserialisation} *)
 
 let result_allowed =
   [
@@ -918,7 +918,7 @@ let provider_result_of_yojson (json : Yojson.Safe.t) =
   let* notice = opt_string "notice" kvs in
   Ok { provider; results; answer; cost_usd; notice }
 
-(* ---------- the engine's pass: escape in place, count, log the count ---------- *)
+(* {1 The engine's pass: escape in place, count, log the count} *)
 
 let sanitize_option value =
   match value with
