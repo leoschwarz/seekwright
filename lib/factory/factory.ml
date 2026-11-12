@@ -246,7 +246,14 @@ let build_fetch_stack ~sw ~net ~mono_clock config =
             fetch =
               (fun ~url ~offset ~max_chars ->
                 match
-                  Fetcher.fetch fetcher url ~offset ~max_chars:(cap_of max_chars)
+                  (* Python bounds the whole redirect chain at twice the
+                     per-request timeout (fetcher.py's asyncio.timeout); the
+                     per-hop bound is the grant's, set above. *)
+                  Fetcher.fetch
+                    ~chain_timeout:
+                      (Eio.Time.Timeout.seconds mono_clock
+                         (2. *. fetch.Config.timeout_seconds))
+                    fetcher url ~offset ~max_chars:(cap_of max_chars)
                 with
                 | Ok page -> Ok page
                 | Error error -> Error (error_of error));
