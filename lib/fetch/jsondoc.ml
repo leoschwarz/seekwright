@@ -788,12 +788,17 @@ let classify payload =
       && payload.[kl] = '('
     then
       let rest = String.sub payload (kl + 1) (String.length payload - kl - 1) in
-      match String.index_opt rest ')' with
-      | Some i when python_int (String.sub rest 0 i) <> None -> (
-          let size = Option.get (python_int (String.sub rest 0 i)) in
-          let after = String.sub rest (i + 1) (String.length rest - i - 1) in
-          Some (kind, size, trim_left after))
-      | _ -> None
+      (* The bound is parsed once and destructured where it appears. The guard
+         and the force beside it evaluated [python_int] on the same slice twice
+         and re-sliced it a third time (style review M3). *)
+      (match String.index_opt rest ')' with
+      | Some i -> (
+          match python_int (String.sub rest 0 i) with
+          | Some size ->
+              let after = String.sub rest (i + 1) (String.length rest - i - 1) in
+              Some (kind, size, trim_left after)
+          | None -> None)
+      | None -> None)
     else None
   in
   match header "object" with

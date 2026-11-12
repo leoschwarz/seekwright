@@ -1220,10 +1220,14 @@ module Fetch = struct
       fetch_page t ~url ~offset ~max_chars notices base ~started ?named ~auto_fallback ?run ?step ()
     with
     | Error refused -> Error refused
-    | Ok { page; fallback; cached } ->
-      if page.image <> None
-      then Ok (finish_image t ~url page (Option.get page.image) ~fallback base ~started !notices ~run)
-      else begin
+    | Ok { page; fallback; cached } -> (
+      (* Destructured, not [Option.get] behind a [<> None] guard: the branch and
+         the value it needs are one pattern (style review M3). *)
+      match page.image with
+      | Some image ->
+          Ok (finish_image t ~url page image ~fallback base ~started !notices ~run)
+      | None ->
+        begin
         (* The ladder is finished and this page is the page, so the escape lands here:
            everything downstream reads the escaped text. An offset taken from escaped
            text stays valid across a re-fetch; only a cut-boundary token drifts. *)
@@ -1283,7 +1287,7 @@ module Fetch = struct
           log_content base t page ?matches ();
           Ok (response t ~url page ~offset ?matches !notices)
         end
-      end
+      end)
 
   let fetch t ?(offset = 0) ?query ?path ?(structure = false) ?provider ?auto_fallback ?run ?step
       (url : string) : (Model.fetch_response, error) result =

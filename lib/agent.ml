@@ -396,19 +396,26 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
     let responses = List.rev !responses in
     let failed = List.rev !failed in
     let empty = List.rev !empty in
-    if responses = [] && !first_failure <> None then
-      (* Every step failed: the first step's message carries the ladder's
-         wording. No model call. *)
-      Error (Agent_failed (Option.get !first_failure))
-    else if not (List.exists (fun (r : Model.search_response) -> r.Model.results <> []) responses)
-    then
+    let zero_results =
       (* Every step answered with nothing: the engine's zero-result notice names
-         the retry. No model call. *)
+         the retry. No model call. [find_map] is the one call here — the earlier
+         shape was [find_opt] on a [notice <> None] test and then [Option.get] on
+         the field, a match written as two statements (style review M3). *)
       Error
         (Agent_failed
-           (match List.find_opt (fun (r : Model.search_response) -> r.Model.notice <> None) responses with
-           | Some r -> Option.get r.Model.notice
-           | None -> "No results were returned for this question; retry or rephrase."))
+           (Option.value
+              (List.find_map (fun (r : Model.search_response) -> r.Model.notice) responses)
+              ~default:"No results were returned for this question; retry or rephrase."))
+    in
+    if responses = [] then
+      match !first_failure with
+      | Some failure ->
+          (* Every step failed: the first step's message carries the ladder's
+             wording. No model call. *)
+          Error (Agent_failed failure)
+      | None -> zero_results
+    else if not (List.exists (fun (r : Model.search_response) -> r.Model.results <> []) responses)
+    then zero_results
     else begin
       let notices =
         if failed <> [] || empty <> [] then [ partial_notice (List.length queries) failed empty ]
