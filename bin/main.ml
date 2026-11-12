@@ -32,7 +32,7 @@ let usage_error message =
   prerr_endline ("seekwright: " ^ message);
   exit 2
 
-(* ------------------------------------------------------------- JSON reads *)
+(* {1 JSON reads} *)
 
 let json_field key = function
   | `Assoc fields -> ( match List.assoc_opt key fields with Some v -> v | None -> `Null)
@@ -56,7 +56,7 @@ let json_bool key json = match json_field key json with `Bool b -> Some b | _ ->
 
 let json_list key json = match json_field key json with `List items -> Some items | _ -> None
 
-(* ------------------------------------------------------------ flag parsing *)
+(* {1 Flag parsing} *)
 
 type server_opts = {
   check : bool;
@@ -86,24 +86,57 @@ let log_format_of_string = function
   | "json" -> Some Config.Log_json
   | _ -> None
 
+(* The scanner reads [Server.server_flag_table], so a flag's spelling, its arity
+   and the field it fills are one fact: [Server.server_flags] and the manifest
+   are derived from the same rows. The key, not the spelling, is what these two
+   functions match on — the only place a flag's name is written is the table. *)
+let apply_boolean opts ~key ~flag =
+  match key with
+  | "check" -> { opts with check = true }
+  | "live" -> { opts with live = true }
+  | "metrics" -> { opts with metrics = true }
+  | "json" -> { opts with json = true }
+  | "http" -> { opts with http = true }
+  | _ -> usage_error ("unknown flag " ^ flag)
+
+let apply_value opts ~key ~flag value =
+  match key with
+  | "host" -> { opts with host = Some value }
+  | "port" -> (
+      match int_of_string_opt value with
+      | Some n when n > 0 && n < 65536 -> { opts with port = Some n }
+      | _ -> usage_error (flag ^ " needs a port number"))
+  | "allowed_host" -> { opts with allowed_hosts = opts.allowed_hosts @ [ value ] }
+  | "log_level" -> (
+      match log_level_of_string value with
+      | Some level -> { opts with log_level = Some level }
+      | None -> usage_error (flag ^ " needs TRACE..CRITICAL"))
+  | "log_format" -> (
+      match log_format_of_string value with
+      | Some format_ -> { opts with log_format = Some format_ }
+      | None -> usage_error (flag ^ " needs text or json"))
+  | _ -> usage_error ("unknown flag " ^ flag)
+
 let parse_server_flags argv =
-  let rec go opts flags = function
-    | [] -> (opts, List.rev flags)
-    | "--check" :: rest -> go { opts with check = true } flags rest
-    | "--live" :: rest -> go { opts with live = true } flags rest
-    | "--metrics" :: rest -> go { opts with metrics = true } flags rest
-    | "--json" :: rest -> go { opts with json = true } flags rest
-    | "--http" :: rest -> go { opts with http = true } flags rest
-    | ("--host" | "--port" | "--allowed-host" | "--log-level" | "--log-format") as flag
-      :: rest -> (
-        match rest with
-        | value :: rest' -> go opts ((flag, value) :: flags) rest'
-        | [] -> usage_error (flag ^ " needs a value"))
-    | flag :: _ when String.length flag > 2 && String.sub flag 0 2 = "--" ->
-        usage_error ("unknown flag " ^ flag)
-    | arg :: _ -> usage_error ("unexpected argument " ^ arg)
+  let rec go opts = function
+    | [] -> opts
+    | flag :: rest -> (
+        match Server.flag_spec flag with
+        | None ->
+            if String.length flag > 2 && String.sub flag 0 2 = "--" then
+              usage_error ("unknown flag " ^ flag)
+            else usage_error ("unexpected argument " ^ flag)
+        | Some spec -> (
+            match spec.Server.arity with
+            | Server.Boolean ->
+                go (apply_boolean opts ~key:spec.key ~flag) rest
+            | Server.Value -> (
+                match rest with
+                | [] -> usage_error (flag ^ " needs a value")
+                | value :: rest' ->
+                    go (apply_value opts ~key:spec.key ~flag value) rest')))
   in
-  let opts, flags =
+  let opts =
     go
       {
         check = false;
@@ -117,39 +150,7 @@ let parse_server_flags argv =
         log_level = None;
         log_format = None;
       }
-      [] argv
-  in
-  let value flag = List.assoc_opt flag flags in
-  let opts =
-    {
-      opts with
-      host = value "--host";
-      port =
-        (match value "--port" with
-        | Some text -> (
-            match int_of_string_opt text with
-            | Some n when n > 0 && n < 65536 -> Some n
-            | _ -> usage_error "--port needs a port number")
-        | None -> None);
-      allowed_hosts =
-        List.concat_map
-          (fun (flag, v) -> if flag = "--allowed-host" then [ v ] else [])
-          flags;
-      log_level =
-        (match value "--log-level" with
-        | Some text -> (
-            match log_level_of_string text with
-            | Some level -> Some level
-            | None -> usage_error "--log-level needs TRACE..CRITICAL")
-        | None -> None);
-      log_format =
-        (match value "--log-format" with
-        | Some text -> (
-            match log_format_of_string text with
-            | Some format_ -> Some format_
-            | None -> usage_error "--log-format needs text or json")
-        | None -> None);
-    }
+      argv
   in
   (* The combination guards, ported from cli.py's parser.error calls. *)
   if opts.metrics && (opts.check || opts.live || opts.http || opts.host <> None || opts.port <> None || opts.allowed_hosts <> []) then
@@ -161,7 +162,7 @@ let parse_server_flags argv =
     usage_error "--host, --port and --allowed-host only make sense together with --http";
   opts
 
-(* ------------------------------------------------------------------ check *)
+(* {1 The check} *)
 
 let probe_prose = function
   | Health.Reachable -> "reachable"
@@ -260,8 +261,6 @@ let check ~env ~sw ~live =
       prerr_endline ("seekwright: " ^ message);
       1
   | Ok config ->
-      let logging = Log.apply_overrides config.Config.logging None None in
-      let _log = Log.sink (Log.make logging) in
       let problems = ref 0 in
       print_endline "seekwright check";
       print_endline "================";
@@ -296,26 +295,9 @@ let check ~env ~sw ~live =
         built.Factory.grant_errors;
       let mono_clock = env#mono_clock in
       let probe_net =
-        match built.Factory.endpoints with
-        | [] ->
-            {
-              Provider.Net.request =
-                (fun _request ->
-                  Error (Caps.Error.make Caps.Error.Unavailable ~message:"no endpoints configured"));
-            }
-        | endpoints -> (
-            match
-              Caps.Policy.with_endpoints ~sw ~net:(env#net)
-                ~max_response_bytes:Caps.Policy.default_max_response_bytes endpoints
-            with
-            | Ok decision ->
-                Provider.Net.of_grant (Caps.Authority.Net.of_confinement ~mono_clock decision)
-            | Error _ ->
-                {
-                  Provider.Net.request =
-                    (fun _request ->
-                      Error (Caps.Error.make Caps.Error.Unavailable ~message:"no endpoints configured"));
-                })
+        Factory.probe_net ~sw ~net:(env#net) ~mono_clock
+          ~timeout_seconds:config.Config.policy.Config.provider_timeout_seconds
+          built.Factory.endpoints
       in
       let ready = ref 0 in
       let lines = ref [] in
@@ -360,7 +342,7 @@ let check ~env ~sw ~live =
       report_agent config problems;
       if !problems > 0 then 1 else 0
 
-(* ---------------------------------------------------------------- metrics *)
+(* {1 Metrics} *)
 
 let metric_columns =
   [ "provider"; "calls"; "errors"; "fellback"; "samples"; "p50 ms"; "p95 ms"; "mean ms"; "cost usd"; "$/1k"; "last seen" ]
@@ -463,7 +445,7 @@ let metrics ~env ~as_json =
             0
           end))
 
-(* ----------------------------------------------------------------- client *)
+(* {1 The client} *)
 
 type scanned = {
   positional : string list;
@@ -678,7 +660,7 @@ let error_message status text =
           Printf.sprintf "HTTP %d%s" status
             (if String.trim text = "" then "" else ": " ^ String.trim text))
 
-(* ------------------------------------------------------- human rendering *)
+(* {1 Human rendering} *)
 
 type human_response =
   | Human_search of Model.search_response
@@ -837,12 +819,16 @@ let run_client ~env command argv =
         else print_human response;
         0
 
-(* ----------------------------------------------------------------- server *)
+(* {1 The server} *)
 
-let startup_log log config =
+let startup_log log config unsupported =
   log Config.Log_info "startup"
     [
       ("providers", `String (String.concat "," (Config.enabled_providers config)));
+      ( "unsupported",
+        (match unsupported with
+        | [] -> `Null
+        | names -> `String (String.concat "," names)) );
       ( "default_provider",
         (match config.Config.default_provider with
         | Some name -> `String name
@@ -894,15 +880,21 @@ let run_server ~env ~sw opts =
       | missing ->
           prerr_endline ("seekwright: agent mode is enabled but missing " ^ String.concat ", " missing);
           exit 1);
-      startup_log log config;
       match
         Factory.build_app ~sw ~env ~now:Unix.gettimeofday ~log ~allowed_hosts:opts.allowed_hosts config
       with
       | Error message ->
           prerr_endline ("seekwright: " ^ message);
           exit 1
-      | Ok app -> (
-          match Server.mcp_server app with
+      | Ok (app, built) ->
+          startup_log log config built.Factory.unsupported;
+          if built.Factory.unsupported <> [] then
+            log Config.Log_warning "startup.providers_unsupported"
+              [
+                ( "unsupported",
+                  `String (String.concat "," built.Factory.unsupported) );
+              ];
+          (match Server.mcp_server app with
           | Error (Caps.Server.Duplicate_tool name) ->
               prerr_endline ("seekwright: duplicate tool: " ^ name);
               exit 1
@@ -919,7 +911,7 @@ let run_server ~env ~sw opts =
               end
               else Mcp_kit_stdio.run_channels server stdin stdout)
 
-(* ------------------------------------------------------------------- main *)
+(* {1 Main} *)
 
 let () =
   (* Every path that can build a network grant needs a generator installed:

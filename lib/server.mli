@@ -14,7 +14,9 @@
 
     One listener serves [/mcp] plus the custom routes, routed by path in
     {!serve_http}: [GET /healthz] (outside the Host allowlist, secret-free:
-    provider names and uptime only), the dashboard routes ([GET /dashboard],
+    the providers this build can dispatch and uptime only — a configured name
+    with no adapter is not listed, and the startup warning names it), the
+    dashboard routes ([GET /dashboard],
     [GET /dashboard/data], [GET /dashboard/metrics], registered only when
     [[dashboard] enabled = true]) and the REST projection
     ([POST /api/v1/search], [POST /api/v1/fetch], [POST /api/v1/answer]) —
@@ -36,6 +38,28 @@
     {!Mcp_caps.Error}, whose [render] prefixes the stable kind — the layer's
     error channel, not Python's bare [ToolError] text. *)
 
+(** {1 The health monitor} *)
+
+type health = {
+  board : Health.t;
+  built : Config.name list;
+  probes : (Config.name * Health.probe_spec) list;
+  net : Provider.Net.t;
+}
+(** What one monitor tick reads: the board the engines record on, the names this
+    build can dispatch, their probe rows, and the network seam the probes dial
+    through. Built by the factory beside the app so the monitor and the search
+    engine share one board. *)
+
+val run_health_monitor :
+  health -> config:Config.t -> sleep:(unit -> unit) -> unit
+(** Probe forever: [sleep], one {!Health.run_probes} tick, repeat. The sleep is
+    the caller's because the interval comes from config and the clock belongs
+    to the transport; [serve_http] hands in the listener's monotonic clock.
+    Python sleeps first, so a start does not spend a probe before the first
+    interval. The fiber is a child of the listener's switch, and cancelling
+    that switch — how the process ends — is the stop. *)
+
 (** The process-wide context: one per server, built once by the factory (P8's
     [seekwright.factory]) and shared by every tool call and custom route.
     Grants are server-lifetime values, so the [Eio.Switch.t] that built them
@@ -54,6 +78,10 @@ type app = {
   mono_now : unit -> float;
   allowed_hosts : string list;
   (** The operator's [--allowed-host] entries; loopback is always allowed. *)
+  health : health option;
+  (** [None] when the app was assembled without a board to tick — the route and
+      tool suites build their own engines — and [Some] from
+      {!Seekwright_factory.Factory.build_app}, which shares the engine's board. *)
 }
 
 val fetch_disabled : string
@@ -128,8 +156,10 @@ val serve_http :
 (** Serve Streamable HTTP on [host]:[port]: [/mcp] is delegated to the mcp-kit
     adapter's handler (which owns body bound, routing headers and Origin), and
     every other path goes through {!handle_custom} under the same Host
-    allowlist. Runs until the enclosing switch ends; the listener is
-    registered on [sw], which owns the grants. *)
+    allowlist. [app.health] runs as a fiber on the same switch — so a cancelled
+    listener takes its monitor with it — when
+    [[search] health_interval_seconds] is positive. Runs until the enclosing
+    switch ends; the listener is registered on [sw], which owns the grants. *)
 
 (** {1 The frozen surface, as data}
 
@@ -152,7 +182,44 @@ val cli_verbs : string list
 (** The three client verbs, sorted: ["answer"; "fetch"; "search"]. *)
 
 val server_flags : string list
-(** The ten server flags, in the order the CLI declares them. *)
+(** The ten server flags, in the order the CLI declares them, derived from
+    {!server_flag_table}. *)
+
+type flag_arity =
+  | Boolean
+  | Value
+
+type server_flag = {
+  name : string;
+  (** The spelling the CLI accepts and the manifest prints. *)
+  arity : flag_arity;
+  (** [Boolean] takes no argument; [Value] takes exactly one. *)
+  repeats : bool;
+  (** Whether the flag may appear more than once ([--allowed-host]). *)
+  key : string;
+  (** The parser's field name, so [bin/main.ml] never spells a flag itself: a
+      rename here moves the accepted name, the error sentences and the
+      manifest together. *)
+}
+
+val server_flag_table : server_flag list
+(** The one source {!server_flags} and the CLI scanner both read. *)
+
+val flag_spec : string -> server_flag option
+(** The table row for a spelling, or [None]: what makes an unknown flag
+    unknown. *)
+
+(** {1 The HTTP wire helpers} *)
+
+val headers_of_lines : string list -> Http.Header.t
+(** Fold a replayed request head's lines into the [http] header type — the
+    transport reads [Host] from this, not from a hand-rolled prefix test. A
+    line with no colon is not a header and is dropped. *)
+
+val http_text_response : int -> string -> string
+(** The exact bytes of a plain-text refusal, with [content-length] computed
+    from the body. The transport below {!serve_http}'s routing writes its own
+    framing, so this is where the arithmetic lives. *)
 
 val journal_fields : (string * string list) list
 (** The usage-journal field sets per line kind ([search], [fetch], [answer]),

@@ -41,7 +41,7 @@ let runs_max = 256
 let keep_days_default = 370
 let recent_default = 100
 
-(* ------------------------------------------------------------------ clocks *)
+(* {1 The clock} *)
 
 (* Days since 1970-01-01 and back: Howard Hinnant's civil-date arithmetic. The
    stdlib's date functions are not in scope without [unix], and walking ~20 000
@@ -113,7 +113,7 @@ let iso_utc_seconds (secs : float) : string =
   let (y, m, d, hh, mm, ss, _) = civil_of secs in
   Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d+00:00" y m d hh mm ss
 
-(* ------------------------------------------------- parsing a journal timestamp *)
+(* {1 Parsing a journal timestamp} *)
 
 let digits (s : string) (i : int) (n : int) : int option =
   if i < 0 || n <= 0 || i + n > String.length s then None
@@ -194,7 +194,7 @@ let parse_utc (ts : string) : float option =
     end
   | _ -> None
 
-(* ------------------------------------------------------------ reading a line *)
+(* {1 Reading a line} *)
 
 (* A journal line's field, and [Null] for a key that is not there: Python's
    [entry.get(key)], which is how a line written before a key existed folds. *)
@@ -259,7 +259,7 @@ let round6 (x : float) : Yojson.Safe.t = `Float (float_of_string (Printf.sprintf
 (* Python's [int(x)] on a non-negative quotient: truncate, do not round. *)
 let trunc_int (x : float) : int = Float.to_int x
 
-(* --------------------------------------------------------------- aggregates *)
+(* {1 Aggregates} *)
 
 type day_totals = {
   mutable searches : int;
@@ -492,7 +492,7 @@ let fold_days (buckets : (string * provider_day) list) : provider_day =
     buckets;
   merged
 
-(* ------------------------------------------------------------ the line schema *)
+(* {1 The line schema} *)
 
 (* The journal's line schema: the one place its keys are declared, so a misnamed
    key is a compile error, not a line that changes shape. The tuple order {b is}
@@ -572,7 +572,7 @@ let answer_line (ts : string) (run : string) (model : string option) (depth : st
       ("error", (match error with Some e -> `String e | None -> `Null));
     ]
 
-(* --------------------------------------------------------------- the folding *)
+(* {1 The folding} *)
 
 let remember_run (t : t) (run : string) (provider : string) (results : int) : unit =
   (* The [run] id is the whole join: retrieval lines are written before the
@@ -802,7 +802,7 @@ let fold_entry (t : t) (entry : Yojson.Safe.t) : bool =
 let apply (t : t) (entry : Yojson.Safe.t) : bool =
   match entry with `Assoc _ -> fold_entry t entry | _ -> false
 
-(* --------------------------------------------------------------- the journal *)
+(* {1 The journal} *)
 
 let render_exn (exn : exn) : string =
   (* The reason is a log field, never a stack: [Printexc.to_string] gives the
@@ -917,7 +917,7 @@ let create ~now ?log ?history_path ?(recent = recent_default) ?(keep_days = keep
         | exception exn ->
           Error (Printf.sprintf "not writable: %s (%s)" shown (render_exn exn)))
 
-(* ---------------------------------------------------------------- recording *)
+(* {1 Recording} *)
 
 let record_search (t : t) ~(provider : string) ~(ms : int) ~(cost_usd : float)
     ~(results : int) ~(fell_back : bool) ?error ?run ?step () : unit =
@@ -948,7 +948,7 @@ let record_answer (t : t) ~(run : string) ~(model : string option) ~(depth : str
 
 let search_cost_usd (t : t) : float = t.search_cost_usd
 
-(* ------------------------------------------------------------- the snapshot *)
+(* {1 The snapshot} *)
 
 (* The last [window_days] UTC day names, oldest first — the axis both the chart and
    the endpoint series draw. *)

@@ -39,7 +39,7 @@ let log_format =
     (fun ppf format -> Format.pp_print_string ppf (Config.show_log_format format))
     ( = )
 
-(* ------------------------------------------------------------------ fixtures *)
+(* {1 Fixtures} *)
 
 (* One config file per case, the way the Python suite writes one into tmp_path. *)
 let write_config text =
@@ -122,7 +122,7 @@ let fenced_block path heading language =
   | Some at -> String.sub after_fence 0 at
   | None -> A.failf "%s leaves the %s block under %S unterminated" path language heading
 
-(* -------------------------------------------------------------- the assertions *)
+(* {1 The assertions} *)
 
 (* The value, or a failure that names the refusal: an unexpected refusal is a
    bug in the port, so the message has to show it. *)
@@ -155,7 +155,7 @@ let refuses_naming needles outcome =
             A.failf "fault %S does not name %S" fault needle)
         needles
 
-(* ------------------------------------------------------------------ the suites *)
+(* {1 The suites} *)
 
 let known_providers_sentence =
   "algolia, anysearch, deepseek, exa, exa:free, freeserp, linkup, parallel, \
@@ -414,25 +414,27 @@ let policy_cases =
   ]
 
 let fetch_extractor_cases =
-  [ ( "the default backend is trafilatura"
-    , fun () -> A.(check string "extractor" "trafilatura" Config.default_fetch_config.extractor) )
-  ; ( "the second registry member loads"
+  [ ( "the default backend is stdlib"
+    , fun () -> A.(check string "extractor" "stdlib" Config.default_fetch_config.extractor) )
+  ; ( "an empty config names the backend this build carries"
     , fun () ->
-        (* [stdlib] is what keeps [fetch] buildable on a bare install, so it has to
-           survive a resolve rather than only a validation *)
-        let bare =
-          expect
-            (Config.resolve
-               ~providers:(named [ "serper" ])
-               ~fetch:{ Config.default_fetch_config with extractor = "stdlib" }
-               ())
-        in
-        A.(check string "stdlib accepted" "stdlib" bare.Config.fetch.extractor) )
+        let cfg = expect (load "") in
+        A.(check string "stdlib" "stdlib" cfg.Config.fetch.extractor) )
+  ; ( "the default validates, so a stock install can start"
+    , fun () ->
+        A.(check bool "valid" true
+           (Result.is_ok
+              (Config.validate_fetch_extractor Config.default_fetch_config.extractor))) )
   ; ( "an unknown backend is refused naming the registry"
     , fun () ->
         refuses_exactly
-          "fetch.extractor names unknown extractor 'readability'; supported: stdlib, trafilatura"
+          "fetch.extractor names unknown extractor 'readability'; supported: stdlib"
           (Config.validate_fetch_extractor "readability") )
+  ; ( "trafilatura is refused, because this build has no such backend"
+    , fun () ->
+        refuses_exactly
+          "fetch.extractor names unknown extractor 'trafilatura'; supported: stdlib"
+          (Config.validate_fetch_extractor "trafilatura") )
   ]
 
 (* Every case reads the environment fresh: the Python suite's monkeypatch fixtures
@@ -596,7 +598,7 @@ let test_the_removed_knowledge_section_is_rejected () =
   let path = write_config "[providers.serper]\nenabled = true\n\n[knowledge]\nenabled = true\n" in
   refuses_with "knowledge" (Config.load (Some path))
 
-(* ------------------------------------------------------------------ documents *)
+(* {1 Documents} *)
 
 let configuration_doc = "../docs/reference/configuration.md"
 let deploying_doc = "../docs/reference/deploying.md"
@@ -611,9 +613,22 @@ let documented_example () =
       let start = at + String.length "```toml" in
       cut_at "```" (String.sub text start (String.length text - start))
 
+(* The reference page belongs to the Python tree, whose default backend is
+   "trafilatura"; this port carries only "stdlib", so the example's one
+   extractor line is translated before the load. Every other key is the
+   documented text unchanged, which is what this case is about. *)
+let port_example text =
+  let from = "extractor = \"trafilatura\"" and into = "extractor = \"stdlib\"" in
+  match find_index from text with
+  | None -> A.failf "%s's example no longer names the extractor" configuration_doc
+  | Some at ->
+      String.sub text 0 at ^ into
+      ^ String.sub text (at + String.length from)
+          (String.length text - at - String.length from)
+
 let test_the_documented_example_loads () =
   clear_keys ();
-  let cfg = expect (load (documented_example ())) in
+  let cfg = expect (load (port_example (documented_example ()))) in
   let enabled = Config.enabled_providers cfg in
   if enabled = [] then A.failf "the documented example enables nothing";
   (match cfg.Config.default_provider with
@@ -699,7 +714,7 @@ let test_the_fetch_role_cannot_dispatch_a_provider () =
       cfg.Config.permitted_providers;
     check strings "nothing missing" [] (Config.missing_api_keys cfg))
 
-(* ------------------------------------------------------- the fetch fallbacks *)
+(* {1 The fetch fallbacks} *)
 
 let fallback_names rows = List.map (fun (row : Config.fetch_fallback) -> row.name) rows
 
@@ -844,7 +859,7 @@ let fetch_primary_cases =
           (Config.validate_fetch_primary Config.known_fetch_fallbacks "kagi") )
   ]
 
-(* --------------------------------------------------------- the search ladders *)
+(* {1 The search ladders} *)
 
 (* [search.fallback] is the default route's ladder, and its shape is startup
    policy rather than a serving-path surprise: unlike fetch's fallbacks, one
@@ -1270,7 +1285,7 @@ let agent_cases =
         unsetenv "SEEKWRIGHT_AGENT_API_KEY")
   ]
 
-(* ---------------------------------------------------------------- lax scalars *)
+(* {1 Lax scalars} *)
 
 (* pydantic's lax scalar reading, ported because a quoted number is the commonest
    typo in a config file and the Python deployment has always taken it. The
@@ -1369,11 +1384,14 @@ let test_a_boolean_refuses_everything_else () =
     check (option bool) "another number" None (flag "2");
     check (option bool) "a fractional number" None (flag "2.5"))
 
-(* ----------------------------------------------------------- the vocabularies *)
+(* {1 The vocabularies} *)
 
-(* The frozen names, written out rather than recomputed: this is the row of
+(* The frozen names, written out rather than recomputed: these are the rows of
    tools/value_sets.json the port has to agree with, and a name that moves in the
-   Python tree fails here before it can pass as a silent config change. *)
+   Python tree fails here before it can pass as a silent config change. The
+   extractor row is the one deliberate narrowing: [trafilatura] is absent because
+   this build has no such backend, so a config that names it is refused at load
+   rather than at construction. *)
 let test_the_frozen_vocabularies () =
   A.(
     check strings "known providers"
@@ -1382,7 +1400,7 @@ let test_the_frozen_vocabularies () =
       ; "serpapi"; "serper"; "tavily"; "tinyfish" ]
       Config.known_providers;
     check strings "the fetch-only permitted name" [ "jina" ] Config.permitted_fetch_names;
-    check strings "extractors" [ "stdlib"; "trafilatura" ] Config.known_extractors;
+    check strings "extractors" [ "stdlib" ] Config.known_extractors;
     check strings "keyless" [ "exa:free"; "parallel:free"; "freeserp" ] Config.keyless_providers;
     check (list (pair string string)) "retired spellings"
       [ ("exa_free", "exa:free"); ("parallel_free", "parallel:free") ]

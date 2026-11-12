@@ -132,6 +132,34 @@
   ../docs/reference/configuration.md
   ../docs/reference/deploying.md))
 
+; P8: the config timeouts reach the grants they bound. A loopback listener that
+; accepts and never answers makes the bound observable, so no billed endpoint is
+; involved; the factory source is a dep because the config-read pin scans it.
+(test
+ (name test_grant_timeouts)
+ (libraries seekwright seekwright.factory mcp-caps uri yojson eio eio_main
+   mirage-crypto-rng.unix unix alcotest)
+ (deps ../lib/factory/factory.ml))
+
+; P8: the server-side health monitor. An injected sleep pins the loop's order,
+; and a real loopback listener (never connected to) pins that the monitor is a
+; child of the listener's switch; the probe's net seam is a fake, so no request
+; leaves the process.
+(test
+ (name test_health_monitor)
+ (libraries seekwright mcp-caps mcp-kit eio eio_main mirage-crypto-rng.unix
+   yojson alcotest))
+
+; P8: boots the shipped default configuration through the real construction
+; path — the regression test for the default extractor. Installing a random
+; generator is the caller's job, so the suite holds an Eio loop and stdlib
+; Unix; no socket is opened.
+(test
+ (name test_boot)
+ (libraries seekwright seekwright.fetch seekwright.fetch.stdlib
+   seekwright.providers seekwright.factory mcp-caps uri yojson eio eio_main
+   mirage-crypto-rng.unix unix alcotest))
+
 ; P4: the provider contract's machinery — the constraint report, the caps, and
 ; the failure rows provider-contract.md's Failures table fixes. It reads the
 ; adapter sources from the sandbox as well, which is what the (deps) line is:
@@ -243,11 +271,13 @@
 ; P8: the server module — the three tools through the capability registry, the
 ; custom routes behind the Host allowlist, and the frozen-surface data. The app
 ; is built from stub providers and a stub fetcher, so the suite needs the
-; library, the capability layer, mcp-kit (to dispatch JSON-RPC lines) and
-; yojson; no transport and no loop.
+; library, the capability layer, mcp-kit (to dispatch JSON-RPC lines), yojson
+; and [http] for the wire helpers; no transport and no loop. [bin/main.ml] is a
+; dep because the flag-table guard reads the scanner's source.
 (test
  (name test_p8_server)
- (libraries seekwright mcp-caps mcp-kit yojson alcotest))
+ (libraries seekwright mcp-caps mcp-kit http yojson alcotest)
+ (deps ../bin/main.ml))
 
 ; P8: the journal-field pin behind the surface manifest. The journal is a real
 ; file under a scratch root, so the suite owns an Eio loop (the recorder's

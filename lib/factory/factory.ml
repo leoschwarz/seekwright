@@ -1,10 +1,15 @@
 (* Construction from config and environment. Port of
    [src/seekwright/factory.py]; see [factory.mli] for the shape.
 
-   Only the two keyless HTTP adapters this build carries (P4) are built here;
-   the other fifteen names have no adapter yet and are skipped, exactly as
-   Python skips a name missing its key. Each built adapter gets its own
-   endpoint-scoped grant, so the provider can dial only its own vendor. *)
+   Only the two keyless HTTP adapters this build carries (P4) are built here.
+   The other fifteen names have no adapter yet, so they are skipped and
+   disclosed: [build_providers] returns them as [unsupported], and the startup
+   line binds that list so an operator reads which names this build cannot
+   dispatch. That is deliberately *not* Python's behaviour — Python raises on an
+   enabled provider without a key and never skips — so the port says the
+   absence out loud instead of leaving a config name looking served. Each built
+   adapter gets its own endpoint-scoped grant, so the provider can dial only its
+   own vendor. *)
 
 module Caps = Mcp_caps
 module Authority = Caps.Authority
@@ -29,17 +34,27 @@ type providers = {
   probe_table : (Config.name * Health.probe_spec) list;
   endpoints : Policy.endpoint list;
   grant_errors : (Config.name * string) list;
+  unsupported : Config.name list;
 }
 
 (* One endpoint-scoped grant per adapter: the only network path a provider
-   has. *)
-let grant_of_endpoint ~sw ~net ~mono_clock (endpoint : Policy.endpoint) =
+   has. The operation bound is the config's, not the capability layer's
+   default: [policy.provider_timeout_seconds] bounds a provider call,
+   [fetch.timeout_seconds] a fetch, and [agent.model_timeout_seconds] the model
+   request — the three keys Python feeds its clients. *)
+let grant_of_endpoint ~sw ~net ~mono_clock ~timeout_seconds
+    (endpoint : Policy.endpoint) =
   match
     Policy.with_endpoints ~sw ~net
       ~max_response_bytes:Policy.default_max_response_bytes
       [ endpoint ]
   with
-  | Ok decision -> Ok (Authority.Net.of_confinement ~mono_clock decision)
+  | Ok decision ->
+      let grant = Authority.Net.of_confinement ~mono_clock decision in
+      Ok
+        (Authority.with_operation_timeout
+           (Eio.Time.Timeout.seconds mono_clock timeout_seconds)
+           grant)
   | Error error -> Error (Caps.Error.render error)
 
 let keyless_headers _config _key = []
@@ -77,24 +92,29 @@ let cost_of (pc : Config.provider_config) = Option.value ~default:0.0 pc.Config.
 
 let build_providers ~sw ~net ~mono_clock ~now config =
   let snippet_chars = config.Config.policy.Config.max_snippet_chars in
-  let rec go built table endpoints errors = function
+  let rec go built table endpoints errors unsupported = function
     | [] ->
         {
           built = List.rev built;
           probe_table = List.rev table;
           endpoints = List.rev endpoints;
           grant_errors = List.rev errors;
+          unsupported = List.rev unsupported;
         }
     | (name, pc0) :: rest ->
         let (pc : Config.provider_config) = pc0 in
-        if not pc.Config.enabled then go built table endpoints errors rest
+        if not pc.Config.enabled then go built table endpoints errors unsupported rest
         else
           match List.assoc_opt name adapters with
-          | None -> go built table endpoints errors rest
+          | None -> go built table endpoints errors (name :: unsupported) rest
           | Some adapter -> (
-              match grant_of_endpoint ~sw ~net ~mono_clock adapter.endpoint with
+              match
+                grant_of_endpoint ~sw ~net ~mono_clock
+                  ~timeout_seconds:config.Config.policy.Config.provider_timeout_seconds
+                  adapter.endpoint
+              with
               | Error message ->
-                  go built table endpoints ((name, message) :: errors) rest
+                  go built table endpoints ((name, message) :: errors) unsupported rest
               | Ok grant ->
                   let net = Provider.Net.of_grant grant in
                   let provider =
@@ -111,9 +131,42 @@ let build_providers ~sw ~net ~mono_clock ~now config =
                     ((name, provider) :: built)
                     (row :: table)
                     (adapter.endpoint :: endpoints)
-                    errors rest)
+                    errors unsupported rest)
   in
-  go [] [] [] [] config.Config.providers
+  go [] [] [] [] [] config.Config.providers
+
+(* The network seam the readiness probes share: one grant over the union of the
+   built vendors' endpoints. With no endpoint there is nothing to allow, so
+   every request answers [Unavailable] instead of building an empty grant. *)
+let probe_net ~sw ~net ~mono_clock ~timeout_seconds endpoints =
+  match endpoints with
+  | [] ->
+      {
+        Provider.Net.request =
+          (fun _request ->
+            Error
+              (Caps.Error.make Caps.Error.Unavailable
+                 ~message:"no endpoints configured"));
+      }
+  | endpoints -> (
+      match
+        Policy.with_endpoints ~sw ~net
+          ~max_response_bytes:Policy.default_max_response_bytes endpoints
+      with
+      | Ok decision ->
+          let grant = Authority.Net.of_confinement ~mono_clock decision in
+          Provider.Net.of_grant
+            (Authority.with_operation_timeout
+               (Eio.Time.Timeout.seconds mono_clock timeout_seconds)
+               grant)
+      | Error _ ->
+          {
+            Provider.Net.request =
+              (fun _request ->
+                Error
+                  (Caps.Error.make Caps.Error.Unavailable
+                     ~message:"no endpoints configured"));
+          })
 
 let build_extractor config =
   match config.Config.fetch.Config.extractor with
@@ -172,6 +225,11 @@ let build_fetch_stack ~sw ~net ~mono_clock config =
     | Error error -> Some (Error (Caps.Error.render error))
     | Ok decision ->
         let grant = Authority.Net.of_confinement ~mono_clock decision in
+        let grant =
+          Authority.with_operation_timeout
+            (Eio.Time.Timeout.seconds mono_clock fetch.Config.timeout_seconds)
+            grant
+        in
         let fetcher =
           Fetcher.make ~net:grant ~extractor
             ~max_download_bytes:fetch.Config.max_download_bytes
@@ -210,7 +268,9 @@ let agent_net ~sw ~net ~mono_clock config =
       in
       let host = Option.value ~default:"" (Uri.host uri) in
       let endpoint = { Policy.scheme; host; port = Uri.port uri } in
-      grant_of_endpoint ~sw ~net ~mono_clock endpoint)
+      grant_of_endpoint ~sw ~net ~mono_clock
+        ~timeout_seconds:config.Config.agent.Config.model_timeout_seconds
+        endpoint)
 
 let build_app ~sw
     ~(env : < net : [> [> `Generic ] Eio.Net.ty] Eio.Resource.t;
@@ -269,13 +329,26 @@ let build_app ~sw
                           ?fetch_engine:fetch ~usage ~log ~clock:mono_now ~now ()))
           in
           Ok
-            {
-              Server.config;
-              search;
-              usage;
-              fetch;
-              agent;
-              started_at = mono_now ();
-              mono_now;
-              allowed_hosts;
-            })
+            ( {
+                Server.config;
+                search;
+                usage;
+                fetch;
+                agent;
+                started_at = mono_now ();
+                mono_now;
+                allowed_hosts;
+                health =
+                  Some
+                    {
+                      Server.board;
+                      built = List.map fst built.probe_table;
+                      probes = built.probe_table;
+                      net =
+                        probe_net ~sw ~net:(env#net) ~mono_clock
+                          ~timeout_seconds:
+                            config.Config.policy.Config.provider_timeout_seconds
+                          built.endpoints;
+                    };
+              },
+              built ))
