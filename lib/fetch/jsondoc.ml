@@ -251,12 +251,30 @@ let normalize (json : Yojson.Safe.t) =
     | `List xs -> `List (List.map walk xs)
     | j -> j
   and dedupe kvs =
-    List.fold_left
-      (fun acc (k, v) ->
-        if List.mem_assoc k acc then
-          List.map (fun (k', v') -> if k' = k then (k, v) else (k', v')) acc
-        else acc @ [ (k, v) ])
-      [] kvs
+    (* Python's object semantics: a duplicate key keeps the {b first} position and
+       the {b last} value. One pass does that — a table from key to the slot it
+       first took, a value array under it, and the slots read out in order.
+
+       The shape of the input is why this is not a [fold_left] with
+       [List.mem_assoc] and an append: [max_download_bytes] caps the {b bytes} of
+       a body, not its member count, so [{"k":1,}] repeated is a legal document
+       with tens of thousands of members, and a per-member scan plus a copy of the
+       accumulator makes the parse quadratic before the rendering budget is even
+       consulted. The placeholder each slot starts on is never read: only the
+       first [n] slots, each written before its index is handed out, are taken. *)
+    let slots = Hashtbl.create (List.length kvs) in
+    let members = Array.make (List.length kvs) ("", `Null) in
+    let used = ref 0 in
+    List.iter
+      (fun (key, value) ->
+        match Hashtbl.find_opt slots key with
+        | Some slot -> members.(slot) <- (key, value)
+        | None ->
+            Hashtbl.replace slots key !used;
+            members.(!used) <- (key, value);
+            incr used)
+      kvs;
+    Array.to_list (Array.sub members 0 !used)
   in
   walk json
 
