@@ -111,14 +111,16 @@ end
 (** {1 The fetch engine} *)
 
 module Fetch : sig
-  type image = {
+  (* Equated aliases for [Seekwright_wire.Page]: this interface and
+     [Fetcher.fetched_page] name the same record, so nothing between the two has
+     to copy it and a field cannot be added on one side only (style review M5). *)
+  type image = Seekwright_wire.Page.image = {
     media_type : string
   ;  (** the type the body's own bytes agreed with, not the server's header *)
     body : string  (** the bytes, whole *)
   }
-  (** [fetcher.FetchedImage]. *)
 
-  type page = {
+  type page = Seekwright_wire.Page.page = {
     url : string  (** where the fetch landed, after any redirects *)
   ; title : string option
   ; text : string
@@ -129,8 +131,6 @@ module Fetch : sig
   ; path_addressable : bool  (** [text] is a structure this build rendered *)
   ; image : image option
   }
-  (** [fetcher.FetchedPage]: one fetched and extracted page, before response
-      metadata is attached. *)
 
   type cap =
     | Default  (** this fetcher's own configured [fetch.max_text_chars] *)

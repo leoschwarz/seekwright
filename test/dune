@@ -264,3 +264,10 @@
 (test
  (name test_text)
  (libraries seekwright.text seekwright.fetch alcotest))
+
+; Foundation wave A: the page record has one owner (style review M5). The pin
+; is that [Engine.Fetch.page] and [Fetcher.fetched_page] are the same record,
+; so all three libraries have to be in scope for the identity to mean anything.
+(test
+ (name test_wire)
+ (libraries seekwright seekwright.fetch seekwright.wire alcotest))

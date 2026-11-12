@@ -28,7 +28,15 @@
     (Python's single 2× wall-clock budget over the chain is the engine's job
     in this port, P5). *)
 
-type fetched_image = {
+(* The page records are [Seekwright_wire.Page]'s, re-declared here under the
+   names this interface uses, so the two halves of the fetch path cannot drift
+   and the layer between them has nothing to copy (style review M5). The
+   equated-alias form is the one [lib/caps/policy.mli] already uses: one type,
+   two names, the fields spelled out on both sides so each interface keeps its
+   own field documentation — and a field that stops matching stops being a
+   silent omission and becomes a type error. *)
+
+type fetched_image = Seekwright_wire.Page.image = {
   media_type : string;
   (** The media type the bytes' own first bytes agreed with — never the
       server's header alone. *)
@@ -36,7 +44,7 @@ type fetched_image = {
   body : string;
 }
 
-type fetched_page = {
+type fetched_page = Seekwright_wire.Page.page = {
   url : string;
   (** Where the fetch actually landed, after any redirects. *)
 

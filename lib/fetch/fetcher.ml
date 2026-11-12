@@ -6,12 +6,12 @@ module Caps = Mcp_caps
 module E = Extractor
 module J = Jsondoc
 
-type fetched_image = {
+type fetched_image = Seekwright_wire.Page.image = {
   media_type : string;
   body : string;
 }
 
-type fetched_page = {
+type fetched_page = Seekwright_wire.Page.page = {
   url : string;
   title : string option;
   text : string;

@@ -144,22 +144,12 @@ let cap_of (cap : Engine.Fetch.cap) : int option =
   | Engine.Fetch.Limit n -> Some n
   | Engine.Fetch.Uncapped -> Some Fetcher.uncapped
 
-let page_of (page : Fetcher.fetched_page) : Engine.Fetch.page =
-  {
-    Engine.Fetch.url = page.Fetcher.url;
-    title = page.Fetcher.title;
-    text = page.Fetcher.text;
-    content_type = page.Fetcher.content_type;
-    status_code = page.Fetcher.status_code;
-    truncated = page.Fetcher.truncated;
-    total_chars = page.Fetcher.total_chars;
-    path_addressable = page.Fetcher.path_addressable;
-    image =
-      (match page.Fetcher.image with
-      | None -> None
-      | Some image -> Some { Engine.Fetch.media_type = image.Fetcher.media_type; body = image.Fetcher.body });
-  }
-
+(* [error_of] is a translation, not a copy, and stays one: [Fetcher.refusal] and
+   [Engine.Fetch.fetch_error] are different vocabularies on purpose — a
+   [Blocked] becomes the engine's mid-flight refusal, a [Failed] becomes a
+   provider error carrying the route's name. The page records beside them are the
+   same type under both names ([Seekwright_wire.Page]), so the reader below hands
+   the page straight over (style review M5). *)
 let error_of (error : Fetcher.error) : Engine.Fetch.fetch_error =
   match error with
   | Fetcher.Refusal (Fetcher.Url_blocked message) -> Engine.Fetch.Url_blocked message
@@ -200,7 +190,7 @@ let build_fetch_stack ~sw ~net ~mono_clock config =
                 match
                   Fetcher.fetch fetcher url ~offset ~max_chars:(cap_of max_chars)
                 with
-                | Ok page -> Ok (page_of page)
+                | Ok page -> Ok page
                 | Error error -> Error (error_of error));
             aclose = (fun () -> ());
           }

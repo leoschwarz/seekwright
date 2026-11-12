@@ -657,9 +657,9 @@ end
 (* {1 The fetch engine} *)
 
 module Fetch = struct
-  type image = { media_type : string; body : string }
+  type image = Seekwright_wire.Page.image = { media_type : string; body : string }
 
-  type page = {
+  type page = Seekwright_wire.Page.page = {
     url : string
   ; title : string option
   ; text : string

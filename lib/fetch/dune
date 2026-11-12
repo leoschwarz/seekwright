@@ -18,12 +18,14 @@
 (library
  (name seekwright_fetch)
  (public_name seekwright.fetch)
- ; [seekwright.text] is the port's one codepoint walk and [repr] pass (style
- ; review H1 and H2). It used to be a copy here and a copy in [seekwright],
- ; because neither big library may link the other; the walk therefore sits on a
- ; stdlib-only floor under both.
+ ; [seekwright.text] is the one codepoint walk (style review H1/H2) and
+ ; [seekwright.wire] the page records this library produces and [seekwright]
+ ; consumes: both used to own a copy, and the layer between the two libraries
+ ; copied the record field by field. Neither big library may link the other, so
+ ; both sit on a stdlib-only floor under both.
  (libraries
   seekwright.text
+  seekwright.wire
   mcp-caps
   uri
   yojson))
