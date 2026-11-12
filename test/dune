@@ -132,6 +132,15 @@
   ../docs/reference/configuration.md
   ../docs/reference/deploying.md))
 
+; P8: the config timeouts reach the grants they bound. A loopback listener that
+; accepts and never answers makes the bound observable, so no billed endpoint is
+; involved; the factory source is a dep because the config-read pin scans it.
+(test
+ (name test_grant_timeouts)
+ (libraries seekwright seekwright.factory mcp-caps uri yojson eio eio_main
+   mirage-crypto-rng.unix unix alcotest)
+ (deps ../lib/factory/factory.ml))
+
 ; P8: the server-side health monitor. An injected sleep pins the loop's order,
 ; and a real loopback listener (never connected to) pins that the monitor is a
 ; child of the listener's switch; the probe's net seam is a fake, so no request

@@ -297,6 +297,7 @@ let check ~env ~sw ~live =
       let mono_clock = env#mono_clock in
       let probe_net =
         Factory.probe_net ~sw ~net:(env#net) ~mono_clock
+          ~timeout_seconds:config.Config.policy.Config.provider_timeout_seconds
           built.Factory.endpoints
       in
       let ready = ref 0 in

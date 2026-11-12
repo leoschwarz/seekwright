@@ -38,14 +38,23 @@ type providers = {
 }
 
 (* One endpoint-scoped grant per adapter: the only network path a provider
-   has. *)
-let grant_of_endpoint ~sw ~net ~mono_clock (endpoint : Policy.endpoint) =
+   has. The operation bound is the config's, not the capability layer's
+   default: [policy.provider_timeout_seconds] bounds a provider call,
+   [fetch.timeout_seconds] a fetch, and [agent.model_timeout_seconds] the model
+   request — the three keys Python feeds its clients. *)
+let grant_of_endpoint ~sw ~net ~mono_clock ~timeout_seconds
+    (endpoint : Policy.endpoint) =
   match
     Policy.with_endpoints ~sw ~net
       ~max_response_bytes:Policy.default_max_response_bytes
       [ endpoint ]
   with
-  | Ok decision -> Ok (Authority.Net.of_confinement ~mono_clock decision)
+  | Ok decision ->
+      let grant = Authority.Net.of_confinement ~mono_clock decision in
+      Ok
+        (Authority.with_operation_timeout
+           (Eio.Time.Timeout.seconds mono_clock timeout_seconds)
+           grant)
   | Error error -> Error (Caps.Error.render error)
 
 let keyless_headers _config _key = []
@@ -99,7 +108,11 @@ let build_providers ~sw ~net ~mono_clock ~now config =
           match List.assoc_opt name adapters with
           | None -> go built table endpoints errors (name :: unsupported) rest
           | Some adapter -> (
-              match grant_of_endpoint ~sw ~net ~mono_clock adapter.endpoint with
+              match
+                grant_of_endpoint ~sw ~net ~mono_clock
+                  ~timeout_seconds:config.Config.policy.Config.provider_timeout_seconds
+                  adapter.endpoint
+              with
               | Error message ->
                   go built table endpoints ((name, message) :: errors) unsupported rest
               | Ok grant ->
@@ -125,7 +138,7 @@ let build_providers ~sw ~net ~mono_clock ~now config =
 (* The network seam the readiness probes share: one grant over the union of the
    built vendors' endpoints. With no endpoint there is nothing to allow, so
    every request answers [Unavailable] instead of building an empty grant. *)
-let probe_net ~sw ~net ~mono_clock endpoints =
+let probe_net ~sw ~net ~mono_clock ~timeout_seconds endpoints =
   match endpoints with
   | [] ->
       {
@@ -141,8 +154,11 @@ let probe_net ~sw ~net ~mono_clock endpoints =
           ~max_response_bytes:Policy.default_max_response_bytes endpoints
       with
       | Ok decision ->
+          let grant = Authority.Net.of_confinement ~mono_clock decision in
           Provider.Net.of_grant
-            (Authority.Net.of_confinement ~mono_clock decision)
+            (Authority.with_operation_timeout
+               (Eio.Time.Timeout.seconds mono_clock timeout_seconds)
+               grant)
       | Error _ ->
           {
             Provider.Net.request =
@@ -219,6 +235,11 @@ let build_fetch_stack ~sw ~net ~mono_clock config =
     | Error error -> Some (Error (Caps.Error.render error))
     | Ok decision ->
         let grant = Authority.Net.of_confinement ~mono_clock decision in
+        let grant =
+          Authority.with_operation_timeout
+            (Eio.Time.Timeout.seconds mono_clock fetch.Config.timeout_seconds)
+            grant
+        in
         let fetcher =
           Fetcher.make ~net:grant ~extractor
             ~max_download_bytes:fetch.Config.max_download_bytes
@@ -257,7 +278,9 @@ let agent_net ~sw ~net ~mono_clock config =
       in
       let host = Option.value ~default:"" (Uri.host uri) in
       let endpoint = { Policy.scheme; host; port = Uri.port uri } in
-      grant_of_endpoint ~sw ~net ~mono_clock endpoint)
+      grant_of_endpoint ~sw ~net ~mono_clock
+        ~timeout_seconds:config.Config.agent.Config.model_timeout_seconds
+        endpoint)
 
 let build_app ~sw
     ~(env : < net : [> [> `Generic ] Eio.Net.ty] Eio.Resource.t;
@@ -333,6 +356,8 @@ let build_app ~sw
                       probes = built.probe_table;
                       net =
                         probe_net ~sw ~net:(env#net) ~mono_clock
+                          ~timeout_seconds:
+                            config.Config.policy.Config.provider_timeout_seconds
                           built.endpoints;
                     };
               },
