@@ -21,7 +21,7 @@ module Server = Seekwright.Server
 
 let ( // ) = Filename.concat
 
-(* ------------------------------------------------- config.mli record scan *)
+(* {1 The config.mli record scan} *)
 
 (* The section table -> the Python model name the manifest prints, and the
    record type in [config.mli] the keys are read from. The mapping is the
@@ -83,7 +83,7 @@ let read_config_keys path =
   in
   (section_keys, per_provider, top_level)
 
-(* ------------------------------------------------------------- rendering *)
+(* {1 Rendering} *)
 
 let entry label = "- `" ^ label ^ "`"
 

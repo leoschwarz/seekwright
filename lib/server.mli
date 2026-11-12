@@ -182,7 +182,44 @@ val cli_verbs : string list
 (** The three client verbs, sorted: ["answer"; "fetch"; "search"]. *)
 
 val server_flags : string list
-(** The ten server flags, in the order the CLI declares them. *)
+(** The ten server flags, in the order the CLI declares them, derived from
+    {!server_flag_table}. *)
+
+type flag_arity =
+  | Boolean
+  | Value
+
+type server_flag = {
+  name : string;
+  (** The spelling the CLI accepts and the manifest prints. *)
+  arity : flag_arity;
+  (** [Boolean] takes no argument; [Value] takes exactly one. *)
+  repeats : bool;
+  (** Whether the flag may appear more than once ([--allowed-host]). *)
+  key : string;
+  (** The parser's field name, so [bin/main.ml] never spells a flag itself: a
+      rename here moves the accepted name, the error sentences and the
+      manifest together. *)
+}
+
+val server_flag_table : server_flag list
+(** The one source {!server_flags} and the CLI scanner both read. *)
+
+val flag_spec : string -> server_flag option
+(** The table row for a spelling, or [None]: what makes an unknown flag
+    unknown. *)
+
+(** {1 The HTTP wire helpers} *)
+
+val headers_of_lines : string list -> Http.Header.t
+(** Fold a replayed request head's lines into the [http] header type — the
+    transport reads [Host] from this, not from a hand-rolled prefix test. A
+    line with no colon is not a header and is dropped. *)
+
+val http_text_response : int -> string -> string
+(** The exact bytes of a plain-text refusal, with [content-length] computed
+    from the body. The transport below {!serve_http}'s routing writes its own
+    framing, so this is where the arithmetic lives. *)
 
 val journal_fields : (string * string list) list
 (** The usage-journal field sets per line kind ([search], [fetch], [answer]),

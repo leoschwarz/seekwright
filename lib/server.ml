@@ -28,7 +28,7 @@ module Tool = Caps.Tool
 
 let ( >>= ) = Result.bind
 
-(* ------------------------------------------------------------------ schemas *)
+(* {1 Schemas} *)
 
 let obj ?(additional = true) properties required =
   `Assoc
@@ -210,7 +210,7 @@ let answer_response_schema =
     ]
     [ "query"; "answer"; "sources"; "model"; "depth"; "searches"; "fetched" ]
 
-(* -------------------------------------------------------------------- tools *)
+(* {1 The tools} *)
 
 type health = {
   board : Health.t;
@@ -344,7 +344,7 @@ let mcp_server app =
   |> Result.map_error (fun (Registry.Duplicate_tool name) -> Server.Duplicate_tool name)
   >>= Server.of_registry ~name:"seekwright" ~version:"0.1.0"
 
-(* ---------------------------------------------------------- the Host guard *)
+(* {1 The Host guard} *)
 
 let loopback = [ "localhost"; "127.0.0.1"; "::1" ]
 
@@ -378,7 +378,17 @@ let origin_allowlist extra =
     (fun host -> [ "http://" ^ host; "https://" ^ host ])
     (loopback @ extra)
 
-(* ------------------------------------------------------- the custom routes *)
+(* The one Host decision both layers use. [/healthz] is outside the allowlist —
+   a kubelet probes with the pod IP in [Host] — and a missing [Host] is refused
+   like an unlisted one. *)
+let host_gate app ~path ~host =
+  path = "/healthz"
+  ||
+  match host with
+  | Some h -> is_host_allowed (host_allowlist app.allowed_hosts) h
+  | None -> false
+
+(* {1 The custom routes} *)
 
 type response = {
   status : int;
@@ -518,17 +528,12 @@ let handle_custom app ~meth ~path ~host ~origin ~body =
     { status = 413; headers = text_content; body = "" }
   else
     (* [/healthz] is outside the allowlist; everything else is guarded. *)
-    let host_ok =
-      match host with
-      | Some h -> is_host_allowed (host_allowlist app.allowed_hosts) h
-      | None -> false
-    in
     let origin_ok =
       match origin with
       | None -> true
       | Some o -> List.mem o (origin_allowlist app.allowed_hosts)
     in
-    if path <> "/healthz" && not host_ok then
+    if not (host_gate app ~path ~host) then
       text_response 421 "Invalid Host header"
     else if path <> "/healthz" && not origin_ok then
       text_response 403 "Invalid Origin header"
@@ -546,7 +551,7 @@ let handle_custom app ~meth ~path ~host ~origin ~body =
           text_response 405 "Method Not Allowed"
       | _ -> text_response 404 "Not Found"
 
-(* ---------------------------------------------------------------- serving *)
+(* {1 Serving} *)
 
 (* A tap on the accepted socket: every byte read through it is also recorded,
    so a request whose head has been read can be replayed for the mcp-kit
@@ -629,6 +634,39 @@ let addr_of_host ~net host =
       | `Tcp (addr, _) :: _ -> addr
       | _ -> failwith ("seekwright: cannot resolve bind address " ^ host))
 
+(* The replayed head arrives as lines, not as an [Http.Header]; fold it through
+   the same header type so the transport's [Host] read is not a hand-rolled
+   prefix test. A line without a colon is not a header and is dropped. *)
+let headers_of_lines lines =
+  List.fold_left
+    (fun headers line ->
+      match String.index_opt line ':' with
+      | None -> headers
+      | Some at ->
+          let name = String.trim (String.sub line 0 at) in
+          let value =
+            String.trim
+              (String.sub line (at + 1) (String.length line - at - 1))
+          in
+          if name = "" then headers else Http.Header.add headers name value)
+    (Http.Header.init ()) lines
+
+(* [http] 6.3 has no phrase for 421 and answers the decimal code in its place;
+   the refusal this module writes says [Misdirected Request], as Python's does. *)
+let reason_phrase status =
+  let phrase = Http.Status.reason_phrase_of_code status in
+  if phrase <> string_of_int status then phrase
+  else match status with 421 -> "Misdirected Request" | _ -> phrase
+
+(* A text refusal's exact bytes, with the length computed from the body it
+   writes: the transport below this point writes its own framing, so a
+   hand-counted [content-length] would be a protocol lie the first time a
+   sentence changed. *)
+let http_text_response status body =
+  Printf.sprintf
+    "HTTP/1.1 %d %s\r\ncontent-type: text/plain\r\ncontent-length: %d\r\nconnection: close\r\n\r\n%s"
+    status (reason_phrase status) (String.length body) body
+
 let run_health_monitor (health : health) ~(config : Config.t)
     ~(sleep : unit -> unit) =
   let tick () =
@@ -699,22 +737,9 @@ let serve_http ~env ~sw app server ~host ~port =
   match Eio.Buf_read.line ic with
   | exception End_of_file -> ()
   | request_line ->
-      let headers = peek_headers [] in
+      let headers = headers_of_lines (peek_headers []) in
       let path = path_of_request_line request_line in
-      let host =
-        List.find_map
-          (fun line ->
-            let lower = String.lowercase_ascii line in
-            if String.length lower > 5 && String.sub lower 0 5 = "host:" then
-              Some (String.trim (String.sub line 5 (String.length line - 5)))
-            else None)
-          headers
-      in
-      let host_ok =
-        match host with
-        | Some h -> is_host_allowed (host_allowlist app.allowed_hosts) h
-        | None -> false
-      in
+      let host = Http.Header.get headers "host" in
       let replay () =
         let replay_handler = Eio.Flow.Pi.source (module Replay) in
         let replay : Eio.Flow.source_ty Eio.Resource.t =
@@ -724,14 +749,13 @@ let serve_http ~env ~sw app server ~host ~port =
         in
         Eio.Buf_read.of_flow ~max_size:max_int replay
       in
-      if path <> "/healthz" && not host_ok then
-        Eio.Buf_write.string oc
-          ("HTTP/1.1 421 Misdirected Request\r\ncontent-type: text/plain\r\ncontent-length: 19\r\nconnection: close\r\n\r\nInvalid Host header")
+      if not (host_gate app ~path ~host) then
+        Eio.Buf_write.string oc (http_text_response 421 "Invalid Host header")
       else if path = "/mcp" then
         Cohttp_eio.Server.callback handler (conn_sw, peer) (replay ()) oc
       else Cohttp_eio.Server.callback custom (conn_sw, peer) (replay ()) oc
 
-(* ------------------------------------------------- the frozen surface data *)
+(* {1 The frozen surface data} *)
 
 let params properties = List.map fst properties
 
@@ -768,19 +792,50 @@ let operational_routes =
 
 let cli_verbs = [ "answer"; "fetch"; "search" ]
 
-let server_flags =
+(** {1 The server flags} *)
+
+type flag_arity =
+  | Boolean
+  | Value
+
+type server_flag = {
+  name : string;
+  arity : flag_arity;
+  repeats : bool;
+  key : string;
+}
+
+let server_flag_table =
   [
-    "--check";
-    "--live";
-    "--metrics";
-    "--json";
-    "--http";
-    "--host";
-    "--port";
-    "--allowed-host";
-    "--log-level";
-    "--log-format";
+    { name = "--check"; arity = Boolean; repeats = false; key = "check" };
+    { name = "--live"; arity = Boolean; repeats = false; key = "live" };
+    { name = "--metrics"; arity = Boolean; repeats = false; key = "metrics" };
+    { name = "--json"; arity = Boolean; repeats = false; key = "json" };
+    { name = "--http"; arity = Boolean; repeats = false; key = "http" };
+    { name = "--host"; arity = Value; repeats = false; key = "host" };
+    { name = "--port"; arity = Value; repeats = false; key = "port" };
+    {
+      name = "--allowed-host";
+      arity = Value;
+      repeats = true;
+      key = "allowed_host";
+    };
+    { name = "--log-level"; arity = Value; repeats = false; key = "log_level" };
+    {
+      name = "--log-format";
+      arity = Value;
+      repeats = false;
+      key = "log_format";
+    };
   ]
+
+(* The frozen manifest's list is derived, so the name the manifest advertises
+   and the name the parser accepts are one fact. *)
+let server_flags =
+  List.map (fun (flag : server_flag) -> flag.name) server_flag_table
+
+let flag_spec name =
+  List.find_opt (fun (flag : server_flag) -> flag.name = name) server_flag_table
 
 (* The keys [Usage] writes on each journal line kind, sorted. Pinned against a
    real journal by test/test_p8_surface.ml. *)

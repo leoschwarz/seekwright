@@ -521,6 +521,115 @@ let dashboard_routes _ =
   check_int "wrong method is 405" 405 wrong_method.Server.status;
   check_int "unknown path is 404" 404 (get enabled "/nope").Server.status
 
+(* {1 The flag table and the wire helpers} *)
+
+let read path =
+  let channel = open_in_bin path in
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr channel)
+    (fun () -> really_input_string channel (in_channel_length channel))
+
+let slice_between text start_marker end_marker =
+  let at marker =
+    let n = String.length text and m = String.length marker in
+    let rec from i =
+      if i + m > n then A.failf "the source is missing %s" marker
+      else if String.sub text i m = marker then i
+      else from (i + 1)
+    in
+    from 0
+  in
+  let start = at start_marker and stop = at end_marker in
+  String.sub text start (stop - start)
+
+(* [Server.server_flag_table] is the one vocabulary the manifest and the CLI
+   both read. The source half is the derivation: the scanner must dispatch on
+   [flag_spec] and its keys, never on a flag spelling — a renamed row moves the
+   accepted name, the error sentence and the manifest together. *)
+let test_the_flag_table_is_the_scanners_only_vocabulary () =
+  A.(check (list string) "the manifest is the table's names"
+       (List.map (fun (flag : Server.server_flag) -> flag.name)
+          Server.server_flag_table)
+       Server.server_flags);
+  let names = List.map (fun (flag : Server.server_flag) -> flag.name)
+      Server.server_flag_table
+  in
+  let keys = List.map (fun (flag : Server.server_flag) -> flag.key)
+      Server.server_flag_table
+  in
+  A.(check int "no duplicate spelling" (List.length names)
+       (List.length (List.sort_uniq String.compare names)));
+  A.(check int "no duplicate key" (List.length keys)
+       (List.length (List.sort_uniq String.compare keys)));
+  A.(check (list string) "the ten keys the record has"
+       [ "check"; "live"; "metrics"; "json"; "http"; "host"; "port";
+         "allowed_host"; "log_level"; "log_format" ]
+       keys);
+  List.iter
+    (fun (flag : Server.server_flag) ->
+      match flag.arity with
+      | Server.Boolean ->
+          A.(check bool (flag.name ^ " is not repeatable") false flag.repeats)
+      | Server.Value ->
+          A.(check bool (flag.name ^ " repeats only for allowed-host") true
+               (flag.repeats = (flag.key = "allowed_host"))))
+    Server.server_flag_table;
+  let scanner =
+    slice_between (read "../bin/main.ml") "let parse_server_flags"
+      "(* {1 The check} *)"
+  in
+  A.(check bool "the scanner reads the table" true
+       (contains scanner "Server.flag_spec"));
+  A.(check bool "the scanner reads the row's arity" true
+       (contains scanner "spec.Server.arity"));
+  List.iter
+    (fun name ->
+      A.(check bool (name ^ " is not string-matched in the scanner") false
+           (contains scanner ("\"" ^ name ^ "\""))))
+    names
+
+(* The transport below [serve_http]'s routing writes its own framing, so this
+   string is the whole response: the length has to be the body's, not a literal
+   copied beside it. *)
+let test_http_text_response_frames_its_body () =
+  let body = "Invalid Host header" in
+  let response = Server.http_text_response 421 body in
+  check_string "exact bytes"
+    ("HTTP/1.1 421 Misdirected Request\r\ncontent-type: text/plain\r\n\
+      content-length: 19\r\nconnection: close\r\n\r\n" ^ body)
+    response;
+  List.iter
+    (fun status ->
+      let body = "refused" in
+      let response = Server.http_text_response status body in
+      let expected =
+        Printf.sprintf "content-length: %d" (String.length body)
+      in
+      A.(check bool (Printf.sprintf "%d's length is the body's" status) true
+           (contains response expected)))
+    [ 400; 403; 413; 421; 500 ]
+
+(* The replayed request head arrives as lines. [Host] is read from the same
+   header type the transport uses, so a case variant and surrounding whitespace
+   behave; a line without a colon is not a header. *)
+let test_header_lines_fold_into_the_header_type () =
+  let headers =
+    Server.headers_of_lines
+      [
+        "Host: Example.COM";
+        "not a header";
+        "X-Trace:  abc ";
+        ": nameless";
+        "Accept: */*";
+      ]
+  in
+  A.(check (option string) "Host is read case-insensitively" (Some "Example.COM")
+       (Http.Header.get headers "host"));
+  A.(check (option string) "a value is trimmed" (Some "abc")
+       (Http.Header.get headers "x-trace"));
+  A.(check (option string) "a second header survives" (Some "*/*")
+       (Http.Header.get headers "accept"))
+
 let () =
   A.run "seekwright/p8-server"
     [
@@ -549,5 +658,14 @@ let () =
           A.test_case "the api search status table" `Quick api_search_status_table;
           A.test_case "fetch and answer statuses" `Quick api_fetch_and_answer_statuses;
           A.test_case "the dashboard routes" `Quick dashboard_routes;
+        ] );
+      ( "flags and framing",
+        [
+          A.test_case "the flag table is the scanner's vocabulary" `Quick
+            test_the_flag_table_is_the_scanners_only_vocabulary;
+          A.test_case "a text response frames its own body" `Quick
+            test_http_text_response_frames_its_body;
+          A.test_case "header lines fold into the header type" `Quick
+            test_header_lines_fold_into_the_header_type;
         ] );
     ]
