@@ -15,6 +15,12 @@
    (the spaces keep them out of the [<|] shape) and unterminated fragments like
    [<|endoftext] stay untouched. *)
 
+(* The scan steps codepoint by codepoint with [Seekwright_text.Utf8]'s step: a
+   malformed lead byte advances one byte, which keeps the scan total, and this
+   pass reads the content of a [<|...|>] literal looking for the closing bar — a
+   step that jumped a whole sequence would walk past that bar. *)
+module Utf8 = Seekwright_text.Utf8
+
 let zwsp = "\xe2\x80\x8b"
 (* U+200B ZERO WIDTH SPACE: the escape, and the only character escaping adds. *)
 
@@ -41,16 +47,6 @@ let escaped_literal marker =
 
 let escaped_literals = List.map escaped_literal literal_tokens
 
-(* The next codepoint boundary. A malformed lead byte advances one byte, which
-   keeps the scan total; valid UTF-8 never takes that branch. *)
-let next_index s i =
-  let len = String.length s in
-  let c = Char.code s.[i] in
-  if c < 0x80 then i + 1
-  else if c land 0xe0 = 0xc0 then min len (i + 2)
-  else if c land 0xf0 = 0xe0 then min len (i + 3)
-  else if c land 0xf8 = 0xf0 then min len (i + 4)
-  else i + 1
 
 (* U+FF5C FULLWIDTH VERTICAL LINE in UTF-8. *)
 let is_fullwidth_bar s j =
@@ -79,7 +75,7 @@ let escape_angle_ascii s =
         if c = '<' || c = '>' || c = '|' || c = '\n' then scanning := false
         else begin
           incr points;
-          j := next_index s !j
+          j := Utf8.next_index s !j
         end
       done;
       if !points >= 1 && !j + 1 < len && s.[!j] = '|' && s.[!j + 1] = '>' then begin
@@ -119,7 +115,7 @@ let escape_angle_fullwidth s =
         then scanning := false
         else begin
           incr points;
-          j := next_index s !j
+          j := Utf8.next_index s !j
         end
       done;
       if !points >= 1 && is_fullwidth_bar s !j && !j + 3 < len && s.[!j + 3] = '>'

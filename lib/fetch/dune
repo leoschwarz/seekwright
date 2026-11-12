@@ -18,4 +18,12 @@
 (library
  (name seekwright_fetch)
  (public_name seekwright.fetch)
- (libraries mcp-caps uri yojson))
+ ; [seekwright.text] is the port's one codepoint walk and [repr] pass (style
+ ; review H1 and H2). It used to be a copy here and a copy in [seekwright],
+ ; because neither big library may link the other; the walk therefore sits on a
+ ; stdlib-only floor under both.
+ (libraries
+  seekwright.text
+  mcp-caps
+  uri
+  yojson))

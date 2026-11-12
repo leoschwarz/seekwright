@@ -26,7 +26,12 @@
  ; [ipaddr] for the request-replay tap and the bind address. The loop runner
  ; (eio_main) stays out: a library must not call [Eio_main.run], so bin/ owns
  ; the loop and hands the library an [Eio.Stdenv.t].
+ ; [seekwright.text] is the port's one codepoint walk and [repr] pass (style
+ ; review H1 and H2): [lib/] and [lib/fetch/] each carried copies, in three
+ ; spellings of the same lead-byte test, because neither big library may link
+ ; the other.
  (libraries
+  seekwright.text
   digestif
   mcp-caps
   eio

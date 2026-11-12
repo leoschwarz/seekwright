@@ -6,6 +6,7 @@
    clipped snippet from a short one, unless the adapter says so. *)
 
 module Caps = Mcp_caps
+module Utf8 = Seekwright_text.Utf8
 
 type search_query = Model.search_query
 type name = string
@@ -59,49 +60,18 @@ let decode_json_object ~provider body =
   | Ok json -> (
       match json with `Assoc _ -> Ok json | _ -> Error malformed)
 
-(* UTF-8 helpers. The caps count {b characters}, as Python's [len] and slicing
-   do, so a cap of 500 does not cut a multibyte token in half and a length
-   figure means the same thing on both sides of the port. A lead byte of a
-   sequence the encoder would not emit is treated as one character, so a hostile
-   payload can neither loop here nor move a cut. *)
-
-let lead_len s i =
-  let c = Char.code s.[i] in
-  if c < 0x80 then 1
-  else if c < 0xc0 then 1
-  else if c < 0xe0 then 2
-  else if c < 0xf0 then 3
-  else 4
-
-let codepoints s =
-  let acc = ref [] in
-  let i = ref 0 in
-  while !i < String.length s do
-    let len = lead_len s !i in
-    let len = if !i + len > String.length s then String.length s - !i else len in
-    acc := String.sub s !i len :: !acc;
-    i := !i + len
-  done;
-  Array.of_list (List.rev !acc)
-
-let codepoint_count s =
-  let n = ref 0 in
-  let i = ref 0 in
-  while !i < String.length s do
-    let len = lead_len s !i in
-    i := !i + if !i + len > String.length s then String.length s - !i else len;
-    n := !n + 1
-  done;
-  !n
-
-let is_space c =
-  match c with ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true | _ -> false
+(* The caps count {b characters}, as Python's [len] and slicing do, so a cap of
+   500 does not cut a multibyte token in half and a length figure means the same
+   thing on both sides of the port. The walk itself is [Seekwright_text.Utf8]'s;
+   [clip] is the one place here that needs the string cut into characters rather
+   than merely counted, because it looks for a sentence boundary between two of
+   them. *)
 
 (* Python's [" ".join(text.split())]: runs of whitespace collapse to one space
    and the ends are trimmed. Python splits on Unicode whitespace; every
    provider payload in the oracle's fixtures separates on ASCII blanks, and a
-   non-ASCII space inside a snippet only costs the collapse, so this keeps the
-   ASCII set and says so. *)
+   non-ASCII space inside a snippet only costs the collapse, so this keeps
+   [Utf8.is_ascii_space] and says so. *)
 let normalise text =
   let words = ref [] in
   let start = ref 0 in
@@ -110,7 +80,7 @@ let normalise text =
   in
   String.iteri
     (fun i c ->
-      if is_space c then begin
+      if Utf8.is_ascii_space c then begin
         flush i;
         start := i + 1
       end)
@@ -120,7 +90,7 @@ let normalise text =
 
 let rstrip text =
   let stop = ref (String.length text) in
-  while !stop > 0 && is_space text.[!stop - 1] do
+  while !stop > 0 && Utf8.is_ascii_space text.[!stop - 1] do
     decr stop
   done;
   String.sub text 0 !stop
@@ -132,9 +102,9 @@ let clip text limit =
      byte-wise comparison would ellipsise a snippet whose bytes pass the cap but
      whose codepoints do not, and would report [text_truncated] for a page that
      was never cut. *)
-  if codepoint_count text <= limit then text
+  if Utf8.count text <= limit then text
   else begin
-    let chars = codepoints text in
+    let chars = Utf8.slices text in
     let n = Array.length chars in
     let window = min (limit + 1) n in
     let is_boundary a b = (a = "." || a = "!" || a = "?") && b = " " in
@@ -156,7 +126,7 @@ let truncate_snippet text limit =
   | None -> (None, None)
   | Some text ->
       let normal = normalise text in
-      (Some (clip normal limit), Some (codepoint_count normal))
+      (Some (clip normal limit), Some (Utf8.count normal))
 
 let truncate_text text limit =
   match text with
@@ -166,7 +136,7 @@ let truncate_text text limit =
       if normal = "" then (None, false, None)
       else
         let clipped = clip normal limit in
-        (Some clipped, clipped <> normal, Some (codepoint_count normal))
+        (Some clipped, clipped <> normal, Some (Utf8.count normal))
 
 let ignored_constraints (q : search_query) ~domains ~dates ~geo ~language ~safety =
   let missing = ref [] in

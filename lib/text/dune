@@ -1,0 +1,22 @@
+; The codepoint walk, in one stdlib-only library: [seekwright.text], wrapped as
+; [Seekwright_text], the way [lib/providers/] is [seekwright.providers] and
+; [lib/fetch/] is [seekwright.fetch].
+;
+; It exists because the same walk had five copies in this tree, in three
+; spellings of the same byte test, and the engine's copy was the one that did not
+; clamp its slice — which raised out of a value-typed module
+; (plans/reviews/2026-11-12-style-review.md, H1 and H2). A module inside [lib/]
+; could not be that owner: [seekwright] cannot be linked by [seekwright.fetch]
+; (the direction both dune files state), and [seekwright.fetch] cannot be linked
+; by [seekwright], so every module on both sides re-wrote it.
+;
+; [seekwright] and [seekwright.fetch] both link this, and nothing here links
+; either: no wire model, no page record, no fetch backend, no grant. That is what
+; keeps the recorded direction intact — [mcp-caps → seekwright →
+; seekwright.providers / seekwright.fetch] — with one stdlib-only floor under it.
+; It is also why [lib/caps/error.ml] keeps its own byte-backing helper: [mcp-caps]
+; may not depend on a seekwright library, and this one carries the [seekwright.]
+; prefix.
+(library
+ (name seekwright_text)
+ (public_name seekwright.text))

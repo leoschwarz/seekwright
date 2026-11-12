@@ -255,3 +255,12 @@
 (test
  (name test_p8_surface)
  (libraries seekwright alcotest eio eio_main unix yojson))
+
+; Foundation wave A: the shared text basis (style review H1/H2). The walk and
+; the repr pass live in [seekwright.text] and the fetch path re-exports the
+; walk, so the suite names both libraries: pinning that the fetch path's [Utf8]
+; {b is} this one is a compile, and only a suite that sees both modules can
+; make it.
+(test
+ (name test_text)
+ (libraries seekwright.text seekwright.fetch alcotest))

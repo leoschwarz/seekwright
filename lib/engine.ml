@@ -8,6 +8,9 @@
    today the engines are its only clients, and a module only one caller uses is
    that caller's detail. *)
 
+module Utf8 = Seekwright_text.Utf8
+module Repr = Seekwright_text.Repr
+
 type log = Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
 
 let quiet : log = fun _level _event _fields -> ()
