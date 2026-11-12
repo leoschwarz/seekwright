@@ -940,3 +940,63 @@ Design decisions worth not rediscovering:
   identically in the phase-1 fixture baseline). The phase-1 mcp-caps fixture
   recorded 19/18; mcp-kit's own control is 37/37 — do not claim that for this
   server.
+
+## Review checklist (2026-11-12, folded from the style review)
+
+Twenty checks for any change to this tree, each keyed to a real example; the
+full evidence and Learning notes are in
+`plans/reviews/2026-11-12-style-review.md` (§3), the correctness findings in
+`plans/reviews/2026-11-12-quality-review.md`.
+
+1. Does a failure the caller must act on arrive as a `result`, not an
+   exception? (`Engine.Search.resolve` converts `Route_refused`; the unclamped
+   `Engine.take` raised past every `try` — style H1.)
+2. Which exceptions cross this boundary, and is the rule written down?
+   `grep -n '^exception ' lib/**/*.mli` — six exist; the rule belongs in an
+   interface header (style M11).
+3. Is every `Option.get`/`List.hd`/`List.tl`/`assert false` guarded by
+   something the compiler sees? `x <> None` + `Option.get x` is a match
+   written as two statements (style M3).
+4. Is a byte/string invariant re-implemented elsewhere? grep `0x80`, `0xc0`,
+   `land 0xe0`, `String.sub` — the codepoint walk lived in eight files; the
+   shared owner is the fix (style H2).
+5. Prefix/suffix tests use `String.starts_with`/`String.ends_with`, not
+   `String.sub s 0 n = "…"` (they exist in 5.3; substring search does not).
+6. Does the stdlib already have it? `List.filter_map`, `Option.value`,
+   `String.split_on_char` yes; `List.last`, substring search no.
+7. Does a new dependency seam pick the same shape as its neighbours
+   (record-of-functions vs `(module S)` vs `S`+`of_module`)?
+8. Two records with the same fields and a copier between them = a type that
+   wants sharing; `type x = Other.x = { … }` (equated alias) removes the
+   copier — `lib/caps/policy.mli` shows it, `Factory.page_of` lacked it
+   (style M5).
+9. A type alias must mean one thing: `Config.name` ("a provider name") was
+   also the type of config file paths (style L1).
+10. Tuples wider than ~3, or all one type, are records wearing a hat
+    (`surface.ml`'s ten-int `count_lines`).
+11. Same helper name = same argument order everywhere; two `string` params
+    can be swapped silently (`contains needle haystack` vs `contains text
+    needle`, style M2).
+12. `l @ [x]` is O(n): fine under a config ceiling (≤17 names), wrong when
+    the length comes from a page or caller (`Jsondoc.dedupe`, style M4).
+    Accumulate then `List.rev`.
+13. One `Result` bind style per module: module-level `let*` for chains,
+    nested `match` where each level maps to a status (REST routes); say which
+    in the skill, don't mix three (style L4).
+14. ocamldoc attaches: `(** … *)` before an item describes it; at the head of
+    a `sig` it describes the signature (style L10).
+15. Every "these are the same" claim needs a rule, not prose: dune `diff`
+    rules, `(deps (glob_files …))`, `should_not_compile`. The tree already
+    pins `surface.expected`, `router_dependencies.expected`, six diagnostics
+    — extend that idiom, don't narrate equivalence (style M1/M6/M8).
+16. Each `mutable`/`ref` carries its justification in a comment
+    (`Health`'s `open_until = 0.` sentinel earns its keep).
+17. Every effect is injectable: clocks, log sinks, net grants, readers.
+    `bin/main.ml` is the undrivable exception — keep new logic out of it.
+18. Hand-written protocol bytes compute their own lengths — never a
+    hand-counted `content-length: 19` (style M7).
+19. The build pins its warning policy in a root `(env)` stanza; "clean
+    build" is only a claim if the flags are in the repo (style M10).
+20. Library direction is stated in the `dune` comment and honoured:
+    `mcp-caps → seekwright → seekwright.providers/fetch`; nothing in `lib/`
+    names a fetch backend; `mcp-caps` never depends on a seekwright library.
