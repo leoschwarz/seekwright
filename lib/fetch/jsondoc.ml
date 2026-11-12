@@ -17,6 +17,8 @@
     Every length here is a codepoint count — Python's [len] — so the work runs
     over {!Utf8}, never [String.length]. *)
 
+module Repr = Seekwright_text.Repr
+
 type key =
   | Name of string
       (** A member addressed by name. *)
@@ -391,34 +393,13 @@ let trim_left s =
   while !i < n && Utf8.is_python_space a.(!i) do incr i done;
   Utf8.to_string (Array.sub a !i (n - !i))
 
-(* Python's [repr] of a string in a refusal message: single quotes, and the
-   backslash escapes a reader of the message expects. *)
+(* Python's [repr] of a string in a refusal message: the quote is fixed and every
+   byte above ASCII is escaped, so a path token the caller wrote comes back
+   readable whatever the transport does with it. One escape pass with the engine's
+   [safe] now sits in [Seekwright_text.Repr]; the two quoting policies stay
+   separate functions there (style review H2). *)
 
-let py_repr s =
-  let plain c =
-    c <> '\\'
-    && c <> '\''
-    && Char.code c >= 0x20
-    && Char.code c < 0x7f
-  in
-  if String.for_all plain s then "'" ^ s ^ "'"
-  else
-    let b = Buffer.create (String.length s + 2) in
-    Buffer.add_char b '\'';
-    String.iter
-      (fun c ->
-        match c with
-        | '\\' -> Buffer.add_string b "\\\\"
-        | '\'' -> Buffer.add_string b "\\'"
-        | '\n' -> Buffer.add_string b "\\n"
-        | '\r' -> Buffer.add_string b "\\r"
-        | '\t' -> Buffer.add_string b "\\t"
-        | c when Char.code c < 0x20 || Char.code c >= 0x7f ->
-            Buffer.add_string b (Printf.sprintf "\\x%02x" (Char.code c))
-        | c -> Buffer.add_char b c)
-      s;
-    Buffer.add_char b '\'';
-    Buffer.contents b
+let py_repr = Repr.py_repr_ascii
 
 (* [int("…")] as Python reads it: an optional sign then digits, and nothing
    else — no [0x] or [1_000] the way [int_of_string] would take. *)

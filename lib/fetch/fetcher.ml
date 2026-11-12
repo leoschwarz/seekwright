@@ -5,6 +5,7 @@
 module Caps = Mcp_caps
 module E = Extractor
 module J = Jsondoc
+module Repr = Seekwright_text.Repr
 
 type fetched_image = Seekwright_wire.Page.image = {
   media_type : string;
@@ -73,7 +74,10 @@ let accept_header =
 let ascii_lower s =
   String.map (fun c -> if c >= 'A' && c <= 'Z' then Char.chr (Char.code c + 32) else c) s
 
-let py_repr s = "'" ^ String.concat "" (List.map (String.make 1) (List.init (String.length s) (String.get s))) ^ "'"
+(* The port's [repr] for a token quoted back at the caller. The copy here was a
+   no-op that only added quotes, so a scheme with a control byte or a non-ASCII
+   byte reached the message raw (style review H2). *)
+let py_repr = Repr.py_repr_ascii
 
 (* [validate_url] without the exception: the fetch chain turns a hop-0 refusal
    into [Url_blocked] and a later hop's into [Redirect_blocked]. *)

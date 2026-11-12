@@ -18,6 +18,8 @@
    reach the wire, and OCaml has no field-level privacy to hide them behind.
    P5 adds them to whatever record owns the measurement. *)
 
+module Utf8 = Seekwright_text.Utf8
+
 let ( let* ) = Result.bind
 
 type recency = Day | Week | Month | Year
@@ -247,24 +249,10 @@ let default_string_list name kvs default =
   | Some `Null -> Error (Printf.sprintf "field %S is not nullable" name)
   | Some json -> decode_list string_item json
 
-let utf8_length s =
-  let len = String.length s in
-  let count = ref 0 in
-  let i = ref 0 in
-  while !i < len do
-    incr count;
-    let c = Char.code s.[!i] in
-    if c < 0x80 then incr i
-    else if c land 0xe0 = 0xc0 then i := min len (!i + 2)
-    else if c land 0xf0 = 0xe0 then i := min len (!i + 3)
-    else if c land 0xf8 = 0xf0 then i := min len (!i + 4)
-    else incr i
-  done;
-  !count
-
 (* pydantic counts codepoints for min_length/max_length, so must this. *)
+
 let check_length ~name ~min ~max value =
-  let n = utf8_length value in
+  let n = Utf8.count value in
   if n < min then
     Error (Printf.sprintf "field %S is shorter than %d characters" name min)
   else if n > max then
@@ -286,7 +274,7 @@ let check_int_range ~name ~min ~max value =
   else Ok value
 
 let check_exact_length ~name ~expected value =
-  if utf8_length value <> expected then
+  if Utf8.count value <> expected then
     Error (Printf.sprintf "field %S must be exactly %d characters" name expected)
   else Ok value
 
