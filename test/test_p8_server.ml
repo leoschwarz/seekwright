@@ -158,6 +158,7 @@ let make_app ?(stubs = [ stub () ]) ?(fetch = true) ?(agent = false) ?(dashboard
     started_at = 40.0;
     mono_now = (fun () -> 42.5);
     allowed_hosts = [];
+    health = None;
   }
 
 let default_app () = make_app [ "serper" ]

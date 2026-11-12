@@ -38,6 +38,28 @@
     {!Mcp_caps.Error}, whose [render] prefixes the stable kind — the layer's
     error channel, not Python's bare [ToolError] text. *)
 
+(** {1 The health monitor} *)
+
+type health = {
+  board : Health.t;
+  built : Config.name list;
+  probes : (Config.name * Health.probe_spec) list;
+  net : Provider.Net.t;
+}
+(** What one monitor tick reads: the board the engines record on, the names this
+    build can dispatch, their probe rows, and the network seam the probes dial
+    through. Built by the factory beside the app so the monitor and the search
+    engine share one board. *)
+
+val run_health_monitor :
+  health -> config:Config.t -> sleep:(unit -> unit) -> unit
+(** Probe forever: [sleep], one {!Health.run_probes} tick, repeat. The sleep is
+    the caller's because the interval comes from config and the clock belongs
+    to the transport; [serve_http] hands in the listener's monotonic clock.
+    Python sleeps first, so a start does not spend a probe before the first
+    interval. The fiber is a child of the listener's switch, and cancelling
+    that switch — how the process ends — is the stop. *)
+
 (** The process-wide context: one per server, built once by the factory (P8's
     [seekwright.factory]) and shared by every tool call and custom route.
     Grants are server-lifetime values, so the [Eio.Switch.t] that built them
@@ -56,6 +78,10 @@ type app = {
   mono_now : unit -> float;
   allowed_hosts : string list;
   (** The operator's [--allowed-host] entries; loopback is always allowed. *)
+  health : health option;
+  (** [None] when the app was assembled without a board to tick — the route and
+      tool suites build their own engines — and [Some] from
+      {!Seekwright_factory.Factory.build_app}, which shares the engine's board. *)
 }
 
 val fetch_disabled : string
@@ -130,8 +156,10 @@ val serve_http :
 (** Serve Streamable HTTP on [host]:[port]: [/mcp] is delegated to the mcp-kit
     adapter's handler (which owns body bound, routing headers and Origin), and
     every other path goes through {!handle_custom} under the same Host
-    allowlist. Runs until the enclosing switch ends; the listener is
-    registered on [sw], which owns the grants. *)
+    allowlist. [app.health] runs as a fiber on the same switch — so a cancelled
+    listener takes its monitor with it — when
+    [[search] health_interval_seconds] is positive. Runs until the enclosing
+    switch ends; the listener is registered on [sw], which owns the grants. *)
 
 (** {1 The frozen surface, as data}
 

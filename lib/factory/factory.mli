@@ -45,6 +45,18 @@ val build_providers :
 (** Instantiate every enabled provider that has the credentials and the
     adapter this build carries. *)
 
+val probe_net :
+  sw:Eio.Switch.t ->
+  net:_ Eio.Net.t ->
+  mono_clock:_ Eio.Time.Mono.t ->
+  Mcp_caps.Policy.endpoint list ->
+  Seekwright.Provider.Net.t
+(** The shared network seam for the readiness probes: one grant over the union
+    of the given endpoints. An empty list answers [Unavailable] to every
+    request rather than building a grant that allows nothing. [--check] and the
+    serving path's health monitor both read it, so the two probes dial under
+    the same policy. *)
+
 val build_extractor : Seekwright.Config.t -> (Seekwright_fetch.Extractor.backend, string) result
 (** Instantiate the extraction backend [[fetch] extractor] names. [stdlib] is
     the one this build carries; the name is validated at config load, so an

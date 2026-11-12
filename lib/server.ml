@@ -212,6 +212,13 @@ let answer_response_schema =
 
 (* -------------------------------------------------------------------- tools *)
 
+type health = {
+  board : Health.t;
+  built : Config.name list;
+  probes : (Config.name * Health.probe_spec) list;
+  net : Provider.Net.t;
+}
+
 type app = {
   config : Config.t;
   search : Engine.Search.t;
@@ -221,6 +228,7 @@ type app = {
   started_at : float;
   mono_now : unit -> float;
   allowed_hosts : string list;
+  health : health option;
 }
 
 let fetch_disabled =
@@ -621,9 +629,34 @@ let addr_of_host ~net host =
       | `Tcp (addr, _) :: _ -> addr
       | _ -> failwith ("seekwright: cannot resolve bind address " ^ host))
 
+let run_health_monitor (health : health) ~(config : Config.t)
+    ~(sleep : unit -> unit) =
+  let tick () =
+    Health.run_probes config ~built:health.built ~table:health.probes
+      ~net:health.net health.board
+  in
+  (* Sleep first, as [HealthMonitor.run] does: a start does not spend a probe
+     before the first interval. The fiber is a child of the listener's switch,
+     so cancelling that switch is the stop. *)
+  let rec loop () =
+    sleep ();
+    tick ();
+    loop ()
+  in
+  loop ()
+
 let serve_http ~env ~sw app server ~host ~port =
   let addr = addr_of_host ~net:(env#net) host in
   let socket = Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (addr, port)) in
+  (match app.health with
+  | Some health when app.config.Config.search.Config.health_interval_seconds > 0.0 ->
+      let interval =
+        app.config.Config.search.Config.health_interval_seconds
+      in
+      Eio.Fiber.fork ~sw (fun () ->
+        run_health_monitor health ~config:app.config
+          ~sleep:(fun () -> Eio.Time.Mono.sleep env#mono_clock interval))
+  | _ -> ());
   let handler =
     Mcp_kit_cohttp_eio.handler ~max_body_size
       ~allowed_origins:(origin_allowlist app.allowed_hosts)

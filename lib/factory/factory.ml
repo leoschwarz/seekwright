@@ -122,6 +122,36 @@ let build_providers ~sw ~net ~mono_clock ~now config =
   in
   go [] [] [] [] [] config.Config.providers
 
+(* The network seam the readiness probes share: one grant over the union of the
+   built vendors' endpoints. With no endpoint there is nothing to allow, so
+   every request answers [Unavailable] instead of building an empty grant. *)
+let probe_net ~sw ~net ~mono_clock endpoints =
+  match endpoints with
+  | [] ->
+      {
+        Provider.Net.request =
+          (fun _request ->
+            Error
+              (Caps.Error.make Caps.Error.Unavailable
+                 ~message:"no endpoints configured"));
+      }
+  | endpoints -> (
+      match
+        Policy.with_endpoints ~sw ~net
+          ~max_response_bytes:Policy.default_max_response_bytes endpoints
+      with
+      | Ok decision ->
+          Provider.Net.of_grant
+            (Authority.Net.of_confinement ~mono_clock decision)
+      | Error _ ->
+          {
+            Provider.Net.request =
+              (fun _request ->
+                Error
+                  (Caps.Error.make Caps.Error.Unavailable
+                     ~message:"no endpoints configured"));
+          })
+
 let build_extractor config =
   match config.Config.fetch.Config.extractor with
   | "stdlib" ->
@@ -295,5 +325,15 @@ let build_app ~sw
                 started_at = mono_now ();
                 mono_now;
                 allowed_hosts;
+                health =
+                  Some
+                    {
+                      Server.board;
+                      built = List.map fst built.probe_table;
+                      probes = built.probe_table;
+                      net =
+                        probe_net ~sw ~net:(env#net) ~mono_clock
+                          built.endpoints;
+                    };
               },
               built ))

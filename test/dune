@@ -132,6 +132,15 @@
   ../docs/reference/configuration.md
   ../docs/reference/deploying.md))
 
+; P8: the server-side health monitor. An injected sleep pins the loop's order,
+; and a real loopback listener (never connected to) pins that the monitor is a
+; child of the listener's switch; the probe's net seam is a fake, so no request
+; leaves the process.
+(test
+ (name test_health_monitor)
+ (libraries seekwright mcp-caps mcp-kit eio eio_main mirage-crypto-rng.unix
+   yojson alcotest))
+
 ; P8: boots the shipped default configuration through the real construction
 ; path — the regression test for the default extractor. Installing a random
 ; generator is the caller's job, so the suite holds an Eio loop and stdlib

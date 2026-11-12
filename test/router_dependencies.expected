@@ -110,8 +110,10 @@
 ../lib/server.cmo : \
     ../lib/usage.cmi \
     ../lib/router.cmi \
+    ../lib/provider.cmi \
     ../lib/prompts.cmi \
     ../lib/model.cmi \
+    ../lib/health.cmi \
     ../lib/engine.cmi \
     ../lib/dashboard_html.cmi \
     ../lib/config.cmi \
@@ -120,8 +122,10 @@
 ../lib/server.cmx : \
     ../lib/usage.cmx \
     ../lib/router.cmx \
+    ../lib/provider.cmx \
     ../lib/prompts.cmx \
     ../lib/model.cmx \
+    ../lib/health.cmx \
     ../lib/engine.cmx \
     ../lib/dashboard_html.cmx \
     ../lib/config.cmx \
@@ -129,7 +133,9 @@
     ../lib/server.cmi
 ../lib/server.cmi : \
     ../lib/usage.cmi \
+    ../lib/provider.cmi \
     ../lib/model.cmi \
+    ../lib/health.cmi \
     ../lib/engine.cmi \
     ../lib/config.cmi \
     ../lib/agent.cmi

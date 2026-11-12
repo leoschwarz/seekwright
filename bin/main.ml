@@ -296,26 +296,8 @@ let check ~env ~sw ~live =
         built.Factory.grant_errors;
       let mono_clock = env#mono_clock in
       let probe_net =
-        match built.Factory.endpoints with
-        | [] ->
-            {
-              Provider.Net.request =
-                (fun _request ->
-                  Error (Caps.Error.make Caps.Error.Unavailable ~message:"no endpoints configured"));
-            }
-        | endpoints -> (
-            match
-              Caps.Policy.with_endpoints ~sw ~net:(env#net)
-                ~max_response_bytes:Caps.Policy.default_max_response_bytes endpoints
-            with
-            | Ok decision ->
-                Provider.Net.of_grant (Caps.Authority.Net.of_confinement ~mono_clock decision)
-            | Error _ ->
-                {
-                  Provider.Net.request =
-                    (fun _request ->
-                      Error (Caps.Error.make Caps.Error.Unavailable ~message:"no endpoints configured"));
-                })
+        Factory.probe_net ~sw ~net:(env#net) ~mono_clock
+          built.Factory.endpoints
       in
       let ready = ref 0 in
       let lines = ref [] in
