@@ -4,9 +4,12 @@
    nothing here ever writes to it; [--check] and [--metrics] print their report
    to stdout themselves, and that is the one sanctioned exception.
 
-   The sink type is the one {!Engine}, {!Usage} and {!Health} take, so the
-   server hands one function to all four. Levels are [Config]'s vocabulary,
-   because [logging.level] in TOML spells them that way. *)
+   The sink type is this module's own — see {!log} — and {!Engine}, {!Usage} and
+   {!Health} alias it, so the server hands one function to all four. Levels are
+   [Config]'s vocabulary, because [logging.level] in TOML spells them that way. *)
+
+type log =
+  Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
 
 let level_rank = function
   | Config.Log_trace -> 0

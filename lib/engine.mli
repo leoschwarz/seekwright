@@ -48,8 +48,9 @@
 
 (** {1 Shared types} *)
 
-type log =
-  Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
+type log = Log.log
+(** The sink type is {!Log}'s, aliased here so the four modules that take one
+    name the same type — style review M1. *)
 
 (** {1 The search engine} *)
 

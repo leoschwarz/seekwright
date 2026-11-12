@@ -11,7 +11,10 @@
 module Utf8 = Seekwright_text.Utf8
 module Repr = Seekwright_text.Repr
 
-type log = Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
+type log = Log.log
+(* The sink type has one owner — [Log] — and the engines alias it, so a new
+   parameter is one declaration rather than four that must agree (style review
+   M1). *)
 
 let quiet : log = fun _level _event _fields -> ()
 

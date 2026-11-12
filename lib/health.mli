@@ -33,8 +33,8 @@
 
 (** {1 The board} *)
 
-type log =
-  Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
+type log = Log.log
+(** The sink type is {!Log}'s, aliased here — style review M1. *)
 
 type t
 (** One board: per-name failure counts and open gates. *)

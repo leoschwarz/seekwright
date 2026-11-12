@@ -271,3 +271,11 @@
 (test
  (name test_wire)
  (libraries seekwright seekwright.fetch seekwright.wire alcotest))
+
+; Foundation wave A: the sink type has one owner (style review M1). The type
+; identities are the compile; the source case reads the interfaces, which are
+; only honest inputs when they are declared as deps.
+(test
+ (name test_log)
+ (libraries seekwright alcotest)
+ (deps (glob_files ../lib/*.mli)))
