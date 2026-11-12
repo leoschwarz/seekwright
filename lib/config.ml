@@ -81,7 +81,11 @@ let free_provider_order = keyless_providers @ [ "searxng"; "tinyfish" ]
    and never through a config key. *)
 let untested_providers = [ "deepseek"; "querit"; "search1api"; "serpapi" ]
 
-let known_extractors = [ "stdlib"; "trafilatura" ]
+(* The set the port can actually build, which is what the validator and the
+   default must both read. [trafilatura] is a Python-only member: its library
+   does not ride on this port, so naming it here would accept a config that
+   construction then refuses. *)
+let known_extractors = [ "stdlib" ]
 
 type fetch_fallback = {
   name : name;
@@ -295,7 +299,7 @@ let default_policy_config = {
 
 let default_fetch_config = {
   enabled = true;
-  extractor = "trafilatura";
+  extractor = "stdlib";
   timeout_seconds = 15.0;
   max_download_bytes = 8_388_608;
   max_text_chars = 40_000;
@@ -1074,7 +1078,7 @@ let decode_policy_config loc table =
 let decode_fetch_config loc table =
   section loc table (fun get ->
     let* enabled = bool_field get loc "enabled" true in
-    let* extractor = string_field get loc "extractor" "trafilatura" in
+    let* extractor = string_field get loc "extractor" "stdlib" in
     let* timeout_seconds = float_field get loc "timeout_seconds" 15.0 in
     let* max_download_bytes = int_field get loc "max_download_bytes" 8_388_608 in
     let* max_text_chars = int_field get loc "max_text_chars" 40_000 in

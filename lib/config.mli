@@ -69,8 +69,11 @@ val untested_providers : name list
     a name leaves only once a live run has passed. *)
 
 val known_extractors : string list
-(** One name per extraction backend; [fetch.extractor] is validated against
-    this, exactly as a provider name is against {!known_providers}. *)
+(** One name per extraction backend this port can build; [fetch.extractor] is
+    validated against this, exactly as a provider name is against
+    {!known_providers}. Python's [trafilatura] is absent because its library
+    does not ride on the port, so naming it here would accept a config that
+    construction then refuses. *)
 
 (** One row of the fetch fallback registry: what [fetch.fallback] may name, and
     the two facts the ladder and the report need from it. Ported from
