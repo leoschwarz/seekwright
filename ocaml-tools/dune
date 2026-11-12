@@ -1,0 +1,38 @@
+; The OCaml surface printer (P8): root [tools/] belongs to the read-only
+; Python tree, so the port's instrument lives here. It prints the frozen
+; manifest in the same body format [tools/surface.py] prints, and the two
+; goldens below are what make drift fail [dune runtest]:
+;
+; - [surface.expected] is the full rendering (the Python-compatible body plus
+;   the usage-journal fields) diffed against the printer's output;
+; - the [py_body.out]/[our_body.out] pair diffs the Python-compatible body
+;   against the body of the checked-in [../docs/reference/surface.md], which
+;   is the "the two manifests diff clean" exit criterion.
+(executable
+ (name surface)
+ (libraries seekwright))
+
+(rule
+ (targets surface.actual)
+ (deps surface.exe ../lib/config.mli)
+ (action (with-outputs-to surface.actual (run ./surface.exe))))
+
+(rule
+ (alias runtest)
+ (action (diff surface.expected surface.actual)))
+
+(rule
+ (targets py_body.out)
+ (deps ../docs/reference/surface.md)
+ (action
+  (with-outputs-to py_body.out
+   (run sh -c "awk 'f{print} /<!-- surface:body -->/{f=1}' ../docs/reference/surface.md"))))
+
+(rule
+ (targets our_body.out)
+ (deps surface.exe ../lib/config.mli)
+ (action (with-outputs-to our_body.out (run ./surface.exe --python-body))))
+
+(rule
+ (alias runtest)
+ (action (diff py_body.out our_body.out)))

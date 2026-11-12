@@ -1,0 +1,1204 @@
+(** The usage dashboard's one self-contained page, served by [GET /dashboard].
+
+    Port of [src/seekwright/dashboard.py]: the Python tree reads
+    [resources/dashboard.html] from package data; this port has no
+    package-data directory, so the same document is embedded verbatim in one
+    quoted literal (generated from the resource file, byte for byte). The
+    document carries no external assets, so serving it needs no static mount;
+    all behaviour is client-side, polling [GET /dashboard/data]. *)
+
+let dashboard_html =
+  {|<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#f4f1ea">
+<title>seekwright · usage</title>
+<style>
+  :root {
+    --paper: #f4f1ea;
+    --surface: #fdfcf9;
+    --surface-2: #f0ede4;
+    --ink: #201d18;
+    --ink-2: #5f594e;
+    --ink-3: #8d8778;
+    --rule: #d9d4c7;
+    --rule-soft: #e7e3d7;
+    --accent: #0e6b5c;
+    --accent-2: #8c5a10;
+    --model: #6b5a8c;
+    --good: #2e7d46;
+    --warn: #9c6b0a;
+    --bad: #b3271e;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    padding: clamp(18px, 3vw, 40px);
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; }
+
+  header {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 22px;
+  }
+  h1 {
+    display: flex; align-items: center; gap: 10px; margin: 0;
+    font-family: var(--serif); font-size: 21px; font-weight: 600;
+    letter-spacing: 0.005em;
+  }
+  .mark {
+    width: 18px; height: 18px; flex: none; border-radius: 2px;
+    border: 1px solid var(--ink);
+    background: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 4px);
+  }
+  .sub {
+    color: var(--ink-2); font-size: 12px; margin: 6px 0 0;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .sub b {
+    color: var(--ink); font-family: var(--mono); font-size: 12px;
+    font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .sep { color: var(--ink-3); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 1px 7px; border-radius: 2px;
+    border: 1px solid var(--rule); background: var(--surface);
+    color: var(--ink-2); font-family: var(--mono); font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    max-width: 70ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .chip::before {
+    content: ""; width: 5px; height: 5px; border-radius: 50%; flex: none;
+    background: var(--good);
+  }
+  .chip.failed { color: var(--bad); border-color: var(--bad); }
+  .chip.failed::before { background: var(--bad); }
+
+  .status {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 4px 10px; border-radius: 2px;
+    border: 1px solid var(--rule); background: var(--surface);
+    color: var(--ink-2); font-family: var(--mono); font-size: 11.5px;
+    white-space: nowrap;
+  }
+  .pulse {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--good);
+    animation: pulse 2.6s infinite;
+  }
+  .status.stale .pulse { background: var(--warn); animation: none; }
+  @keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.3; }
+    100% { opacity: 1; }
+  }
+
+  .cards {
+    display: grid; gap: 12px; margin-bottom: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(172px, 1fr));
+  }
+  .card {
+    position: relative; overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 3px;
+    padding: 14px 16px 13px;
+    transition: border-color 0.15s ease;
+  }
+  .card::before {
+    content: ""; position: absolute; inset: 0 0 auto 0; height: 2px;
+    background: var(--c, var(--accent));
+  }
+  .card:hover { border-color: var(--ink-3); }
+  .card .card-label {
+    display: block; color: var(--ink-2); font-size: 10.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .card .card-value {
+    display: block; margin-top: 8px; font-family: var(--mono);
+    font-size: 26px; font-weight: 600;
+    font-variant-numeric: tabular-nums; line-height: 1.15;
+  }
+  .card .card-foot {
+    display: block; margin-top: 5px; color: var(--ink-3); font-size: 11.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 3px;
+    margin-bottom: 16px; overflow: hidden;
+  }
+  .panel-head {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--rule);
+  }
+  .panel-head h2 {
+    margin: 0; font-family: var(--serif); font-size: 14px; font-weight: 600;
+    letter-spacing: 0.005em;
+  }
+  .panel-head .hint { color: var(--ink-3); font-size: 11.5px; }
+  .spacer { flex: 1 1 auto; }
+
+  .legend {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    color: var(--ink-2); font-family: var(--mono); font-size: 11px;
+  }
+  .sw { display: inline-flex; align-items: center; gap: 6px; }
+  .sw i { width: 9px; height: 9px; border-radius: 1px; display: inline-block; flex: none; }
+
+  .toggle {
+    display: inline-flex; padding: 2px; gap: 2px;
+    border: 1px solid var(--rule); border-radius: 2px;
+    background: var(--surface-2);
+  }
+  .toggle button {
+    appearance: none; border: 0; background: transparent; color: var(--ink-2);
+    padding: 4px 11px; border-radius: 2px; cursor: pointer;
+    font: inherit; font-family: var(--mono); font-size: 11.5px; font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .toggle button:hover { color: var(--ink); }
+  .toggle button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+  .toggle button:focus-visible, th:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .chart { padding: 6px 8px 2px; }
+  .chart svg { display: block; width: 100%; height: auto; }
+  .chart .axis {
+    fill: var(--ink-3); font-family: var(--mono); font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .chart .axis.today { fill: var(--accent); font-weight: 600; }
+  .chart .bar { transition: fill-opacity 0.12s ease; }
+  .chart .bar:hover { fill-opacity: 0.8; }
+
+  .scroll { overflow: auto; max-height: 420px; }
+  table { width: 100%; border-collapse: separate; border-spacing: 0; }
+  th, td {
+    text-align: left; padding: 8px 16px; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--surface-2); color: var(--ink-2);
+    font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em;
+    border-bottom: 1px solid var(--rule);
+  }
+  thead th[data-sort] { cursor: pointer; user-select: none; }
+  thead th[data-sort]:hover { color: var(--ink); }
+  thead th[aria-sort="descending"]::after { content: "▾"; margin-left: 5px; color: var(--ink-3); }
+  thead th[aria-sort="ascending"]::after { content: "▴"; margin-left: 5px; color: var(--ink-3); }
+  tbody td { border-bottom: 1px solid var(--rule-soft); font-size: 12.5px; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr { transition: background 0.12s ease; }
+  tbody tr:hover { background: var(--surface-2); }
+  .num { text-align: right; font-family: var(--mono); }
+  .emph { color: var(--accent); font-weight: 600; }
+  .err { color: var(--bad); font-weight: 600; }
+  .mono { font-family: var(--mono); }
+
+  .share { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .share .track {
+    width: 52px; height: 5px; border-radius: 1px; flex: none;
+    border: 1px solid var(--rule-soft); background: var(--surface-2); overflow: hidden;
+  }
+  .share .track i { display: block; height: 100%; }
+
+  .pill {
+    display: inline-block; padding: 1px 6px; border-radius: 2px;
+    border: 1px solid; font-family: var(--mono); font-size: 11px; font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .pill.search { color: var(--accent); border-color: var(--accent); background: rgba(14, 107, 92, 0.07); }
+  .pill.fetch { color: var(--accent-2); border-color: var(--accent-2); background: rgba(140, 90, 16, 0.07); }
+  .pill.answer { color: var(--model); border-color: var(--model); background: rgba(107, 90, 140, 0.08); }
+  .pill.err {
+    color: var(--bad); border-color: var(--bad); background: rgba(179, 39, 30, 0.07);
+    max-width: 34ch; overflow: hidden; text-overflow: ellipsis; vertical-align: bottom;
+  }
+  .dim { color: var(--ink-3); }
+
+  .empty { padding: 22px 16px; color: var(--ink-3); text-align: center; font-size: 12.5px; }
+  footer {
+    color: var(--ink-3); font-family: var(--serif); font-style: italic; font-size: 12px;
+    line-height: 1.6; max-width: 78ch; margin: 26px auto 0; padding-top: 14px;
+    border-top: 1px solid var(--rule); text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, .card, .pulse, .toggle button, .chart .bar { transition: none !important; animation: none !important; }
+  }
+  @media (max-width: 560px) {
+    .card .card-value { font-size: 23px; }
+    th, td { padding: 7px 11px; }
+    .panel-head { padding: 11px 12px; }
+  }
+</style>
+</head>
+<body data-testid="dashboard">
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1><span class="mark" aria-hidden="true"></span>seekwright · usage</h1>
+      <p class="sub">
+        <span>since <b id="since">—</b></span>
+        <span class="sep">·</span>
+        <span>process started <b id="started">—</b></span>
+        <span id="journal" class="chip">—</span>
+      </p>
+    </div>
+    <div class="status" id="status"><span class="pulse"></span><span id="status-text">loading…</span></div>
+  </header>
+
+  <section class="cards">
+    <div class="card" style="--c: var(--accent)">
+      <span class="card-label">Spend · search</span>
+      <span class="card-value" id="m-spend">$0.0000</span>
+      <span class="card-foot" id="f-spend">estimated from provider prices</span>
+    </div>
+    <div class="card" style="--c: var(--model)">
+      <span class="card-label">Spend · model</span>
+      <span class="card-value" id="m-model">—</span>
+      <span class="card-foot" id="f-model">counted, not priced</span>
+    </div>
+    <div class="card" style="--c: var(--accent)">
+      <span class="card-label">Searches</span>
+      <span class="card-value" id="m-searches">0</span>
+      <span class="card-foot" id="f-searches">—</span>
+    </div>
+    <div class="card" style="--c: var(--accent-2)">
+      <span class="card-label">Fetches</span>
+      <span class="card-value" id="m-fetches">0</span>
+      <span class="card-foot" id="f-fetches">—</span>
+    </div>
+    <div class="card" style="--c: var(--model)">
+      <span class="card-label">Answers</span>
+      <span class="card-value" id="m-answers">0</span>
+      <span class="card-foot" id="f-answers">—</span>
+    </div>
+    <div class="card" style="--c: var(--bad)">
+      <span class="card-label">Errors</span>
+      <span class="card-value" id="m-errors">0</span>
+      <span class="card-foot" id="f-errors">—</span>
+    </div>
+    <div class="card" style="--c: var(--good)">
+      <span class="card-label">Fetch fallback pages</span>
+      <span class="card-value" id="m-fallback">0</span>
+      <span class="card-foot" id="f-fallback">counted, not priced</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2 id="chart-title">Requests · last 14 days</h2>
+      <div class="legend" id="legend"></div>
+      <span class="spacer"></span>
+      <div class="toggle" role="group" aria-label="View">
+        <button id="v-requests" type="button" aria-pressed="true">Requests</button>
+        <button id="v-spend" type="button" aria-pressed="false">Spend</button>
+      </div>
+    </div>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <section class="panel" id="panel-provider-cost">
+    <div class="panel-head">
+      <h2>Cost per day by provider · last 14 days</h2>
+      <span class="hint">search cost only; an unbilled provider draws no height</span>
+      <span class="spacer"></span>
+      <div class="legend" id="provider-legend"></div>
+    </div>
+    <div class="chart" id="provider-chart"></div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Providers</h2>
+      <span class="hint">searches only</span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="provider">Provider</th>
+            <th class="num" data-sort="calls">Calls</th>
+            <th class="num" data-sort="errors">Errors</th>
+            <th class="num" data-sort="errrate">Err %</th>
+            <th class="num" data-sort="avg_ms">Avg ms</th>
+            <th class="num" id="th-spend" data-sort="cost_usd">Spend</th>
+            <th data-sort="last_used">Last used</th>
+          </tr>
+        </thead>
+        <tbody id="providers"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-endpoints">
+    <div class="panel-head">
+      <h2>Endpoint latency &amp; cost · last 14 days</h2>
+      <span class="hint">successful, non-fallback searches only</span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-sort="provider">Provider</th>
+            <th class="num" data-sort="calls">Calls</th>
+            <th class="num" data-sort="errors">Errors</th>
+            <th class="num" data-sort="fell_back_calls">Fallbacks</th>
+            <th class="num" data-sort="latency_samples">Samples</th>
+            <th class="num" data-sort="p50_ms">p50 ms</th>
+            <th class="num" data-sort="p95_ms">p95 ms</th>
+            <th class="num" data-sort="mean_ms">Mean ms</th>
+            <th class="num" data-sort="cost_per_1k">$/1k</th>
+            <th data-sort="last_seen">Last seen</th>
+          </tr>
+        </thead>
+        <tbody id="endpoint-rollup"></tbody>
+      </table>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th>Date (UTC)</th>
+            <th class="num">Calls</th>
+            <th class="num">Errors</th>
+            <th class="num">Samples</th>
+            <th class="num">p50 ms</th>
+            <th class="num">p95 ms</th>
+            <th class="num">$/1k</th>
+          </tr>
+        </thead>
+        <tbody id="endpoint-days"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel" id="panel-answers">
+    <div class="panel-head">
+      <h2>Agent answers</h2>
+      <span class="hint">model figures are the model's; cited invalid is never a provider's</span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th class="num">Answers</th>
+            <th class="num">Errors</th>
+            <th class="num">Cited</th>
+            <th class="num">Cited invalid</th>
+            <th class="num">Sources</th>
+            <th class="num">Tokens in / out</th>
+            <th class="num">Model spend</th>
+            <th class="num">Avg ms</th>
+          </tr>
+        </thead>
+        <tbody id="answers-model"></tbody>
+      </table>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Provider</th>
+            <th class="num">Retrieved</th>
+            <th class="num">Cited</th>
+            <th class="num">Cited &divide; retrieved</th>
+          </tr>
+        </thead>
+        <tbody id="answers-providers"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Recent calls</h2>
+      <span class="hint" id="recent-hint">latest 100, newest first</span>
+      <span class="spacer"></span>
+      <div class="toggle" role="group" aria-label="Tool">
+        <button id="t-all" type="button" aria-pressed="true">All</button>
+        <button id="t-search" type="button" aria-pressed="false">Search</button>
+        <button id="t-fetch" type="button" aria-pressed="false">Fetch</button>
+        <button id="t-answer" type="button" aria-pressed="false">Answer</button>
+      </div>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Time (UTC)</th>
+            <th>Tool</th>
+            <th>Provider / fallback</th>
+            <th class="num">ms</th>
+            <th class="num">Results / chars</th>
+            <th class="num">Cost</th>
+            <th>Error</th>
+          </tr>
+        </thead>
+        <tbody id="recent"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>
+    Fetch fallback pages are priced per call from the serving fallback's declared
+    price, and only when a fallback declares one: a page served locally, by the
+    self-hosted renderer or by the keyless reader carries no figure at all, and
+    the page count stands alone. The price is declared, not invoiced.
+    Model spend is an em dash until agent.cost_per_1k_in and
+    agent.cost_per_1k_out are set; the tokens are counted either way.
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var data = null;
+  var view = localStorage.getItem("dashboard.view") || "requests";
+  var tool = localStorage.getItem("dashboard.tool") || "all";
+  // Sort state outlives a render, because the poll re-renders every ten seconds
+  // and a table that reshuffles under the reader is a table they cannot read.
+  // `null` means "the snapshot's own order", which is the ranking the server
+  // built; a click is what replaces it.
+  var sortState = { providers: null, endpoints: null };
+
+  function $(id) { return document.getElementById(id); }
+  function setText(id, v) { var el = $(id); if (el) { el.textContent = v; } }
+  function num(n) { return Number(n || 0).toLocaleString(); }
+  function money(n, dp) { return "$" + Number(n || 0).toFixed(dp === undefined ? 4 : dp); }
+  function compact(n) {
+    n = Number(n || 0);
+    if (n >= 1e6) { return (n / 1e6).toFixed(n % 1e6 ? 1 : 0) + "M"; }
+    if (n >= 1e3) { return (n / 1e3).toFixed(n % 1e3 ? 1 : 0) + "k"; }
+    return String(n);
+  }
+  function axisLabel(v, spend) {
+    if (spend) { return v >= 1 ? money(v, 2) : money(v, 3); }
+    return compact(v);
+  }
+  function stamp(ts, short) {
+    if (!ts) { return "—"; }
+    var d = new Date(ts);
+    if (isNaN(d.getTime())) { return ts; }
+    var iso = d.toISOString();
+    return short ? iso.slice(11, 16) : iso.slice(0, 16).replace("T", " ") + "Z";
+  }
+  // Every timestamp the page prints is UTC, because that is what the journal
+  // writes and a reader comparing two rows needs one clock. The reader's own
+  // clock rides along in the tooltip, so the visible text never has to be
+  // re-derived by hand to answer "when was that, locally".
+  function localTitle(ts) {
+    if (!ts) { return ""; }
+    var d = new Date(ts);
+    return isNaN(d.getTime()) ? "" : d.toLocaleString();
+  }
+  function niceMax(v, div) {
+    if (!(v > 0)) { return div; }
+    var raw = v / div;
+    var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var n = raw / mag;
+    var step = n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10;
+    return step * mag * div;
+  }
+  function el(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) { node.className = cls; }
+    if (text !== undefined) { node.textContent = text; }
+    return node;
+  }
+  function stampCell(ts, cls, short) {
+    var td = el("td", cls, stamp(ts, short));
+    var title = localTitle(ts);
+    if (title) { td.title = title; }
+    return td;
+  }
+
+  function setStampText(id, ts, fallback) {
+    setText(id, ts ? stamp(ts) : fallback);
+    var node = $(id);
+    if (node) { node.title = localTitle(ts); }
+  }
+
+  // Rows with no figure for the sort column land last in both directions: a
+  // null p95 or an unset `cost_per_1k` is absence, so it can be neither the
+  // fastest nor the cheapest row, and flipping the arrow must not promote it to
+  // the top.
+  function sortRows(rows, state, get) {
+    if (!state) { return rows; }
+    var scored = [], missing = [];
+    rows.forEach(function (row) {
+      var v = get(row, state.key);
+      (v === null || v === undefined) ? missing.push(row) : scored.push(row);
+    });
+    scored.sort(function (a, b) {
+      var x = get(a, state.key), y = get(b, state.key);
+      if (typeof x === "string" || typeof y === "string") {
+        var byText = String(x).localeCompare(String(y));
+        return state.dir === "asc" ? byText : -byText;
+      }
+      return state.dir === "asc" ? x - y : y - x;
+    });
+    return scored.concat(missing);
+  }
+
+  function providerValue(p, key) {
+    if (key === "provider") { return p.provider; }
+    if (key === "last_used") { return p.last_used || null; }
+    if (key === "errrate") {
+      return Number(p.calls || 0) ? 100 * Number(p.errors || 0) / Number(p.calls) : 0;
+    }
+    return Number(p[key] || 0);
+  }
+
+  function endpointValue(p, key) {
+    if (key === "provider") { return p.provider; }
+    if (key === "last_seen") { return p.last_seen || null; }
+    if (key === "p50_ms" || key === "p95_ms" || key === "mean_ms" || key === "cost_per_1k") {
+      return (p[key] === null || p[key] === undefined) ? null : Number(p[key]);
+    }
+    return Number(p[key] || 0);
+  }
+
+  function markSort(head, state) {
+    Array.prototype.forEach.call(head.querySelectorAll("th[data-sort]"), function (th) {
+      if (state && th.getAttribute("data-sort") === state.key) {
+        th.setAttribute("aria-sort", state.dir === "asc" ? "ascending" : "descending");
+      } else {
+        th.removeAttribute("aria-sort");
+      }
+    });
+  }
+
+  function wireSort(bodyId, stateKey, get) {
+    var body = $(bodyId);
+    var head = body.parentNode.tHead;
+    head.addEventListener("click", function (event) {
+      var th = event.target.closest("th[data-sort]");
+      if (!th) { return; }
+      var key = th.getAttribute("data-sort");
+      var current = sortState[stateKey];
+      var same = current && current.key === key;
+      var dir = same
+        ? (current.dir === "desc" ? "asc" : "desc")
+        : (key === "provider" || key === "last_used" || key === "last_seen" ? "asc" : "desc");
+      sortState[stateKey] = { key: key, dir: dir };
+      markSort(head, sortState[stateKey]);
+      if (!data) { return; }
+      if (stateKey === "providers") { renderProviders(); } else { renderEndpoints(); }
+    });
+  }
+
+  function renderHeader() {
+    setStampText("since", data.since, "never");
+    setStampText("started", data.process_started_at, "—");
+    var chip = $("journal");
+    var j = data.journal || {};
+    if (j.failed) {
+      chip.textContent = "journal write failed";
+      chip.className = "chip failed";
+    } else {
+      chip.textContent = j.path ? "journal " + j.path : "in-memory only";
+      chip.className = "chip";
+    }
+  }
+
+  function renderCards() {
+    var t = data.totals || {};
+    var a = data.answers || {};
+    var calls = Number(t.searches || 0) + Number(t.fetches || 0);
+    setText("m-spend", money(t.search_cost_usd));
+    setText("m-searches", num(t.searches));
+    setText("m-fetches", num(t.fetches));
+    setText("m-errors", num(t.errors));
+    setText("m-fallback", num(t.fetch_pages_via_fallback));
+    // The fetch money column follows the same rule as the model's: a null cost
+    // is *unknown*, not a free page, so the pages are counted in its place
+    // rather than a $0.0000 that would read as "these were free".
+    setText("f-fallback", t.fetch_cost_usd === null || t.fetch_cost_usd === undefined
+      ? (t.fetch_pages_via_fallback ? "counted, not priced" : "none yet")
+      : money(t.fetch_cost_usd) + " on " + num(t.priced_fetches) + " of "
+        + num(t.fetch_pages_via_fallback) + " pages");
+    setText("f-spend", t.fallbacks ? num(t.fallbacks) + " served by a fallback" : "no fallbacks");
+    setText("f-searches", t.searches ? num(t.searches) + " of " + num(calls) + " calls" : "none yet");
+    setText("f-fetches", t.fetches ? num(t.fetches) + " pages" : "none yet");
+    setText("f-errors", calls ? (100 * Number(t.errors || 0) / calls).toFixed(1) + "% of calls" : "none yet");
+
+    // The model's money column follows the journal's rule: a null cost is
+    // *unknown*, not a free call, so the tokens are shown in its place rather
+    // than a $0.0000 that reads as "this was free".
+    var tokens = (a.token_calls
+      ? compact(a.prompt_tokens) + " in / " + compact(a.completion_tokens) + " out"
+      : "no tokens reported");
+    setText("m-answers", num(a.calls));
+    setText("f-answers", a.calls
+      ? num(a.cited) + " cited, " + num(a.cited_invalid) + " invalid"
+      : "none yet");
+    if (a.model_cost_usd === null || a.model_cost_usd === undefined) {
+      setText("m-model", "—");
+      setText("f-model", "counted, not priced · " + tokens);
+    } else {
+      setText("m-model", money(a.model_cost_usd));
+      setText("f-model", (a.priced_calls < a.calls
+        ? "priced for " + num(a.priced_calls) + " of " + num(a.calls) + " answers"
+        : "from the configured prices") + " · " + tokens);
+    }
+  }
+
+  // One colour per provider, for the life of the page. The palette is a fixed
+  // list and a name claims the next free slot the first time it is seen, so the
+  // same journal paints the same colours on every load and a provider keeps its
+  // colour across refreshes even when another name joins the window. The
+  // colours are chosen here rather than configured: `[dashboard]`'s two keys are
+  // fixed for 0.1.0, so a per-provider colour needs that set widened before it
+  // could be a config key.
+  // Ordered so its first eight slots are none of the hues the two charts above
+  // draw with: the three series hues (teal, plum, umber) sit at slots 9, 11 and
+  // 12, so a provider segment never reads as a chart series. Sixteen slots is
+  // one short of the seventeen frozen provider names, so a window showing all of
+  // them wraps at slot one.
+  var PALETTE = [
+    "#a63a2b", "#3c688b", "#577e2e", "#93465c", "#b06800", "#5a5f66", "#8f3f74", "#4f7d46",
+    "#7a5c2e", "#0e6b5c", "#96694a", "#6b5a8c", "#8c5a10", "#3a7d74", "#a2785a", "#71735d"
+  ];
+  var colour = Object.create(null);
+  var nextSlot = 0;
+
+  function colourFor(name) {
+    if (colour[name] === undefined) {
+      colour[name] = PALETTE[nextSlot % PALETTE.length];
+      nextSlot += 1;
+    }
+    return colour[name];
+  }
+
+  // Names are claimed in sorted order over every table that draws a provider, so
+  // a page on one journal gets the same palette however the renderers happen to
+  // be ordered. A name first seen later takes the next free slot rather than
+  // shifting the colours already under a reader's eye.
+  function noteProviderColours() {
+    var names = [];
+    (data.providers || []).forEach(function (p) { names.push(p.provider); });
+    ((data.endpoints || {}).providers || []).forEach(function (p) { names.push(p.provider); });
+    ((data.answers || {}).providers || []).forEach(function (p) { names.push(p.provider); });
+    names.sort().forEach(function (name) { colourFor(name); });
+  }
+
+  function swatch(color, label) {
+    return '<span class="sw"><i style="background:' + color + '"></i>' + label + "</span>";
+  }
+  function renderLegend(spend) {
+    $("legend").innerHTML = spend
+      ? swatch("var(--accent)", "search cost") + swatch("var(--model)", "model cost") +
+        swatch("var(--bad)", "errors")
+      : swatch("var(--accent)", "searches") + swatch("var(--accent-2)", "fetches") +
+        swatch("var(--bad)", "errors");
+  }
+
+  function renderChart() {
+    var days = data.days || [];
+    var spend = view === "spend";
+    setText("chart-title", (spend ? "Spend" : "Requests") + " · last 14 days (UTC)");
+    renderLegend(spend);
+
+    // The bottom margin is 62px, not 32: the day labels sit under the baseline
+    // and the error ticks sit between the two, so neither can be clipped by a
+    // viewBox scaled into a narrow column.
+    var W = 720, H = 262, padL = 52, padR = 14, padT = 14, padB = 62;
+    var base = H - padB, top = padT;
+    var n = Math.max(days.length, 1);
+    var slot = (W - padL - padR) / n;
+    var bw = Math.max(6, Math.min(30, slot * 0.56));
+
+    var maxima = days.map(function (d) {
+      return spend
+        ? Number(d.cost_usd || 0) + Number(d.model_cost_usd || 0)
+        : Number(d.searches || 0) + Number(d.fetches || 0);
+    });
+    var max = niceMax(Math.max.apply(null, maxima.concat([0])), 4);
+    function y(v) { return base - (base - top) * (v / max); }
+
+    var parts = [];
+    [0, 1, 2, 3, 4].forEach(function (i) {
+      var value = max * i / 4;
+      var yy = y(value);
+      parts.push('<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy +
+                 '" y2="' + yy + '" stroke="var(--rule-soft)"></line>');
+      parts.push('<text class="axis" x="' + (padL - 9) + '" y="' + (yy + 3.5) +
+                 '" text-anchor="end">' + axisLabel(value, spend) + "</text>");
+    });
+
+    function bar(x, yy, h, fill, tip) {
+      if (!(h > 0)) { return ""; }
+      return '<rect class="bar" x="' + x + '" y="' + yy + '" width="' + bw +
+             '" height="' + h + '" rx="1" fill="' + fill + '"><title>' + tip + "</title></rect>";
+    }
+
+    // One tick per failed call, scaled to the worst day in the window, so a
+    // reader sees *whether* a day was clean before they hover a bar to count
+    // it. A day with no error draws nothing rather than a zero-height mark.
+    var tickMax = Math.max.apply(null, days.map(function (d) {
+      return Number(d.errors || 0);
+    }).concat([1]));
+
+    days.forEach(function (d, i) {
+      var x = padL + slot * i + (slot - bw) / 2;
+      var modelPriced = !(d.model_cost_usd === null || d.model_cost_usd === undefined);
+      var tip = d.date + " — " + num(d.searches) + " searches, " + num(d.fetches) +
+                " fetches, " + money(d.cost_usd) +
+                (d.answers ? ", " + num(d.answers) + " answers" : "") +
+                (d.answers
+                  ? ", model " + (modelPriced ? money(d.model_cost_usd) : "not priced")
+                  : "") +
+                (d.errors ? ", " + num(d.errors) + " errors" : "");
+      var today = i === days.length - 1;
+      if (spend) {
+        // Stacked, like the requests view: search cost at the axis, the
+        // model's share on top of it. An unpriced day contributes no height
+        // and says so in the tooltip rather than claiming a zero.
+        var hs = base - y(Number(d.cost_usd || 0));
+        var hm = base - y(Number(d.model_cost_usd || 0));
+        var yS = base - hs;
+        parts.push(bar(x, yS, hs, "var(--accent)", tip));
+        parts.push(bar(x, yS - hm, hm, "var(--model)", tip));
+      } else {
+        var fs = Number(d.fetches || 0), ss = Number(d.searches || 0);
+        var gap = (fs > 0 && ss > 0) ? 2 : 0;
+        var hf = base - y(fs), hs2 = base - y(ss);
+        var yF = base - hf;
+        parts.push(bar(x, yF, hf, "var(--accent-2)", tip));
+        parts.push(bar(x, yF - gap - hs2, hs2, "var(--accent)", tip));
+      }
+      if (Number(d.errors || 0) > 0) {
+        var th = Math.max(1.5, 18 * Number(d.errors || 0) / tickMax);
+        parts.push('<rect x="' + x + '" y="' + (base + 26 - th) + '" width="' + bw +
+                   '" height="' + th + '" rx="1" fill="var(--bad)" fill-opacity="0.8">' +
+                   "<title>" + tip + "</title></rect>");
+      }
+      parts.push('<text class="axis' + (today ? " today" : "") + '" x="' +
+                 (x + bw / 2) + '" y="' + (H - 10) +
+                 '" text-anchor="middle">' + d.date.slice(5) + "</text>");
+      // Today is marked with a rule under its label instead of a glow: the
+      // palette has no shadow, and a highlight that changes a bar's weight
+      // would read as a data difference.
+      if (today) {
+        parts.push('<rect x="' + (x + bw / 2 - 9) + '" y="' + (H - 6) +
+                   '" width="18" height="2" fill="var(--accent)"></rect>');
+      }
+    });
+
+    $("chart").innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' +
+      (spend ? "spend" : "requests") + ' over the last 14 days">' +
+      parts.join("") + "</svg>";
+  }
+
+  // The per-provider decomposition of the spend bar above: one bar per day, cut
+  // into one segment per provider, drawn from the `endpoints` series the
+  // Endpoint panel already reads -- same poll, same window, no second fetch and
+  // no chart library (the rule the whole page follows, stated in `dashboard.py`'s
+  // module docstring).
+  // The stack order is the sorted name list rather than the cost ranking the
+  // tables use: a bar whose layers reorder themselves from day to day is a
+  // stacked chart no reader can trace.
+  function renderProviderCost() {
+    var series = (data.endpoints || {}).providers || [];
+    var axis = (data.days || []).map(function (d) { return d.date; });
+    var legend = $("provider-legend");
+    var box = $("provider-chart");
+
+    var byName = {};
+    var names = [];
+    series.forEach(function (p) {
+      var perDay = {};
+      (p.days || []).forEach(function (d) { perDay[d.date] = d; });
+      byName[p.provider] = perDay;
+      names.push(p.provider);
+    });
+    names.sort();
+
+    if (!names.length) {
+      legend.innerHTML = "";
+      box.innerHTML = '<p class="empty">no search history in the window</p>';
+      return;
+    }
+    legend.innerHTML = names.map(function (name) {
+      return swatch(colourFor(name), name);
+    }).join("");
+
+    var W = 720, H = 232, padL = 52, padR = 14, padT = 14, padB = 32;
+    var base = H - padB, top = padT;
+    var n = Math.max(axis.length, 1);
+    var width = (W - padL - padR) / n;
+    var bw = Math.max(6, Math.min(30, width * 0.56));
+
+    var totals = axis.map(function (date) {
+      return names.reduce(function (sum, name) {
+        return sum + Number((byName[name][date] || {}).cost_usd || 0);
+      }, 0);
+    });
+    var max = niceMax(Math.max.apply(null, totals.concat([0])), 4);
+    function y(v) { return base - (base - top) * (v / max); }
+
+    var parts = [];
+    [0, 1, 2, 3, 4].forEach(function (i) {
+      var value = max * i / 4;
+      var yy = y(value);
+      parts.push('<line x1="' + padL + '" x2="' + (W - padR) + '" y1="' + yy +
+                 '" y2="' + yy + '" stroke="var(--rule-soft)"></line>');
+      parts.push('<text class="axis" x="' + (padL - 9) + '" y="' + (yy + 3.5) +
+                 '" text-anchor="end">' + axisLabel(value, true) + "</text>");
+    });
+
+    axis.forEach(function (date, i) {
+      var x = padL + width * i + (width - bw) / 2;
+      var stackBase = base;
+      names.forEach(function (name) {
+        var row = byName[name][date];
+        if (!row) { return; }
+        var v = Number(row.cost_usd || 0);
+        var h = base - y(v);
+        // A day a free provider was called on contributes no height, and says
+        // so in the tooltip it still has no segment to hover. The panel head
+        // carries the same rule; the legend lists the provider all the same.
+        if (!(h > 0)) { return; }
+        // Square corners, unlike the single bars above: a rounded corner on
+        // every layer of a stack reads as a gap that is not there.
+        parts.push('<rect class="bar" x="' + x + '" y="' + (stackBase - h) +
+                   '" width="' + bw + '" height="' + h + '" rx="1" fill="' + colourFor(name) +
+                   '"><title>' + name + " · " + date + " — " + money(v) +
+                   " over " + num(row.calls) + " searches</title></rect>");
+        stackBase -= h;
+      });
+      parts.push('<text class="axis' + (i === axis.length - 1 ? " today" : "") +
+                 '" x="' + (x + bw / 2) + '" y="' + (H - 10) +
+                 '" text-anchor="middle">' + date.slice(5) + "</text>");
+    });
+
+    box.innerHTML =
+      '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="' +
+      'search cost over the last 14 days, stacked by provider">' +
+      parts.join("") + "</svg>";
+  }
+
+  function share(value, max, color) {
+    var pct = max > 0 ? Math.max(2, Math.round((value / max) * 100)) : 0;
+    return '<span class="share"><span class="track"><i style="width:' + pct +
+           "%;background:" + color + '"></i></span><span>' + num(value) + "</span></span>";
+  }
+
+  function renderProviders() {
+    var spend = view === "spend";
+    var rows = sortRows(data.providers || [], sortState.providers, providerValue);
+    var body = $("providers");
+    body.innerHTML = "";
+    $("th-spend").className = spend ? "num emph" : "num";
+
+    if (!rows.length) {
+      var empty = el("tr");
+      var cell = el("td", "empty", "no searches recorded yet");
+      cell.colSpan = 7;
+      empty.appendChild(cell);
+      body.appendChild(empty);
+      return;
+    }
+    var maxSpend = Math.max.apply(null, rows.map(function (p) { return Number(p.cost_usd || 0); }).concat([0]));
+    var maxCalls = Math.max.apply(null, rows.map(function (p) { return Number(p.calls || 0); }).concat([0]));
+
+    rows.forEach(function (p) {
+      var tr = el("tr");
+      function cell(text, cls) {
+        var td = el("td", cls, text);
+        tr.appendChild(td);
+        return td;
+      }
+      cell("", "mono").innerHTML = swatch(colourFor(p.provider), p.provider);
+      var calls = cell("", "num");
+      calls.innerHTML = share(Number(p.calls || 0), maxCalls, "var(--accent-2)");
+      cell(num(p.errors), p.errors ? "num err" : "num dim");
+      // The same ratio the Errors card states, per row: the row a reader is
+      // about to retry is the row where the share matters, not the total.
+      var rate = Number(p.calls || 0) ? 100 * Number(p.errors || 0) / Number(p.calls) : null;
+      cell(rate === null ? "—" : rate.toFixed(1) + "%", rate ? "num" : "num dim");
+      cell(num(p.avg_ms), "num");
+      var spendCell = cell("", spend ? "num emph" : "num");
+      spendCell.innerHTML = share(Number(p.cost_usd || 0), maxSpend, colourFor(p.provider));
+      tr.appendChild(stampCell(p.last_used, "dim"));
+      body.appendChild(tr);
+    });
+  }
+
+  function renderEndpoints() {
+    var rollup = $("endpoint-rollup");
+    var days = $("endpoint-days");
+    rollup.innerHTML = "";
+    days.innerHTML = "";
+    var rows = sortRows((data.endpoints || {}).providers || [], sortState.endpoints, endpointValue);
+
+    if (!rows.length) {
+      [rollup, days].forEach(function (body, i) {
+        var empty = el("tr");
+        var cell = el("td", "empty", "no search history in the window");
+        cell.colSpan = i === 0 ? 10 : 8;
+        empty.appendChild(cell);
+        body.appendChild(empty);
+      });
+      return;
+    }
+
+    // A percentile with no sample behind it is an em dash, never 0: zero
+    // milliseconds reads as "instant", absence reads as "nothing to measure".
+    function ms(v) { return (v === null || v === undefined) ? "—" : num(v); }
+    function perK(v) { return (v === null || v === undefined) ? "—" : money(v); }
+
+    rows.forEach(function (p) {
+      var tr = el("tr");
+      // Returns the cell: the swatch is written into it with `innerHTML`, and a
+      // helper that only appended would yield `undefined` mid-render.
+      function cell(text, cls) {
+        var td = el("td", cls, text);
+        tr.appendChild(td);
+        return td;
+      }
+      cell("", "mono").innerHTML = swatch(colourFor(p.provider), p.provider);
+      cell(num(p.calls), "num");
+      cell(num(p.errors), p.errors ? "num err" : "num dim");
+      cell(num(p.fell_back_calls), p.fell_back_calls ? "num" : "num dim");
+      cell(num(p.latency_samples), "num");
+      cell(ms(p.p50_ms), "num");
+      cell(ms(p.p95_ms), "num");
+      cell(ms(p.mean_ms), "num");
+      cell(perK(p.cost_per_1k), "num");
+      tr.appendChild(stampCell(p.last_seen, "dim"));
+      rollup.appendChild(tr);
+
+      (p.days || []).forEach(function (d) {
+        var dtr = el("tr");
+        function dcell(text, cls) {
+          var td = el("td", cls, text);
+          dtr.appendChild(td);
+          return td;
+        }
+        dcell("", "mono").innerHTML = swatch(colourFor(p.provider), p.provider);
+        dcell(d.date, "dim");
+        dcell(num(d.calls), "num");
+        dcell(num(d.errors), d.errors ? "num err" : "num dim");
+        dcell(num(d.latency_samples), "num");
+        dcell(ms(d.p50_ms), "num");
+        dcell(ms(d.p95_ms), "num");
+        dcell(perK(d.cost_per_1k), "num");
+        days.appendChild(dtr);
+      });
+    });
+  }
+
+  function renderAnswers() {
+    var a = data.answers || {};
+    var model = $("answers-model");
+    var provs = $("answers-providers");
+    model.innerHTML = "";
+    provs.innerHTML = "";
+
+    // The model's row: its own figures, never a provider's. A null cost is an
+    // em dash (unknown, not free); a null token total is an em dash too, since
+    // an endpoint that reports no `usage` is not an endpoint that used none.
+    // With no answer calls at all the row is the empty state rather than a row
+    // of zeros, the rule the endpoints panel follows.
+    function dash(v) { return (v === null || v === undefined) ? "—" : num(v); }
+    if (!a.calls) {
+      var none = el("tr");
+      var noneCell = el("td", "empty", "no answer calls recorded yet");
+      noneCell.colSpan = 9;
+      none.appendChild(noneCell);
+      model.appendChild(none);
+    } else {
+      var mtr = el("tr");
+      function mcell(text, cls) { mtr.appendChild(el("td", cls, text)); }
+      mcell((a.models && a.models.length) ? a.models.join(", ") : "—", "mono");
+      mcell(num(a.calls), "num");
+      mcell(num(a.errors), a.errors ? "num err" : "num dim");
+      mcell(num(a.cited), "num");
+      mcell(num(a.cited_invalid), a.cited_invalid ? "num err" : "num dim");
+      mcell(num(a.sources), "num");
+      mcell(dash(a.prompt_tokens) + " / " + dash(a.completion_tokens), "num");
+      mcell((a.model_cost_usd === null || a.model_cost_usd === undefined)
+        ? "—" : money(a.model_cost_usd), "num");
+      mcell(dash(a.mean_ms), "num");
+      model.appendChild(mtr);
+    }
+
+    var rows = a.providers || [];
+    if (!rows.length) {
+      var empty = el("tr");
+      var cell = el("td", "empty", "no answer calls recorded yet");
+      cell.colSpan = 4;
+      empty.appendChild(cell);
+      provs.appendChild(empty);
+      return;
+    }
+    var maxRetrieved = Math.max.apply(null, rows.map(function (p) { return Number(p.retrieved || 0); }).concat([0]));
+    rows.forEach(function (p) {
+      var tr = el("tr");
+      // Returns the cell: the bar is written into it with `innerHTML`, and a
+      // helper that only appended would leave this `undefined` and abort the
+      // whole render halfway through.
+      function cell(text, cls) {
+        var td = el("td", cls, text);
+        tr.appendChild(td);
+        return td;
+      }
+      cell("", "mono").innerHTML = swatch(colourFor(p.provider), p.provider);
+      var retrieved = cell("", "num");
+      retrieved.innerHTML = share(Number(p.retrieved || 0), maxRetrieved, "var(--accent-2)");
+      cell(num(p.cited), "num");
+      var retrievedN = Number(p.retrieved || 0);
+      cell(retrievedN
+        ? (100 * Number(p.cited || 0) / retrievedN).toFixed(0) + "%"
+        : "—", "num");
+      provs.appendChild(tr);
+    });
+  }
+
+  function renderRecent() {
+    var body = $("recent");
+    var hint = $("recent-hint");
+    body.innerHTML = "";
+    var all = data.recent || [];
+    // The filter narrows the rows the poll already delivered: the journal's
+    // newest hundred is the window, so a filtered table is a view of it and
+    // never a second query.
+    var rows = tool === "all" ? all : all.filter(function (e) { return e.tool === tool; });
+    hint.textContent = "latest 100, newest first" +
+      (tool === "all" ? "" : " · " + num(rows.length) + " shown");
+    if (!rows.length) {
+      var empty = el("tr");
+      var cell = el("td", "empty",
+        tool === "all" ? "nothing recorded yet" : "no " + tool + " calls recorded yet");
+      cell.colSpan = 7;
+      empty.appendChild(cell);
+      body.appendChild(empty);
+      return;
+    }
+    rows.forEach(function (e) {
+      var isSearch = e.tool === "search";
+      var isAnswer = e.tool === "answer";
+      var tr = el("tr");
+      function cell(node, cls) {
+        var td = el("td", cls);
+        if (typeof node === "string") { td.textContent = node; }
+        else { td.appendChild(node); }
+        tr.appendChild(td);
+        return td;
+      }
+      tr.appendChild(stampCell(e.ts, "dim", true));
+      cell(el("span", "pill " + (isSearch ? "search" : isAnswer ? "answer" : "fetch"), e.tool));
+      cell(isSearch ? (e.provider || "—") : isAnswer ? (e.model || "—") : (e.fallback || "local"), "mono");
+      cell(num(e.ms), "num");
+      cell(isSearch ? num(e.results) : isAnswer ? num(e.answer_chars) : num(e.chars), "num");
+      // An answer's cost is the model's, and `null` on it means the prices were
+      // unset -- an em dash, not `$0.0000`, which would read as a free call.
+      // A fetch line is the same shape: it carries a price only when the fallback
+      // that served the page declares one, so an absent key is an em dash.
+      var pricedFetch = e.cost_usd !== null && e.cost_usd !== undefined;
+      var cost = isSearch
+        ? money(e.cost_usd)
+        : (isAnswer
+            ? ((e.model_cost_usd === null || e.model_cost_usd === undefined) ? "—" : money(e.model_cost_usd))
+            : (pricedFetch ? money(e.cost_usd) : "—"));
+      cell(cost, (isSearch || isAnswer || pricedFetch) ? "num" : "num dim");
+      if (e.error) {
+        cell(el("span", "pill err", e.error));
+      } else {
+        cell("—", "dim");
+      }
+      body.appendChild(tr);
+    });
+  }
+
+  function setView(next) {
+    view = next;
+    localStorage.setItem("dashboard.view", next);
+    $("v-requests").setAttribute("aria-pressed", String(next === "requests"));
+    $("v-spend").setAttribute("aria-pressed", String(next === "spend"));
+    if (data) { renderChart(); renderProviders(); }
+  }
+
+  function setTool(next) {
+    tool = next;
+    localStorage.setItem("dashboard.tool", next);
+    ["all", "search", "fetch", "answer"].forEach(function (name) {
+      $("t-" + name).setAttribute("aria-pressed", String(name === next));
+    });
+    if (data) { renderRecent(); }
+  }
+
+  function render() {
+    noteProviderColours();
+    renderHeader();
+    renderCards();
+    renderChart();
+    renderProviderCost();
+    renderProviders();
+    renderEndpoints();
+    renderAnswers();
+    renderRecent();
+  }
+
+  function setStatus(text, stale) {
+    setText("status-text", text);
+    var box = $("status");
+    box.className = stale ? "status stale" : "status";
+  }
+
+  async function refresh() {
+    try {
+      var r = await fetch("/dashboard/data", { cache: "no-store" });
+      if (!r.ok) {
+        setStatus("unavailable (" + r.status + ")", true);
+        return;
+      }
+      data = await r.json();
+      setStatus("updated " + new Date().toISOString().slice(11, 19) + "Z", false);
+      render();
+    } catch (err) {
+      setStatus("offline", true);
+    }
+  }
+
+  $("v-requests").addEventListener("click", function () { setView("requests"); });
+  $("v-spend").addEventListener("click", function () { setView("spend"); });
+  $("t-all").addEventListener("click", function () { setTool("all"); });
+  $("t-search").addEventListener("click", function () { setTool("search"); });
+  $("t-fetch").addEventListener("click", function () { setTool("fetch"); });
+  $("t-answer").addEventListener("click", function () { setTool("answer"); });
+  wireSort("providers", "providers", providerValue);
+  wireSort("endpoint-rollup", "endpoints", endpointValue);
+  setView(view);
+  setTool(tool);
+  refresh();
+  setInterval(refresh, 10000);
+})();
+</script>
+</body>
+</html>
+|}

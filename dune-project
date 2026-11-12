@@ -100,5 +100,26 @@
    (>= 1.2))
   (eio
    (>= 1.6))
+  ; P8: the server module and the binary. mcp-kit is pinned exactly, as in
+  ; mcp-caps, because it owns the wire contract; the transports ride the
+  ; switch's versions. [eio_main] is a real dependency now (bin/ runs the loop
+  ; the grants are opened on), and [mirage-crypto-rng] is what bin/ installs a
+  ; generator from — the library itself only detects its absence.
+  (mcp-kit
+   (= 0.2.0))
+  (mcp-kit-cohttp-eio
+   (>= 0.2.0))
+  (cohttp-eio
+   (>= 6.0))
+  (http
+   (>= 6.0))
+  (cstruct
+   (>= 6.0))
+  (ipaddr
+   (>= 5.5))
+  (eio_main
+   (>= 1.6))
+  (mirage-crypto-rng
+   (>= 1.5))
   (alcotest
    :with-test)))

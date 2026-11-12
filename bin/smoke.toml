@@ -1,0 +1,6 @@
+# The stdio smoke's config: the keyless defaults with the one extraction
+# backend this build carries, since [trafilatura] does not ride on the port
+# (lib/fetch/extractor.mli). Pointed at by SEEKWRIGHT_CONFIG in the smoke rule
+# in [dune].
+[fetch]
+extractor = "stdlib"

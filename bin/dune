@@ -1,0 +1,58 @@
+; The seekwright executable: the server on either transport, the [--check] /
+; [--metrics] diagnoses, and the three client verbs over the REST projection.
+; P8 owns this file. The loop runner and the RNG installer belong here, not in
+; any library: [Eio_main]'s interface says a library must not call [run], and
+; [mirage-crypto-rng.unix] pulls stdlib [unix], which the libraries keep out.
+(executable
+ (name main)
+ (public_name seekwright)
+ (package seekwright)
+ (libraries
+  seekwright
+  seekwright.factory
+  seekwright.providers
+  seekwright.fetch
+  seekwright.fetch.stdlib
+  mcp-caps
+  mcp-kit
+  mcp-kit.stdio
+  mcp-kit-cohttp-eio
+  cohttp-eio
+  http
+  eio
+  eio_main
+  uri
+  yojson
+  cstruct
+  ipaddr
+  tls
+  tls-eio
+  ca-certs
+  mirage-crypto-rng.unix
+  unix))
+
+; The stdio smoke: a scripted legacy JSON-RPC session (initialize,
+; notifications/initialized, tools/list) piped through the real binary, with
+; the config pointed at a path that does not exist so the keyless defaults are
+; what runs. The protocol answers are blessed; the startup notes on stderr are
+; pinned separately so "stdout is JSON-RPC only" stays checked.
+(rule
+ (deps main.exe smoke.jsonl smoke.toml)
+ (targets smoke.out smoke.err)
+ (action
+  (with-accepted-exit-codes
+   0
+   (with-stderr-to smoke.err
+    (with-stdout-to smoke.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=smoke.toml sh -c 'cat smoke.jsonl | ./main.exe'"))))))
+
+(rule
+ (alias runtest)
+ (action (diff smoke.expected smoke.out)))
+
+(rule
+ (alias runtest)
+ (action (diff smoke_notes.expected smoke.err)))

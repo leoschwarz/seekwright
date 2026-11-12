@@ -1,0 +1,20 @@
+; The construction layer (P8): build_providers / build_extractor /
+; build_fetch_stack / build_app, ported from [src/seekwright/factory.py] and
+; kept out of the server's startup path so [--check] can diagnose a deployment
+; without building the MCP server. It is its own library —
+; [seekwright.factory], wrapped as [Seekwright_factory] — for the same reason
+; [lib/providers/] is one: the adapters depend on [seekwright], so a factory
+; inside that library could not name them without closing a cycle
+; (plans/seekwright-ocaml-port.md, the P4 note).
+(library
+ (name seekwright_factory)
+ (public_name seekwright.factory)
+ (libraries
+  seekwright
+  seekwright.providers
+  seekwright.fetch
+  seekwright.fetch.stdlib
+  mcp-caps
+  eio
+  uri
+  yojson))

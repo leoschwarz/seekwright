@@ -12,6 +12,14 @@ depends: [
   "toml" {>= "7.0"}
   "digestif" {>= "1.2"}
   "eio" {>= "1.6"}
+  "mcp-kit" {= "0.2.0"}
+  "mcp-kit-cohttp-eio" {>= "0.2.0"}
+  "cohttp-eio" {>= "6.0"}
+  "http" {>= "6.0"}
+  "cstruct" {>= "6.0"}
+  "ipaddr" {>= "5.5"}
+  "eio_main" {>= "1.6"}
+  "mirage-crypto-rng" {>= "1.5"}
   "alcotest" {with-test}
   "odoc" {with-doc}
 ]

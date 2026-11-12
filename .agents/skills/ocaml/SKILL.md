@@ -883,3 +883,60 @@ Design decisions worth not rediscovering:
   `Agent.answer_system_prompt` exposes it.
 - The run id is `Random.State.make_self_init ()` + 8 bytes hex (16 chars), stdlib
   only — a random per-call id, never a hash of the query.
+
+## P8 (server, transports, dashboard, REST projection, CLI, surface)
+
+- **`Server.app` is the grant**: the three tools are registered with
+  `~grant:app` (`Registry.add ... search_tool ~grant:app`), so the app record
+  (config, search engine, usage, fetch option, agent option, clocks,
+  allowed hosts) is the one power the tools run with. Providers never become
+  tools; their endpoint-scoped Net grants live inside the engines the app
+  carries.
+- **`handle_custom` is the testable core of every non-`/mcp` route** — a pure
+  `meth/path/host/origin/body -> response`. `serve_http` peeks the request
+  line + headers off a tap flow, applies the Host allowlist itself (mcp-kit
+  0.2.0's adapter owns Origin but not Host), then replays the recorded bytes
+  into either the mcp-kit handler (`/mcp`) or a `Cohttp_eio.Server.make` over
+  `handle_custom`. `Eio.Flow.Pi.source (module Tap)` with
+  `read_methods = []` (a value, not a function) gives peek-with-record;
+  `Cohttp_eio.Request`/`Response` are NOT exported by cohttp-eio — only
+  `Server`/`Client`/`Body`.
+- **Host guard semantics** (`Server.is_host_allowed`): entries match exactly
+  or as `name:*` (any port); the seed is `localhost`, `127.0.0.1`, `::1` plus
+  their `:*` forms and `[::1]:*` — widening only. `/healthz` is exempt (a
+  kubelet probes with the pod IP); a missing Host on a guarded path is 421.
+  Origin, when present, must be in `origin_allowlist` (`http(s)://` each
+  loopback name + operator hosts) or 403. 413 above `max_body_size` (1 MiB).
+- **`Eio.Stdenv.t` is not a named type**: env params are spelled as open
+  object types (`net : [> [> `Generic ] Eio.Net.ty] Eio.Resource.t; fs :
+  Eio.Fs.dir_ty Eio.Path.t; mono_clock : [> Eio.Time.Mono.ty] Eio.Resource.t;
+  ..`). `Eio.Time.Mono.now` returns `Mtime.t` — convert with
+  `Int64.to_float (Mtime.to_uint64_ns m) /. 1e9`. Accepted sockets need
+  `(sock :> Eio.Flow.two_way_ty Eio.Resource.t)`.
+- **`Config.default_dashboard_config` has `enabled = true`** (Python's
+  default): a test fixture that means "dashboard off" must set
+  `enabled = false` explicitly.
+- **The frozen surface is data in `Server`** (`tools_surface`, `rest_routes`,
+  `operational_routes`, `cli_verbs`, `server_flags`, `journal_fields`), built
+  from the same property tables the tool schemas are made of, so the wire and
+  the manifest cannot drift; `ocaml-tools/surface.ml` prints it and a dune
+  rule diffs the body against `docs/reference/surface.md` (`--python-body`
+  mode) and the whole output against `ocaml-tools/surface.expected`.
+  `journal_fields` is pinned against a real journal file by
+  `test/test_p8_surface.ml` (union of keys per `tool` line kind).
+- **Warning 21 trap**: in the dev profile `exit 1;` followed by `;` + more
+  code in the same sequence fails the build — end the branch with `exit 1`
+  as the last expression or use if/else.
+- **`Mirage_crypto_rng_unix.use_default ()` runs at the top of `main`**, before
+  flag parsing: the `--check` path builds grants for its probes without ever
+  touching the MCP machinery, and TLS reads the generator at
+  grant-construction time.
+- **Conformance (P8 run, 2026-11-12)**: pinned runner
+  `@modelcontextprotocol/conformance@0.2.0-alpha.11`, Node v22.23.4, against
+  `bin/main.exe --http` at `/mcp`: **10 pass / 27 fail of the 37 required
+  scenarios** — every failure is a declared-surface gap (scenario-named
+  diagnostic tools/prompts/resources the seekwright server does not declare,
+  `completion/complete`, and `dns-rebinding-protection`, which fails
+  identically in the phase-1 fixture baseline). The phase-1 mcp-caps fixture
+  recorded 19/18; mcp-kit's own control is 37/37 — do not claim that for this
+  server.
