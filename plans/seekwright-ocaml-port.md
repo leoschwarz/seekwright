@@ -216,3 +216,16 @@ for the phases behind it:
 - No new surface: three tools, same names, same fields, same refusal sentences.
 - No auth, cache, or spend ceiling — the declined features stay declined, now
   partly enforced by the type system instead of by convention.
+
+## 7. Port status (2026-11-12)
+
+P1–P8 all landed on `ocaml-port` (head `4afa8e5`): mcp-caps (M0–M4), router,
+models+sanitize, config, provider contract + freeserp/anysearch, engines +
+health + usage, fetch stack over the Net grant, agent mode, and the P8 server
+(both transports, dashboard, REST projection, CLI verbs, surface manifest).
+Gate state at merge: `dune build` clean, `dune runtest` 934 cases green,
+scripted stdio initialize + tools/list returns exactly `search`, `fetch`,
+`answer`, `--check` exits 0. Conformance against the pinned official runner is
+10/37 on this fixture's declared surface (three tools only) versus the phase-1
+baseline 19/18 — the delta is declared-surface gaps, not regressions; mcp-kit's
+37/37 remains upstream's control, not this server's claim.
