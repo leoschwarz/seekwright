@@ -25,6 +25,11 @@
 ../lib/config.cmx : \
     ../lib/config.cmi
 ../lib/config.cmi :
+../lib/dashboard_html.cmo : \
+    ../lib/dashboard_html.cmi
+../lib/dashboard_html.cmx : \
+    ../lib/dashboard_html.cmi
+../lib/dashboard_html.cmi :
 ../lib/engine.cmo : \
     ../lib/usage.cmi \
     ../lib/sanitize.cmi \
@@ -61,6 +66,15 @@
 ../lib/health.cmi : \
     ../lib/provider.cmi \
     ../lib/config.cmi
+../lib/log.cmo : \
+    ../lib/config.cmi \
+    ../lib/log.cmi
+../lib/log.cmx : \
+    ../lib/config.cmx \
+    ../lib/log.cmi
+../lib/log.cmi : \
+    ../lib/engine.cmi \
+    ../lib/config.cmi
 ../lib/model.cmo : \
     ../lib/sanitize.cmi \
     ../lib/model.cmi
@@ -68,6 +82,13 @@
     ../lib/sanitize.cmx \
     ../lib/model.cmi
 ../lib/model.cmi :
+../lib/prompts.cmo : \
+    ../lib/agent.cmi \
+    ../lib/prompts.cmi
+../lib/prompts.cmx : \
+    ../lib/agent.cmx \
+    ../lib/prompts.cmi
+../lib/prompts.cmi :
 ../lib/provider.cmo : \
     ../lib/model.cmi \
     ../lib/provider.cmi
@@ -86,6 +107,32 @@
 ../lib/sanitize.cmx : \
     ../lib/sanitize.cmi
 ../lib/sanitize.cmi :
+../lib/server.cmo : \
+    ../lib/usage.cmi \
+    ../lib/router.cmi \
+    ../lib/prompts.cmi \
+    ../lib/model.cmi \
+    ../lib/engine.cmi \
+    ../lib/dashboard_html.cmi \
+    ../lib/config.cmi \
+    ../lib/agent.cmi \
+    ../lib/server.cmi
+../lib/server.cmx : \
+    ../lib/usage.cmx \
+    ../lib/router.cmx \
+    ../lib/prompts.cmx \
+    ../lib/model.cmx \
+    ../lib/engine.cmx \
+    ../lib/dashboard_html.cmx \
+    ../lib/config.cmx \
+    ../lib/agent.cmx \
+    ../lib/server.cmi
+../lib/server.cmi : \
+    ../lib/usage.cmi \
+    ../lib/model.cmi \
+    ../lib/engine.cmi \
+    ../lib/config.cmi \
+    ../lib/agent.cmi
 ../lib/usage.cmo : \
     ../lib/config.cmi \
     ../lib/usage.cmi

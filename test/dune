@@ -239,3 +239,19 @@
 (test
  (name test_agent)
  (libraries seekwright mcp-caps uri yojson alcotest unix))
+
+; P8: the server module — the three tools through the capability registry, the
+; custom routes behind the Host allowlist, and the frozen-surface data. The app
+; is built from stub providers and a stub fetcher, so the suite needs the
+; library, the capability layer, mcp-kit (to dispatch JSON-RPC lines) and
+; yojson; no transport and no loop.
+(test
+ (name test_p8_server)
+ (libraries seekwright mcp-caps mcp-kit yojson alcotest))
+
+; P8: the journal-field pin behind the surface manifest. The journal is a real
+; file under a scratch root, so the suite owns an Eio loop (the recorder's
+; appends go through Eio.Path) and Unix (the fixture directory).
+(test
+ (name test_p8_surface)
+ (libraries seekwright alcotest eio eio_main unix yojson))

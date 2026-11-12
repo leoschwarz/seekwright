@@ -20,5 +20,23 @@
 (library
  (name seekwright)
  (public_name seekwright)
- (libraries digestif mcp-caps eio toml uri yojson))
+ ; P8 adds the server module: mcp-kit for [Mcp_kit.Server.t], the two
+ ; cohttp-eio transports ([serve_http] routes [/mcp] to the adapter's handler
+ ; and the custom routes around it), the [http] message model, and [cstruct]/
+ ; [ipaddr] for the request-replay tap and the bind address. The loop runner
+ ; (eio_main) stays out: a library must not call [Eio_main.run], so bin/ owns
+ ; the loop and hands the library an [Eio.Stdenv.t].
+ (libraries
+  digestif
+  mcp-caps
+  eio
+  toml
+  uri
+  yojson
+  mcp-kit
+  mcp-kit-cohttp-eio
+  cohttp-eio
+  http
+  cstruct
+  ipaddr))
 

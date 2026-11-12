@@ -1,0 +1,1 @@
+INFO startup providers="exa:free,freeserp,parallel:free" default_provider=null providers_defaulted=true fetch=true fetch_extractor="stdlib" fetch_primary="http" agent=null
