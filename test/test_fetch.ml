@@ -86,36 +86,48 @@ let blocked_schemes =
     "gopher://example.com/";
   ]
 
-let assert_url_blocked ?needle f =
+(* The URL gate answers with a value: [validate_url] used to raise an exception
+   that shared its name with the [Url_blocked] constructor of [Fetcher.refusal],
+   so a [match] on one and a [with] on the other looked the same on the page
+   (style review M11). Every case below therefore reads a [result], and the type
+   is what pins it — a raise here would not compile against [fetcher.mli]. *)
+
+let assert_url_refused ?needle f =
   match f () with
-  | exception F.Url_blocked msg -> (
+  | Error msg -> (
       match needle with
       | Some needle when not (contains_substring msg needle) ->
           A.failf "message %S lacks %S" msg needle ()
       | _ -> ())
-  | _ -> A.fail "expected Url_blocked"
+  | Ok url -> A.failf "expected a refusal, got %S" url
+
+let expect_url url =
+  match F.validate_url url with
+  | Ok normalised -> normalised
+  | Error message -> A.failf "%S refused: %s" url message
 
 let test_non_http_schemes_are_refused () =
   List.iter
-    (fun url -> assert_url_blocked ~needle:"not fetchable" (fun () -> F.validate_url url))
+    (fun url -> assert_url_refused ~needle:"not fetchable" (fun () -> F.validate_url url))
     blocked_schemes
 
 let test_credentials_are_refused_not_stripped () =
-  assert_url_blocked ~needle:"credentials" (fun () ->
+  assert_url_refused ~needle:"credentials" (fun () ->
     F.validate_url "http://user:secret@example.com/")
 
 let test_missing_host_is_refused () =
-  assert_url_blocked ~needle:"no host" (fun () -> F.validate_url "http:///path-only")
+  assert_url_refused ~needle:"no host" (fun () -> F.validate_url "http:///path-only")
 
 let test_ordinary_url_passes_and_keeps_its_query () =
-  A.check A.string "unchanged" "https://e.com/a?b=1" (F.validate_url "https://e.com/a?b=1")
+  A.check A.string "unchanged" "https://e.com/a?b=1"
+    (expect_url "https://e.com/a?b=1")
 
 let test_fragment_is_dropped () =
-  A.check A.string "fragment gone" "https://e.com/a" (F.validate_url "https://e.com/a#frag")
+  A.check A.string "fragment gone" "https://e.com/a" (expect_url "https://e.com/a#frag")
 
 let test_an_unsendable_port_is_refused () =
   List.iter
-    (fun url -> assert_url_blocked ~needle:"port" (fun () -> F.validate_url url))
+    (fun url -> assert_url_refused ~needle:"port" (fun () -> F.validate_url url))
     [
       "https://example.com:99999/";
       "https://example.com:70000/";
@@ -124,10 +136,10 @@ let test_an_unsendable_port_is_refused () =
     ]
 
 let test_an_ordinary_port_passes () =
-  A.check A.string "port kept" "https://e.com:8443/a" (F.validate_url "https://e.com:8443/a")
+  A.check A.string "port kept" "https://e.com:8443/a" (expect_url "https://e.com:8443/a")
 
 let test_the_scheme_is_lowercased_and_an_empty_path_becomes_root () =
-  A.check A.string "normalised" "https://e.com/" (F.validate_url "HTTPS://e.com")
+  A.check A.string "normalised" "https://e.com/" (expect_url "HTTPS://e.com")
 
 (* {1 Image sniffing} *)
 

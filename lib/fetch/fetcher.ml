@@ -33,8 +33,6 @@ type error =
   | Refusal of refusal
   | Failed of string
 
-exception Url_blocked of string
-
 let default_user_agent = "seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright)"
 
 let uncapped = 2_147_483_647
@@ -79,10 +77,10 @@ let ascii_lower s =
    byte reached the message raw (style review H2). *)
 let py_repr = Repr.py_repr_ascii
 
-(* [validate_url] without the exception: the fetch chain turns a hop-0 refusal
-   into [Url_blocked] and a later hop's into [Redirect_blocked]. *)
+(* The URL gate returns a value: the fetch chain turns a hop-0 refusal into
+   [Url_blocked] and a later hop's into [Redirect_blocked]. *)
 
-let validate_url_opt (raw : string) : (string, string) result =
+let validate_url (raw : string) : (string, string) result =
   let s = String.trim raw in
   let n = String.length s in
   let scheme, rest =
@@ -193,11 +191,6 @@ let validate_url_opt (raw : string) : (string, string) result =
               let path = if path = "" then "/" else path in
               let query = match query with Some q when q <> "" -> "?" ^ q | _ -> "" in
               Ok (scheme_l ^ "://" ^ netloc ^ path ^ query)
-
-let validate_url raw =
-  match validate_url_opt raw with
-  | Ok url -> url
-  | Error message -> raise (Url_blocked message)
 
 (* {1 The response window} *)
 
@@ -310,7 +303,7 @@ let cap_body max_download_bytes (body : string) : string * bool =
   else (body, false)
 
 let rec fetch (t : t) (url : string) ~offset ~max_chars : (fetched_page, error) result =
-  match validate_url_opt url with
+  match validate_url url with
   | Error message -> Error (Refusal (Url_blocked message))
   | Ok current ->
       let rec chain current hop =
@@ -357,7 +350,7 @@ let rec fetch (t : t) (url : string) ~offset ~max_chars : (fetched_page, error) 
                       Uri.to_string
                         (Uri.resolve "" (Uri.of_string current) (Uri.of_string location))
                     in
-                    (match validate_url_opt target with
+                    (match validate_url target with
                     | Error message -> Error (Refusal (Redirect_blocked message))
                     | Ok target ->
                         (* A redirect from https to http is either a
