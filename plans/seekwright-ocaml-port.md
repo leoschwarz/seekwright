@@ -229,3 +229,19 @@ scripted stdio initialize + tools/list returns exactly `search`, `fetch`,
 10/37 on this fixture's declared surface (three tools only) versus the phase-1
 baseline 19/18 — the delta is declared-surface gaps, not regressions; mcp-kit's
 37/37 remains upstream's control, not this server's claim.
+
+## 8. CI (2026-11-12)
+
+F0.2 registered `.github/workflows/ci-ocaml.yml`, a separate workflow so the
+Python jobs in `ci.yml` keep their behaviour. It triggers on pull requests,
+`main` and `ocaml-port`, pins `ocaml/setup-ocaml` (v3.9.1) and `actions/cache`
+(v6.1.0) by verified commit, installs `libgmp-dev` and the opam dependencies
+(`--deps-only --with-test --with-doc`), then runs the ordinary gate verbatim —
+`dune build @install`, `dune runtest --force`, `dune build @doc` — plus the
+read-only `tools.surface`, `tools.value_sets` and `tools.egress_lists` checks.
+The `_opam` cache is keyed on the exact compiler (`5.3.0`) and the committed
+manifests, never the opam-repository head. No live or billed step is reachable.
+Run mechanics, pin verification and the local `odoc` prerequisite are recorded
+in `plans/infra-setup.md`, "CI: the OCaml gate"; the exit observation (a
+documentation-only change proving the job runs) is made on the pull request that
+carries this workflow, not from a local checkout.

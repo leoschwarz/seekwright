@@ -1,7 +1,7 @@
 # Dev environment / infra setup — ocaml-port
 
 Status: verified on this machine (vps-01, Debian 13 "trixie", x86_64), 2026-11-10.
-Recreate from scratch with the steps below.
+Recreate from scratch with the steps below. The CI lane (F0.2) is at the end.
 
 ## System packages (apt)
 
@@ -195,4 +195,79 @@ connects to it, so no scenario reaches the public internet. `run_live.sh` record
 `node-version.txt`, `npm-version.txt` and `runner-version.txt` in its output
 directory beside the raw results. See `test/conformance/README.md` for what the
 run is and what it measured.
+
+## CI: the OCaml gate (2026-11-12, F0.2)
+
+`.github/workflows/ci-ocaml.yml` is a separate workflow, not a job inside
+`ci.yml`, so the Python lanes keep their current behaviour and a change to one
+cannot silently drop the other. It runs on pull requests, pushes to `main` and
+`ocaml-port`, and manual dispatch — the `ocaml-port` trigger is what stops the
+working branch looking green because `ci.yml` names only `main`.
+
+Its steps, in order:
+
+1. `sudo apt-get install -y libgmp-dev`. zarith's C stub (via `tls` →
+   `mirage-crypto-pk`) links `-lgmp`. A machine with a real `libgmp-dev` needs
+   none of the local GMP exports above.
+2. `actions/cache` restores the local switch `_opam` with the key
+   `opam-<runner.os>-<compiler>-<hash(dune-project, *.opam)>`, prefix-restoring
+   the compiler when the manifests changed. The key names the compiler and the
+   committed manifests, **not** the opam-repository head: a repository snapshot
+   that moves is not a dependency change and would make the cache key claim a
+   reproducibility it does not have. The trade-off (documented in
+   `ocaml/setup-ocaml`'s own caching warning) is that a restored switch can hold
+   package versions resolved earlier; `opam install --deps-only` still runs and
+   re-resolves from the current repository, and only the compiler and already
+   installed packages are reused. Delete the cache or bump `OCAML_COMPILER` when
+   that is not wanted.
+3. `ocaml/setup-ocaml` pinned to the commit `v3.9.1` resolved to, with
+   `ocaml-compiler: "5.3.0"` (exact, not `5.3.x`, which would take whatever
+   patch release opam-repository currently carries) and `cache: false` so the
+   explicit step above is the only cache.
+4. `opam install . --deps-only --with-test --with-doc -y`. `--with-test` supplies
+   alcotest/eio_main; `--with-doc` supplies `odoc`, which `dune build @doc`
+   requires. Locally that is `opam install odoc`.
+5. The ordinary gate from `AGENTS.md` verbatim: `dune build @install`,
+   `dune runtest --force`, `dune build @doc`. `dune runtest` also runs the
+   negative-compilation pins in `test/should_not_compile/` and the
+   `ocaml-tools/` surface and embedded-resource diffs, so those need no separate
+   step.
+6. `astral-sh/setup-uv` (same pinned SHA as `ci.yml`) and the three read-only
+   Python checks: `uv lock --check`, `uv sync`, then
+   `uv run python -m tools.surface --check`, `tools.value_sets --check` and
+   `tools.egress_lists --check`. Python lint/type/test stay in `ci.yml`.
+
+No step sets `SEEKWRIGHT_LIVE_TESTS`, so no live or billed call is reachable
+from this workflow.
+
+### Pin verification (2026-11-12)
+
+The setup action is `ocaml/setup-ocaml`; `actions/setup-ocaml` does not exist.
+
+```sh
+curl -sS https://api.github.com/repos/ocaml/setup-ocaml/git/ref/tags/v3.9.1
+# refs/tags/v3.9.1 -> ff66428f72b64472e749b22e0ad4dded4b2ddca6, type: commit
+# (lightweight tag: no annotated-tag hop through /git/tags/<sha>)
+curl -sS https://api.github.com/repos/actions/cache/git/ref/tags/v6.1.0
+# refs/tags/v6.1.0 -> 55cc8345863c7cc4c66a329aec7e433d2d1c52a9, type: commit
+```
+
+A bump repeats those calls for the new tag, rewrites the SHA in the workflow
+and its comment, and records the new tag/date here.
+
+### Local `dune build @doc` needs `odoc`
+
+`dune build @doc` fails with `Program odoc not found in the tree or in PATH` on a
+switch without it. `opam install odoc` is the fix. If `odoc-parser` then fails
+with `Unbound module "Stream"`, the system `camlp-streams` (Debian ships it
+without `.cmi` files) is shadowing the switch's copy in findlib's path; install
+with the switch's lib path first:
+
+```sh
+OCAMLPATH=$HOME/.opam/default/lib opam install odoc
+```
+
+Both were hit on this machine on 2026-11-12; the CI runner is a fresh switch and
+needs neither workaround.
+
 

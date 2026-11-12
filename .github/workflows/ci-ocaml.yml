@@ -1,0 +1,101 @@
+name: CI (OCaml)
+
+# The port's gate, beside the Python jobs rather than inside them (F0.2,
+# plans/ocaml-finalisation.md). It is a separate workflow so a change to the
+# Python lane cannot silently drop the OCaml one, and it names ocaml-port as
+# well as main so the working branch cannot look green merely because ci.yml
+# triggers on main alone. No step here contacts a provider: the live suites are
+# only reachable behind SEEKWRIGHT_LIVE_TESTS, which this file never sets.
+on:
+  push:
+    branches: [main, ocaml-port]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Exact, not a range: this string is also one half of the opam cache key
+  # below, so a compiler bump rebuilds the switch instead of reusing a
+  # mismatched one.
+  OCAML_COMPILER: "5.3.0"
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Actions are pinned to the commit a release tag resolved to, never the
+      # tag itself: a tag is mutable upstream (docs/reference/publishing.md).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # zarith, pulled in by tls -> mirage-crypto-pk, links -lgmp. The opam
+      # switch does not install system packages for the runner, so this is the
+      # one apt step; plans/infra-setup.md records the same fact for the host.
+      - name: install libgmp-dev
+        run: sudo apt-get update && sudo apt-get install -y libgmp-dev
+
+      # Verified 2026-11-12 against
+      # GET /repos/ocaml/setup-ocaml/git/ref/tags/v3.9.1: refs/tags/v3.9.1 is
+      # a lightweight tag whose object is the commit below (type "commit"), so
+      # there is no annotated tag to follow. The action lives at
+      # ocaml/setup-ocaml; actions/setup-ocaml does not exist.
+      - name: restore the local switch
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0, tag verified 2026-11-12
+        with:
+          path: _opam
+          # Compiler version plus the committed manifests, never the opam
+          # repository head: a moving repository snapshot is not a dependency
+          # change, and a cache keyed on it would claim a reproducibility it
+          # does not have. The restore-keys prefix lets a manifest bump reuse
+          # the compiler while `opam install --deps-only` re-resolves packages.
+          key: opam-${{ runner.os }}-${{ env.OCAML_COMPILER }}-${{ hashFiles('dune-project', '*.opam') }}
+          restore-keys: |
+            opam-${{ runner.os }}-${{ env.OCAML_COMPILER }}-
+
+      - uses: ocaml/setup-ocaml@ff66428f72b64472e749b22e0ad4dded4b2ddca6
+        with:
+          ocaml-compiler: ${{ env.OCAML_COMPILER }}
+          # The cache step above is the only one: the action's own key is built
+          # from the compiler and repository URLs, not the dependency manifest.
+          cache: false
+
+      # --with-test supplies alcotest/eio_main; --with-doc supplies odoc, which
+      # `dune build @doc` needs. Both package manifests in the root are covered.
+      - name: install opam dependencies
+        run: opam install . --deps-only --with-test --with-doc -y
+
+      # The ordinary gate from AGENTS.md and plans/ocaml-finalisation.md §3,
+      # command for command.
+      - name: build @install
+        run: dune build @install
+
+      # This is also the negative-compilation lane: test/should_not_compile
+      # diffs each must-not-compile program, and ocaml-tools/ diffs the surface
+      # manifest and the embedded prompt copy against the read-only Python tree.
+      - name: run tests
+        run: dune runtest --force
+
+      - name: build @doc
+        run: dune build @doc
+
+      # Frozen values are shared with the Python oracle, so the three read-only
+      # checks run here too. The action and SHA are ci.yml's; the Python lint,
+      # type and test lanes stay in ci.yml and are not duplicated.
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          enable-cache: true
+
+      - run: uv lock --check
+      - run: uv sync
+
+      - name: check the frozen surface manifest
+        run: uv run python -m tools.surface --check
+
+      - name: check the frozen value sets
+        run: uv run python -m tools.value_sets --check
+
+      - name: check the rendered egress lists
+        run: uv run python -m tools.egress_lists --check
