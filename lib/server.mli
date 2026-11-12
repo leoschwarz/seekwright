@@ -14,7 +14,9 @@
 
     One listener serves [/mcp] plus the custom routes, routed by path in
     {!serve_http}: [GET /healthz] (outside the Host allowlist, secret-free:
-    provider names and uptime only), the dashboard routes ([GET /dashboard],
+    the providers this build can dispatch and uptime only — a configured name
+    with no adapter is not listed, and the startup warning names it), the
+    dashboard routes ([GET /dashboard],
     [GET /dashboard/data], [GET /dashboard/metrics], registered only when
     [[dashboard] enabled = true]) and the REST projection
     ([POST /api/v1/search], [POST /api/v1/fetch], [POST /api/v1/answer]) —

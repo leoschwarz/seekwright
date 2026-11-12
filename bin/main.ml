@@ -839,10 +839,14 @@ let run_client ~env command argv =
 
 (* ----------------------------------------------------------------- server *)
 
-let startup_log log config =
+let startup_log log config unsupported =
   log Config.Log_info "startup"
     [
       ("providers", `String (String.concat "," (Config.enabled_providers config)));
+      ( "unsupported",
+        (match unsupported with
+        | [] -> `Null
+        | names -> `String (String.concat "," names)) );
       ( "default_provider",
         (match config.Config.default_provider with
         | Some name -> `String name
@@ -894,15 +898,21 @@ let run_server ~env ~sw opts =
       | missing ->
           prerr_endline ("seekwright: agent mode is enabled but missing " ^ String.concat ", " missing);
           exit 1);
-      startup_log log config;
       match
         Factory.build_app ~sw ~env ~now:Unix.gettimeofday ~log ~allowed_hosts:opts.allowed_hosts config
       with
       | Error message ->
           prerr_endline ("seekwright: " ^ message);
           exit 1
-      | Ok app -> (
-          match Server.mcp_server app with
+      | Ok (app, built) ->
+          startup_log log config built.Factory.unsupported;
+          if built.Factory.unsupported <> [] then
+            log Config.Log_warning "startup.providers_unsupported"
+              [
+                ( "unsupported",
+                  `String (String.concat "," built.Factory.unsupported) );
+              ];
+          (match Server.mcp_server app with
           | Error (Caps.Server.Duplicate_tool name) ->
               prerr_endline ("seekwright: duplicate tool: " ^ name);
               exit 1

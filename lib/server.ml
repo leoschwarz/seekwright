@@ -399,19 +399,19 @@ let parse_json_body body =
   | _ -> Error "Body must be a JSON object."
 
 let healthz app =
+  let built = Engine.Search.providers app.search in
   json_response 200
     (`Assoc
        [
          ("status", `String "ok");
-         ( "providers",
-           `List
-             (List.map
-                (fun name -> `String name)
-                (Config.enabled_providers app.config)) );
+         (* The dispatchable set, not the configured one: a name this build has
+            no adapter for is not a provider it has, and the startup warning
+            is where the operator reads that. *)
+         ("providers", `List (List.map (fun name -> `String name) built));
          ( "default_provider",
            (match app.config.Config.default_provider with
-           | Some name -> `String name
-           | None -> `Null) );
+           | Some name when List.mem name built -> `String name
+           | _ -> `Null) );
          ( "uptime_s",
            `Int (int_of_float (app.mono_now () -. app.started_at)) );
        ])

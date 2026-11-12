@@ -1,10 +1,15 @@
 (* Construction from config and environment. Port of
    [src/seekwright/factory.py]; see [factory.mli] for the shape.
 
-   Only the two keyless HTTP adapters this build carries (P4) are built here;
-   the other fifteen names have no adapter yet and are skipped, exactly as
-   Python skips a name missing its key. Each built adapter gets its own
-   endpoint-scoped grant, so the provider can dial only its own vendor. *)
+   Only the two keyless HTTP adapters this build carries (P4) are built here.
+   The other fifteen names have no adapter yet, so they are skipped and
+   disclosed: [build_providers] returns them as [unsupported], and the startup
+   line binds that list so an operator reads which names this build cannot
+   dispatch. That is deliberately *not* Python's behaviour — Python raises on an
+   enabled provider without a key and never skips — so the port says the
+   absence out loud instead of leaving a config name looking served. Each built
+   adapter gets its own endpoint-scoped grant, so the provider can dial only its
+   own vendor. *)
 
 module Caps = Mcp_caps
 module Authority = Caps.Authority
@@ -29,6 +34,7 @@ type providers = {
   probe_table : (Config.name * Health.probe_spec) list;
   endpoints : Policy.endpoint list;
   grant_errors : (Config.name * string) list;
+  unsupported : Config.name list;
 }
 
 (* One endpoint-scoped grant per adapter: the only network path a provider
@@ -77,24 +83,25 @@ let cost_of (pc : Config.provider_config) = Option.value ~default:0.0 pc.Config.
 
 let build_providers ~sw ~net ~mono_clock ~now config =
   let snippet_chars = config.Config.policy.Config.max_snippet_chars in
-  let rec go built table endpoints errors = function
+  let rec go built table endpoints errors unsupported = function
     | [] ->
         {
           built = List.rev built;
           probe_table = List.rev table;
           endpoints = List.rev endpoints;
           grant_errors = List.rev errors;
+          unsupported = List.rev unsupported;
         }
     | (name, pc0) :: rest ->
         let (pc : Config.provider_config) = pc0 in
-        if not pc.Config.enabled then go built table endpoints errors rest
+        if not pc.Config.enabled then go built table endpoints errors unsupported rest
         else
           match List.assoc_opt name adapters with
-          | None -> go built table endpoints errors rest
+          | None -> go built table endpoints errors (name :: unsupported) rest
           | Some adapter -> (
               match grant_of_endpoint ~sw ~net ~mono_clock adapter.endpoint with
               | Error message ->
-                  go built table endpoints ((name, message) :: errors) rest
+                  go built table endpoints ((name, message) :: errors) unsupported rest
               | Ok grant ->
                   let net = Provider.Net.of_grant grant in
                   let provider =
@@ -111,9 +118,9 @@ let build_providers ~sw ~net ~mono_clock ~now config =
                     ((name, provider) :: built)
                     (row :: table)
                     (adapter.endpoint :: endpoints)
-                    errors rest)
+                    errors unsupported rest)
   in
-  go [] [] [] [] config.Config.providers
+  go [] [] [] [] [] config.Config.providers
 
 let build_extractor config =
   match config.Config.fetch.Config.extractor with
@@ -279,13 +286,14 @@ let build_app ~sw
                           ?fetch_engine:fetch ~usage ~log ~clock:mono_now ~now ()))
           in
           Ok
-            {
-              Server.config;
-              search;
-              usage;
-              fetch;
-              agent;
-              started_at = mono_now ();
-              mono_now;
-              allowed_hosts;
-            })
+            ( {
+                Server.config;
+                search;
+                usage;
+                fetch;
+                agent;
+                started_at = mono_now ();
+                mono_now;
+                allowed_hosts;
+              },
+              built ))

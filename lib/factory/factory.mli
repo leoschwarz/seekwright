@@ -18,7 +18,8 @@ type providers = {
   built : (Seekwright.Config.name * Seekwright.Provider.t) list;
   (** The adapters this deployment can dispatch, in config order. A name with
       no adapter in this build (the MCP-backed and keyed adapters deferred past
-      P4) is absent, exactly as a Python name missing its key is. *)
+      P4) is absent — and is listed in [unsupported] rather than silently
+      dropped; Python raises for a missing key and never skips. *)
   probe_table : (Seekwright.Config.name * Seekwright.Health.probe_spec) list;
   (** The [--check] probe rows for the built names, built from the adapters'
       own endpoint constants. *)
@@ -28,6 +29,10 @@ type providers = {
   grant_errors : (Seekwright.Config.name * string) list;
   (** Names whose grant could not be constructed (a missing trust store, say).
       [--check] reports them as problems; {!build_app} refuses to start. *)
+  unsupported : Seekwright.Config.name list;
+  (** Enabled names this build has no adapter for, in config order. The startup
+      line binds them and emits [startup.providers_unsupported], so the silence
+      that used to make a config name look served is gone. *)
 }
 
 val build_providers :
@@ -72,9 +77,11 @@ val build_app :
   log:Seekwright.Engine.log ->
   allowed_hosts:string list ->
   Seekwright.Config.t ->
-  (Seekwright.Server.app, string) result
+  (Seekwright.Server.app * providers, string) result
 (** Build the process-wide {!Seekwright.Server.app}: the usage recorder (a bad
     [dashboard.history_path] is a config problem and reads as one), the shared
     health board, the search engine over the built providers, the fetch engine
     when enabled, and the agent engine when enabled (its model endpoint gets
-    its own endpoint-scoped grant over [[agent] base_url]). *)
+    its own endpoint-scoped grant over [[agent] base_url]). The {!providers}
+    pass travels back with the app so the startup line can bind the names this
+    build could not dispatch. *)

@@ -355,6 +355,18 @@ let healthz_is_secret_free_and_exempt _ =
     (match field "uptime_s" body with `Int n -> n | _ -> -1);
   check_bool "no key or secret field is present" false
     (contains ok.Server.body "api_key" || contains ok.Server.body "key");
+  (* A configured name this build has no adapter for is not a provider it has:
+     /healthz reports the dispatchable set, and the startup warning names the
+     rest. *)
+  let undeployable = make_app [ "serper"; "exa:free" ] in
+  let body =
+    Yojson.Safe.from_string
+      (Server.handle_custom undeployable ~meth:"GET" ~path:"/healthz" ~host:None
+         ~origin:None ~body:"")
+        .Server.body
+  in
+  check_bool "an unbuilt configured name is not advertised" true
+    (match field "providers" body with `List [ `String "serper" ] -> true | _ -> false);
   (* A kubelet probes with the pod IP in Host; /healthz must still answer. *)
   let probed =
     Server.handle_custom app ~meth:"GET" ~path:"/healthz" ~host:(Some "10.0.0.5") ~origin:None ~body:""

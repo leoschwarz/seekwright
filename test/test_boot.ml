@@ -42,7 +42,18 @@ let test_the_default_config_builds_the_app () =
       Config.default
   with
   | Error message -> A.failf "the default app was refused: %s" message
-  | Ok _ -> ()
+  | Ok (_app, _built) -> ()
+
+let test_the_names_this_build_cannot_dispatch_are_reported () =
+  with_env @@ fun ~env ~sw ->
+  let built =
+    Factory.build_providers ~sw ~net:(env#net) ~mono_clock:(env#mono_clock)
+      ~now:Unix.gettimeofday Config.default
+  in
+  A.(check (list string) "the keyless names with no adapter"
+       [ "exa:free"; "parallel:free" ] built.Factory.unsupported);
+  A.(check (list string) "the one this build carries" [ "freeserp" ]
+       (List.map fst built.Factory.built))
 
 let () =
   Mirage_crypto_rng_unix.use_default ();
@@ -58,5 +69,7 @@ let () =
             test_the_default_fetch_stack_builds;
           A.test_case "the default app builds" `Quick
             test_the_default_config_builds_the_app;
+          A.test_case "unbuildable names are disclosed" `Quick
+            test_the_names_this_build_cannot_dispatch_are_reported;
         ] );
     ]
