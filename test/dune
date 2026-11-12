@@ -1,3 +1,11 @@
+; [test_support] is the private library under [support/]: the substring search,
+; the file read and the [Alcotest] aliases the suites share. It has one copy of
+; each helper and one argument order, which is the point — [contains] arrived
+; with two of them ([text needle] in most suites, [needle haystack] in
+; [test_config]) and a swapped pair of [string]s typechecks either way, so the
+; shared one names its arguments. A suite whose helper is genuinely its own (a
+; split over a literal delimiter, an assertion wrapper) still keeps it locally.
+
 (test
  (name test_error)
  (libraries mcp-caps alcotest))
@@ -12,7 +20,7 @@
 ; dependency story.
 (test
  (name test_router)
- (libraries seekwright alcotest))
+ (libraries seekwright alcotest test_support))
 
 ; The port of tests/test_router.py's stdlib-only case, as a dependency fact.
 ; Two checks, and each catches what the other cannot: a reference to
@@ -48,12 +56,12 @@
 ; The suite may speak mcp-kit: only the library's own core may not.
 (test
  (name test_server)
- (libraries mcp-caps mcp-kit yojson alcotest))
+ (libraries mcp-caps mcp-kit yojson alcotest test_support))
 
 ; Reads the library's sources, so they have to be in the build sandbox.
 (test
  (name test_core_no_mcp_kit)
- (libraries mcp-caps alcotest)
+ (libraries mcp-caps alcotest test_support)
  (deps (glob_files ../lib/caps/*.ml)))
 
 ; The filesystem grant is tested against a real backend, so this suite owns an
@@ -62,13 +70,13 @@
 ; test_core_no_mcp_kit.ml guards.
 (test
  (name test_authority_fs)
- (libraries mcp-caps alcotest eio eio_main unix))
+ (libraries mcp-caps alcotest test_support eio eio_main unix))
 
 ; Same: this suite serves tools over mcp-kit and builds fixture trees with
 ; Unix, so it holds a loop and the transport the core itself never names.
 (test
  (name test_grant_wiring)
- (libraries mcp-caps mcp-kit yojson alcotest eio eio_main unix))
+ (libraries mcp-caps mcp-kit yojson alcotest test_support eio eio_main unix))
 
 ; M2: the same server over Streamable HTTP. This is the only place in the tree
 ; that runs a cohttp-eio listener and a client, and it uses real loopback TCP
@@ -87,7 +95,7 @@
   uri
   eio
   eio_main
-  alcotest
+  alcotest test_support
   unix))
 
 ; M3: the network grant. The fixture is a real loopback HTTP server (so it needs
@@ -99,7 +107,7 @@
  (name test_authority_net)
  (libraries
   mcp-caps
-  alcotest
+  alcotest test_support
   eio
   cohttp-eio
   http
@@ -117,7 +125,7 @@
 
 (test
  (name test_sanitize)
- (libraries seekwright yojson alcotest))
+ (libraries seekwright yojson alcotest test_support))
 
 ; P3: config loading and validation, ported from tests/test_config.py. The
 ; suite reads the two operator pages beside the model — the documented example
@@ -127,7 +135,7 @@
 ; against the same text a reader of the repo sees.
 (test
  (name test_config)
- (libraries seekwright alcotest unix)
+ (libraries seekwright alcotest test_support unix)
  (deps
   ../docs/reference/configuration.md
   ../docs/reference/deploying.md))
@@ -138,7 +146,7 @@
 (test
  (name test_grant_timeouts)
  (libraries seekwright seekwright.factory mcp-caps uri yojson eio eio_main
-   mirage-crypto-rng.unix unix alcotest)
+   mirage-crypto-rng.unix unix alcotest test_support)
  (deps ../lib/factory/factory.ml))
 
 ; P8: the server-side health monitor. An injected sleep pins the loop's order,
@@ -167,7 +175,7 @@
 ; to the test, and dune would otherwise let it read a tree it did not declare.
 (test
  (name test_provider)
- (libraries seekwright mcp-caps yojson alcotest)
+ (libraries seekwright mcp-caps yojson alcotest test_support)
  (deps
   (glob_files ../lib/provider.ml)
   (glob_files ../lib/provider.mli)
@@ -179,18 +187,18 @@
 ; and the request that would have gone out is asserted on instead.
 (test
  (name test_freeserp)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
 
 (test
  (name test_anysearch)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
 
 ; The shared failure rows, driven over every adapter module on disk. The
 ; (deps) line is what lets the suite count those modules rather than trust the
 ; list in its own source.
 (test
  (name test_provider_contract)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support)
  (deps (glob_files ../lib/providers/*.ml)))
 
 ; P5: the health board and its probe. The board's clock is injected, so the
@@ -207,7 +215,7 @@
 ; in for a broken volume).
 (test
  (name test_usage)
- (libraries seekwright alcotest eio eio_main unix yojson))
+ (libraries seekwright alcotest test_support eio eio_main unix yojson))
 
 ; P5: the search engine. The stub providers are [Provider.S] modules closing over
 ; mutable state, the log is an injected sink, and one case drives a real adapter
@@ -215,14 +223,14 @@
 ; capability layer the fake speaks, and [uri] for its request records.
 (test
  (name test_engine)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
 
 ; P5: the fetch engine. The page readers and the document grammars are P6, so the
 ; suite hands [Engine.Fetch] a stub [Readers] and drives the route, the notices,
 ; the escape pass and the journal around it; no adapter and no network is built.
 (test
  (name test_fetch_engine)
- (libraries seekwright yojson alcotest))
+ (libraries seekwright yojson alcotest test_support))
 
 ; P6: the fetch stack's pure half — URL validation, windowing, image sniffing,
 ; the extractor plumbing, passage selection and the stdlib backend. Ported from
@@ -230,7 +238,7 @@
 ; signature-table classes) and test_extractors.py.
 (test
  (name test_fetch)
- (libraries seekwright.fetch seekwright.fetch.stdlib alcotest))
+ (libraries seekwright.fetch seekwright.fetch.stdlib alcotest test_support))
 
 ; P6: the fetcher over a real loopback fixture and a [Policy.with_endpoints]
 ; grant — the networked guardrail cases. The grant's own address policy is
@@ -247,17 +255,17 @@
   eio_main
   uri
   yojson
-  alcotest))
+  alcotest test_support))
 
 ; P6: the JSON and table halves of the fetch path — the renderers' cases from
 ; tests/fetch/test_jsondoc.py and test_tabledoc.py.
 (test
  (name test_jsondoc)
- (libraries seekwright.fetch alcotest))
+ (libraries seekwright.fetch alcotest test_support))
 
 (test
  (name test_tabledoc)
- (libraries seekwright.fetch alcotest))
+ (libraries seekwright.fetch alcotest test_support))
 
 ; P7: agent mode. The real search and fetch engines run over stub providers and
 ; a stub fetcher; only the model endpoint is stubbed, through a fake
@@ -266,7 +274,7 @@
 ; Unix.
 (test
  (name test_agent)
- (libraries seekwright mcp-caps uri yojson alcotest unix))
+ (libraries seekwright mcp-caps uri yojson alcotest test_support unix))
 
 ; P8: the server module — the three tools through the capability registry, the
 ; custom routes behind the Host allowlist, and the frozen-surface data. The app
@@ -276,7 +284,7 @@
 ; dep because the flag-table guard reads the scanner's source.
 (test
  (name test_p8_server)
- (libraries seekwright mcp-caps mcp-kit http yojson alcotest)
+ (libraries seekwright mcp-caps mcp-kit http yojson alcotest test_support)
  (deps ../bin/main.ml))
 
 ; P8: the journal-field pin behind the surface manifest. The journal is a real
@@ -284,7 +292,7 @@
 ; appends go through Eio.Path) and Unix (the fixture directory).
 (test
  (name test_p8_surface)
- (libraries seekwright alcotest eio eio_main unix yojson))
+ (libraries seekwright alcotest test_support eio eio_main unix yojson))
 
 ; Foundation wave A: the shared text basis (style review H1/H2). The walk and
 ; the repr pass live in [seekwright.text] and the fetch path re-exports the
@@ -307,5 +315,5 @@
 ; only honest inputs when they are declared as deps.
 (test
  (name test_log)
- (libraries seekwright alcotest)
+ (libraries seekwright alcotest test_support)
  (deps (glob_files ../lib/*.mli)))

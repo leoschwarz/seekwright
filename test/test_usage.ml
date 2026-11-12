@@ -12,6 +12,7 @@
 module Config = Seekwright.Config
 module Usage = Seekwright.Usage
 module A = Alcotest
+open Test_support
 
 (* 2026-01-15T12:00:00Z. The one instant every case shares, so "today" and
    "fourteen days ago" are arithmetic rather than calendar-dependent. *)
@@ -106,13 +107,6 @@ let root = String.concat "/" root_parts
 
 let eio_path env parts =
   List.fold_left (fun acc part -> Eio.Path.(acc / part)) (Eio.Stdenv.fs env) parts
-
-let read_file path =
-  let ic = open_in_bin path in
-  let n = in_channel_length ic in
-  let content = really_input_string ic n in
-  close_in ic;
-  content
 
 let write_file path content =
   let oc = open_out_bin path in
@@ -629,24 +623,13 @@ let a_line_written_before_the_rename_still_renders () =
     A.(check int) "calls" 1 (int (get "calls" row));
     money "cost_usd" 0.001 (get "cost_usd" row)
 
-(* The stdlib this build has (5.3) gives no substring search, and the assertion
-   worth making is "this text does not contain that word". *)
-let has ~needle ~hay =
-  let nl = String.length needle and hl = String.length hay in
-  let rec go i =
-    if i + nl > hl then false
-    else if String.sub hay i nl = needle then true
-    else go (i + 1)
-  in
-  go 0
-
 let markers = [ "query"; "http"; "host"; "title"; "snippet"; "url" ]
 
 let no_marker label blob =
   List.iter
     (fun marker ->
       A.(check bool) (Printf.sprintf "%s carries no %s" label marker) false
-        (has ~needle:marker ~hay:blob))
+        (contains ~haystack:blob ~needle:marker))
     markers
 
 let the_series_is_content_free_and_the_journal_gains_no_field () =
@@ -777,8 +760,8 @@ let a_missing_parent_directory_names_the_path () =
   | Ok _ -> A.failf "a journal whose parent does not exist must not open"
   | Error message ->
       A.(check bool) "the sentence names the path the operator wrote" true
-        (has ~needle:"no-such-dir/usage.jsonl" ~hay:message);
-      A.(check bool) "and says why" true (has ~needle:"parent directory does not exist" ~hay:message)
+        (contains ~haystack:message ~needle:"no-such-dir/usage.jsonl");
+      A.(check bool) "and says why" true (contains ~haystack:message ~needle:"parent directory does not exist")
 
 let an_unwritable_path_is_a_startup_error () =
   (try Unix.mkdir root 0o755 with Unix.Unix_error (Unix.EEXIST, _, _) -> ());
@@ -795,8 +778,8 @@ let an_unwritable_path_is_a_startup_error () =
   match outcome with
   | Ok _ -> A.failf "an unwritable journal must not open"
   | Error message ->
-      A.(check bool) "the sentence names the path" true (has ~needle:"usage.jsonl" ~hay:message);
-      A.(check bool) "and says it is not writable" true (has ~needle:"not writable" ~hay:message)
+      A.(check bool) "the sentence names the path" true (contains ~haystack:message ~needle:"usage.jsonl");
+      A.(check bool) "and says it is not writable" true (contains ~haystack:message ~needle:"not writable")
 
 let the_journal_writes_its_keys_in_the_declared_order () =
   (* Field order is part of the append-only format, not an accident: a line

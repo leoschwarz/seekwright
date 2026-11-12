@@ -28,6 +28,7 @@ module Provider = Seekwright.Provider
 module Sanitize = Seekwright.Sanitize
 module Usage = Seekwright.Usage
 module A = Alcotest
+open Test_support
 
 let zwsp = Sanitize.zwsp
 
@@ -53,28 +54,13 @@ let float_of = function
   | `Float f -> f
   | v -> A.failf "not a money figure: %s" (Yojson.Safe.to_string v)
 
-let find_sub_from ?(start = 0) text needle =
-  let needle_length = String.length needle in
-  let haystack_length = String.length text in
-  let rec go index =
-    if index + needle_length > haystack_length then None
-    else if String.sub text index needle_length = needle then Some index
-    else go (index + 1)
-  in
-  go start
+let check_opt_bool = A.(check (option bool))
 
-let includes label needle text =
-  match find_sub_from text needle with
-  | Some _ -> ()
-  | None -> A.failf "%s: the text did not contain %S\n     it was: %S" label needle text
-
-let excludes label needle text =
-  match find_sub_from text needle with
-  | None -> ()
-  | Some _ -> A.failf "%s: the text contained %S, and must not\n     it was: %S" label needle text
-
+(* The one split the material parser needs: the delimiters are literal strings
+   and both halves are kept. A generic substring split, but only this suite
+   splits on anything, so it stays here rather than in [Test_support]. *)
 let split_once separator text =
-  match find_sub_from text separator with
+  match find_sub ~haystack:text ~needle:separator () with
   | None -> None
   | Some i ->
     Some
@@ -83,27 +69,19 @@ let split_once separator text =
 
 let rsplit_once separator text =
   let rec go from =
-    match find_sub_from ~start:from text separator with
+    match find_sub ~start:from ~haystack:text ~needle:separator () with
     | None -> None
     | Some i -> (
-      match find_sub_from ~start:(i + String.length separator) text separator with
+      match find_sub ~start:(i + String.length separator) ~haystack:text ~needle:separator () with
       | Some _ -> go i
       | None ->
         Some
           ( String.sub text 0 i,
             String.sub text (i + String.length separator) (String.length text - i - String.length separator) ))
   in
-  match find_sub_from text separator with
+  match find_sub ~haystack:text ~needle:separator () with
   | None -> None
   | Some first -> go first
-
-let check_string = A.(check string)
-let check_int = A.(check int)
-let check_bool = A.(check bool)
-let check_opt_string = A.(check (option string))
-let check_opt_bool = A.(check (option bool))
-let check_strings = A.(check (list string))
-let check_ints = A.(check (list int))
 
 (* {1 The wire fixtures} *)
 
@@ -604,7 +582,7 @@ let the_material_is_bounded_by_max_material_chars () =
   ignore (answered rig ());
   let m = material rig.model in
   if String.length m > cap then A.failf "the material was %d chars, over the cap %d" (String.length m) cap;
-  let has tag = match find_sub_from m tag with Some _ -> true | None -> false in
+  let has tag = contains ~haystack:m ~needle:tag in
   if not (has "[1]") then A.failf "no [1] in %S" m;
   if has "[2]" then A.failf "the numbering did not stop at the cap: %S" m
 

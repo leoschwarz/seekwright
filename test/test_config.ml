@@ -19,13 +19,13 @@
 
 module Config = Seekwright.Config
 module A = Alcotest
+open Test_support
 
 let strings = A.list A.string
 let maybe_string = A.option A.string
 (* Floats in this module are counts and ceilings read from TOML, so they are
    compared as magnitudes: an equality test on a decoded scalar would fail on a
    representation detail rather than on a decision. *)
-let number = A.float 1e-9
 let maybe_number = A.option number
 (* The two log vocabularies are frozen value sets, so the suite compares the
    constructor and prints the operator-facing spelling when it differs. *)
@@ -81,23 +81,10 @@ let named providers =
 let read path =
   if not (Sys.file_exists path) then
     A.failf "%s is missing from the test sandbox (test/dune declares it)" path;
-  let channel = open_in_bin path in
-  Fun.protect ~finally:(fun () -> close_in_noerr channel) (fun () ->
-    really_input_string channel (in_channel_length channel))
-
-let find_index needle haystack =
-  let n = String.length needle and m = String.length haystack in
-  let rec from i =
-    if i + n > m then None
-    else if String.sub haystack i n = needle then Some i
-    else from (i + 1)
-  in
-  from 0
-
-let contains needle haystack = find_index needle haystack <> None
+  read_file path
 
 let cut_at needle haystack =
-  match find_index needle haystack with
+  match find_sub ~haystack ~needle () with
   | Some at -> String.sub haystack 0 at
   | None -> haystack
 
@@ -106,19 +93,19 @@ let cut_at needle haystack =
 let fenced_block path heading language =
   let text = read path in
   let after_heading =
-    match find_index heading text with
+    match find_sub ~haystack:text ~needle:heading () with
     | Some at -> String.sub text at (String.length text - at)
     | None -> A.failf "%s has no %S heading" path heading
   in
   let fence = "```" ^ language in
   let after_fence =
-    match find_index fence after_heading with
+    match find_sub ~haystack:after_heading ~needle:fence () with
     | Some at ->
         let start = at + String.length fence in
         String.sub after_heading start (String.length after_heading - start)
     | None -> A.failf "%s has no %s block under %S" path language heading
   in
-  match find_index "```" after_fence with
+  match find_sub ~haystack:after_fence ~needle:"```" () with
   | Some at -> String.sub after_fence 0 at
   | None -> A.failf "%s leaves the %s block under %S unterminated" path language heading
 
@@ -135,7 +122,7 @@ let refuses_with needle outcome =
   match outcome with
   | Ok _ -> A.failf "expected a fault naming %S" needle
   | Error fault ->
-      if not (contains needle fault) then A.failf "fault %S does not name %S" fault needle
+      if not (contains ~haystack:fault ~needle) then A.failf "fault %S does not name %S" fault needle
 
 let refuses_exactly sentence outcome =
   match outcome with
@@ -151,7 +138,7 @@ let refuses_naming needles outcome =
   | Error fault ->
       List.iter
         (fun needle ->
-          if not (contains needle fault) then
+          if not (contains ~haystack:fault ~needle) then
             A.failf "fault %S does not name %S" fault needle)
         needles
 
@@ -582,8 +569,8 @@ let test_a_typo_is_a_startup_error (section, text) =
      operator edits and the key they typed *)
   (match Config.load None with
   | Error fault ->
-      if not (contains path fault) then A.failf "%s: the fault does not name %s" section path;
-      if not (contains "unknown key" fault) then A.failf "%s: %s" section fault
+      if not (contains ~haystack:fault ~needle:path) then A.failf "%s: the fault does not name %s" section path;
+      if not (contains ~haystack:fault ~needle:"unknown key") then A.failf "%s: %s" section fault
   | Ok _ -> A.failf "%s: the typo loaded silently" section);
   unsetenv "SEEKWRIGHT_CONFIG"
 
@@ -607,7 +594,7 @@ let deploying_doc = "../docs/reference/deploying.md"
    copies, so it is parsed and loaded here rather than quoted into this file. *)
 let documented_example () =
   let text = read configuration_doc in
-  match find_index "```toml" text with
+  match find_sub ~haystack:text ~needle:"```toml" () with
   | None -> A.failf "%s has no TOML example" configuration_doc
   | Some at ->
       let start = at + String.length "```toml" in
@@ -619,7 +606,7 @@ let documented_example () =
    documented text unchanged, which is what this case is about. *)
 let port_example text =
   let from = "extractor = \"trafilatura\"" and into = "extractor = \"stdlib\"" in
-  match find_index from text with
+  match find_sub ~haystack:text ~needle:from () with
   | None -> A.failf "%s's example no longer names the extractor" configuration_doc
   | Some at ->
       String.sub text 0 at ^ into
@@ -647,12 +634,13 @@ let test_the_example_documents_every_section () =
   let example = documented_example () in
   List.iter
     (fun section ->
-      if not (contains ("[" ^ section) example || contains (section ^ " =") example) then
+      if not (contains ~haystack:example ~needle:("[" ^ section)
+          || contains ~haystack:example ~needle:(section ^ " =")) then
         A.failf "the example never documents the [%s] section" section)
     Config.section_names;
   List.iter
     (fun scalar ->
-      if not (contains (scalar ^ " = ") example) then
+      if not (contains ~haystack:example ~needle:(scalar ^ " = ")) then
         A.failf "the example never documents %s" scalar)
     [ "default_provider"; "permitted_providers" ]
 
@@ -665,8 +653,9 @@ let test_the_secrets_block_names_every_mandatory_key_provider () =
     let names = ref [] in
     List.iter
       (fun line ->
-        if contains "export SEEKWRIGHT_" line && contains "_API_KEY=" line then
-          match find_index "SEEKWRIGHT_" line with
+        if contains ~haystack:line ~needle:"export SEEKWRIGHT_"
+           && contains ~haystack:line ~needle:"_API_KEY=" then
+          match find_sub ~haystack:line ~needle:"SEEKWRIGHT_" () with
           | Some at ->
               let rest = String.sub line at (String.length line - at) in
               let name = cut_at "_API_KEY=" rest in
@@ -680,7 +669,7 @@ let test_the_secrets_block_names_every_mandatory_key_provider () =
   List.iter
     (fun provider ->
       let backend =
-        match find_index ":" provider with
+        match find_sub ~haystack:provider ~needle:":" () with
         | Some at -> String.sub provider 0 at
         | None -> provider
       in
@@ -1071,7 +1060,7 @@ let name_scheme_cases =
         in
         List.iter
           (fun name ->
-            match find_index ":" name with
+            match find_sub ~haystack:name ~needle:":" () with
             | None ->
                 let cfg =
                   expect
@@ -1120,10 +1109,10 @@ let name_scheme_cases =
         List.iter
           (fun name ->
             let whole = "SEEKWRIGHT_" ^ String.uppercase_ascii name ^ "_API_KEY" in
-            if contains ":" name && legal_identifier whole then
+            if contains ~haystack:name ~needle:":" && legal_identifier whole then
               A.failf "%s taken whole should not be an exportable variable: %s" name whole;
             let backend =
-              match find_index ":" name with Some at -> String.sub name 0 at | None -> name
+              match find_sub ~haystack:name ~needle:":" () with Some at -> String.sub name 0 at | None -> name
             in
             let variable = "SEEKWRIGHT_" ^ String.uppercase_ascii backend ^ "_API_KEY" in
             A.(check string (name ^ " derives its variable") variable (Config.api_key_env_var name));

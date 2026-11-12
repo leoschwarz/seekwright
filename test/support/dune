@@ -1,0 +1,7 @@
+; A private library, not a module in each suite: F3.1's point is one copy of
+; each helper with one argument order. No [public_name], so nothing here is
+; installed and [dune build @install] does not see it.
+
+(library
+ (name test_support)
+ (libraries alcotest))

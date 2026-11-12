@@ -1,15 +1,7 @@
 module Registry = Mcp_caps.Registry
 module Server = Mcp_caps.Server
 module Tool = Mcp_caps.Tool
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false
-    else if String.sub text i m = needle then true
-    else from (i + 1)
-  in
-  from 0
+open Test_support
 
 let object_schema ~properties ~required =
   `Assoc
@@ -78,7 +70,7 @@ let legacy_lifecycle_answers _ =
     (dispatch server {|{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}|} = `Null);
   let listed = dispatch server {|{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}|} in
   Alcotest.(check bool) "tools/list advertises echo" true
-    (contains (Yojson.Safe.to_string listed) "\"echo\"");
+    (contains ~haystack:(Yojson.Safe.to_string listed) ~needle:"\"echo\"");
   let called =
     dispatch server
       {|{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"}}}|}
@@ -139,13 +131,13 @@ let bad_declarations_fail_construction _ =
          ~run:(fun () () -> Ok (Tool.Output.text ""))
          "bad")
   in
-  Alcotest.(check bool) "the refusal names the tool" true (contains non_object_schema "bad:");
+  Alcotest.(check bool) "the refusal names the tool" true (contains ~haystack:non_object_schema ~needle:"bad:");
   Alcotest.(check bool) "and says what is wrong" true
-    (contains non_object_schema "describe an object");
+    (contains ~haystack:non_object_schema ~needle:"describe an object");
   Alcotest.(check bool) "an empty name is refused" true
-    (contains (refusal (tool ~name:"")) "usable");
+    (contains ~haystack:(refusal (tool ~name:"")) ~needle:"usable");
   Alcotest.(check bool) "a name with a space is refused" true
-    (contains (refusal (tool ~name:"not a name")) "usable")
+    (contains ~haystack:(refusal (tool ~name:"not a name")) ~needle:"usable")
 
 (* An advertised output schema the handler does not satisfy is a server contract
    failure, which mcp-kit owns: it becomes a JSON-RPC error, not a denial. *)

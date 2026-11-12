@@ -5,6 +5,7 @@
 
 module S = Seekwright.Sanitize
 module M = Seekwright.Model
+open Test_support
 
 let z = S.zwsp
 
@@ -13,41 +14,7 @@ let check_sanitize msg input expected count =
   Alcotest.(check int) (msg ^ ": count") count n;
   Alcotest.(check string) (msg ^ ": text") expected out
 
-(* [str.replace]'s semantics, for the reversibility assertions. *)
-let replace_all ~pattern ~with_ text =
-  let plen = String.length pattern in
-  let len = String.length text in
-  if plen = 0 then text
-  else begin
-    let buf = Buffer.create (len + 16) in
-    let i = ref 0 in
-    while !i <= len - plen do
-      if String.sub text !i plen = pattern then begin
-        Buffer.add_string buf with_;
-        i := !i + plen
-      end
-      else begin
-        Buffer.add_char buf text.[!i];
-        incr i
-      end
-    done;
-    if !i < len then Buffer.add_substring buf text !i (len - !i);
-    Buffer.contents buf
-  end
-
-let drop_zwsp text = replace_all ~pattern:z ~with_:"" text
-
-let count_sub text needle =
-  let n = String.length needle in
-  if n = 0 then 0
-  else begin
-    let rec loop i acc =
-      if i + n > String.length text then acc
-      else if String.sub text i n = needle then loop (i + n) (acc + 1)
-      else loop (i + 1) acc
-    in
-    loop 0 0
-  end
+let drop_zwsp text = replace_all ~haystack:text ~needle:z ~with_:""
 
 let member name = function
   | `Assoc kvs -> List.assoc_opt name kvs
@@ -394,9 +361,10 @@ let test_the_payload_escapes_completely () =
   let out, n = S.sanitize_text golden_incident_text in
   Alcotest.(check int) "count" 7 n;
   Alcotest.(check bool) "literal gone" false
-    (count_sub out "<|endoftext|>" > 0);
+    (count_occurrences ~haystack:out ~needle:"<|endoftext|>" > 0);
   Alcotest.(check bool) "rejected line rewritten" true
-    (count_sub out (Printf.sprintf "disallowed special token '<%s|endoftext|>'." z)
+    (count_occurrences ~haystack:out
+       ~needle:(Printf.sprintf "disallowed special token '<%s|endoftext|>'." z)
     > 0)
 
 let test_the_payload_travels_the_boundary_and_back () =
@@ -413,8 +381,9 @@ let test_the_payload_travels_the_boundary_and_back () =
   let json = M.search_response_to_yojson response in
   let result = List.hd (match member_exn "results" json with `List l -> l | _ -> []) in
   let served = string_member "text" result in
-  Alcotest.(check bool) "literal gone" false (count_sub served "<|endoftext|>" > 0);
-  Alcotest.(check int) "seven escapes" 7 (count_sub served z);
+  Alcotest.(check bool) "literal gone" false
+    (count_occurrences ~haystack:served ~needle:"<|endoftext|>" > 0);
+  Alcotest.(check int) "seven escapes" 7 (count_occurrences ~haystack:served ~needle:z);
   let reread =
     match M.search_response_of_yojson json with
     | Ok value -> value

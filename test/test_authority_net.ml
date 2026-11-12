@@ -35,18 +35,12 @@ module Error = Mcp_caps.Error
 module Event = Mcp_caps.Event
 module Policy = Mcp_caps.Policy
 module Policy_net = Mcp_caps.Policy_net
+open Test_support
 
 let kind_testable =
   Alcotest.testable
     (fun ppf kind -> Format.pp_print_string ppf (Error.kind_to_string kind))
     ( = )
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false else if String.sub text i m = needle then true else from (i + 1)
-  in
-  from 0
 
 (* [Alcotest.fail]'s optional [~here] means it cannot be passed to [kasprintf]
    directly: the wrapper is what keeps a failure message one [failf] call away. *)
@@ -661,7 +655,7 @@ let response_ceiling () =
           check_kind Error.Denied error;
           check_one_line error;
           Alcotest.(check bool) "the sentence names the ceiling, not the page" true
-            (contains (Error.message error) "4096"));
+            (contains ~haystack:(Error.message error) ~needle:"4096"));
       (* A caller may lower it. *)
       (match request ~max_response_bytes:256 grant (uri "/big") with
       | Ok response -> failf "a 256-byte caller ceiling served %d bytes" (String.length response.body)
@@ -691,7 +685,7 @@ let redirects () =
           check_kind Error.Denied error;
           check_one_line error;
           Alcotest.(check bool) "the sentence names the target's host" true
-            (contains (Error.message error) "elsewhere.test")
+            (contains ~haystack:(Error.message error) ~needle:"elsewhere.test")
       | Ok response -> failf "an off-list Location was returned as status %d" response.status
       | exception Simulated address -> failf "an off-list Location was connected to: %s"
           (show_address address));
@@ -735,7 +729,7 @@ let request_headers () =
       | Error error ->
           check_kind Error.Invalid error;
           Alcotest.(check bool) "the message does not quote the value" false
-            (contains (Error.message error) "X: b"));
+            (contains ~haystack:(Error.message error) ~needle:"X: b"));
       (match request ~headers:[ ("bad name", "x") ] grant (uri "/ok") with
       | Ok _ -> failf "a header name with a space was sent"
       | Error error -> check_kind Error.Invalid error);
@@ -885,7 +879,7 @@ let audit_events () =
           List.iter
             (fun needle ->
               Alcotest.(check bool) (Printf.sprintf "%S is not in the audit line: %s" needle line)
-                false (contains line needle))
+                false (contains ~haystack:line ~needle:needle))
             [ "/ok"; "/big"; "127.0.0.1"; "localhost"; "elsewhere"; "answer"; "http"; "42" ])
         logged;
       match logged with

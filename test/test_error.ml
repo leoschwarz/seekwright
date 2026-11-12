@@ -45,9 +45,8 @@ let is_valid_utf8 text =
 (* [sanitize] appends the ellipsis only when it cut, so the prefix under test is
    the result without exactly those three bytes. *)
 let truncated_prefix sanitized =
-  let length = String.length sanitized in
-  if length >= 3 && String.sub sanitized (length - 3) 3 = "..." then
-    String.sub sanitized 0 (length - 3)
+  if String.ends_with ~suffix:"..." sanitized then
+    String.sub sanitized 0 (String.length sanitized - 3)
   else sanitized
 
 let bounded _ =

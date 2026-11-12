@@ -13,14 +13,7 @@ module J = Seekwright_fetch.Jsondoc
 module T = Seekwright_fetch.Tabledoc
 module S = Seekwright_fetch_stdlib.Stdlib
 module A = Alcotest
-
-let contains_substring hay needle =
-  let n = String.length hay and m = String.length needle in
-  let rec go i =
-    if i + m > n then false
-    else String.sub hay i m = needle || go (i + 1)
-  in
-  m = 0 || go 0
+open Test_support
 
 let paged ?(paragraph = "paragraph of body text") count =
   String.concat "\n\n" (List.init count (fun i -> Printf.sprintf "%s %d" paragraph i))
@@ -96,7 +89,7 @@ let assert_url_refused ?needle f =
   match f () with
   | Error msg -> (
       match needle with
-      | Some needle when not (contains_substring msg needle) ->
+      | Some needle when not (contains ~haystack:msg ~needle:needle) ->
           A.failf "message %S lacks %S" msg needle ()
       | _ -> ())
   | Ok url -> A.failf "expected a refusal, got %S" url
@@ -283,13 +276,13 @@ let test_it_names_itself_and_claims_no_pdf () =
 
 let test_the_article_survives_and_its_chrome_does_not () =
   let r = S.extract (article ()) (Some "text/html") in
-  A.check A.bool "content kept" true (contains_substring r.E.text "real content of the page");
-  A.check A.bool "nav dropped" false (contains_substring r.E.text "Home About Contact");
-  A.check A.bool "footer dropped" false (contains_substring r.E.text "Copyright 2026");
-  A.check A.bool "script dropped" false (contains_substring r.E.text "var tracking");
-  A.check A.bool "style dropped" false (contains_substring r.E.text "color: red");
-  A.check A.bool "entity unescaped" false (contains_substring r.E.text "&amp;");
-  A.check A.bool "ampersand present" true (contains_substring r.E.text "&");
+  A.check A.bool "content kept" true (contains ~haystack:r.E.text ~needle:"real content of the page");
+  A.check A.bool "nav dropped" false (contains ~haystack:r.E.text ~needle:"Home About Contact");
+  A.check A.bool "footer dropped" false (contains ~haystack:r.E.text ~needle:"Copyright 2026");
+  A.check A.bool "script dropped" false (contains ~haystack:r.E.text ~needle:"var tracking");
+  A.check A.bool "style dropped" false (contains ~haystack:r.E.text ~needle:"color: red");
+  A.check A.bool "entity unescaped" false (contains ~haystack:r.E.text ~needle:"&amp;");
+  A.check A.bool "ampersand present" true (contains ~haystack:r.E.text ~needle:"&");
   A.check (A.option A.string) "title" (Some "The Title") r.E.title
 
 let test_a_list_reads_as_items () =
@@ -318,8 +311,8 @@ let test_an_icon_sprite_does_not_rename_the_page () =
   in
   let r = S.extract body (Some "text/html") in
   A.check (A.option A.string) "title" (Some "Real Page Title") r.E.title;
-  A.check A.bool "icon A dropped" false (contains_substring r.E.text "Icon A");
-  A.check A.bool "icon B dropped" false (contains_substring r.E.text "Icon B")
+  A.check A.bool "icon A dropped" false (contains ~haystack:r.E.text ~needle:"Icon A");
+  A.check A.bool "icon B dropped" false (contains ~haystack:r.E.text ~needle:"Icon B")
 
 let test_a_title_inside_a_graphic_is_never_the_page_name () =
   let body =
@@ -338,12 +331,12 @@ let test_the_text_inside_a_form_goes_with_the_form () =
 let test_a_block_left_open_does_not_swallow_the_rest_of_the_page () =
   let body = "<html><body><nav><div>Menu</nav><p>The article body.</p></body></html>" in
   let r = S.extract body (Some "text/html") in
-  A.check A.bool "article kept" true (contains_substring r.E.text "The article body.");
-  A.check A.bool "menu dropped" false (contains_substring r.E.text "Menu")
+  A.check A.bool "article kept" true (contains ~haystack:r.E.text ~needle:"The article body.");
+  A.check A.bool "menu dropped" false (contains ~haystack:r.E.text ~needle:"Menu")
 
 let test_missing_content_type_is_sniffed () =
   let r = S.extract (article ()) None in
-  A.check A.bool "sniffed as html" true (contains_substring r.E.text "real content")
+  A.check A.bool "sniffed as html" true (contains ~haystack:r.E.text ~needle:"real content")
 
 let test_javascript_shell_yields_empty_text_not_an_error () =
   let shell = "<!DOCTYPE html><html><body><div id='root'></div></body></html>" in
@@ -352,14 +345,14 @@ let test_javascript_shell_yields_empty_text_not_an_error () =
 let test_a_pdf_is_a_refusal_naming_the_type () =
   match S.extract "%PDF-1.4\n" (Some "application/pdf") with
   | exception E.Extraction_failed msg ->
-      A.check A.bool "names the type" true (contains_substring msg "application/pdf")
+      A.check A.bool "names the type" true (contains ~haystack:msg ~needle:"application/pdf")
   | _ -> A.fail "expected Extraction_failed"
 
 let test_untagged_markup_is_read_as_text_not_as_a_failure () =
   let body = "<html><body><p>An unclosed paragraph<p>And another" in
   let r = S.extract body (Some "text/html") in
-  A.check A.bool "first" true (contains_substring r.E.text "An unclosed paragraph");
-  A.check A.bool "second" true (contains_substring r.E.text "And another")
+  A.check A.bool "first" true (contains ~haystack:r.E.text ~needle:"An unclosed paragraph");
+  A.check A.bool "second" true (contains ~haystack:r.E.text ~needle:"And another")
 
 let test_plain_text_passes_through () =
   A.check A.string "plain" "hello world" (S.extract "hello world" (Some "text/plain")).E.text
@@ -378,7 +371,7 @@ let test_unextractable_types_raise () =
 let test_a_json_body_becomes_structure_a_path_can_address () =
   let r = S.extract "{\"title\": \"A page\", \"lines\": [\"one\", \"two\"]}" (Some "application/json") in
   A.check A.bool "addressable" true r.E.path_addressable;
-  A.check A.bool "path printed" true (contains_substring r.E.text "$.lines[0]")
+  A.check A.bool "path printed" true (contains ~haystack:r.E.text ~needle:"$.lines[0]")
 
 let test_a_body_that_is_not_one_json_document_comes_back_as_its_text () =
   let body = "{\"a\": 1}\n{\"a\": 2}\n" in
@@ -389,7 +382,7 @@ let test_a_body_that_is_not_one_json_document_comes_back_as_its_text () =
 let test_a_csv_document_arrives_as_row_paths () =
   let r = S.extract "id,name\n1,Ada\n" (Some "text/csv") in
   A.check A.bool "addressable" true r.E.path_addressable;
-  A.check A.bool "row path" true (contains_substring r.E.text "$.rows[0].name")
+  A.check A.bool "row path" true (contains ~haystack:r.E.text ~needle:"$.rows[0].name")
 
 let () =
   Alcotest.run "fetch"

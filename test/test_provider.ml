@@ -10,24 +10,7 @@ module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module A = Alcotest
-
-let check_string what expected got = A.(check string) what expected got
-let check_bool what expected got = A.(check bool) what expected got
-let check_opt what expected got = A.(check (option string)) what expected got
-let check_int what expected got = A.(check int) what expected got
-
-let check_opt_int what expected got = A.(check (option int)) what expected got
-
-(* Alcotest's float testable takes the absolute error, not a labelled option. *)
-let number = A.float 1e-9
-let check_opt_number what expected got = A.(check (option number)) what expected got
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false else String.sub text i m = needle || from (i + 1)
-  in
-  from 0
+open Test_support
 
 let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
     ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
@@ -51,7 +34,7 @@ let honoured q =
 (* The constraint report. *)
 
 let no_constraints_draws_no_notice () =
-  check_opt "an unconstrained query" None (honoured (query ()))
+  check_opt_string "an unconstrained query" None (honoured (query ()))
 
 let each_bucket_names_its_token () =
   let cases =
@@ -118,7 +101,7 @@ let every_dropped_bucket_is_named_in_order () =
 let a_constraint_that_is_not_asked_for_draws_no_notice () =
   (* The buckets fire on what the caller asked for, not on what the adapter
      cannot do: an incapable adapter with nothing asked files nothing. *)
-  check_opt "nothing asked" None
+  check_opt_string "nothing asked" None
     (Provider.ignored_constraints (query ()) ~domains:false ~dates:false ~geo:false
        ~language:None ~safety:false)
 
@@ -142,30 +125,30 @@ let site_operators () =
 
 let a_short_snippet_is_returned_whole () =
   let snippet, uncapped = Provider.truncate_snippet (Some "short enough.") 500 in
-  check_opt "whole" (Some "short enough.") snippet;
+  check_opt_string "whole" (Some "short enough.") snippet;
   check_opt_int "measured" (Some 13) uncapped
 
 let a_missing_snippet_stays_missing () =
   let snippet, uncapped = Provider.truncate_snippet None 500 in
-  check_opt "no snippet" None snippet;
+  check_opt_string "no snippet" None snippet;
   (* Not a string upstream is not a length either: the cap measured nothing. *)
   check_opt_int "no measurement" None uncapped
 
 let whitespace_is_normalised_before_the_cap () =
   let snippet, uncapped = Provider.truncate_snippet (Some "  a \n b\tc  ") 500 in
-  check_opt "collapsed" (Some "a b c") snippet;
+  check_opt_string "collapsed" (Some "a b c") snippet;
   check_opt_int "the length the cap received" (Some 5) uncapped
 
 let a_sentence_boundary_beats_mid_word () =
   let snippet, uncapped = Provider.truncate_snippet (Some "alpha beta. gamma delta") 12 in
-  check_opt "cut at the sentence" (Some "alpha beta.") snippet;
+  check_opt_string "cut at the sentence" (Some "alpha beta.") snippet;
   check_opt_int "measured whole" (Some 23) uncapped
 
 let a_boundary_too_early_is_not_used () =
   (* A period in the first quarter of the window saves nothing; the plain cut
      carries more text. *)
   let snippet, uncapped = Provider.truncate_snippet (Some "One. and then more words") 20 in
-  check_opt "plain cut" (Some "One. and then more w…") snippet;
+  check_opt_string "plain cut" (Some "One. and then more w…") snippet;
   check_opt_int "measured whole" (Some 24) uncapped
 
 let the_cap_counts_characters_not_bytes () =
@@ -174,7 +157,7 @@ let the_cap_counts_characters_not_bytes () =
      caller's tokenizer — and the length figure has to mean the same thing on
      both sides of the port. Nine characters here is seventeen bytes. *)
   let snippet, uncapped = Provider.truncate_snippet (Some "éééé éééé") 5 in
-  check_opt "cut after five characters" (Some "éééé…") snippet;
+  check_opt_string "cut after five characters" (Some "éééé…") snippet;
   check_int "the clipped snippet is eleven bytes" 11 (String.length (Option.get snippet));
   check_int "the source is seventeen bytes" 17 (String.length "éééé éééé");
   check_opt_int "measured in characters" (Some 9) uncapped
@@ -208,10 +191,10 @@ let the_crossing_pairs_match_the_oracle () =
       let what = Printf.sprintf "%S at %d" text limit in
       check_bool "the byte length passes the cap" true (String.length text > limit);
       let snippet, measured = Provider.truncate_snippet (Some text) limit in
-      check_opt (what ^ " snippet") (Some expected) snippet;
+      check_opt_string (what ^ " snippet") (Some expected) snippet;
       check_opt_int (what ^ " measured") (Some uncapped) measured;
       let text_out, cut, text_measured = Provider.truncate_text (Some text) limit in
-      check_opt (what ^ " text") (Some expected) text_out;
+      check_opt_string (what ^ " text") (Some expected) text_out;
       check_bool (what ^ " not cut") false cut;
       check_opt_int (what ^ " text measured") (Some uncapped) text_measured)
     cases
@@ -241,27 +224,27 @@ let ascii_caps_match_the_oracle () =
     (fun (text, limit, expected, uncapped, expected_cut) ->
       let what = Printf.sprintf "%S at %d" text limit in
       let snippet, measured = Provider.truncate_snippet (Some text) limit in
-      check_opt (what ^ " snippet") (Some expected) snippet;
+      check_opt_string (what ^ " snippet") (Some expected) snippet;
       check_opt_int (what ^ " measured") (Some uncapped) measured;
       let text_out, cut, text_measured = Provider.truncate_text (Some text) limit in
-      check_opt (what ^ " text") (Some expected) text_out;
+      check_opt_string (what ^ " text") (Some expected) text_out;
       check_bool (what ^ " cut") expected_cut cut;
       check_opt_int (what ^ " text measured") (Some uncapped) text_measured)
     cases
 
 let text_reports_whether_it_was_cut () =
   let text, cut, uncapped = Provider.truncate_text (Some "short") 500 in
-  check_opt "whole" (Some "short") text;
+  check_opt_string "whole" (Some "short") text;
   check_bool "not cut" false cut;
   check_opt_int "measured" (Some 5) uncapped;
   let text, cut, uncapped = Provider.truncate_text (Some "alpha beta. gamma delta") 12 in
-  check_opt "cut" (Some "alpha beta.") text;
+  check_opt_string "cut" (Some "alpha beta.") text;
   check_bool "reported" true cut;
   check_opt_int "measured" (Some 23) uncapped
 
 let empty_text_is_absent_not_empty () =
   let text, cut, uncapped = Provider.truncate_text (Some "   \n  ") 500 in
-  check_opt "absent" None text;
+  check_opt_string "absent" None text;
   check_bool "nothing was cut" false cut;
   check_opt_int "nothing measured" None uncapped
 
@@ -300,8 +283,8 @@ let the_grant_answered_its_two_transport_rows () =
          the authority's own account of the failure — address, query, anything —
          never rides along. *)
       check_bool "nothing from the grant is echoed" false
-        (contains (Provider.render_error e) "203.0.113.9"
-        || contains (Provider.render_error e) "secret-query"))
+        (contains ~haystack:(Provider.render_error e) ~needle:"203.0.113.9"
+        || contains ~haystack:(Provider.render_error e) ~needle:"secret-query"))
     [ Caps.Error.Denied; Invalid; Unavailable; Failed ]
 
 let a_body_that_is_not_an_object_is_the_same_failure () =
@@ -330,10 +313,10 @@ let json_readers_drop_the_wrong_shape () =
     Yojson.Safe.from_string
       {|{"title":"t","url":"https://x","score":1.5,"flag":true,"nested":{"a":1},"list":[1],"count":7,"empty":""}|}
   in
-  check_opt "a string field" (Some "t") (Provider.Json.string_field "title" record);
-  check_opt "a missing field" None (Provider.Json.string_field "absent" record);
-  check_opt "an object is not a string" None (Provider.Json.string_field "nested" record);
-  check_opt "an empty string is still a string" (Some "") (Provider.Json.string_field "empty" record);
+  check_opt_string "a string field" (Some "t") (Provider.Json.string_field "title" record);
+  check_opt_string "a missing field" None (Provider.Json.string_field "absent" record);
+  check_opt_string "an object is not a string" None (Provider.Json.string_field "nested" record);
+  check_opt_string "an empty string is still a string" (Some "") (Provider.Json.string_field "empty" record);
   check_opt_number "a float" (Some 1.5) (Provider.Json.number_field "score" record);
   check_opt_number "an int" (Some 7.) (Provider.Json.number_field "count" record);
   (* [true] is not a number: Python's [isinstance(value, bool)] arm. *)
@@ -361,12 +344,6 @@ let project_url_is_the_one_the_providers_send () =
    run: the failure constructors take a constant string, and the values that
    could leak are only reachable through an accessor this tree never calls. *)
 
-let read path =
-  let channel = open_in_bin path in
-  let text = really_input_string channel (in_channel_length channel) in
-  close_in channel;
-  text
-
 (* A value an adapter may put in a failure message, and one it may never name. *)
 let forbidden =
   [
@@ -391,10 +368,10 @@ let adapter_sources =
 let an_adapter_never_reaches_for_the_values_that_leak () =
   List.iter
     (fun path ->
-      let text = read path in
+      let text = read_file path in
       List.iter
         (fun needle ->
-          if contains text needle then
+          if contains ~haystack:text ~needle:needle then
             A.failf "%s mentions %S, which the redaction rule refuses" path needle)
         forbidden)
     adapter_sources;

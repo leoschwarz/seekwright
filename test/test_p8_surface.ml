@@ -9,17 +9,14 @@
 module Server = Seekwright.Server
 module Usage = Seekwright.Usage
 module A = Alcotest
+open Test_support
 
 let now () = 1_700_000_000.0
 
 let root = "p8-surface-journal"
 
 let read_lines path =
-  let ic = open_in_bin path in
-  let n = in_channel_length ic in
-  let content = really_input_string ic n in
-  close_in ic;
-  String.split_on_char '\n' content |> List.filter (fun line -> line <> "")
+  read_file path |> String.split_on_char '\n' |> List.filter (fun line -> line <> "")
 
 (* Union of the keys each [tool] kind's lines carry, sorted by kind — the shape
    {!Server.journal_fields} is printed in. *)

@@ -76,6 +76,7 @@ module Policy = Mcp_caps.Policy
 module Registry = Mcp_caps.Registry
 module Server = Mcp_caps.Server
 module Tool = Mcp_caps.Tool
+open Test_support
 
 let path_schema =
   `Assoc
@@ -126,19 +127,6 @@ let () =
      and a lexical walk. *)
   Unix.symlink "/etc/passwd" (Filename.concat root_a "escape");
   write root_b "answer.md" "from B\n"
-
-let starts_with prefix text =
-  String.length text >= String.length prefix
-  && String.sub text 0 (String.length prefix) = prefix
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false
-    else if starts_with needle (String.sub text i m) then true
-    else from (i + 1)
-  in
-  from 0
 
 (* {2 A server value, and a listener around it}
 
@@ -380,7 +368,7 @@ let stdio_enforces_the_legacy_lifecycle_and_http_does_not () =
     (match Mcp_kit_stdio.serve_session_line_frames (Mcp_kit.Server.create_session s.server) tools_list with
     | [ response ] ->
         Alcotest.(check bool) "stdio gates the call behind initialize: " true
-          (contains response "server not initialized")
+          (contains ~haystack:response ~needle:"server not initialized")
     | frames ->
         Alcotest.failf "stdio answered the un-initialized call with %d frames"
           (List.length frames));
@@ -388,7 +376,7 @@ let stdio_enforces_the_legacy_lifecycle_and_http_does_not () =
       let response, body = post ~sw s.client ~headers:(json_headers []) ~body:tools_list s.uri in
       let status, text = read_response response body in
       Alcotest.(check int) "HTTP answers it" 200 status;
-      Alcotest.(check bool) "and lists the registered tools: " true (contains text "read_source")))
+      Alcotest.(check bool) "and lists the registered tools: " true (contains ~haystack:text ~needle:"read_source")))
 
 (* {2 The bounds belong to the adapter} *)
 
@@ -415,7 +403,7 @@ let a_body_under_the_same_bound_still_works () =
       in
       let status, text = read_response response body in
       Alcotest.(check int) "200" 200 status;
-      Alcotest.(check bool) "answered from the grant: " true (contains text "from A")))
+      Alcotest.(check bool) "answered from the grant: " true (contains ~haystack:text ~needle:"from A")))
 
 let a_modern_request_with_correct_headers_is_answered () =
   (* The adapter's modern path is what serves this server: routing headers
@@ -429,7 +417,7 @@ let a_modern_request_with_correct_headers_is_answered () =
       in
       let status, text = read_response response body in
       Alcotest.(check int) "200" 200 status;
-      Alcotest.(check bool) "answered from the grant: " true (contains text "from A")))
+      Alcotest.(check bool) "answered from the grant: " true (contains ~haystack:text ~needle:"from A")))
 
 let a_modern_request_with_a_wrong_mcp_method_is_refused () =
   with_server ~root:root_a (fun s ->
@@ -441,8 +429,8 @@ let a_modern_request_with_a_wrong_mcp_method_is_refused () =
       in
       let status, text = read_response response body in
       Alcotest.(check int) "400 from the adapter" 400 status;
-      Alcotest.(check bool) "the adapter's own -32020: " true (contains text "-32020");
-      Alcotest.(check bool) ("and no page content: " ^ text) false (contains text "from A")))
+      Alcotest.(check bool) "the adapter's own -32020: " true (contains ~haystack:text ~needle:"-32020");
+      Alcotest.(check bool) ("and no page content: " ^ text) false (contains ~haystack:text ~needle:"from A")))
 
 let an_unlisted_origin_and_a_get_are_refused () =
   (* Origin checking is the adapter's, and its default allowlist is empty; the
@@ -499,10 +487,10 @@ let two_listeners_do_not_share_a_grant () =
       in
       let text_a = read listener_a in
       let text_b = read listener_b in
-      Alcotest.(check bool) "listener A answers its own root" true (contains text_a "from A");
-      Alcotest.(check bool) "listener A does not reach B" false (contains text_a "from B");
-      Alcotest.(check bool) "listener B answers its own root" true (contains text_b "from B");
-      Alcotest.(check bool) "listener B does not reach A" false (contains text_b "from A"));
+      Alcotest.(check bool) "listener A answers its own root" true (contains ~haystack:text_a ~needle:"from A");
+      Alcotest.(check bool) "listener A does not reach B" false (contains ~haystack:text_a ~needle:"from B");
+      Alcotest.(check bool) "listener B answers its own root" true (contains ~haystack:text_b ~needle:"from B");
+      Alcotest.(check bool) "listener B does not reach A" false (contains ~haystack:text_b ~needle:"from A"));
   check_listener listener_a;
   check_listener listener_b
 
@@ -572,11 +560,11 @@ let one_listener_can_route_connections_to_different_grants () =
       let first = read () in
       let second = read () in
       Alcotest.(check bool) "the first connection gets the first grant" true
-        (contains first "from A");
+        (contains ~haystack:first ~needle:"from A");
       Alcotest.(check bool) "the second connection gets the second grant" true
-        (contains second "from B");
+        (contains ~haystack:second ~needle:"from B");
       Alcotest.(check bool) "and neither reaches the other's file" false
-        (contains first "from B" || contains second "from A"))
+        (contains ~haystack:first ~needle:"from B" || contains ~haystack:second ~needle:"from A"))
 
 let concurrent_clients_do_not_mix_answers () =
   (* Two clients, one listener, one grant: interleaved calls — one a read, one a
@@ -606,10 +594,10 @@ let concurrent_clients_do_not_mix_answers () =
             Atomic.set second text));
       ];
     let first = Atomic.get first and second = Atomic.get second in
-    Alcotest.(check bool) "the read still answers its own file" true (contains first "from A");
-    Alcotest.(check bool) "the walk is still refused" true (contains second "isError");
+    Alcotest.(check bool) "the read still answers its own file" true (contains ~haystack:first ~needle:"from A");
+    Alcotest.(check bool) "the walk is still refused" true (contains ~haystack:second ~needle:"isError");
     Alcotest.(check bool) ("and the refusal carries no root path: " ^ second) false
-      (contains second root_a))
+      (contains ~haystack:second ~needle:root_a))
 
 let () =
   Alcotest.run "mcp-caps/http"

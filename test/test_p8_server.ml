@@ -14,19 +14,7 @@ module Server = Seekwright.Server
 module Usage = Seekwright.Usage
 module Agent = Seekwright.Agent
 module A = Alcotest
-
-let check_string = A.(check string)
-let check_int = A.(check int)
-let check_bool = A.(check bool)
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false
-    else if String.sub text i m = needle then true
-    else from (i + 1)
-  in
-  from 0
+open Test_support
 
 (* {1 Fixtures} *)
 
@@ -285,8 +273,8 @@ let a_search_call_answers_over_the_registry _ =
   in
   check_bool "not an error" false (is_error called);
   let text = text_of called in
-  check_bool "the answer names the provider that served" true (contains text "serper");
-  check_bool "the answer carries the hit" true (contains text "Result for ocaml effects")
+  check_bool "the answer names the provider that served" true (contains ~haystack:text ~needle:"serper");
+  check_bool "the answer carries the hit" true (contains ~haystack:text ~needle:"Result for ocaml effects")
 
 let a_refused_search_is_a_tool_result _ =
   let server = mcp (default_app ()) in
@@ -314,7 +302,7 @@ let fetch_disabled_refuses_cleanly _ =
   in
   check_bool "isError is set" true (is_error called);
   check_bool "the sentence is the shared one" true
-    (contains (text_of called) Server.fetch_disabled)
+    (contains ~haystack:(text_of called) ~needle:Server.fetch_disabled)
 
 let agent_disabled_refuses_cleanly _ =
   let server = mcp (default_app ()) in
@@ -324,7 +312,7 @@ let agent_disabled_refuses_cleanly _ =
   in
   check_bool "isError is set" true (is_error called);
   check_bool "the sentence is the shared one" true
-    (contains (text_of called) Server.agent_disabled)
+    (contains ~haystack:(text_of called) ~needle:Server.agent_disabled)
 
 (* {1 The Host allowlist} *)
 
@@ -355,7 +343,7 @@ let healthz_is_secret_free_and_exempt _ =
   check_int "uptime is whole seconds" 2
     (match field "uptime_s" body with `Int n -> n | _ -> -1);
   check_bool "no key or secret field is present" false
-    (contains ok.Server.body "api_key" || contains ok.Server.body "key");
+    (contains ~haystack:ok.Server.body ~needle:"api_key" || contains ~haystack:ok.Server.body ~needle:"key");
   (* A configured name this build has no adapter for is not a provider it has:
      /healthz reports the dispatchable set, and the startup warning names the
      rest. *)
@@ -429,7 +417,7 @@ let api_search_round_trip _ =
   check_int "the hit count" 1
     (match field "results" body with `List l -> List.length l | _ -> -1);
   check_bool "the hit is there" true
-    (contains ok.Server.body "Result for ocaml effects")
+    (contains ~haystack:ok.Server.body ~needle:"Result for ocaml effects")
 
 let api_search_status_table _ =
   let app = default_app () in
@@ -523,12 +511,6 @@ let dashboard_routes _ =
 
 (* {1 The flag table and the wire helpers} *)
 
-let read path =
-  let channel = open_in_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr channel)
-    (fun () -> really_input_string channel (in_channel_length channel))
-
 let slice_between text start_marker end_marker =
   let at marker =
     let n = String.length text and m = String.length marker in
@@ -575,17 +557,17 @@ let test_the_flag_table_is_the_scanners_only_vocabulary () =
                (flag.repeats = (flag.key = "allowed_host"))))
     Server.server_flag_table;
   let scanner =
-    slice_between (read "../bin/main.ml") "let parse_server_flags"
+    slice_between (read_file "../bin/main.ml") "let parse_server_flags"
       "(* {1 The check} *)"
   in
   A.(check bool "the scanner reads the table" true
-       (contains scanner "Server.flag_spec"));
+       (contains ~haystack:scanner ~needle:"Server.flag_spec"));
   A.(check bool "the scanner reads the row's arity" true
-       (contains scanner "spec.Server.arity"));
+       (contains ~haystack:scanner ~needle:"spec.Server.arity"));
   List.iter
     (fun name ->
       A.(check bool (name ^ " is not string-matched in the scanner") false
-           (contains scanner ("\"" ^ name ^ "\""))))
+           (contains ~haystack:scanner ~needle:("\"" ^ name ^ "\""))))
     names
 
 (* The transport below [serve_http]'s routing writes its own framing, so this
@@ -606,7 +588,7 @@ let test_http_text_response_frames_its_body () =
         Printf.sprintf "content-length: %d" (String.length body)
       in
       A.(check bool (Printf.sprintf "%d's length is the body's" status) true
-           (contains response expected)))
+           (contains ~haystack:response ~needle:expected)))
     [ 400; 403; 413; 421; 500 ]
 
 (* The replayed request head arrives as lines. [Host] is read from the same

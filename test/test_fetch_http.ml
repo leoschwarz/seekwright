@@ -22,6 +22,7 @@ module Policy_net = Caps.Policy_net
 module Error = Caps.Error
 
 module A = Alcotest
+open Test_support
 
 let extractor = E.of_module (module S)
 
@@ -138,14 +139,6 @@ let base fetcher port path =
 
 let expect_ok page = match page with Ok p -> p | Error e -> Alcotest.failf "expected Ok, got error: %s" (match e with F.Refusal r -> (match r with F.Url_blocked m | F.Redirect_blocked m | F.Blocked m -> m) | F.Failed m -> m)
 
-let contains_substring hay needle =
-  let n = String.length hay and m = String.length needle in
-  let rec go i =
-    if i + m > n then false
-    else String.sub hay i m = needle || go (i + 1)
-  in
-  m = 0 || go 0
-
 let expect_refusal_with needle page =
   match page with
   | Error (F.Refusal refusal) ->
@@ -153,7 +146,7 @@ let expect_refusal_with needle page =
         match refusal with
         | F.Url_blocked m | F.Redirect_blocked m | F.Blocked m -> m
       in
-      if not (contains_substring msg needle) then
+      if not (contains ~haystack:msg ~needle:needle) then
         Alcotest.failf "refusal %S lacks %S" msg needle
   | Ok _ -> Alcotest.fail "expected a refusal"
   | Error (F.Failed m) -> Alcotest.failf "expected a refusal, got Failed %S" m
@@ -162,7 +155,7 @@ let test_a_page_is_fetched_and_extracted () =
   with_fetcher (fun fetcher port ->
     let page = expect_ok (base fetcher port "/page") in
     A.check A.int "status" 200 page.F.status_code;
-    A.check A.bool "content" true (contains_substring page.F.text "Sentences of real body text.");
+    A.check A.bool "content" true (contains ~haystack:page.F.text ~needle:"Sentences of real body text.");
     A.check (A.option A.string) "title" (Some "Doc") page.F.title;
     A.check (A.option A.string) "content type" (Some "text/html") page.F.content_type;
     A.check A.bool "not addressable" false page.F.path_addressable;
@@ -172,7 +165,7 @@ let test_a_redirect_is_followed_and_the_final_url_reported () =
   with_fetcher (fun fetcher port ->
     let page = expect_ok (base fetcher port "/redirect") in
     A.check A.bool "landed" true (String.ends_with ~suffix:"/page" page.F.url);
-    A.check A.bool "content" true (contains_substring page.F.text "Sentences of real body text."));
+    A.check A.bool "content" true (contains ~haystack:page.F.text ~needle:"Sentences of real body text."));
   with_fetcher (fun fetcher port ->
     let page = expect_ok (base fetcher port "/redirect-abs") in
     A.check A.bool "landed" true (String.ends_with ~suffix:"/page" page.F.url))
@@ -185,7 +178,7 @@ let test_a_redirect_without_a_usable_location_is_refused () =
   with_fetcher (fun fetcher port ->
     match base fetcher port "/no-location" with
     | Error (F.Failed msg) ->
-        A.check A.bool "location named" true (contains_substring msg "without a Location header")
+        A.check A.bool "location named" true (contains ~haystack:msg ~needle:"without a Location header")
     | other -> Alcotest.failf "expected Failed, got %s"
         (match other with
         | Ok _ -> "Ok"
@@ -201,7 +194,7 @@ let test_a_redirect_to_a_blocked_scheme_is_refused_as_post_dispatch () =
     match base fetcher port "/to-file" with
     | Error (F.Refusal (F.Redirect_blocked msg)) ->
         A.check A.bool "the grant's redirect denial" true
-          (contains_substring msg "redirect")
+          (contains ~haystack:msg ~needle:"redirect")
     | other ->
         Alcotest.failf "expected Redirect_blocked, got %s"
           (match other with
@@ -224,7 +217,7 @@ let test_a_refusal_of_the_written_url_is_url_blocked () =
   with_fetcher (fun fetcher _port ->
     match F.fetch fetcher "file:///etc/passwd" ~offset:0 ~max_chars:None with
     | Error (F.Refusal (F.Url_blocked msg)) ->
-        A.check A.bool "not fetchable named" true (contains_substring msg "not fetchable")
+        A.check A.bool "not fetchable named" true (contains ~haystack:msg ~needle:"not fetchable")
     | other ->
         Alcotest.failf "expected Url_blocked, got %s"
           (match other with
@@ -246,14 +239,14 @@ let test_json_is_fetchable_and_addressable () =
   with_fetcher (fun fetcher port ->
     let page = expect_ok (base fetcher port "/json") in
     A.check A.bool "addressable" true page.F.path_addressable;
-    A.check A.bool "path printed" true (contains_substring page.F.text "$.item.name");
+    A.check A.bool "path printed" true (contains ~haystack:page.F.text ~needle:"$.item.name");
     A.check (A.option A.string) "content type" (Some "application/json") page.F.content_type)
 
 let test_csv_is_fetchable_and_addressable () =
   with_fetcher (fun fetcher port ->
     let page = expect_ok (base fetcher port "/csv") in
     A.check A.bool "addressable" true page.F.path_addressable;
-    A.check A.bool "row path" true (contains_substring page.F.text "$.rows[0].name"))
+    A.check A.bool "row path" true (contains ~haystack:page.F.text ~needle:"$.rows[0].name"))
 
 let test_an_unsupported_type_is_refused_by_name () =
   with_fetcher (fun fetcher port ->
@@ -267,7 +260,7 @@ let test_a_truncated_csv_keeps_the_rows_above_the_cut () =
   with_fetcher ~max_download_bytes:10_000 (fun fetcher port ->
     let page = expect_ok (base fetcher port "/big-csv") in
     A.check A.bool "still addressable" true page.F.path_addressable;
-    A.check A.bool "head rows whole" true (contains_substring page.F.text "$.rows[0].name  \"Ada\""))
+    A.check A.bool "head rows whole" true (contains ~haystack:page.F.text ~needle:"$.rows[0].name  \"Ada\""))
 
 let test_an_oversized_html_page_is_capped () =
   with_fetcher ~max_download_bytes:50_000 (fun fetcher port ->

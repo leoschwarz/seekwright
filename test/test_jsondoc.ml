@@ -16,6 +16,7 @@
 
 module J = Seekwright_fetch.Jsondoc
 module A = Alcotest
+open Test_support
 
 let doc =
   "\n{\n  \"total_count\": 1615,\n  \"items\": [\n    {\"id\": 1, \"name\": \"first\", \"tags\": [\"a\", \"b\"], \"meta\": {\"score\": 1.5}},\n    {\"id\": 2, \"name\": \"second\", \"tags\": [], \"meta\": {}}\n  ],\n  \"next\": null\n}\n"
@@ -31,26 +32,11 @@ let render body =
 
 let rendered () = render doc
 
-let find_at hay needle =
-  let n = String.length hay and m = String.length needle in
-  let rec go i = if i + m > n then None else if String.sub hay i m = needle then Some i else go (i + 1) in
-  go 0
-
-let contains_substring hay needle = find_at hay needle <> None
-
-let rec replace_all hay needle with_ =
-  match find_at hay needle with
-  | None -> hay
-  | Some i ->
-      String.sub hay 0 i
-      ^ with_
-      ^ replace_all
-          (String.sub hay (i + String.length needle) (String.length hay - i - String.length needle))
-          needle with_
-
-let index_of text needle =
+(* The offset of a needle the fixture is known to carry; a missing one is a
+   broken fixture, and the failure names the needle. *)
+let require_offset text needle =
   (* The fixtures are ASCII, so the byte index is the codepoint index. *)
-  match find_at text needle with
+  match find_sub ~haystack:text ~needle:needle () with
   | Some i -> i
   | None -> A.failf "needle %S not found" needle ()
 
@@ -89,7 +75,7 @@ let assert_path_syntax ?(match_ = None) f =
   match f () with
   | exception J.Path_syntax msg -> (
       match match_ with
-      | Some needle when not (contains_substring msg needle) ->
+      | Some needle when not (contains ~haystack:msg ~needle:needle) ->
           A.failf "message %S lacks %S" msg needle ()
       | _ -> ())
   | _ -> A.fail "expected Path_syntax"
@@ -216,7 +202,7 @@ let test_deep_nesting_is_cut_at_the_depth_cap () =
   match J.render_json body with
   | None -> A.fail "deep nesting did not render"
   | Some text ->
-      if not (contains_substring text "not expanded: nested past depth") then
+      if not (contains ~haystack:text ~needle:"not expanded: nested past depth") then
         A.fail "no depth cut line";
       A.check A.bool "size" true (String.length text < 4 * 5000)
 
@@ -232,7 +218,7 @@ let test_a_wide_document_inside_the_depth_cap_is_cut_by_size () =
   match J.render_json body with
   | None -> A.fail "wide document did not render"
   | Some text ->
-      if not (contains_substring text "not rendered: the document expands past the budget of")
+      if not (contains ~haystack:text ~needle:"not rendered: the document expands past the budget of")
       then A.fail "no budget cut line";
       A.check A.bool "within a small multiple of the body" true
         (String.length text < 5 * String.length body)
@@ -244,7 +230,7 @@ let test_a_document_people_publish_is_never_cut () =
   match J.render_json body with
   | None -> A.fail "api response did not render"
   | Some text ->
-      if contains_substring text "not rendered" then A.fail "response was cut";
+      if contains ~haystack:text ~needle:"not rendered" then A.fail "response was cut";
       A.check A.int "line count" (3000 * 3 + 2) (List.length (lines text))
 
 let test_every_rendered_path_reads_back_through_the_grammar () =
@@ -253,7 +239,7 @@ let test_every_rendered_path_reads_back_through_the_grammar () =
   List.iter
     (fun line ->
       let path =
-        match find_at line "  " with
+        match find_sub ~haystack:line ~needle:"  " () with
         | Some i -> String.sub line 0 i
         | None -> line
       in
@@ -289,7 +275,7 @@ let test_a_quoted_key_holding_a_colon_is_a_name_not_a_slice () =
   let line = List.nth (lines text) 1 in
   A.check A.string "quoted key line" "$[\"a: b\"]  1" line;
   let path =
-    match find_at line "  " with
+    match find_sub ~haystack:line ~needle:"  " () with
     | Some i -> String.sub line 0 i
     | None -> line
   in
@@ -331,7 +317,7 @@ let test_a_leaf_is_one_span () =
   let needle = "$.items[0].name  \"first\"" in
   let spans, dropped = J.select_paths text "$.items[0].name" ~max_chars:6000 in
   A.check (A.list (A.pair A.int A.string)) "one span"
-    [ (index_of text needle, needle) ] spans;
+    [ (require_offset text needle, needle) ] spans;
   A.check A.int "nothing dropped" 0 dropped
 
 let test_a_container_is_its_whole_subtree () =
@@ -340,9 +326,9 @@ let test_a_container_is_its_whole_subtree () =
   let text = snd (List.nth spans 0) in
   A.check A.bool "starts at the row object" true
     (String.starts_with ~prefix:"$.items[1]  object(4)" text);
-  if not (contains_substring text "$.items[1].name") then
+  if not (contains ~haystack:text ~needle:"$.items[1].name") then
     A.fail "subtree lost its member";
-  if contains_substring text "$.total_count" then
+  if contains ~haystack:text ~needle:"$.total_count" then
     A.fail "took more than the subtree"
 
 let test_a_wildcard_selects_one_line_per_element () =
@@ -356,7 +342,7 @@ let test_a_slice_selects_a_range_of_an_array () =
   A.check A.bool "starts at the first row" true
     (String.starts_with ~prefix:"$.items[0]  object(4)" (snd (List.nth spans 0)));
   A.check A.bool "slice ends before the second" false
-    (contains_substring (snd (List.nth spans 0)) "$.items[1]")
+    (contains ~haystack:(snd (List.nth spans 0)) ~needle:"$.items[1]")
 
 let test_an_index_segment_is_a_step_not_a_character_prefix () =
   let spans, _ = J.select_paths (render "{\"a\": {\"b\": 1}}") "$[0]" ~max_chars:600 in
@@ -428,7 +414,7 @@ let test_the_shape_round_trips_through_the_grammar () =
       List.iter
         (fun line ->
           let path =
-            match find_at line "  " with
+            match find_sub ~haystack:line ~needle:"  " () with
             | Some i -> String.sub line 0 i
             | None -> line
           in
@@ -440,7 +426,7 @@ let test_leaves_read_as_types_not_values () =
   match J.render_schema body with
   | None -> A.fail "schema refused"
   | Some text ->
-      if contains_substring text "secret" then A.fail "a leaf value rode through";
+      if contains ~haystack:text ~needle:"secret" then A.fail "a leaf value rode through";
       assert_in "$.s  string" (lines text);
       assert_in "$.n  number" (lines text);
       assert_in "$.b  bool" (lines text);
@@ -467,7 +453,7 @@ let test_a_uniform_array_collapses_to_one_star_subtree () =
       assert_in "$.items[*].id  number" (lines schema);
       assert_in "$.items[*].name  string" (lines schema);
       (* A uniform array is one subtree, not two members. *)
-      if contains_substring schema "[0]" then A.fail "collapse did not happen"
+      if contains ~haystack:schema ~needle:"[0]" then A.fail "collapse did not happen"
 
 let test_heterogeneous_members_print_one_line_each () =
   let body = render "{\"mixed\": [1, \"two\", null]}" in
@@ -494,7 +480,7 @@ let test_uniformity_is_checked_recursively () =
   match J.render_schema body with
   | None -> A.fail "schema refused"
   | Some schema ->
-      if contains_substring (replace_all schema "$  object" "") "$.rows[*]" then
+      if contains ~haystack:(replace_all ~haystack:schema ~needle:"$  object" ~with_:"") ~needle:"$.rows[*]" then
         A.fail "collapse happened";
       assert_in "$.rows[0].a  number" (lines schema);
       assert_in "$.rows[1].b  number" (lines schema)
@@ -517,7 +503,7 @@ let test_annotations_ride_through_verbatim () =
   match J.render_schema text with
   | None -> A.fail "schema refused"
   | Some schema ->
-      if not (contains_substring schema "not expanded: nested past depth 100") then
+      if not (contains ~haystack:schema ~needle:"not expanded: nested past depth 100") then
         A.fail "annotation lost"
 
 let test_not_a_rendering_is_refused_wholesale () =
@@ -542,10 +528,10 @@ let test_the_schema_is_small_where_the_rendering_is_big () =
   | Some schema ->
       A.check A.bool "schema is small" true (String.length schema < 500);
       if
-        not (contains_substring schema "not rendered: the document expands past the budget")
+        not (contains ~haystack:schema ~needle:"not rendered: the document expands past the budget")
       then A.fail "the cut line does not ride";
       let path =
-        match find_at schema "  " with
+        match find_sub ~haystack:schema ~needle:"  " () with
         | Some i -> String.sub schema 0 i
         | None -> schema
       in

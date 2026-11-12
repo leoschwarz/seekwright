@@ -15,24 +15,7 @@ module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module Freeserp = Seekwright_providers.Freeserp
 module A = Alcotest
-
-let check_string what expected got = A.(check string) what expected got
-let check_bool what expected got = A.(check bool) what expected got
-let check_int what expected got = A.(check int) what expected got
-let check_opt what expected got = A.(check (option string)) what expected got
-let check_opt_int what expected got = A.(check (option int)) what expected got
-
-(* Alcotest's float testable takes the absolute error, not a labelled option. *)
-let number = A.float 1e-9
-let check_number what expected got = A.(check number) what expected got
-let check_opt_number what expected got = A.(check (option number)) what expected got
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false else String.sub text i m = needle || from (i + 1)
-  in
-  from 0
+open Test_support
 
 (* UTF-8 codepoints, so a cap assertion says the same thing the Python [len]
    said: the cap counts characters, and an ellipsis is one of them. *)
@@ -216,7 +199,7 @@ let a_serp_record_fills_snippet_and_never_text () =
   List.iter
     (fun (h : Provider.hit) ->
       check_bool "snippet is filled" true (h.result.snippet <> None);
-      check_opt "text is never filled" None h.result.text)
+      check_opt_string "text is never filled" None h.result.text)
     (parse sample_json)
 
 let the_snippet_cap_clips_and_measures () =
@@ -235,17 +218,16 @@ let uncapped_chars_reach_the_boundary_not_the_wire () =
   let hits = parse sample_json in
   check_opt_int "recorded" (Some 132) (List.hd hits).uncapped_chars;
   check_bool "absent from the wire model" false
-    (contains (Yojson.Safe.to_string (Model.result_to_yojson (List.hd hits).result))
-       "uncapped")
+    (contains ~haystack:(Yojson.Safe.to_string (Model.result_to_yojson (List.hd hits).result)) ~needle:"uncapped")
 
 let published_at_is_the_date () =
-  check_opt "the declared date" (Some "2024-10-04")
+  check_opt_string "the declared date" (Some "2024-10-04")
     (List.hd (parse sample_json)).result.published_date
 
 let crawled_at_stands_in_when_published_at_is_missing () =
   (* Their docs say the declared date is missing for many pages, and the crawl
      date is the honest stand-in. *)
-  check_opt "the crawl date" (Some "2026-06-30")
+  check_opt_string "the crawl date" (Some "2026-06-30")
     (List.nth (parse sample_json) 1).result.published_date
 
 let a_falsy_published_at_falls_through_to_crawled_at () =
@@ -261,11 +243,11 @@ let a_falsy_published_at_falls_through_to_crawled_at () =
                  ];
              ])
       in
-      check_opt what (Some "2026-01-02") (List.hd hits).result.published_date)
+      check_opt_string what (Some "2026-01-02") (List.hd hits).result.published_date)
     [ ("null", `Null); ("empty", `String ""); ("zero", `Int 0) ]
 
 let no_date_is_invented_when_neither_is_present () =
-  check_opt "no date" None (List.hd (parse (payload [ record [] ]))).result.published_date
+  check_opt_string "no date" None (List.hd (parse (payload [ record [] ]))).result.published_date
 
 let the_score_passes_through_as_is () =
   (* Their BM25 x trust number, not a normalised relevance: nothing downstream
@@ -314,7 +296,7 @@ let the_cross_promotion_block_is_ignored () =
   (* [related_apis] advertises the operator's other services. It is a promotion,
      not a result source: the mapping reads [results[]] and nothing else, so a
      body with the block and one without parse identically. *)
-  check_bool "the fixture carries it" true (contains sample "related_apis");
+  check_bool "the fixture carries it" true (contains ~haystack:sample ~needle:"related_apis");
   let without =
     `Assoc
       (List.filter (fun (key, _) -> key <> "related_apis")
@@ -363,7 +345,7 @@ let the_upstream_error_text_is_not_interpolated () =
   let failure = engine_fallback_refusal body (query ()) in
   check_string "the sentence is the adapter's own" "upstream index unavailable" failure.message;
   check_bool "nothing from the body rides along" false
-    (contains (Provider.render_error failure) "internal.example")
+    (contains ~haystack:(Provider.render_error failure) ~needle:"internal.example")
 
 let a_false_or_absent_key_maps_normally () =
   let with_false =
@@ -386,26 +368,26 @@ let get_to_the_web_index_self_identifying () =
   check_string "the path" "/api.php" (Uri.path request.uri);
   check_string "the host" "freeserp.ai" (Option.get (Uri.host request.uri));
   check_string "the scheme" "https" (Option.get (Uri.scheme request.uri));
-  check_opt "the web index, not the sites default" (Some "web") (param request "index");
-  check_opt "the query" (Some "wal mode") (param request "q");
-  check_opt "the size follows max_results" (Some "3") (param request "size");
+  check_opt_string "the web index, not the sites default" (Some "web") (param request "index");
+  check_opt_string "the query" (Some "wal mode") (param request "q");
+  check_opt_string "the size follows max_results" (Some "3") (param request "size");
   (* The operator asks callers to say who they are; nothing validates it, which
      is why neither value is config. *)
-  check_opt "the agent" (Some Freeserp.agent) (param request "agent");
-  check_opt "the website" (Some Provider.project_url) (param request "website")
+  check_opt_string "the agent" (Some Freeserp.agent) (param request "agent");
+  check_opt_string "the website" (Some Provider.project_url) (param request "website")
 
 let size_is_clamped_to_the_endpoint_ceiling () =
   (* The tool schema caps [max_results] at 20, but the adapter is callable
      directly, so the clamp lives here rather than being assumed. *)
   let _, request = search_of ~query:(query ~max_results:500 ()) () in
-  check_opt "the endpoint's ceiling" (Some (string_of_int Freeserp.max_size))
+  check_opt_string "the endpoint's ceiling" (Some (string_of_int Freeserp.max_size))
     (param request "size")
 
 let a_language_reaches_lang_lowercased () =
   (* [lang] is an ISO 639-1 code; the schema already guarantees the two-letter
      form, and this backend has no country parameter at all. *)
   let _, request = search_of ~query:(query ~language:"DE" ()) () in
-  check_opt "lowercased, not split" (Some "de") (param request "lang")
+  check_opt_string "lowercased, not split" (Some "de") (param request "lang")
 
 let no_lang_is_sent_when_none_was_asked_for () =
   let _, request = search_of () in
@@ -442,7 +424,7 @@ let the_unhonourable_constraints_are_reported_never_guessed () =
   check_string "the notice names exactly what dropped"
     "cannot filter by domain or country or safe-search; that constraint was ignored"
     (Option.get outcome.notice);
-  check_opt "the language did ride the wire" (Some "de") (param request "lang");
+  check_opt_string "the language did ride the wire" (Some "de") (param request "lang");
   List.iter
     (fun name ->
       check_bool (Printf.sprintf "no %s parameter" name) false (has_param request name))
@@ -452,7 +434,7 @@ let the_unhonourable_constraints_are_reported_never_guessed () =
     ];
   (* No [site:] operator either: a backend with a native filter field never
      folds the domain into the query, and this one has no field either. *)
-  check_opt "the query is sent as asked" (Some "wal mode") (param request "q")
+  check_opt_string "the query is sent as asked" (Some "wal mode") (param request "q")
 
 let safe_search_is_noticed_for_both_values () =
   (* Both values are drops: FreeSerp has no safety parameter at all. [None] is
@@ -473,17 +455,17 @@ let the_candidate_pool_size_is_not_a_hit_count () =
   let outcome, _ = search_of () in
   check_int "the two records the fixture counts" 2 (List.length outcome.results);
   check_bool "not the pool size" true (List.length outcome.results <> 30);
-  check_opt "no notice" None outcome.notice
+  check_opt_string "no notice" None outcome.notice
 
 let a_honoured_constraint_draws_no_notice () =
   let outcome, _ = search_of ~query:(query ~language:"de" ~recency:Model.Month ()) () in
-  check_opt "nothing dropped" None outcome.notice
+  check_opt_string "nothing dropped" None outcome.notice
 
 let the_result_reports_its_flat_zero_cost () =
   let outcome, _ = search_of ~query:(query ~max_results:5 ()) () in
   check_string "named by the adapter that served it" "freeserp" outcome.provider;
   check_opt_number "flat zero" (Some 0.) outcome.cost_usd;
-  check_opt "no answer from a SERP adapter" None outcome.answer
+  check_opt_string "no answer from a SERP adapter" None outcome.answer
 
 (* {1 The failures this adapter owns}
 
@@ -523,7 +505,7 @@ let the_status_row_carries_only_the_code () =
   | Error failure ->
       check_string "the code is the whole payload" "HTTP 502" failure.message;
       check_bool "the body is not quoted" false
-        (contains (Provider.render_error failure) "error page")
+        (contains ~haystack:(Provider.render_error failure) ~needle:"error page")
 
 let a_network_failure_does_not_echo_the_request () =
   (* The message must not carry the underlying failure: httpx errors echo the
@@ -537,7 +519,7 @@ let a_network_failure_does_not_echo_the_request () =
   | Error failure ->
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
-        (contains (Provider.render_error failure) "secret-marker")
+        (contains ~haystack:(Provider.render_error failure) ~needle:"secret-marker")
 
 let the_grants_bound_is_the_timeout_row () =
   let provider = refusal Caps.Error.Timeout ~message:"operation bound of 10s exceeded" in

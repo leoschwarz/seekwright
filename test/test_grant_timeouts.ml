@@ -10,6 +10,7 @@ module Config = Seekwright.Config
 module Factory = Seekwright_factory.Factory
 module Health = Seekwright.Health
 module A = Alcotest
+open Test_support
 
 exception Done
 
@@ -128,27 +129,12 @@ let test_a_probe_net_honours_its_bound () =
    dropped while the behavioural case above still passes for providers. *)
 let factory_source = "../lib/factory/factory.ml"
 
-let read path =
-  let channel = open_in_bin path in
-  Fun.protect
-    ~finally:(fun () -> close_in_noerr channel)
-    (fun () -> really_input_string channel (in_channel_length channel))
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false
-    else if String.sub text i m = needle then true
-    else from (i + 1)
-  in
-  from 0
-
 let test_every_bounded_grant_reads_its_config_key () =
-  let source = read factory_source in
+  let source = read_file factory_source in
   List.iter
     (fun (what, expression) ->
       A.(check bool (what ^ " is read where its grant is built") true
-           (contains source expression)))
+           (contains ~haystack:source ~needle:expression)))
     [
       ("policy.provider_timeout_seconds", "policy.Config.provider_timeout_seconds");
       ("fetch.timeout_seconds", "fetch.Config.timeout_seconds");

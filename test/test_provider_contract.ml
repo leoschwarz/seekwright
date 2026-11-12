@@ -26,16 +26,10 @@ module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module A = Alcotest
+open Test_support
 
 (* Never sent to anything real: it is the string a leak would carry. *)
 let probe_key = "contract-probe-key-4c1f"
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false else String.sub text i m = needle || from (i + 1)
-  in
-  from 0
 
 let probe_query =
   {
@@ -243,9 +237,9 @@ let problems adapter row probe =
         else [ Printf.sprintf "%s: provider names %S" here failure.provider ]
       in
       let leak =
-        if contains (Provider.render_error failure) probe_key then
+        if contains ~haystack:(Provider.render_error failure) ~needle:probe_key then
           [ Printf.sprintf "%s: the request key leaked into %S" here (Provider.render_error failure) ]
-        else if contains failure.message probe_key then
+        else if contains ~haystack:failure.message ~needle:probe_key then
           [ Printf.sprintf "%s: the key is in the message" here ]
         else []
       in

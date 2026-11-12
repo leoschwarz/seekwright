@@ -24,6 +24,7 @@ module Policy = Mcp_caps.Policy
 module Registry = Mcp_caps.Registry
 module Server = Mcp_caps.Server
 module Tool = Mcp_caps.Tool
+open Test_support
 
 let path_schema =
   `Assoc
@@ -128,16 +129,6 @@ let call server path =
 let listed server =
   Yojson.Safe.to_string (dispatch server {|{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}|})
 
-let starts_with prefix text =
-  String.length text >= String.length prefix && String.sub text 0 (String.length prefix) = prefix
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false else if starts_with needle (String.sub text i m) then true else from (i + 1)
-  in
-  from 0
-
 (* A tool result, as the caller sees it: [isError] and the one text block. A
    JSON-RPC error (no [result] at all) is reported as [None]. *)
 let answer response =
@@ -174,16 +165,17 @@ let show = function Some (is_error, text) -> Printf.sprintf "isError=%b %S" is_e
    asking for one by name leaks nothing about what the operator has. *)
 let a_registry_without_a_grant_does_not_serve_the_tool () =
   let server = served_ping_only () in
-  Alcotest.(check bool) "read_source is not advertised" false (contains (listed server) "read_source");
-  Alcotest.(check bool) "ping is advertised" true (contains (listed server) "ping");
+  Alcotest.(check bool) "read_source is not advertised" false
+    (contains ~haystack:(listed server) ~needle:"read_source");
+  Alcotest.(check bool) "ping is advertised" true (contains ~haystack:(listed server) ~needle:"ping");
   let response = Yojson.Safe.to_string (call server "answer.md") in
   (* mcp-kit owns the JSON-RPC error for a name it does not offer; what the
      layer has to guarantee is that no file content and no root path ride along
      with it. *)
   Alcotest.(check bool) "the call is answered as a JSON-RPC error" true
-    (contains response "\"error\"" && not (contains response "\"result\""));
+    (contains ~haystack:response ~needle:"\"error\"" && not (contains ~haystack:response ~needle:"\"result\""));
   Alcotest.(check bool) "nothing about the root leaks: " false
-    (contains response "from A" || contains response root_a)
+    (contains ~haystack:response ~needle:"from A" || contains ~haystack:response ~needle:root_a)
 
 let one_grant_reads_its_own_root () =
   with_grant ~root:root_a (fun grant ->
@@ -208,9 +200,10 @@ let a_sibling_root_is_not_readable () =
   with_grant ~root:root_a (fun grant ->
     match answer (call (served_fs ~grant) "secret.md") with
     | Some (true, text) ->
-        Alcotest.(check bool) "unavailable" true (starts_with "unavailable:" text);
-        Alcotest.(check bool) ("no leak of the other root: " ^ text) false (contains text "not yours");
-        Alcotest.(check bool) ("no leak of a real path: " ^ text) false (contains text root_b)
+        Alcotest.(check bool) "unavailable" true (String.starts_with ~prefix:"unavailable:" text);
+        Alcotest.(check bool) ("no leak of the other root: " ^ text) false
+          (contains ~haystack:text ~needle:"not yours");
+        Alcotest.(check bool) ("no leak of a real path: " ^ text) false (contains ~haystack:text ~needle:root_b)
     | answer -> Alcotest.failf "expected a refusal, got %s" (show answer))
 
 let a_path_cannot_walk_to_a_sibling () =
@@ -223,9 +216,9 @@ let a_path_cannot_walk_to_a_sibling () =
         match answer (call (served_fs ~grant) path) with
         | Some (true, text) ->
             Alcotest.(check bool) "invalid or denied" true
-              (starts_with "invalid:" text || starts_with "denied:" text);
-            Alcotest.(check bool) ("no leak of a real path: " ^ text) false (contains text root_b);
-            Alcotest.(check bool) ("no leak of the root: " ^ text) false (contains text root_a)
+              (String.starts_with ~prefix:"invalid:" text || String.starts_with ~prefix:"denied:" text);
+            Alcotest.(check bool) ("no leak of a real path: " ^ text) false (contains ~haystack:text ~needle:root_b);
+            Alcotest.(check bool) ("no leak of the root: " ^ text) false (contains ~haystack:text ~needle:root_a)
         | answer -> Alcotest.failf "%S expected a refusal, got %s" path (show answer))
       [ "../" ^ Filename.basename root_b ^ "/secret.md"; sibling ^ "/secret.md"; "notes/../../secret.md" ])
 
@@ -236,9 +229,9 @@ let a_symlink_escape_refuses_through_the_transport () =
   with_grant ~root:root_a (fun grant ->
     match answer (call (served_fs ~grant) "escape") with
     | Some (true, text) ->
-        Alcotest.(check bool) "denied" true (starts_with "denied:" text);
-        Alcotest.(check bool) ("no passwd content: " ^ text) false (contains text "root:");
-        Alcotest.(check bool) ("no native path: " ^ text) false (contains text root_a)
+        Alcotest.(check bool) "denied" true (String.starts_with ~prefix:"denied:" text);
+        Alcotest.(check bool) ("no passwd content: " ^ text) false (contains ~haystack:text ~needle:"root:");
+        Alcotest.(check bool) ("no native path: " ^ text) false (contains ~haystack:text ~needle:root_a)
     | answer -> Alcotest.failf "expected denied, got %s" (show answer))
 
 (* A test-local grant: an association list standing in for a subtree. The point
@@ -278,7 +271,7 @@ let a_test_can_register_an_in_memory_grant () =
   let server = Server.of_registry ~name:"test" ~version:"0" registry |> server_of_server_error in
   match (answer (call server "answer.md"), answer (call server "escape")) with
   | Some (false, "from memory\n"), Some (true, text) ->
-      Alcotest.(check bool) "unavailable" true (starts_with "unavailable:" text)
+      Alcotest.(check bool) "unavailable" true (String.starts_with ~prefix:"unavailable:" text)
   | answer_a, answer_b ->
       Alcotest.failf "expected the fake root's file and a refusal, got %s and %s"
         (show answer_a) (show answer_b)

@@ -9,6 +9,8 @@
    is missing, which is what stops a glob that matched nothing from passing
    vacuously. *)
 
+open Test_support
+
 let library_dir = "../lib/caps"
 let adapter = "server.ml"
 
@@ -25,21 +27,10 @@ let library_modules () =
 
 let core_modules () = List.filter (fun name -> name <> adapter) (library_modules ())
 
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false
-    else if String.sub text i m = needle then true
-    else from (i + 1)
-  in
-  from 0
-
 let read path =
   if not (Sys.file_exists path) then
     Alcotest.failf "%s is missing from the test sandbox (test/dune declares it)" path;
-  let channel = open_in path in
-  let contents = really_input_string channel (in_channel_length channel) in
-  close_in channel; contents
+  read_file path
 
 (* Only the module path is checked: prose in a comment may name mcp-kit freely,
    an import may not. *)
@@ -50,15 +41,20 @@ let no_module_imports_mcp_kit () =
       Alcotest.(check bool)
         (path ^ " names no Mcp_kit module")
         false
-        (contains (read path) "Mcp_kit"))
+        (contains ~haystack:(read path) ~needle:"Mcp_kit"))
     (core_modules ())
 
 let the_adapter_is_still_there () =
   let source = read (Filename.concat library_dir adapter) in
-  Alcotest.(check bool) "server.ml is the mcp-kit adapter" true (contains source "Mcp_kit");
+  Alcotest.(check bool) "server.ml is the mcp-kit adapter" true
+    (contains ~haystack:source ~needle:"Mcp_kit");
   Alcotest.(check bool) "and it is the only one" true
     (List.for_all
-       (fun module_name -> not (contains (read (Filename.concat library_dir module_name)) "Mcp_kit"))
+       (fun module_name ->
+         not
+           (contains
+              ~haystack:(read (Filename.concat library_dir module_name))
+              ~needle:"Mcp_kit"))
        (core_modules ()))
 
 let () =

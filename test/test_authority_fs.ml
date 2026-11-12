@@ -16,20 +16,12 @@
 module Authority = Mcp_caps.Authority
 module Error = Mcp_caps.Error
 module Policy = Mcp_caps.Policy
+open Test_support
 
 let kind_testable =
   Alcotest.testable
     (fun ppf kind -> Format.pp_print_string ppf (Error.kind_to_string kind))
     ( = )
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false
-    else if String.sub text i m = needle then true
-    else from (i + 1)
-  in
-  from 0
 
 let root = Filename.temp_dir "mcp-caps-fs" ""
 
@@ -82,7 +74,7 @@ let check_message error =
      operator's root actually is: that is the server's layout, not the caller's. *)
   Alcotest.(check bool)
     ("the message does not name the real root: " ^ Error.message error)
-    false (contains (Error.message error) root);
+    false (contains ~haystack:(Error.message error) ~needle:root);
   Alcotest.(check bool)
     ("the message is one line: " ^ Error.render error)
     true

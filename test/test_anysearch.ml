@@ -21,24 +21,7 @@ module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module Anysearch = Seekwright_providers.Anysearch
 module A = Alcotest
-
-let check_string what expected got = A.(check string) what expected got
-let check_bool what expected got = A.(check bool) what expected got
-let check_int what expected got = A.(check int) what expected got
-let check_opt what expected got = A.(check (option string)) what expected got
-let check_opt_int what expected got = A.(check (option int)) what expected got
-
-(* Alcotest's float testable takes the absolute error, not a labelled option. *)
-let number = A.float 1e-9
-let check_number what expected got = A.(check number) what expected got
-let check_opt_number what expected got = A.(check (option number)) what expected got
-
-let contains text needle =
-  let n = String.length text and m = String.length needle in
-  let rec from i =
-    if i + m > n then false else String.sub text i m = needle || from (i + 1)
-  in
-  from 0
+open Test_support
 
 let chars s =
   let n = ref 0 and i = ref 0 in
@@ -169,10 +152,10 @@ let the_limit_is_honoured () =
 
 let a_serp_record_keeps_snippet_and_never_text () =
   let hits = parse sample_data in
-  check_opt "the snippet" (Some "Introduction to the changes in Go 1.26.")
+  check_opt_string "the snippet" (Some "Introduction to the changes in Go 1.26.")
     (List.hd hits).result.snippet;
   List.iter
-    (fun (h : Provider.hit) -> check_opt "text is never filled" None h.result.text)
+    (fun (h : Provider.hit) -> check_opt_string "text is never filled" None h.result.text)
     hits
 
 let the_content_extract_is_never_read () =
@@ -180,20 +163,22 @@ let the_content_extract_is_never_read () =
      that [fetch] is for. *)
   List.iter
     (fun (h : Provider.hit) ->
-      check_opt "no text" None h.result.text;
+      check_opt_string "no text" None h.result.text;
       check_bool "the extract is not smuggled into the snippet" false
-        (contains (Option.value ~default:"" h.result.snippet) "introduces changes to the language"))
+        (contains
+           ~haystack:(Option.value ~default:"" h.result.snippet)
+           ~needle:"introduces changes to the language"))
     (parse sample_data)
 
 let a_missing_snippet_stays_absent () =
   (* [snippet] is documented as omitted when unavailable, and a proxy that
      invents one is worse than one that says nothing. *)
-  check_opt "no snippet" None (List.nth (parse sample_data) 1).result.snippet
+  check_opt_string "no snippet" None (List.nth (parse sample_data) 1).result.snippet
 
 let no_date_is_invented () =
   (* No date field exists upstream, so [published_date] stays empty. *)
   List.iter
-    (fun (h : Provider.hit) -> check_opt "no date" None h.result.published_date)
+    (fun (h : Provider.hit) -> check_opt_string "no date" None h.result.published_date)
     (parse sample_data)
 
 let the_snippet_cap_clips () =
@@ -214,7 +199,7 @@ let the_length_the_cap_discarded_is_recorded () =
      here the measurement sits beside the result on the provider boundary, and
      the wire model has no field for it. *)
   check_bool "absent from the wire model" false
-    (contains (Yojson.Safe.to_string (Model.result_to_yojson hit.result)) "uncapped")
+    (contains ~haystack:(Yojson.Safe.to_string (Model.result_to_yojson hit.result)) ~needle:"uncapped")
 
 let records_without_a_url_or_title_are_dropped () =
   let drop items = List.length (parse (`Assoc [ ("results", `List items) ])) in
@@ -273,7 +258,7 @@ let a_non_string_snippet_is_dropped_and_the_call_succeeds () =
       let outcome, _ = search_of ~body:(Yojson.Safe.to_string data) () in
       check_int (Printf.sprintf "the call succeeds with a %s" what) 1
         (List.length outcome.results);
-      check_opt "the snippet is dropped" None (List.hd outcome.results).result.snippet)
+      check_opt_string "the snippet is dropped" None (List.hd outcome.results).result.snippet)
     [
       ("object", `Assoc [ ("nested", `String "object") ]);
       ("list", `List [ `String "a"; `String "b" ]);
@@ -312,7 +297,7 @@ let a_non_string_title_drops_the_record () =
 let a_string_snippet_still_reaches_the_caller () =
   (* The guard must not change behaviour for a well-formed payload. *)
   let outcome, _ = search_of () in
-  check_opt "the snippet" (Some "Introduction to the changes in Go 1.26.")
+  check_opt_string "the snippet" (Some "Introduction to the changes in Go 1.26.")
     (List.hd outcome.results).result.snippet
 
 (* {1 The request}
@@ -339,7 +324,7 @@ let posts_json_to_the_documented_endpoint_without_auth () =
 
 let the_query_and_max_results_are_sent () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:3 ()) () in
-  check_opt "the query" (Some "wal mode") (Provider.Json.string_field "query" (body_of request));
+  check_opt_string "the query" (Some "wal mode") (Provider.Json.string_field "query" (body_of request));
   check_opt_number "max_results" (Some 3.) (Provider.Json.number_field "max_results" (body_of request))
 
 let max_results_is_clamped_to_the_documented_range () =
@@ -352,9 +337,9 @@ let max_results_is_clamped_to_the_documented_range () =
 
 let language_is_lowercased_on_the_wire () =
   let outcome, request = search_of ~query:(query ~language:"DE" ()) () in
-  check_opt "lowercased" (Some "de") (Provider.Json.string_field "language" (body_of request));
+  check_opt_string "lowercased" (Some "de") (Provider.Json.string_field "language" (body_of request));
   (* Language is honoured, so a language-only constraint carries no notice. *)
-  check_opt "no notice" None outcome.notice
+  check_opt_string "no notice" None outcome.notice
 
 let language_is_absent_without_a_language () =
   let _, request = search_of () in
@@ -371,7 +356,7 @@ let never_sends_a_region_or_capability_field () =
 
 let an_unconstrained_query_carries_no_notice () =
   let outcome, _ = search_of () in
-  check_opt "no notice" None outcome.notice
+  check_opt_string "no notice" None outcome.notice
 
 let each_dropped_constraint_is_noticed () =
   List.iter
@@ -422,7 +407,7 @@ let a_402_body_with_credentials_never_reaches_the_message () =
   List.iter
     (fun secret ->
       check_bool (Printf.sprintf "the body never echoes %s" secret) false
-        (contains (Provider.render_error failure) secret))
+        (contains ~haystack:(Provider.render_error failure) ~needle:secret))
     [ "op123"; "secret-password"; "sk-live-abc" ]
 
 let a_nonzero_business_code_fails_without_echoing_the_message () =
@@ -434,7 +419,7 @@ let a_nonzero_business_code_fails_without_echoing_the_message () =
   in
   check_string "the contracted sentence" "search failed (business error)" failure.message;
   check_bool "the operator's text is not echoed" false
-    (contains (Provider.render_error failure) "caller=seekwright-deployment")
+    (contains ~haystack:(Provider.render_error failure) ~needle:"caller=seekwright-deployment")
 
 let a_missing_business_code_fails_the_same_way () =
   let failure = failed_search ~body:{|{"message": "success", "data": {"results": []}}|} () in
@@ -456,7 +441,7 @@ let a_network_failure_does_not_echo_the_request () =
   | Error failure ->
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
-        (contains (Provider.render_error failure) "secret-query")
+        (contains ~haystack:(Provider.render_error failure) ~needle:"secret-query")
 
 (* {1 Cost and endpoint} *)
 
@@ -470,7 +455,7 @@ let the_result_reports_its_flat_cost () =
   let outcome, _ = search_of ~query:(query ~max_results:5 ()) () in
   check_string "named by the adapter that served it" "anysearch" outcome.provider;
   check_opt_number "flat zero" (Some 0.) outcome.cost_usd;
-  check_opt "no answer from a SERP adapter" None outcome.answer
+  check_opt_string "no answer from a SERP adapter" None outcome.answer
 
 let an_operator_corrected_cost_reaches_the_adapter () =
   (* An operator on a future paid tier can fix what [--check] reports; the

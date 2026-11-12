@@ -14,6 +14,7 @@
 module J = Seekwright_fetch.Jsondoc
 module T = Seekwright_fetch.Tabledoc
 module A = Alcotest
+open Test_support
 
 let table_body =
   "id,price,city,qty,note\n1,12.50,London,3,four\n2,7.00,Leeds,11,short\n3,3.99,Bristol,2,x\n4,120.00,Perth,1,long note here\n5,0.50,Cork,7,\n"
@@ -28,13 +29,6 @@ let render ?(delimiter = ",") text =
   | None -> A.fail "fixture did not render"
 
 let table () = render table_body
-
-let find_at hay needle =
-  let n = String.length hay and m = String.length needle in
-  let rec go i = if i + m > n then None else if String.sub hay i m = needle then Some i else go (i + 1) in
-  go 0
-
-let contains_substring hay needle = find_at hay needle <> None
 
 let assert_in needle ls =
   if not (List.mem needle ls) then
@@ -96,7 +90,7 @@ let test_a_long_header_cell_is_cut_to_the_cap () =
   let label = "$.rows[0]." ^ String.make T.max_column_name_chars 'z' in
   assert_in (label ^ "  \"1\"") (lines rendered);
   A.check A.bool "the cap holds" false
-    (contains_substring rendered (String.make (T.max_column_name_chars + 1) 'z'))
+    (contains ~haystack:rendered ~needle:(String.make (T.max_column_name_chars + 1) 'z'))
 
 let test_a_bom_is_not_part_of_the_first_column_name () =
   let ls = lines (render "\xef\xbb\xbfid,name\n1,Ada\n") in
@@ -107,7 +101,7 @@ let test_a_blank_line_between_records_does_not_consume_a_row_index () =
   let ls = lines (render "a,b\n1,x\n\n2,y\n") in
   assert_in "$.rows[1]  object(2)" ls;
   assert_in "$.rows[1].a  \"2\"" ls;
-  A.check A.bool "no third row index" false (contains_substring (String.concat "\n" ls) "$.rows[2]")
+  A.check A.bool "no third row index" false (contains ~haystack:(String.concat "\n" ls) ~needle:"$.rows[2]")
 
 let test_two_columns_with_one_name_print_twice_and_both_are_addressable () =
   (* The file's defect is reported, not renamed away: [path] answers both
@@ -122,7 +116,7 @@ let test_every_line_is_a_path_the_grammar_reads () =
   List.iter
     (fun line ->
       let path =
-        match find_at line "  " with
+        match find_sub ~haystack:line ~needle:"  " () with
         | Some i -> String.sub line 0 i
         | None -> line
       in
@@ -138,7 +132,7 @@ let test_the_shape_names_the_columns_and_withholds_the_values () =
       List.iter
         (fun column -> assert_in (Printf.sprintf "$.rows[*].%s  string" column) ls)
         [ "id"; "price"; "city"; "qty"; "note" ];
-      if contains_substring schema "12.50" then A.fail "a value rode through"
+      if contains ~haystack:schema ~needle:"12.50" then A.fail "a value rode through"
 
 let test_one_column_of_every_row_is_one_wildcard_step () =
   let spans, dropped = J.select_paths (table ()) "$.rows[*].price" ~max_chars:6000 in
@@ -177,7 +171,7 @@ let test_a_column_name_holding_a_colon_stays_a_name_through_the_grammar () =
       (lines rendered)
   in
   let path =
-    match find_at line "  " with
+    match find_sub ~haystack:line ~needle:"  " () with
     | Some i -> String.sub line 0 i
     | None -> line
   in
@@ -234,7 +228,7 @@ let test_a_table_wider_than_its_budget_ends_with_the_line_naming_the_cut () =
   let rendered = render body in
   let budget = max J.min_render_chars (J.max_render_ratio * String.length body) in
   let last = List.nth (lines rendered) (List.length (lines rendered) - 1) in
-  match find_at last "]" with
+  match find_sub ~haystack:last ~needle:"]" () with
   | None -> A.fail "cut line has no row index"
   | Some i ->
       let printed = int_of_string (String.sub last 7 (i - 7)) in

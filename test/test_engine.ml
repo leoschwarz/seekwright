@@ -32,6 +32,7 @@ module Router = Seekwright.Router
 module Sanitize = Seekwright.Sanitize
 module Usage = Seekwright.Usage
 module A = Alcotest
+open Test_support
 
 let z = Sanitize.zwsp
 
@@ -61,41 +62,6 @@ let int = function
 
 let bool = function `Bool b -> b | v -> A.failf "not a flag: %s" (Yojson.Safe.to_string v)
 let is_null = (( = ) `Null)
-
-let find_sub needle text =
-  (* [String.index_opt] takes a char, not a substring; this is the haystack scan
-     the Python suite gets from [needle in text]. *)
-  let needle_length = String.length needle in
-  let haystack_length = String.length text in
-  let rec go index =
-    if index + needle_length > haystack_length
-    then None
-    else if String.sub text index needle_length = needle
-    then Some index
-    else go (index + 1)
-  in
-  go 0
-
-let is_prefix prefix text =
-  (* [String.prefix] and [String.is_suffix] are not in this stdlib; the two
-     helpers are the prefix test the walk-coverage case needs. *)
-  let length = String.length prefix in
-  String.length text >= length && String.sub text 0 length = prefix
-
-let is_suffix affix text =
-  let length = String.length affix in
-  String.length text >= length
-  && String.sub text (String.length text - length) length = affix
-
-let includes label needle text =
-  match find_sub needle text with
-  | Some _ -> ()
-  | None -> A.failf "%s: the text did not contain %S\n     it was: %S" label needle text
-
-let excludes label needle text =
-  match find_sub needle text with
-  | None -> ()
-  | Some _ -> A.failf "%s: the text contained %S, and must not\n     it was: %S" label needle text
 
 let money label expected = function
   | `Int n -> A.(check (float 1e-9) label (float_of_int n) expected)
@@ -378,10 +344,6 @@ let failed board ?provider ?mode q =
     A.failf "expected a failure (502), got a refusal (400): %s" sentence
   | Ok response -> A.failf "expected a failure, got results from %s" response.Model.provider
 
-let check_string = A.(check string)
-let check_int = A.(check int)
-let check_bool = A.(check bool)
-
 (* {1 TestSearch} *)
 
 let results_are_returned () =
@@ -514,7 +476,10 @@ let a_named_provider_failure_stays_terminal () =
   check_int "the ladder behind the default is not walked" 0 (calls board "linkup");
   check_int "one failure line" 1 (count board.lines "search.failed");
   check_int "no walk at all" 0
-    (List.length (List.filter (fun (c : captured) -> is_prefix "search.fallback" c.event) !(board.lines)))
+    (List.length
+       (List.filter
+          (fun (c : captured) -> String.starts_with ~prefix:"search.fallback" c.event)
+          !(board.lines)))
 
 let an_open_circuit_fallback_is_skipped () =
   let health = Health.create ~now ~failure_threshold:1 ~cooldown_seconds:60.0 () in
@@ -599,7 +564,8 @@ let quota_exhausted_reroutes_and_all_quota_keeps_its_advice () =
   in
   let text = failed both_quota (query "x y") in
   includes "the walk is named" " Fallbacks also failed: linkup." text;
-  check_bool "quota advice ends the sentence" true (is_suffix "Do not retry immediately." text)
+  check_bool "quota advice ends the sentence" true
+    (String.ends_with ~suffix:"Do not retry immediately." text)
 
 (* {1 TestFreeMode} *)
 

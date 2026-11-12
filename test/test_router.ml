@@ -16,6 +16,7 @@
 
 module Router = Seekwright.Router
 module A = Alcotest
+open Test_support
 
 (* The frozen free vocabulary: the oracle's FREE_PROVIDERS and FREE_PROVIDER_ORDER
    in src/seekwright/config.py. The Python suite imports those two symbols, so
@@ -67,20 +68,7 @@ let refused call =
   | exception Router.Route_refused sentence -> sentence
 
 let check_refused what expected call = A.(check string) what expected (refused call)
-let check_string what expected got = A.(check string) what expected got
-let check_names what expected got = A.(check (list string)) what expected got
 let check_rungs what expected got = A.(check rungs) what expected got
-let check_bool what expected got = A.(check bool) what expected got
-
-(* The one substring assertion the Python suite makes; where it used
-   pytest.raises(match=…) this suite pins the whole sentence instead. *)
-let contains text needle =
-  let n = String.length text in
-  let m = String.length needle in
-  let rec from i =
-    if i + m > n then false else String.sub text i m = needle || from (i + 1)
-  in
-  from 0
 
 let the_seam =
   [
@@ -208,7 +196,7 @@ let resolve_search_cases =
         ^ ".")
         sentence;
       check_bool "and it does not name the permission set" false
-        (contains sentence "No permitted free provider"));
+        (contains ~haystack:sentence ~needle:"No permitted free provider"));
   ]
 
 let free_route =
@@ -218,16 +206,16 @@ let free_route =
         table ~providers:[ "parallel:free"; "exa:free" ] ~default:(Some "parallel:free")
           ~free_fallback:[ "parallel:free"; "exa:free" ] ()
       in
-      check_names "candidates" [ "parallel:free"; "exa:free" ] (Router.free_candidates ordered);
-      check_names "walk" [ "parallel:free"; "exa:free" ] (Router.free_walk ordered));
+      check_strings "candidates" [ "parallel:free"; "exa:free" ] (Router.free_candidates ordered);
+      check_strings "walk" [ "parallel:free"; "exa:free" ] (Router.free_walk ordered));
     A.test_case "an empty free fallback reads as unset" `Quick (fun () ->
-      check_names "the frozen order" free_order
+      check_strings "the frozen order" free_order
         (Router.free_candidates (table ~free_fallback:[] ())));
     A.test_case "the walk drops the unbuilt the paid and the unpermitted" `Quick (fun () ->
       let narrowed =
         table ~providers:[ "exa:free"; "serper"; "freeserp" ] ~permitted:[ "exa:free"; "serper" ] ()
       in
-      check_names "one name left" [ "exa:free" ] (Router.free_walk narrowed));
+      check_strings "one name left" [ "exa:free" ] (Router.free_walk narrowed));
     A.test_case "unnamed walks free is a truth table" `Quick (fun () ->
       let all_free = [ "exa:free"; "parallel:free"; "freeserp" ] in
       check_bool "no default, all free" true
@@ -349,8 +337,8 @@ let fetch_route =
           (fun () -> Router.resolve_fetch (fetch_table ~built:[] ()) (Some "scrappa")));
     A.test_case "the walk excludes the primary because the route already paid for it" `Quick
       (fun () ->
-        check_names "both" [ "crawl4ai"; "scrappa" ] (Router.fetch_walk (fetch_table ()));
-        check_names "minus the primary" [ "scrappa" ]
+        check_strings "both" [ "crawl4ai"; "scrappa" ] (Router.fetch_walk (fetch_table ()));
+        check_strings "minus the primary" [ "scrappa" ]
           (Router.fetch_walk (fetch_table ~primary:"crawl4ai" ())));
     A.test_case "the menu is the walk never the primary" `Quick (fun () ->
       let leading = fetch_table ~primary:"crawl4ai" () in

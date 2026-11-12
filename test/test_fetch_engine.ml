@@ -30,6 +30,7 @@ module Router = Seekwright.Router
 module Sanitize = Seekwright.Sanitize
 module Usage = Seekwright.Usage
 module A = Alcotest
+open Test_support
 
 let zwsp = Sanitize.zwsp
 
@@ -62,41 +63,7 @@ let money label expected = function
   | `Float f -> A.(check (float 1e-9) label f expected)
   | v -> A.failf "%s: not a money figure: %s" label (Yojson.Safe.to_string v)
 
-let find_sub_from ?(start = 0) text needle =
-  let needle_length = String.length needle in
-  let haystack_length = String.length text in
-  let rec go index =
-    if index + needle_length > haystack_length
-    then None
-    else if String.sub text index needle_length = needle
-    then Some index
-    else go (index + 1)
-  in
-  go start
-
-let includes label needle text =
-  match find_sub_from text needle with
-  | Some _ -> ()
-  | None -> A.failf "%s: the text did not contain %S\n     it was: %S" label needle text
-
-let excludes label needle text =
-  match find_sub_from text needle with
-  | None -> ()
-  | Some _ -> A.failf "%s: the text contained %S, and must not\n     it was: %S" label needle text
-
 let say = function Some s -> s | None -> ""
-
-let check_string = A.(check string)
-let check_int = A.(check int)
-let check_bool = A.(check bool)
-let check_opt_string = A.(check (option string))
-let check_strings = A.(check (list string))
-let check_ints = A.(check (list int))
-let check_opt_int = A.(check (option int))
-
-let is_prefix prefix text =
-  let length = String.length prefix in
-  String.length text >= length && String.sub text 0 length = prefix
 
 (* {1 The page and the fetcher stub}
 
@@ -228,14 +195,14 @@ let rendered =
 (* A rendering line's path: everything up to the two spaces that precede its
    value. *)
 let line_path line =
-  match find_sub_from line "  " with Some i -> String.sub line 0 i | None -> line
+  match find_sub ~haystack:line ~needle:"  " () with Some i -> String.sub line 0 i | None -> line
 
 let split_on_string separator text =
   (* [String.split_on_char] has no substring twin; this is the split the passage
      sections need. *)
   let seplen = String.length separator in
   let rec go offset acc =
-    match find_sub_from text ~start:offset separator with
+    match find_sub ~start:offset ~haystack:text ~needle:separator () with
     | Some i -> go (i + seplen) (String.sub text offset (i - offset) :: acc)
     | None -> List.rev (String.sub text offset (String.length text - offset) :: acc)
   in
@@ -254,19 +221,19 @@ let in_subtree node lp =
   let nlen = String.length node in
   lp = node
   || (String.length lp > nlen
-      && String.sub lp 0 nlen = node
+      && String.starts_with ~prefix:node lp
       && (lp.[nlen] = '.' || lp.[nlen] = '['))
 
 (* A selector is one node, or, written with [*], a family of lines. *)
 let path_matches selector lp =
-  match find_sub_from selector "[*]" with
+  match find_sub ~haystack:selector ~needle:"[*]" () with
   | Some i ->
     let head = String.sub selector 0 i in
     let tail = String.sub selector (i + 3) (String.length selector - i - 3) in
     let ll = String.length lp in
     ll >= String.length head + String.length tail
-    && String.sub lp 0 (String.length head) = head
-    && String.sub lp (ll - String.length tail) (String.length tail) = tail
+    && String.starts_with ~prefix:head lp
+    && String.ends_with ~suffix:tail lp
   | None -> selector = lp
 
 let sections_at text ~max_chars selector =
@@ -276,7 +243,7 @@ let sections_at text ~max_chars selector =
   in
   if matched = []
   then []
-  else if find_sub_from selector "[*]" <> None
+  else if find_sub ~haystack:selector ~needle:"[*]" () <> None
   then matched
   else
     List.flatten
@@ -340,7 +307,7 @@ let paragraphs text =
 let terms_match query text =
   let lower = String.lowercase_ascii text in
   List.exists
-    (fun term -> term <> "" && find_sub_from lower term <> None)
+    (fun term -> term <> "" && find_sub ~haystack:lower ~needle:term () <> None)
     (String.split_on_char ' ' (String.lowercase_ascii query))
 
 let doc_readers : Engine.Fetch.Readers.t =
@@ -349,7 +316,7 @@ let doc_readers : Engine.Fetch.Readers.t =
       (fun selector ->
         (* A filter expression is not in the grammar, and a caller that asks for
            one is refused before a byte is fetched. *)
-        if find_sub_from selector "[?(" <> None
+        if find_sub ~haystack:selector ~needle:"[?(" () <> None
         then Error "a filter is not a path this server can read"
         else Ok ());
     (* [doc_readers] renders no schema: the shape grammar is a [render_schema]
@@ -656,7 +623,7 @@ let a_path_returns_the_subtree_at_an_offset_into_the_rendering () =
   match r.Model.matches with
   | Some [ span ] ->
     check_bool "the subtree starts at its own line" true
-      (is_prefix "$.items[1]  object(4)" span.Model.text);
+      (String.starts_with ~prefix:"$.items[1]  object(4)" span.Model.text);
     check_string "the offset indexes the whole rendering"
       (String.sub rendered span.Model.offset (String.length span.Model.text))
       span.Model.text;
@@ -672,7 +639,7 @@ let a_wildcard_path_returns_one_match_per_element () =
     | Some found -> List.map (fun (m : Model.fetch_match) -> m.Model.text) found
     | None -> []);
   let at line =
-    match find_sub_from rendered line with
+    match find_sub ~haystack:rendered ~needle:line () with
     | Some offset -> offset
     | None -> A.failf "the rendering does not carry %s" line
   in
@@ -708,7 +675,7 @@ let a_page_whose_text_happens_to_start_with_a_dollar_is_still_a_page () =
   let r = served (make_engine ~local:page ()) ~path:"$.src" url in
   check_bool "the page comes back" true (r.Model.text <> None);
   check_bool "the page begins as it was written" true
-    (is_prefix "$ make all" (say r.Model.text));
+    (String.starts_with ~prefix:"$ make all" (say r.Model.text));
   check_bool "no matches" true (r.Model.matches = None);
   includes "the constraint is named" "not one this server could read" (say r.Model.notice)
 
@@ -953,7 +920,7 @@ let query_matches_are_escaped_in_escaped_space () =
     check_ints "offsets in the escaped page" [ 0; String.length escaped_first + 2 ]
       [ one.Model.offset; two.Model.offset ];
     check_bool "the match carries the escaped token" true
-      (is_prefix ("The walrus lives in <" ^ zwsp ^ "|arctic|>.") one.Model.text);
+      (String.starts_with ~prefix:("The walrus lives in <" ^ zwsp ^ "|arctic|>.") one.Model.text);
     excludes "and never the raw token" "<|arctic|>" one.Model.text;
     List.iter
       (fun (m : Model.fetch_match) ->
@@ -1351,7 +1318,7 @@ let a_failing_primary_with_the_walk_off_offers_the_ladder_only () =
   in
   let message = failed board url in
   includes "the ladder is offered" " Other configured fetch providers: scrappa." message;
-  (match find_sub_from message "Other configured" with
+  (match find_sub ~haystack:message ~needle:"Other configured" () with
   | Some i -> excludes "and the primary is not in it" "jina" (String.sub message i (String.length message - i))
   | None -> A.failf "the message offered no ladder: %s" message);
   check_int "nothing was walked" 0 !(behind.calls)

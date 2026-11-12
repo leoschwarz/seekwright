@@ -24,6 +24,7 @@ module Health = Seekwright.Health
 module Model = Seekwright.Model
 module Usage = Seekwright.Usage
 module A = Alcotest
+open Test_support
 
 (* {2 The compile-time pin} *)
 
@@ -57,19 +58,7 @@ let test_the_sink_type_pin_compiles () =
 let read path =
   if not (Sys.file_exists path) then
     A.failf "%s is missing from the test sandbox (test/dune declares it)" path;
-  let channel = open_in path in
-  let contents = really_input_string channel (in_channel_length channel) in
-  close_in channel;
-  contents
-
-let count_occurrences hay needle =
-  let n = String.length hay and m = String.length needle in
-  let rec from i total =
-    if i + m > n then total
-    else if String.sub hay i m = needle then from (i + 1) (total + 1)
-    else from (i + 1) total
-  in
-  if m = 0 then 0 else from 0 0
+  read_file path
 
 (* The arrow, in the exact spelling the four copies had. *)
 let the_arrow = "Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit"
@@ -87,11 +76,11 @@ let test_the_arrow_type_is_declared_once () =
       let aliased = name <> "log.mli" in
       A.(check int) (name ^ (if aliased then " aliases the sink" else " owns the sink"))
         (if aliased then 1 else 0)
-        (count_occurrences source the_alias);
+        (count_occurrences ~haystack:source ~needle:the_alias);
       A.(check int)
         (name ^ " spells the arrow " ^ if aliased then "nowhere" else "exactly once")
         (if aliased then 0 else 1)
-        (count_occurrences source the_arrow))
+        (count_occurrences ~haystack:source ~needle:the_arrow))
     interfaces
 
 let test_the_owner_declares_no_siblings () =
@@ -102,7 +91,7 @@ let test_the_owner_declares_no_siblings () =
   List.iter
     (fun name ->
       A.(check int) ("log.mli mentions " ^ name ^ " nowhere") 0
-        (count_occurrences source (name ^ ".")))
+        (count_occurrences ~haystack:source ~needle:(name ^ ".")))
     [ "Engine"; "Health"; "Usage"; "Provider" ]
 
 (* {2 What the alias has to preserve } *)
