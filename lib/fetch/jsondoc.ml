@@ -17,6 +17,8 @@
     Every length here is a codepoint count — Python's [len] — so the work runs
     over {!Utf8}, never [String.length]. *)
 
+module Repr = Seekwright_text.Repr
+
 type key =
   | Name of string
       (** A member addressed by name. *)
@@ -249,12 +251,30 @@ let normalize (json : Yojson.Safe.t) =
     | `List xs -> `List (List.map walk xs)
     | j -> j
   and dedupe kvs =
-    List.fold_left
-      (fun acc (k, v) ->
-        if List.mem_assoc k acc then
-          List.map (fun (k', v') -> if k' = k then (k, v) else (k', v')) acc
-        else acc @ [ (k, v) ])
-      [] kvs
+    (* Python's object semantics: a duplicate key keeps the {b first} position and
+       the {b last} value. One pass does that — a table from key to the slot it
+       first took, a value array under it, and the slots read out in order.
+
+       The shape of the input is why this is not a [fold_left] with
+       [List.mem_assoc] and an append: [max_download_bytes] caps the {b bytes} of
+       a body, not its member count, so [{"k":1,}] repeated is a legal document
+       with tens of thousands of members, and a per-member scan plus a copy of the
+       accumulator makes the parse quadratic before the rendering budget is even
+       consulted. The placeholder each slot starts on is never read: only the
+       first [n] slots, each written before its index is handed out, are taken. *)
+    let slots = Hashtbl.create (List.length kvs) in
+    let members = Array.make (List.length kvs) ("", `Null) in
+    let used = ref 0 in
+    List.iter
+      (fun (key, value) ->
+        match Hashtbl.find_opt slots key with
+        | Some slot -> members.(slot) <- (key, value)
+        | None ->
+            Hashtbl.replace slots key !used;
+            members.(!used) <- (key, value);
+            incr used)
+      kvs;
+    Array.to_list (Array.sub members 0 !used)
   in
   walk json
 
@@ -391,34 +411,13 @@ let trim_left s =
   while !i < n && Utf8.is_python_space a.(!i) do incr i done;
   Utf8.to_string (Array.sub a !i (n - !i))
 
-(* Python's [repr] of a string in a refusal message: single quotes, and the
-   backslash escapes a reader of the message expects. *)
+(* Python's [repr] of a string in a refusal message: the quote is fixed and every
+   byte above ASCII is escaped, so a path token the caller wrote comes back
+   readable whatever the transport does with it. One escape pass with the engine's
+   [safe] now sits in [Seekwright_text.Repr]; the two quoting policies stay
+   separate functions there (style review H2). *)
 
-let py_repr s =
-  let plain c =
-    c <> '\\'
-    && c <> '\''
-    && Char.code c >= 0x20
-    && Char.code c < 0x7f
-  in
-  if String.for_all plain s then "'" ^ s ^ "'"
-  else
-    let b = Buffer.create (String.length s + 2) in
-    Buffer.add_char b '\'';
-    String.iter
-      (fun c ->
-        match c with
-        | '\\' -> Buffer.add_string b "\\\\"
-        | '\'' -> Buffer.add_string b "\\'"
-        | '\n' -> Buffer.add_string b "\\n"
-        | '\r' -> Buffer.add_string b "\\r"
-        | '\t' -> Buffer.add_string b "\\t"
-        | c when Char.code c < 0x20 || Char.code c >= 0x7f ->
-            Buffer.add_string b (Printf.sprintf "\\x%02x" (Char.code c))
-        | c -> Buffer.add_char b c)
-      s;
-    Buffer.add_char b '\'';
-    Buffer.contents b
+let py_repr = Repr.py_repr_ascii
 
 (* [int("…")] as Python reads it: an optional sign then digits, and nothing
    else — no [0x] or [1_000] the way [int_of_string] would take. *)
@@ -789,12 +788,17 @@ let classify payload =
       && payload.[kl] = '('
     then
       let rest = String.sub payload (kl + 1) (String.length payload - kl - 1) in
-      match String.index_opt rest ')' with
-      | Some i when python_int (String.sub rest 0 i) <> None -> (
-          let size = Option.get (python_int (String.sub rest 0 i)) in
-          let after = String.sub rest (i + 1) (String.length rest - i - 1) in
-          Some (kind, size, trim_left after))
-      | _ -> None
+      (* The bound is parsed once and destructured where it appears. The guard
+         and the force beside it evaluated [python_int] on the same slice twice
+         and re-sliced it a third time (style review M3). *)
+      (match String.index_opt rest ')' with
+      | Some i -> (
+          match python_int (String.sub rest 0 i) with
+          | Some size ->
+              let after = String.sub rest (i + 1) (String.length rest - i - 1) in
+              Some (kind, size, trim_left after)
+          | None -> None)
+      | None -> None)
     else None
   in
   match header "object" with

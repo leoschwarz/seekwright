@@ -38,11 +38,9 @@
     (P8 wires it to stderr); a recorder built without one stays silent, which is
     also what the Python tests' [log_records] fixture replaces here. *)
 
-(** The sink type, identical in shape to the one [Health] and [Engine] take, so
-    P8 hands the same function to all three. The level is [Config]'s because
-    that is the vocabulary [logging.level] in the file spells. *)
-type log =
-  Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
+(* The sink type is [Log]'s, aliased here — style review M1. The level is
+   [Config]'s because that is the vocabulary [logging.level] in the file spells. *)
+type log = Log.log
 
 (** One UTC day's counts, summed as records land — the aggregate the chart
     draws. Declared in the interface only so {!window_days} and the snapshot

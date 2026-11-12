@@ -1,0 +1,14 @@
+; The page records both halves of the fetch path speak: [seekwright.wire],
+; wrapped as [Seekwright_wire]. A second small library beside [seekwright.text]
+; rather than a module in either big one, for the same reason the walk needed
+; one — [seekwright.fetch] produces a fetched page and [seekwright] consumes it,
+; and the direction between those two is fixed, so the shared type can sit only
+; underneath both.
+;
+; Stdlib-only like [seekwright.text]: a record of strings, ints, options. It
+; names no fetch backend, no grant and no wire model, so the direction
+; [mcp-caps → seekwright → seekwright.providers / seekwright.fetch] is unchanged
+; with one floor under it.
+(library
+ (name seekwright_wire)
+ (public_name seekwright.wire))

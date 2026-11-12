@@ -5,13 +5,14 @@
 module Caps = Mcp_caps
 module E = Extractor
 module J = Jsondoc
+module Repr = Seekwright_text.Repr
 
-type fetched_image = {
+type fetched_image = Seekwright_wire.Page.image = {
   media_type : string;
   body : string;
 }
 
-type fetched_page = {
+type fetched_page = Seekwright_wire.Page.page = {
   url : string;
   title : string option;
   text : string;
@@ -31,8 +32,6 @@ type refusal =
 type error =
   | Refusal of refusal
   | Failed of string
-
-exception Url_blocked of string
 
 let default_user_agent = "seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright)"
 
@@ -73,12 +72,15 @@ let accept_header =
 let ascii_lower s =
   String.map (fun c -> if c >= 'A' && c <= 'Z' then Char.chr (Char.code c + 32) else c) s
 
-let py_repr s = "'" ^ String.concat "" (List.map (String.make 1) (List.init (String.length s) (String.get s))) ^ "'"
+(* The port's [repr] for a token quoted back at the caller. The copy here was a
+   no-op that only added quotes, so a scheme with a control byte or a non-ASCII
+   byte reached the message raw (style review H2). *)
+let py_repr = Repr.py_repr_ascii
 
-(* [validate_url] without the exception: the fetch chain turns a hop-0 refusal
-   into [Url_blocked] and a later hop's into [Redirect_blocked]. *)
+(* The URL gate returns a value: the fetch chain turns a hop-0 refusal into
+   [Url_blocked] and a later hop's into [Redirect_blocked]. *)
 
-let validate_url_opt (raw : string) : (string, string) result =
+let validate_url (raw : string) : (string, string) result =
   let s = String.trim raw in
   let n = String.length s in
   let scheme, rest =
@@ -190,11 +192,6 @@ let validate_url_opt (raw : string) : (string, string) result =
               let query = match query with Some q when q <> "" -> "?" ^ q | _ -> "" in
               Ok (scheme_l ^ "://" ^ netloc ^ path ^ query)
 
-let validate_url raw =
-  match validate_url_opt raw with
-  | Ok url -> url
-  | Error message -> raise (Url_blocked message)
-
 (* {1 The response window} *)
 
 let rstrip_py (s : string) : string =
@@ -305,8 +302,9 @@ let cap_body max_download_bytes (body : string) : string * bool =
     (String.sub body 0 max_download_bytes, true)
   else (body, false)
 
-let rec fetch (t : t) (url : string) ~offset ~max_chars : (fetched_page, error) result =
-  match validate_url_opt url with
+let rec fetch ?(chain_timeout = Eio.Time.Timeout.none) (t : t) (url : string) ~offset
+    ~max_chars : (fetched_page, error) result =
+  match validate_url url with
   | Error message -> Error (Refusal (Url_blocked message))
   | Ok current ->
       let rec chain current hop =
@@ -353,7 +351,7 @@ let rec fetch (t : t) (url : string) ~offset ~max_chars : (fetched_page, error) 
                       Uri.to_string
                         (Uri.resolve "" (Uri.of_string current) (Uri.of_string location))
                     in
-                    (match validate_url_opt target with
+                    (match validate_url target with
                     | Error message -> Error (Refusal (Redirect_blocked message))
                     | Ok target ->
                         (* A redirect from https to http is either a
@@ -370,7 +368,21 @@ let rec fetch (t : t) (url : string) ~offset ~max_chars : (fetched_page, error) 
                         else chain target (hop + 1))
             else read t current response ~offset ~max_chars
       in
-      chain current 0
+      (* Python's reader measures {b one} budget over the whole chain; the
+         grant's operation timeout restarts at every hop, so a deployment that
+         allows [max_redirects] redirects can otherwise spend [max_redirects + 1]
+         timeouts on a single page. [run_exn] cancels the fibre doing the I/O when
+         the bound expires — the pattern [Caps.Controls] already uses, and
+         [run_exn] rather than [run] because [run] widens the body's own error
+         channel with a [[`Timeout]] case this sum type cannot unify with.
+
+         Only [Eio.Time.Timeout] is caught here. A cancellation from outside — the
+         caller's switch closing, its own budget expiring — is not this module's
+         to swallow and keeps unwinding. The sentence is the one the per-hop
+         mapping above already returns: a caller cannot tell which bound expired,
+         and never needs to. *)
+      (try Eio.Time.Timeout.run_exn chain_timeout (fun () -> chain current 0)
+       with Eio.Time.Timeout -> Error (Failed "request timed out"))
 
 and read (t : t) (url : string) (response : Caps.Authority.Net.response) ~offset ~max_chars :
     (fetched_page, error) result =

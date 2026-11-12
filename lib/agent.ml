@@ -16,8 +16,10 @@
    running server — no SDK, and no tokenizer: the endpoint reports [usage].
 
    Lengths and slices here count codepoints, not bytes, because Python's
-   [len] and [s[:n]] are codepoint-indexed; the helpers below are the same
-   UTF-8 walk {!Provider}'s clip uses. *)
+   [len] and [s[:n]] are codepoint-indexed; that walk is [Seekwright_text.Utf8],
+   the one the provider caps use too. *)
+
+module Utf8 = Seekwright_text.Utf8
 
 let results_per_query = 5
 let pages_per_report = 3
@@ -48,40 +50,6 @@ Cite each claim where it is made rather than in a list at the end, and cite only
 
 For a brief answer: a few sentences of plain prose that answer the question directly, with no preamble and no restatement of the question. For a report: a short structured answer -- a lead paragraph that answers the question, then the points that matter, each cited. Neither shape is a promise of length: if the material is thin, a short answer is the correct one, and saying so is better than padding it out.
 |}
-
-(* {1 Codepoint-indexed string helpers}
-
-   Python's [len], [s[:n]] and [s.strip()] are codepoint operations; the material
-   bound, the body slice and the [*_chars] counts all inherit that. *)
-
-let lead_len s i =
-  let c = Char.code s.[i] in
-  if c < 0x80 then 1
-  else if c < 0xc0 then 1
-  else if c < 0xe0 then 2
-  else if c < 0xf0 then 3
-  else 4
-
-let cp_count s =
-  let n = ref 0 in
-  let i = ref 0 in
-  while !i < String.length s do
-    let len = lead_len s !i in
-    i := !i + (if !i + len > String.length s then String.length s - !i else len);
-    incr n
-  done;
-  !n
-
-let cp_take n s =
-  (* [s[:n]] in codepoints. *)
-  let total = String.length s in
-  let rec go i taken =
-    if taken >= n || i >= total then i
-    else
-      let len = lead_len s i in
-      go (i + (if i + len > total then total - i else len)) (taken + 1)
-  in
-  String.sub s 0 (go 0 0)
 
 (* {1 The citation marker}
 
@@ -116,12 +84,9 @@ let markers prose =
   done;
   List.rev !acc
 
-let is_space c =
-  match c with ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true | _ -> false
-
 let has_whitespace s =
   let found = ref false in
-  String.iter (fun c -> if is_space c then found := true) s;
+  String.iter (fun c -> if Utf8.is_ascii_space c then found := true) s;
   !found
 
 let is_all_digits s =
@@ -347,10 +312,10 @@ let assemble t hits texts =
       let header =
         Printf.sprintf "[%d] %s\n%s\n" (List.length !items + 1) result.Model.title result.Model.url
       in
-      let room = cap - !used - cp_count header in
+      let room = cap - !used - Utf8.count header in
       if room <= 0 then ()
       else begin
-        let clipped = cp_take room body in
+        let clipped = Utf8.take room body in
         items
         := {
              index = List.length !items + 1;
@@ -361,10 +326,10 @@ let assemble t hits texts =
            }
            :: !items;
         blocks := (header ^ clipped) :: !blocks;
-        used := !used + cp_count header + cp_count clipped;
+        used := !used + Utf8.count header + Utf8.count clipped;
         (* The cap was reached mid-item: everything after it is over budget, so
            the numbering stops here. *)
-        if cp_count clipped < cp_count body then () else go hrest trest
+        if Utf8.count clipped < Utf8.count body then () else go hrest trest
       end
     | _ -> ()
   in
@@ -431,19 +396,26 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
     let responses = List.rev !responses in
     let failed = List.rev !failed in
     let empty = List.rev !empty in
-    if responses = [] && !first_failure <> None then
-      (* Every step failed: the first step's message carries the ladder's
-         wording. No model call. *)
-      Error (Agent_failed (Option.get !first_failure))
-    else if not (List.exists (fun (r : Model.search_response) -> r.Model.results <> []) responses)
-    then
+    let zero_results =
       (* Every step answered with nothing: the engine's zero-result notice names
-         the retry. No model call. *)
+         the retry. No model call. [find_map] is the one call here — the earlier
+         shape was [find_opt] on a [notice <> None] test and then [Option.get] on
+         the field, a match written as two statements (style review M3). *)
       Error
         (Agent_failed
-           (match List.find_opt (fun (r : Model.search_response) -> r.Model.notice <> None) responses with
-           | Some r -> Option.get r.Model.notice
-           | None -> "No results were returned for this question; retry or rephrase."))
+           (Option.value
+              (List.find_map (fun (r : Model.search_response) -> r.Model.notice) responses)
+              ~default:"No results were returned for this question; retry or rephrase."))
+    in
+    if responses = [] then
+      match !first_failure with
+      | Some failure ->
+          (* Every step failed: the first step's message carries the ladder's
+             wording. No model call. *)
+          Error (Agent_failed failure)
+      | None -> zero_results
+    else if not (List.exists (fun (r : Model.search_response) -> r.Model.results <> []) responses)
+    then zero_results
     else begin
       let notices =
         if failed <> [] || empty <> [] then [ partial_notice (List.length queries) failed empty ]
@@ -472,7 +444,7 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
           (Agent_failed
              "The retrieval returned nothing usable to ground an answer in; retry, or rephrase the question.")
       else begin
-        tally.material_chars <- cp_count plan.rendered;
+        tally.material_chars <- Utf8.count plan.rendered;
         Ok plan
       end
     end
@@ -704,7 +676,7 @@ let log_content t prose ~run ~depth =
         ( "answer",
           `String
             (Printf.sprintf "%S"
-               (cp_take t.config.Config.agent.Config.max_material_chars prose)) );
+               (Utf8.take t.config.Config.agent.Config.max_material_chars prose)) );
       ]
 
 let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_domains ?recency
@@ -752,7 +724,7 @@ let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_do
           | None ->
             tally.prompt_tokens <- completion.prompt_tokens;
             tally.completion_tokens <- completion.completion_tokens;
-            tally.answer_chars <- cp_count completion.prose;
+            tally.answer_chars <- Utf8.count completion.prose;
             let citations = cite completion.prose plan.items in
             tally.cited <- citations.cited;
             tally.cited_invalid <- citations.cited_invalid;

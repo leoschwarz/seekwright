@@ -8,7 +8,13 @@
    today the engines are its only clients, and a module only one caller uses is
    that caller's detail. *)
 
-type log = Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
+module Utf8 = Seekwright_text.Utf8
+module Repr = Seekwright_text.Repr
+
+type log = Log.log
+(* The sink type has one owner — [Log] — and the engines alias it, so a new
+   parameter is one declaration rather than four that must agree (style review
+   M1). *)
 
 let quiet : log = fun _level _event _fields -> ()
 
@@ -36,71 +42,14 @@ let round1 (value : float) : float =
 
 (* {2 The [logs.py] helpers} *)
 
-let utf8_width (byte : char) : int =
-  let c = Char.code byte in
-  if c < 0x80 then 1
-  else if c < 0xC0 then 1 (* a continuation byte: counted, never skipped *)
-  else if c < 0xE0 then 2
-  else if c < 0xF0 then 3
-  else 4
-
-let codepoints (text : string) : int =
-  (* Every length in this module counts codepoints, as Python's [len()] does: a
-     byte count would disagree with [fetch.max_text_chars] the moment a page is
-     not ASCII. *)
-  let count = ref 0 in
-  let i = ref 0 in
-  while !i < String.length text do
-    i := !i + utf8_width text.[!i];
-    incr count
-  done;
-  !count
-
-let take (limit : int) (text : string) : string =
-  (* Python's [text[:limit]], which counts codepoints. [String.sub] counts bytes,
-     and a byte slice can cut a character in half. *)
-  let target = max limit 0 in
-  let seen = ref 0 in
-  let i = ref 0 in
-  while !i < String.length text && !seen < target do
-    i := !i + utf8_width text.[!i];
-    incr seen
-  done;
-  String.sub text 0 !i
-
-let py_repr (value : string) : string =
-  (* Python's [repr] of a str, which is what [safe] renders through: single quotes
-     unless the text holds a single quote and no double quote, in which case double
-     quotes; the backslash and the chosen quote escaped, [\n]/[\r]/[\t] named, other
-     control bytes as [\xNN], printable non-ASCII left alone. The rule this serves
-     is that a newline in a scraped title cannot close one log record and open a
-     fabricated one, so what has to match Python exactly is the quoting and the
-     escaping. *)
-  let quote =
-    if String.contains value '\'' && not (String.contains value '"') then '"' else '\''
-  in
-  let buffer = Buffer.create (String.length value + 8) in
-  Buffer.add_char buffer quote;
-  String.iter
-    (fun ch ->
-      match ch with
-      | '\n' -> Buffer.add_string buffer "\\n"
-      | '\r' -> Buffer.add_string buffer "\\r"
-      | '\t' -> Buffer.add_string buffer "\\t"
-      | '\\' -> Buffer.add_string buffer "\\\\"
-      | '"' when quote = '"' -> Buffer.add_string buffer "\\\""
-      | '\'' when quote = '\'' -> Buffer.add_string buffer "\\'"
-      | chr when Char.code chr < 0x20 || Char.code chr = 0x7F ->
-        Buffer.add_string buffer (Printf.sprintf "\\x%02x" (Char.code chr))
-      | chr -> Buffer.add_char buffer chr)
-    value;
-  Buffer.add_char buffer quote;
-  Buffer.contents buffer
-
 let safe ?(limit = 120) (value : string option) : string =
   (* [repr((value or "")[:limit])]: [None] and the empty string render the same
-     way, which is why [search.rejected]'s [requested] is always a string. *)
-  py_repr (take limit (match value with None -> "" | Some text -> text))
+     way, which is why [search.rejected]'s [requested] is always a string. Every
+     length in this module counts codepoints, as Python's [len()] does: a byte
+     count would disagree with [fetch.max_text_chars] the moment a page is not
+     ASCII. *)
+  Repr.py_repr
+    (Utf8.take limit (match value with None -> "" | Some text -> text))
 
 let host_of (url : string) : string =
   (* [urlsplit(url).hostname or "?"], and never raises: the malformed URL that
@@ -116,7 +65,7 @@ let query_fields (logging : Config.logging_config) (query : string) : (string * 
      [logs.py] states why. [digestif] stands in for [hashlib.sha256]. *)
   let digest = Digestif.SHA256.(to_hex (digest_string query)) in
   [
-    ("qlen", `Int (codepoints query));
+    ("qlen", `Int (Utf8.count query));
     ("qhash", `String (String.sub digest 0 8));
   ]
   @
@@ -182,16 +131,15 @@ let grouped (n : int) : string =
   Buffer.contents buffer
 
 let strip (text : string) : string =
-  (* [str.strip()], over the whitespace an extraction actually leaves behind. *)
-  let is_space ch =
-    match ch with ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true | _ -> false
-  in
+  (* [str.strip()], over the whitespace an extraction actually leaves behind —
+     the set [Utf8.is_ascii_space] states, which the agent's citation parser and
+     the provider caps use too. *)
   let first = ref 0 in
-  while !first < String.length text && is_space text.[!first] do
+  while !first < String.length text && Utf8.is_ascii_space text.[!first] do
     incr first
   done;
   let last = ref (String.length text) in
-  while !last > !first && is_space text.[!last - 1] do
+  while !last > !first && Utf8.is_ascii_space text.[!last - 1] do
     decr last
   done;
   String.sub text !first (!last - !first)
@@ -372,11 +320,11 @@ module Search = struct
              names the cap that applied. *)
           let field, cap, chars =
             match item.Model.snippet with
-            | Some snippet -> ("snippet", policy.Config.max_snippet_chars, codepoints snippet)
+            | Some snippet -> ("snippet", policy.Config.max_snippet_chars, Utf8.count snippet)
             | None ->
               ( "text"
               , policy.Config.max_result_text_chars
-              , codepoints (match item.text with None -> "" | Some text -> text) )
+              , Utf8.count (match item.text with None -> "" | Some text -> text) )
           in
           emit base Config.Log_info "search.cap"
             [
@@ -654,9 +602,9 @@ end
 (* {1 The fetch engine} *)
 
 module Fetch = struct
-  type image = { media_type : string; body : string }
+  type image = Seekwright_wire.Page.image = { media_type : string; body : string }
 
-  type page = {
+  type page = Seekwright_wire.Page.page = {
     url : string
   ; title : string option
   ; text : string
@@ -715,7 +663,7 @@ module Fetch = struct
     if config.Config.fetch.primary = "http" then None else Some config.Config.fetch.primary
 
   let unbuilt_primary (config : Config.t) =
-    "fetch.primary names " ^ py_repr config.Config.fetch.primary
+    "fetch.primary names " ^ Repr.py_repr config.Config.fetch.primary
     ^ ", which this deployment did not build"
 
   let create
@@ -838,7 +786,7 @@ module Fetch = struct
   let is_empty t (text : string) =
     (* Whether an extraction found so little that it counts as nothing. The floor of
        1 keeps a blank page empty at every setting. *)
-    codepoints (strip text) < max t.config.Config.fetch.min_text_chars 1
+    Utf8.count (strip text) < max t.config.Config.fetch.min_text_chars 1
 
   let log_ok base (_t : t) (page : page) ~(fell_back : bool) ~(ms : int) ~(sanitized : int) ?image_bytes
       ~(cached : bool) () =
@@ -850,7 +798,7 @@ module Fetch = struct
       [
         ("ms", `Int ms)
       ; ("status", `Int page.status_code)
-      ; ("chars", `Int (codepoints page.text))
+      ; ("chars", `Int (Utf8.count page.text))
       ; ("truncated", `Bool page.truncated)
       ; ("fell_back", `Bool fell_back)
       ; ("sanitized", `Int sanitized)
@@ -900,7 +848,7 @@ module Fetch = struct
          whatever the rung's price: the absence is the journal's "nothing was
          spent", so a cache easing repeat reads never reads as a provider turned
          free. *)
-      Usage.record_fetch usage ~ms ~chars:(codepoints page.text) ~fallback
+      Usage.record_fetch usage ~ms ~chars:(Utf8.count page.text) ~fallback
         ?cost_usd:(if cached then None else fallback_cost_usd t fallback)
         ?run ?step ()
 
@@ -1272,10 +1220,14 @@ module Fetch = struct
       fetch_page t ~url ~offset ~max_chars notices base ~started ?named ~auto_fallback ?run ?step ()
     with
     | Error refused -> Error refused
-    | Ok { page; fallback; cached } ->
-      if page.image <> None
-      then Ok (finish_image t ~url page (Option.get page.image) ~fallback base ~started !notices ~run)
-      else begin
+    | Ok { page; fallback; cached } -> (
+      (* Destructured, not [Option.get] behind a [<> None] guard: the branch and
+         the value it needs are one pattern (style review M3). *)
+      match page.image with
+      | Some image ->
+          Ok (finish_image t ~url page image ~fallback base ~started !notices ~run)
+      | None ->
+        begin
         (* The ladder is finished and this page is the page, so the escape lands here:
            everything downstream reads the escaped text. An offset taken from escaped
            text stays valid across a re-fetch; only a cut-boundary token drifts. *)
@@ -1326,7 +1278,7 @@ module Fetch = struct
           in
           if empty_page
           then begin
-            emit (bind base [ ("chars", `Int (codepoints (strip page.text))) ]) Config.Log_info
+            emit (bind base [ ("chars", `Int (Utf8.count (strip page.text))) ]) Config.Log_info
               "fetch.empty" [];
             notices := !notices @ [ Router.empty_notice (table t) ~walked:auto_fallback ]
           end;
@@ -1335,7 +1287,7 @@ module Fetch = struct
           log_content base t page ?matches ();
           Ok (response t ~url page ~offset ?matches !notices)
         end
-      end
+      end)
 
   let fetch t ?(offset = 0) ?query ?path ?(structure = false) ?provider ?auto_fallback ?run ?step
       (url : string) : (Model.fetch_response, error) result =

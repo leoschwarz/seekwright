@@ -148,6 +148,45 @@ let test_document_order_is_kept () =
   let ls = lines (render "{\"z\": 1, \"a\": 2}") in
   A.check (A.list A.string) "document order" [ "$.z  1"; "$.a  2" ] (List.tl ls)
 
+let test_a_duplicate_key_keeps_its_first_place_and_its_last_value () =
+  (* Python's object semantics, which the whole fetch path inherits: a repeated
+     member is not a second line and not a dropped one — the key holds the place
+     it first took and the value it last had, exactly as [json.loads] leaves it.
+     The earlier fold in this module rebuilt the accumulator on every duplicate
+     and could get the two halves apart; this pins both together. *)
+  let ls = lines (render "{\"a\": 1, \"b\": 2, \"a\": 3}") in
+  A.check A.string "the header counts members, not mentions" "$  object(2)" (List.nth ls 0);
+  A.check (A.list A.string) "first place, last value" [ "$.a  3"; "$.b  2" ] (List.tl ls)
+
+let test_a_key_repeated_tens_of_thousands_of_times_is_one_pass () =
+  (* [max_download_bytes] caps a body's bytes, not its member count, so
+     [{"k":1,}] repeated is a legal document at tens of thousands of members.
+     A dedupe that scans and rebuilds its accumulator per member makes the parse
+     quadratic before the rendering budget is even consulted — the Python suite
+     measures that shape with [tracemalloc]; [Gc]'s word counters are this
+     runtime's equivalent, and the ceiling below is many times the one-pass
+     figure and far under what the quadratic fold allocated at the same size. *)
+  let words_allocated () =
+    (* [Gc.counters] is (minor_words, promoted_words, major_words) since the
+       process started, and the total allocated is minor + major - promoted. *)
+    let minor, promoted, major = Gc.counters () in
+    minor +. major -. promoted
+  in
+  let n = 20_000 in
+  let body = "{" ^ String.concat "," (List.init n (fun _ -> "\"k\": 1")) ^ "}" in
+  let before = words_allocated () in
+  (match J.render_json body with
+  | Some text ->
+      (* Every mention collapses: one line for the key, holding the last value. *)
+      let ls = lines text in
+      A.check A.string "one header" "$  object(1)" (List.nth ls 0);
+      A.check (A.list A.string) "one member" [ "$.k  1" ] (List.tl ls)
+  | None -> A.fail "the repeated-key body refused to render");
+  let words = words_allocated () -. before in
+  A.(check bool)
+    (Printf.sprintf "the parse allocated %.0f words, not quadratically" words)
+    true (words < 50_000_000.)
+
 let test_an_empty_container_is_still_a_line () =
   let ls = lines (rendered ()) in
   assert_in "$.items[1].meta  object(0)" ls;
@@ -529,6 +568,10 @@ let () =
           Alcotest.test_case "kinds survive the rendering" `Quick
             test_kinds_survive_the_rendering;
           Alcotest.test_case "document order is kept" `Quick test_document_order_is_kept;
+          Alcotest.test_case "a duplicate key keeps its first place and its last value" `Quick
+            test_a_duplicate_key_keeps_its_first_place_and_its_last_value;
+          Alcotest.test_case "a key repeated tens of thousands of times is one pass" `Quick
+            test_a_key_repeated_tens_of_thousands_of_times_is_one_pass;
           Alcotest.test_case "an empty container is still a line" `Quick
             test_an_empty_container_is_still_a_line;
           Alcotest.test_case "a key that cannot be written bare is quoted" `Quick

@@ -28,7 +28,15 @@
     (Python's single 2× wall-clock budget over the chain is the engine's job
     in this port, P5). *)
 
-type fetched_image = {
+(* The page records are [Seekwright_wire.Page]'s, re-declared here under the
+   names this interface uses, so the two halves of the fetch path cannot drift
+   and the layer between them has nothing to copy (style review M5). The
+   equated-alias form is the one [lib/caps/policy.mli] already uses: one type,
+   two names, the fields spelled out on both sides so each interface keeps its
+   own field documentation — and a field that stops matching stops being a
+   silent omission and becomes a type error. *)
+
+type fetched_image = Seekwright_wire.Page.image = {
   media_type : string;
   (** The media type the bytes' own first bytes agreed with — never the
       server's header alone. *)
@@ -36,7 +44,7 @@ type fetched_image = {
   body : string;
 }
 
-type fetched_page = {
+type fetched_page = Seekwright_wire.Page.page = {
   url : string;
   (** Where the fetch actually landed, after any redirects. *)
 
@@ -81,11 +89,30 @@ type error =
 type t
 
 val fetch :
-  t -> string -> offset:int -> max_chars:int option -> (fetched_page, error) result
+  ?chain_timeout:Eio.Time.Timeout.t ->
+  t ->
+  string ->
+  offset:int ->
+  max_chars:int option ->
+  (fetched_page, error) result
 (** [fetch t url ~offset ~max_chars] fetches, extracts and windows to
     [[offset, offset + max_chars)] in codepoints. [max_chars = None] means the
     fetcher's own configured default; {!total_chars} always reports the full
-    extraction, whatever the window. *)
+    extraction, whatever the window.
+
+    [?chain_timeout] is the budget for the {b whole} redirect chain, on top of
+    the grant's per-operation bound, which restarts at every hop. Without it a
+    deployment that allows ten redirects can spend ten timeouts on one page, and
+    Python's reader — which measures one budget over the chain — has no OCaml
+    counterpart. It is a [Timeout.t] rather than a number of seconds because
+    measuring it needs the monotonic clock, and this module deliberately holds
+    none: the caller that built the grant has the clock and builds the timeout
+    with it. An expired budget is a {b value}, not an exception: the chain's
+    fiber is cancelled and [fetch] answers [Error (Failed "request timed out")],
+    the same sentence the grant's own per-hop timeout maps to, so a caller cannot
+    tell which bound expired and never has to. A cancellation that comes from
+    outside — the caller's switch closing, its own timeout firing — is {b not}
+    caught here and keeps unwinding. *)
 
 (** {1 Construction} *)
 
@@ -108,13 +135,31 @@ val make :
     is built — so a document cut at the cap is refused where a record stream
     keeps its head, exactly as the Python reader's sliced buffer does. *)
 
-(** {1 The URL and window rules, exposed for the engine and the tests} *)
+(** {1 What may raise, and where it turns back into a value}
 
-exception Url_blocked of string
-(** [validate_url] raises this: a scheme, credential, host or port refusal of
-the URL as written. *)
+    Every function in this interface answers with a value. The port's rule, said
+    once here because this is the interface that used to break it:
 
-val validate_url : string -> string
+    - An {b outcome a caller can act on} is a [result]. A refused URL, a denied
+      host, a body over the cap, an expired budget — [Refusal] and [Failed], and
+      the engine's [resolve] wrappers turn those into [Fetch_refused] /
+      [Fetch_failed] for the wire.
+    - An {b exception} is for what no caller can act on at the point it happens:
+      the pure grammars ([Jsondoc.Path_syntax], [Tabledoc.No_rows],
+      [Router.Route_refused]) and what has to unwind out of the middle of an Eio
+      body ([Policy_net.Refusal], [Extractor.Extraction_failed]). Both kinds are
+      converted at a boundary the caller chose, never at the raise.
+
+    [Fetcher] itself raises nothing. It used to carry [exception Url_blocked]
+    beside the [Url_blocked] constructor of [refusal] — the same name in the two
+    sum types that look identical in a pattern, one of them invisible in the type
+    of the function that raised it — and the raising [validate_url] had no caller
+    outside its own tests: the chain reads [validate_url_opt]. The two are now
+    one function that returns. A grep for [^exception ] in [lib/*.mli] is meant
+    to answer "which exceptions cross this boundary?", and this file's answer is
+    none. *)
+
+val validate_url : string -> (string, string) result
 (** Check scheme and shape and normalise: scheme lowercased, empty path
 becoming [/], fragment dropped, query kept. Credentials are refused rather
 than stripped: a model constructing [http://user:pass@host/] has been told

@@ -18,6 +18,8 @@
    reach the wire, and OCaml has no field-level privacy to hide them behind.
    P5 adds them to whatever record owns the measurement. *)
 
+module Utf8 = Seekwright_text.Utf8
+
 let ( let* ) = Result.bind
 
 type recency = Day | Week | Month | Year
@@ -133,7 +135,7 @@ type provider_result = {
   notice : string option;
 }
 
-(* ---------- small JSON helpers ---------- *)
+(* {1 Small JSON helpers} *)
 
 let json_kind (json : Yojson.Safe.t) = match json with
   | `Null -> "null"
@@ -247,24 +249,10 @@ let default_string_list name kvs default =
   | Some `Null -> Error (Printf.sprintf "field %S is not nullable" name)
   | Some json -> decode_list string_item json
 
-let utf8_length s =
-  let len = String.length s in
-  let count = ref 0 in
-  let i = ref 0 in
-  while !i < len do
-    incr count;
-    let c = Char.code s.[!i] in
-    if c < 0x80 then incr i
-    else if c land 0xe0 = 0xc0 then i := min len (!i + 2)
-    else if c land 0xf0 = 0xe0 then i := min len (!i + 3)
-    else if c land 0xf8 = 0xf0 then i := min len (!i + 4)
-    else incr i
-  done;
-  !count
-
 (* pydantic counts codepoints for min_length/max_length, so must this. *)
+
 let check_length ~name ~min ~max value =
-  let n = utf8_length value in
+  let n = Utf8.count value in
   if n < min then
     Error (Printf.sprintf "field %S is shorter than %d characters" name min)
   else if n > max then
@@ -286,11 +274,11 @@ let check_int_range ~name ~min ~max value =
   else Ok value
 
 let check_exact_length ~name ~expected value =
-  if utf8_length value <> expected then
+  if Utf8.count value <> expected then
     Error (Printf.sprintf "field %S must be exactly %d characters" name expected)
   else Ok value
 
-(* ---------- variants ---------- *)
+(* {1 Variants} *)
 
 let string_of_recency = function
   | Day -> "day"
@@ -339,7 +327,7 @@ let opt_mode name kvs =
       let* value = mode_of_yojson json in
       Ok (Some value)
 
-(* ---------- serialisation: only set fields, escaped text ---------- *)
+(* {1 Serialisation: only set fields, escaped text} *)
 
 let escaped text = fst (Sanitize.sanitize_text text)
 
@@ -542,7 +530,7 @@ let provider_result_to_yojson (r : provider_result) : Yojson.Safe.t =
       ("notice", match r.notice with None -> `Null | Some s -> `String s);
     ]
 
-(* ---------- deserialisation ---------- *)
+(* {1 Deserialisation} *)
 
 let result_allowed =
   [
@@ -930,7 +918,7 @@ let provider_result_of_yojson (json : Yojson.Safe.t) =
   let* notice = opt_string "notice" kvs in
   Ok { provider; results; answer; cost_usd; notice }
 
-(* ---------- the engine's pass: escape in place, count, log the count ---------- *)
+(* {1 The engine's pass: escape in place, count, log the count} *)
 
 let sanitize_option value =
   match value with

@@ -1,40 +1,17 @@
-(** UTF-8 helpers for the fetch path.
+(** The fetch path's name for the port's one codepoint walk.
 
-    Python counts [len] in codepoints and indexes strings by them, so every
-    offset the fetch stack carries — [total_chars], a window's [offset],
-    [select_paths]' span starts — is a character offset. OCaml strings are
-    bytes, so the char-indexed work happens on {!t}, the codepoint array, and
-    the boundaries convert with {!of_string} / {!to_string}.
+    The walk lives in [seekwright.text] — [Seekwright_text.Utf8] — and this
+    module is that module, so the fetch stack keeps saying [Utf8.]. It could not
+    stay here: [seekwright] consumes the page this library produces and may not
+    link it, so [engine.ml], [provider.ml], [agent.ml], [model.ml] and
+    [sanitize.ml] each carried their own copy, in three spellings of the same
+    byte test that disagreed about a five-byte lead byte and about clamping the
+    last step (style review H1 and H2).
 
-    A lead byte of a sequence the encoder would not emit is treated as one
-    character, so a hostile payload can neither loop here nor move a cut. *)
+    Read {!Seekwright_text.Utf8} for the signature and for the two constraints on
+    the lead-byte test. The short version: every length and offset the fetch
+    stack carries — [total_chars], a window's [offset], a [select_paths] span —
+    is a codepoint offset, a byte the encoder would not emit is one character,
+    and a step never runs past the end of the string. *)
 
-type t = int array
-(** The characters of a string, one codepoint per entry. *)
-
-val count : string -> int
-(** [count s] is [len(s)] in Python: the codepoint count, not the byte count. *)
-
-val of_string : string -> t
-
-val to_string : t -> string
-
-val encode : int -> string
-(** [encode cp] is the UTF-8 bytes of one codepoint — the inverse of
-{!of_string} one element at a time, and the spelling a character reference
-or a codec table writes. *)
-
-val is_python_space : int -> bool
-(** Whether a codepoint is whitespace to [str.strip] — the ASCII blanks plus
-the Unicode spaces the method also drops. *)
-
-val splitlines : t -> t list
-(** [str.splitlines]: the boundaries are LF, VT, FF, CR ([CRLF] as one break),
-the four file/group/record separators, NEL, and the two Unicode line/para
-separators. A trailing break ends a (possibly empty) last line, exactly as
-Python's does. *)
-
-val ascii_lower : t -> t
-(** ASCII-only lowercasing. Python's [casefold] also folds non-ASCII ([ß] into
-[ss]); the fetch-path fixtures are ASCII and the term-overlap scorer only
-needs a stable normal form, so the rest passes through unchanged. *)
+include module type of Seekwright_text.Utf8
