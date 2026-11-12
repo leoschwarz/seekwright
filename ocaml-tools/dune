@@ -36,3 +36,66 @@
 (rule
  (alias runtest)
  (action (diff py_body.out our_body.out)))
+
+; The embedded-prose pins (M8). Each literal in [lib/] is a copy of a
+; read-only file under [../src/seekwright/resources/]; these rules print the
+; literal and diff it against the original, so a drift in either direction
+; fails [dune runtest] instead of waiting for a reader to notice two
+; deployments phrasing one rule differently.
+(executable
+ (name resources)
+ (libraries seekwright))
+
+(rule
+ (targets server_instructions.out)
+ (deps resources.exe)
+ (action (with-outputs-to server_instructions.out (run ./resources.exe server_instructions))))
+
+(rule
+ (alias runtest)
+ (action (diff ../src/seekwright/resources/server_instructions.txt server_instructions.out)))
+
+(rule
+ (targets search_description.out)
+ (deps resources.exe)
+ (action (with-outputs-to search_description.out (run ./resources.exe search_description))))
+
+(rule
+ (alias runtest)
+ (action (diff ../src/seekwright/resources/search_description.txt search_description.out)))
+
+(rule
+ (targets fetch_description.out)
+ (deps resources.exe)
+ (action (with-outputs-to fetch_description.out (run ./resources.exe fetch_description))))
+
+(rule
+ (alias runtest)
+ (action (diff ../src/seekwright/resources/fetch_description.txt fetch_description.out)))
+
+(rule
+ (targets answer_description.out)
+ (deps resources.exe)
+ (action (with-outputs-to answer_description.out (run ./resources.exe answer_description))))
+
+(rule
+ (alias runtest)
+ (action (diff ../src/seekwright/resources/answer_description.txt answer_description.out)))
+
+(rule
+ (targets answer_system.out)
+ (deps resources.exe)
+ (action (with-outputs-to answer_system.out (run ./resources.exe answer_system))))
+
+(rule
+ (alias runtest)
+ (action (diff ../src/seekwright/resources/answer_system.txt answer_system.out)))
+
+(rule
+ (targets dashboard.out)
+ (deps resources.exe)
+ (action (with-outputs-to dashboard.out (run ./resources.exe dashboard))))
+
+(rule
+ (alias runtest)
+ (action (diff ../src/seekwright/resources/dashboard.html dashboard.out)))
