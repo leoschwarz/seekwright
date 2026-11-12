@@ -22,10 +22,13 @@
  ; [seekwright.wire] the page records this library produces and [seekwright]
  ; consumes: both used to own a copy, and the layer between the two libraries
  ; copied the record field by field. Neither big library may link the other, so
- ; both sit on a stdlib-only floor under both.
+ ; both sit on a stdlib-only floor under both. [eio] is the chain budget on
+ ; [Fetcher.fetch] (quality review, fetch finding 4) — a timeout value, not a
+ ; clock: the caller holds the monotonic clock.
  (libraries
   seekwright.text
   seekwright.wire
   mcp-caps
   uri
-  yojson))
+  yojson
+  eio))

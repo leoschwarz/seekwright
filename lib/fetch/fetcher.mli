@@ -89,11 +89,30 @@ type error =
 type t
 
 val fetch :
-  t -> string -> offset:int -> max_chars:int option -> (fetched_page, error) result
+  ?chain_timeout:Eio.Time.Timeout.t ->
+  t ->
+  string ->
+  offset:int ->
+  max_chars:int option ->
+  (fetched_page, error) result
 (** [fetch t url ~offset ~max_chars] fetches, extracts and windows to
     [[offset, offset + max_chars)] in codepoints. [max_chars = None] means the
     fetcher's own configured default; {!total_chars} always reports the full
-    extraction, whatever the window. *)
+    extraction, whatever the window.
+
+    [?chain_timeout] is the budget for the {b whole} redirect chain, on top of
+    the grant's per-operation bound, which restarts at every hop. Without it a
+    deployment that allows ten redirects can spend ten timeouts on one page, and
+    Python's reader — which measures one budget over the chain — has no OCaml
+    counterpart. It is a [Timeout.t] rather than a number of seconds because
+    measuring it needs the monotonic clock, and this module deliberately holds
+    none: the caller that built the grant has the clock and builds the timeout
+    with it. An expired budget is a {b value}, not an exception: the chain's
+    fiber is cancelled and [fetch] answers [Error (Failed "request timed out")],
+    the same sentence the grant's own per-hop timeout maps to, so a caller cannot
+    tell which bound expired and never has to. A cancellation that comes from
+    outside — the caller's switch closing, its own timeout firing — is {b not}
+    caught here and keeps unwinding. *)
 
 (** {1 Construction} *)
 

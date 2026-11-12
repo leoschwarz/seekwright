@@ -302,7 +302,8 @@ let cap_body max_download_bytes (body : string) : string * bool =
     (String.sub body 0 max_download_bytes, true)
   else (body, false)
 
-let rec fetch (t : t) (url : string) ~offset ~max_chars : (fetched_page, error) result =
+let rec fetch ?(chain_timeout = Eio.Time.Timeout.none) (t : t) (url : string) ~offset
+    ~max_chars : (fetched_page, error) result =
   match validate_url url with
   | Error message -> Error (Refusal (Url_blocked message))
   | Ok current ->
@@ -367,7 +368,21 @@ let rec fetch (t : t) (url : string) ~offset ~max_chars : (fetched_page, error) 
                         else chain target (hop + 1))
             else read t current response ~offset ~max_chars
       in
-      chain current 0
+      (* Python's reader measures {b one} budget over the whole chain; the
+         grant's operation timeout restarts at every hop, so a deployment that
+         allows [max_redirects] redirects can otherwise spend [max_redirects + 1]
+         timeouts on a single page. [run_exn] cancels the fibre doing the I/O when
+         the bound expires — the pattern [Caps.Controls] already uses, and
+         [run_exn] rather than [run] because [run] widens the body's own error
+         channel with a [[`Timeout]] case this sum type cannot unify with.
+
+         Only [Eio.Time.Timeout] is caught here. A cancellation from outside — the
+         caller's switch closing, its own budget expiring — is not this module's
+         to swallow and keeps unwinding. The sentence is the one the per-hop
+         mapping above already returns: a caller cannot tell which bound expired,
+         and never needs to. *)
+      (try Eio.Time.Timeout.run_exn chain_timeout (fun () -> chain current 0)
+       with Eio.Time.Timeout -> Error (Failed "request timed out"))
 
 and read (t : t) (url : string) (response : Caps.Authority.Net.response) ~offset ~max_chars :
     (fetched_page, error) result =

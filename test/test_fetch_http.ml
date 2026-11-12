@@ -37,8 +37,15 @@ let big_json = "{\"items\": [" ^ String.concat "," (List.init 60_000 (fun _ -> "
 let big_html = "<html><body><p>" ^ String.make 3_000_000 'x' ^ "</p></body></html>"
 let png_body = "\x89PNG\r\n\x1a\n" ^ String.make 100 'p'
 
+(* The fixture's [/stall] sleep and the budgets the cases set against it: the
+   sleep is longer than every budget that expects to be cut and shorter than the
+   one that expects to arrive. *)
+let slow_seconds = 2.0
+let tight_budget_seconds = 0.4
+let generous_budget_seconds = 10.0
+
 (* The fixture: one route table, keyed by path. *)
-let fixture ~port _conn request _body =
+let fixture ~port ~clock _conn request _body =
   let path = Http.Request.resource request in
   let respond ?(headers = []) ~status body =
     Cohttp_eio.Server.respond_string ~headers:(Http.Header.of_list headers) ~status
@@ -48,6 +55,11 @@ let fixture ~port _conn request _body =
   let base = Printf.sprintf "http://127.0.0.1:%d" port in
   match path with
   | "/page" -> respond ~headers: [ ("content-type", "text/html") ] ~status:`OK html_body
+  | "/stall" ->
+      (* Answers, but late: the route the chain budget is measured against, and
+         the one the outer-cancellation case cancels. *)
+      Eio.Time.sleep clock slow_seconds;
+      respond ~headers: [ ("content-type", "text/html") ] ~status:`OK html_body
   | "/json" -> respond ~headers: [ ("content-type", "application/json") ] ~status:`OK json_body
   | "/csv" -> respond ~headers: [ ("content-type", "text/csv") ] ~status:`OK csv_body
   | "/redirect" -> redirect "/page"
@@ -70,8 +82,10 @@ let fixture ~port _conn request _body =
   | _ -> respond ~status:`Not_found "nothing here\n"
 
 (* One case: the fixture, a grant pinned to it, and the fetcher built with the
-   case's knobs. *)
-let with_fetcher ?(max_download_bytes = 8_388_608) ?(allow_images = false) f =
+   case's knobs. The clocked form also hands over the monotonic clock, which is
+   what a chain budget is measured against and what the fixture's [/stall]
+   route sleeps on. *)
+let with_fetcher_clocked ?(max_download_bytes = 8_388_608) ?(allow_images = false) f =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let socket =
@@ -82,7 +96,9 @@ let with_fetcher ?(max_download_bytes = 8_388_608) ?(allow_images = false) f =
     | `Tcp (_, port) -> port
     | `Unix path -> Alcotest.failf "unix socket fixture: %s" path
   in
-  let server = Cohttp_eio.Server.make ~callback:(fixture ~port) () in
+  let server =
+    Cohttp_eio.Server.make ~callback:(fixture ~port ~clock:(Eio.Stdenv.clock env)) ()
+  in
   let stop, fill_stop = Eio.Promise.create () in
   let stopped, fill_stopped = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
@@ -108,7 +124,13 @@ let with_fetcher ?(max_download_bytes = 8_388_608) ?(allow_images = false) f =
           let fetcher =
             F.make ~net ~extractor ~max_download_bytes ~allow_images ()
           in
-          f fetcher port)
+          f fetcher port (Eio.Stdenv.mono_clock env))
+
+(* The form every non-timing case uses: the clock is there for the fixture, and
+   a case that sets no budget has no use for it. *)
+let with_fetcher ?(max_download_bytes = 8_388_608) ?(allow_images = false) f =
+  with_fetcher_clocked ~max_download_bytes ~allow_images (fun fetcher port _clock ->
+    f fetcher port)
 
 let base fetcher port path =
   F.fetch fetcher (Printf.sprintf "http://127.0.0.1:%d%s" port path) ~offset:0
@@ -269,6 +291,74 @@ let test_an_image_without_the_switch_names_the_switch () =
   with_fetcher ~allow_images:false (fun fetcher port ->
     expect_refusal_with "fetch.allow_images = true" (base fetcher port "/png"))
 
+(* {2 The chain budget} *)
+
+(* One bound over the whole redirect chain, not one per hop: the grant's
+   operation timeout restarts at every hop, so without this a page behind
+   [max_redirects] redirects can spend [max_redirects + 1] timeouts on one URL.
+   The cases use the harness's monotonic clock — the same clock
+   [Authority.Net.of_confinement] was built with, so the bound and the I/O agree
+   about what "elapsed" means. *)
+
+let describe outcome =
+  match outcome with
+  | Ok _ -> "a page"
+  | Error (F.Refusal r) ->
+      (match r with F.Url_blocked m | F.Redirect_blocked m | F.Blocked m -> "refusal: " ^ m)
+  | Error (F.Failed m) -> "failed: " ^ m
+
+let test_a_chain_budget_cuts_a_page_that_takes_too_long () =
+  with_fetcher_clocked (fun fetcher port clock ->
+    match
+      F.fetch
+        ~chain_timeout:(Eio.Time.Timeout.seconds clock tight_budget_seconds)
+        fetcher (Printf.sprintf "http://127.0.0.1:%d/stall" port) ~offset:0 ~max_chars:None
+    with
+    | Error (F.Failed msg) ->
+        (* The sentence the per-hop grant timeout already returns: a caller
+           cannot tell which bound expired and never needs to. *)
+        A.check A.string "the budget's sentence" "request timed out" msg
+    | other -> Alcotest.failf "expected the budget to answer, got %s" (describe other))
+
+let test_a_chain_budget_wider_than_the_page_answers_normally () =
+  with_fetcher_clocked (fun fetcher port clock ->
+    let page =
+      expect_ok
+        (F.fetch
+           ~chain_timeout:(Eio.Time.Timeout.seconds clock generous_budget_seconds)
+           fetcher (Printf.sprintf "http://127.0.0.1:%d/page" port) ~offset:0
+           ~max_chars:None)
+    in
+    A.check A.int "status" 200 page.F.status_code)
+
+let test_without_a_chain_budget_the_page_still_arrives () =
+  (* [none] is the default, and the default is what every call site that does
+     not pass a budget gets: no ceiling of this module's own, so the fetch
+     takes as long as the grant allows it to. *)
+  with_fetcher (fun fetcher port ->
+    let page = expect_ok (base fetcher port "/stall") in
+    A.check A.int "status" 200 page.F.status_code)
+
+let test_an_outer_budget_still_cancels_a_fetch () =
+  (* The other half of the budget rule: this module's [try] names only
+     [Eio.Time.Timeout], so a caller whose own bound expires still gets its own
+     exception. The difference between a fetch that is late and a fetch that
+     cannot be stopped is exactly this clause. *)
+  with_fetcher_clocked (fun fetcher port clock ->
+    let outcome =
+      try
+        `Answered
+          (Eio.Time.Timeout.run_exn
+             (Eio.Time.Timeout.seconds clock tight_budget_seconds)
+             (fun () -> base fetcher port "/stall"))
+      with Eio.Time.Timeout -> `Cancelled
+    in
+    match outcome with
+    | `Cancelled -> ()
+    | `Answered result ->
+        Alcotest.failf "the caller's budget expired and the fetch returned %s instead"
+          (describe result))
+
 let () =
   Alcotest.run "fetch_http"
     [
@@ -312,5 +402,16 @@ let () =
             test_an_image_whose_bytes_disagree_with_its_header_is_refused;
           A.test_case "without the switch the refusal names it" `Quick
             test_an_image_without_the_switch_names_the_switch;
+        ] );
+      ( "the chain budget",
+        [
+          A.test_case "a chain budget cuts a page that takes too long" `Quick
+            test_a_chain_budget_cuts_a_page_that_takes_too_long;
+          A.test_case "a chain budget wider than the page answers normally" `Quick
+            test_a_chain_budget_wider_than_the_page_answers_normally;
+          A.test_case "without a chain budget the page still arrives" `Quick
+            test_without_a_chain_budget_the_page_still_arrives;
+          A.test_case "an outer budget still cancels a fetch" `Quick
+            test_an_outer_budget_still_cancels_a_fetch;
         ] );
     ]
