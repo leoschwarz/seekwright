@@ -26,7 +26,10 @@
     same contract as every [Authority] operation. Each hop is bounded by the
     grant's per-operation timeout; the chain is bounded by [max_redirects]
     (Python's single 2× wall-clock budget over the chain is the engine's job
-    in this port, P5). *)
+    in this port, P5). Extraction runs on an {!Extract_pool} when one is
+    injected — off the loop's domain, with the parse deadline the Python
+    reader puts on [to_thread] — and only the fixture/embedder position takes
+    the inline path (see {!make}). *)
 
 (* The page records are [Seekwright_wire.Page]'s, re-declared here under the
    names this interface uses, so the two halves of the fetch path cannot drift
@@ -126,6 +129,8 @@ val make :
   ?max_redirects:int ->
   ?allow_images:bool ->
   ?user_agent:string ->
+  ?workers:Extract_pool.t ->
+  ?parse_timeout_seconds:float ->
   unit ->
   t
 (** [make ~net ~extractor ()] is the free primary: the grant is the only network
@@ -133,7 +138,19 @@ val make :
     no default. [max_download_bytes] is enforced on the grant-delivered body —
     the grant's own ceiling is the streaming bound and is set where the grant
     is built — so a document cut at the cap is refused where a record stream
-    keeps its head, exactly as the Python reader's sliced buffer does. *)
+    keeps its head, exactly as the Python reader's sliced buffer does.
+
+    [?workers] is an {!Extract_pool}: with one, extraction runs on that pool's
+    worker domains and [?parse_timeout_seconds] bounds it, the oracle's
+    per-request parse deadline ([fetcher.py]'s [asyncio.wait_for] around
+    [to_thread]); a parse that overruns comes back as the documented
+    non-retryable refusal, "cannot extract text: … did not finish within N
+    seconds; raise fetch.timeout_seconds to allow a longer parse". Without
+    one, extraction runs inline on the calling fiber and no parse deadline can
+    apply — the position the Python tests' direct [HttpFetcher] construction
+    holds, and a deliberate seam, not the served path: {!Extract_pool} says
+    why the isolation exists, and the factory ([lib/factory/]) wires every
+    built fetch stack to a pool. The pair is honoured or absent together. *)
 
 (** {1 What may raise, and where it turns back into a value}
 

@@ -334,10 +334,18 @@ type t = {
   max_redirects : int;
   allow_images : bool;
   user_agent : string;
+  workers : Extract_pool.t option;
+  (* [parse_timeout_seconds] only means something beside [workers]: a parse
+     that never yields cannot be interrupted on the loop's domain, so the
+     deadline is enforced by abandoning a pool job, not by stopping one. The
+     inline path ([workers = None], the embedder and fixture position) has no
+     bound to report, so the pair is honoured or absent together. *)
+  parse_timeout_seconds : float option;
 }
 
 let make ~net ~extractor ?(max_download_bytes = 8_388_608) ?(max_text_chars = 40_000)
-    ?(max_redirects = 3) ?(allow_images = false) ?(user_agent = default_user_agent) () =
+    ?(max_redirects = 3) ?(allow_images = false) ?(user_agent = default_user_agent)
+    ?workers ?parse_timeout_seconds () =
   {
     net;
     extractor;
@@ -346,6 +354,8 @@ let make ~net ~extractor ?(max_download_bytes = 8_388_608) ?(max_text_chars = 40
     max_redirects;
     allow_images;
     user_agent;
+    workers;
+    parse_timeout_seconds;
   }
 
 let contains_substring hay needle =
@@ -387,6 +397,50 @@ let cap_body max_download_bytes (body : string) : string * bool =
   if String.length body > max_download_bytes then
     (String.sub body 0 max_download_bytes, true)
   else (body, false)
+
+(* The oracle's parse-deadline sentence ([fetcher.py]'s [TimeoutError] arm),
+   with the port's [Timeout.t]-carrying clock removed: the seconds the caller
+   passed to [make] are quoted back so the remedy named in the sentence is the
+   key the operator actually raises. [%g] is Python's [f"{x:g}"]. *)
+let parse_timeout_refusal kind seconds =
+  let what = if kind = "" then "extraction" else kind ^ " extraction" in
+  Refusal
+    (Blocked
+       (Printf.sprintf
+          "cannot extract text: %s did not finish within %s seconds; raise \
+           fetch.timeout_seconds to allow a longer parse"
+          what (Printf.sprintf "%g" seconds)))
+
+(* Turning a body into text, on the pool when the fetcher has one and inline
+   only when it does not. The pool is the public fetch path's isolation
+   ([Extract_pool], plans/ocaml-finalisation.md F2.2): the download cap bounds
+   the input, and this is the half that bounds the *time* the backend then
+   spends on it, off the loop's own domain. [Extraction_failed] arrives here
+   both ways — raised on the loop, or carried back across the pool's socket
+   as [Backend] — and takes the same sentence either way, because a parse
+   that failed and a parse that ran too long are both "cannot extract text"
+   to the REST projection and both non-retryable with the same bytes. *)
+let extract_body (t : t) ~kind body content_type =
+  match t.workers with
+  | None -> (
+      try Ok (t.extractor.extract body content_type)
+      with E.Extraction_failed message ->
+        Error (Refusal (Blocked ("cannot extract text: " ^ message))))
+  | Some pool -> (
+      match
+        Extract_pool.extract pool ?timeout_seconds:t.parse_timeout_seconds ~body
+          ~content_type
+      with
+      | Ok extracted -> Ok extracted
+      | Error Extract_pool.Timed_out ->
+          Error
+            (parse_timeout_refusal
+               kind
+               (Option.value ~default:0. t.parse_timeout_seconds))
+      | Error Extract_pool.Pool_closed ->
+          Error (Failed "the extraction worker pool is closed")
+      | Error (Extract_pool.Backend message | Extract_pool.Worker message) ->
+          Error (Refusal (Blocked ("cannot extract text: " ^ message))))
 
 let rec fetch ?(chain_timeout = Eio.Time.Timeout.none) (t : t) (url : string) ~offset
     ~max_chars : (fetched_page, error) result =
@@ -518,11 +572,7 @@ and read (t : t) (url : string) (response : Caps.Authority.Net.response) ~offset
                     returned in part; raise fetch.max_download_bytes to return it"
                    kind limit_kib)))
       else
-        let extracted =
-          try Ok (t.extractor.extract body content_type)
-          with E.Extraction_failed message ->
-            Error (Refusal (Blocked ("cannot extract text: " ^ message)))
-        in
+        let extracted = extract_body t ~kind body content_type in
         match extracted with
         | Error _ as e -> e
         | Ok extracted ->
