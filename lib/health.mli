@@ -19,9 +19,27 @@
     plain attributes need no locks. This module has no loop to read, so the clock
     is {i injected} at {!create} and every comparison in here goes through it.
     That is what makes the state machine testable without sleeping: the suite
-    moves the clock instead of waiting for it, and a cooldown that would otherwise
-    be a race is an exact assertion. One fiber touches a board at a time, as in
-    Python; {!t} is not shared across domains.
+    moves the clock instead of waiting for it, and a cooldown that would
+    otherwise be a race is an exact assertion.
+
+    {1 Concurrency}
+
+    The same argument carries over to the Eio fibers that share one board. Every
+    public mutator — {!record_failure}, {!record_success} — is a critical
+    section with {b no suspension point}: the read of the clock, the lookup, the
+    update and the log emission all run between two yields, so an Eio fiber
+    cannot switch to another caller inside one. Concurrent traffic and health
+    ticks therefore interleave only {i between} whole state transitions, which
+    is why there is no lock here and why adding one would not change an
+    observable: Eio gives a fiber sole occupancy of the domain until it
+    suspends, and this module never suspends. The invariant to keep when editing
+    is exactly that: a yield ([Provider.Net.request]'s I/O, a sleep, a mutex)
+    inside a mutator would make two calls interleave and would need a guard.
+
+    {!t} is not shared across Eio domains, and {!run_probes} is called on the
+    listener's switch, so a probe tick and a search share one domain and one
+    fiber at a time. The monitor's own [sleep] sits between ticks, outside every
+    critical section.
 
     {1 The log}
 

@@ -31,6 +31,29 @@
     testable core of those routes: a pure function from method, path, headers
     and body to {!response}, which {!serve_http} adapts onto cohttp.
 
+    {1 Concurrent sessions}
+
+    Every request is served on its own Eio fiber, and the two transports answer
+    concurrency differently by design rather than by accident:
+
+    - {b Streamable HTTP} is stateless per POST. The adapter takes one JSON-RPC
+      body, dispatches it against the immutable [Mcp_kit.Server.t], and writes
+      the answer to that same request; there is no session value to share and no
+      request-id table to race, so concurrent bodies cannot mix answers and a
+      duplicate id on two connections is two independent calls. That is
+      "concurrent request ids supported correctly", not a lock.
+    - {b stdio} is one session and one line stream, so the transport serialises
+      it by construction ([Mcp_kit_stdio.run_channels] reads a line, answers it,
+      reads the next). It is "serialised by design", and no server-level lock is
+      needed to make it so.
+
+    The shared state the two transports do share is the app's {!Usage.t} and
+    {!Health.t}; their interfaces own the serialisation contract (the usage
+    journal and its snapshot take one guard, the health board's transitions are
+    yield-free), so {!serve_connection} itself carries no lock and must not gain
+    one — a mutex over dispatch would turn every dashboard read into a queue
+    behind every provider call.
+
     {1 Error prose}
 
     The REST routes answer the exact sentences the Python tree carries:

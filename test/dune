@@ -420,6 +420,29 @@
  (libraries seekwright mcp-caps mcp-kit eio eio_main mtime yojson alcotest
    test_support))
 
+; F2.4: shared state under concurrent serving. The suite drives the REST
+; projection, the dashboard, the three tools and the health monitor at once over
+; real loopback connections, with fake providers, fetcher and model endpoint on
+; a second listener. Both listeners and every grant live on one switch, so
+; cancellation is the shutdown case; the fixture listens through the capability
+; layer, which is why the crypto RNG is installed here.
+(test
+ (name test_concurrency)
+ (libraries
+  seekwright
+  seekwright.factory
+  mcp-caps
+  mcp-kit
+  cohttp-eio
+  http
+  uri
+  yojson
+  eio
+  eio_main
+  mirage-crypto-rng.unix
+  alcotest test_support
+  unix))
+
 (test
  (name test_text)
  (libraries seekwright.text seekwright.fetch alcotest))

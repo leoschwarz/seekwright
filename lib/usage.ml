@@ -340,6 +340,11 @@ type answer_totals = {
 type t = {
   now : unit -> float;
   log : log option;
+  (* One recorder, many fibers: the append is I/O and therefore a suspension
+     point, so the fold and the line it writes are one critical section. Eio's
+     mutex, not [Stdlib.Mutex]: a waiting fiber parks instead of blocking the
+     domain the recorder's own append needs to finish. See the interface. *)
+  lock : Eio.Mutex.t;
   process_started_at : string;
   recent_max : int;
   mutable recent : Yojson.Safe.t list;
@@ -862,6 +867,7 @@ let create ~now ?log ?history_path ?(recent = recent_default) ?(keep_days = keep
     {
       now;
       log;
+      lock = Eio.Mutex.create ();
       process_started_at = iso_utc_full (now ());
       recent_max = recent;
       recent = [];
@@ -921,19 +927,28 @@ let create ~now ?log ?history_path ?(recent = recent_default) ?(keep_days = keep
 
 (* {1 Recording} *)
 
+(* The fold and the line are one critical section: [apply] touches every
+   aggregate with no suspension point, and [append] then suspends on the file.
+   Holding the lock across both is what makes the aggregate order, the journal
+   order and the snapshot all read the same order, and it is what keeps two
+   fibers' bytes from sharing a line. [Yojson.Safe.to_string] runs inside
+   [append], under the lock, so the bytes of one record are formed and written
+   before another record may start. *)
 let record_search (t : t) ~(provider : string) ~(ms : int) ~(cost_usd : float)
     ~(results : int) ~(fell_back : bool) ?error ?run ?step () : unit =
   let entry =
     search_line (iso_utc_full (t.now ())) ~provider ms cost_usd results fell_back error run step
   in
-  ignore (apply t entry);
-  append t entry
+  Eio.Mutex.use_ro t.lock (fun () ->
+    ignore (apply t entry);
+    append t entry)
 
 let record_fetch (t : t) ~(ms : int) ~(chars : int) ~(fallback : string option)
     ?cost_usd ?error ?run ?step () : unit =
   let entry = fetch_line (iso_utc_full (t.now ())) ms chars fallback cost_usd error run step in
-  ignore (apply t entry);
-  append t entry
+  Eio.Mutex.use_ro t.lock (fun () ->
+    ignore (apply t entry);
+    append t entry)
 
 let record_answer (t : t) ~(run : string) ~(model : string option) ~(depth : string)
     ~(searches : int) ~(results : int) ~(fetched : int) ~(material_chars : int)
@@ -945,8 +960,9 @@ let record_answer (t : t) ~(run : string) ~(model : string option) ~(depth : str
       prompt_tokens completion_tokens answer_chars cited cited_invalid sources model_cost_usd ms
       error
   in
-  ignore (apply t entry);
-  append t entry
+  Eio.Mutex.use_ro t.lock (fun () ->
+    ignore (apply t entry);
+    append t entry)
 
 let search_cost_usd (t : t) : float = t.search_cost_usd
 
@@ -1091,7 +1107,7 @@ let citation_rows (t : t) : Yojson.Safe.t list =
         ])
     present
 
-let snapshot (t : t) : Yojson.Safe.t =
+let snapshot_unlocked (t : t) : Yojson.Safe.t =
   let today = utc_date (t.now ()) in
   (* A day with no traffic is a zero row for the counting columns and null for the
      money columns: the chart's axis is the whole window, but an unpriced day has
@@ -1201,3 +1217,11 @@ let snapshot (t : t) : Yojson.Safe.t =
             ("failed", `Bool t.journal_failed);
           ] );
     ]
+
+(* The snapshot is a read of every aggregate at once, so it takes the same lock
+   the writers do. Nothing in the fold itself suspends, so the lock is what
+   turns "consistent by absence of a yield" into "consistent by construction":
+   a dashboard read that arrives while a record is being appended waits for
+   the fold and the line to finish rather than judging a half-applied call. *)
+let snapshot (t : t) : Yojson.Safe.t =
+  Eio.Mutex.use_ro t.lock (fun () -> snapshot_unlocked t)

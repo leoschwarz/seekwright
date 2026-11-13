@@ -22,10 +22,28 @@
     - Agent mode's ranking data ([retrieved]/[cited]) folds onto the same lines,
       and [cited_invalid] is attributed to the model, never to a provider.
 
-    Python confines this to one event loop: plain attributes, no locks. The OCaml
-    port keeps that discipline — a recorder is touched from one fiber at a time,
-    which the engine's own serial dispatch guarantees, and {!t} is not shared
-    across domains.
+    Python confines this to one event loop: plain attributes, no locks. The
+    OCaml port serves every MCP and REST call on its own Eio fiber, so several
+    operations do reach one recorder at once and the confinement is explicit
+    instead of assumed:
+
+    - The fold of a line into the aggregates and the append of that line to the
+      journal are {b one critical section}, guarded by an [Eio.Mutex] owned by
+      the recorder. [apply] never suspends, and [append] does, so the guard is
+      what makes the aggregate order, the journal order and a dashboard read
+      agree — and what keeps two fibers from interleaving inside one JSON line.
+      A frozen mutex is used, not [Stdlib.Mutex], because a waiting fiber must
+      park rather than block the domain the holder's append needs.
+    - {!snapshot} takes the same guard. The fold itself is already yield-free,
+      so a read could not observe it halfway today; the guard states that as a
+      property rather than as a consequence of where the suspension points
+      happen to be, and it is what will keep the promise if a fold ever grows
+      one.
+    - {!t} is still one domain's value. A recorder is not shared across Eio
+      domains: the guard is a fiber lock, not a cross-domain lock, and nothing
+      in the serving path spawns a second domain for a call. A later worker
+      domain would need a real lock at the boundary, which is exactly what the
+      absence of one here records.
 
     Python reads its clock from the loop and the process wall clock; OCaml's
     stdlib has neither, so the wall clock is {i injected} at {!create}. Every
@@ -77,7 +95,13 @@ val window_days : int
 val keep_days_default : int
 (** The default lifetime of a day bucket: [370], a year plus its leap day. *)
 
-(** {1 Recording} *)
+(** {1 Recording}
+
+    Each [record_*] folds the line into the aggregates and appends it to the
+    journal as one critical section: serialised by the recorder's guard, so
+    concurrent fibers cannot interleave inside the fold or inside one JSON
+    line. The line is written after the fold, so a dashboard snapshot and the
+    file agree on the order the calls landed in. *)
 
 val record_search :
   t ->
@@ -165,6 +189,11 @@ val search_cost_usd : t -> float
 
 val snapshot : t -> Yojson.Safe.t
 (** The whole dashboard state, as the JSON the page reads.
+
+    One consistent read: the snapshot takes the recorder's guard, so it cannot
+    see a record whose fold has started but whose journal line has not been
+    written. Every field therefore describes the same set of terminal calls,
+    whatever the HTTP routes were doing when the request arrived.
 
     Costs are rounded to six decimals — sub-microdollar — so a float sum never
     ships its binary-tail noise to a page whose point is readability.

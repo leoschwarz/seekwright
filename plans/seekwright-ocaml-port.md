@@ -911,3 +911,73 @@ Gate at landing: `dune build @install`, `dune runtest --force` and
 `dune build @doc` all exit 0 — every existing golden (`bin/check_unbuilt*`,
 `bin/smoke*`, `test/check_transitional*`) byte-identical. No suite reached a
 provider endpoint.
+
+## 18. F2.4 — shared state under concurrent calls (2026-11-13)
+
+Landed on `f2-4-concurrency`. Spec: `plans/ocaml-finalisation.md` §F2.4.
+
+**What is shared, and by whom.** Every MCP and REST call is served on its own
+Eio fiber, so one process reaches three mutable things at once: `Usage`'s
+aggregates plus its JSONL journal, `Health`'s provider board, and the app value
+the routes read. The Python confined all three to one event loop (plain
+attributes, no locks); the port cannot borrow that argument, so each seam states
+its own.
+
+- `Usage` now owns an `Eio.Mutex` (`t.lock`). `record_search`,
+  `record_fetch` and `record_answer` fold the line into the aggregates and
+  append it to the journal inside one critical section, and `snapshot` takes
+  the same guard. The fold has no suspension point today, but `append` is I/O
+  and therefore is one, so the guard is what makes the aggregate order, the
+  journal order and a dashboard read agree, and what keeps two fibers' bytes
+  from sharing a journal line. `Eio.Mutex`, not `Stdlib.Mutex`: a waiting fiber
+  must park and let the holder's append finish rather than block the domain it
+  needs. `t` remains a single-domain value; a worker domain would need a real
+  lock at the boundary, which the absence of one records.
+- `Health` needed no lock, and `lib/health.mli` now says why: every public
+  mutator is a critical section with no yield — the clock read, the lookup, the
+  update and the log emission all run between two yields — so fibers interleave
+  only between whole transitions. The invariant to preserve when editing is
+  exactly that; a suspension point inside a mutator would need a guard.
+- `lib/server.mli` records the transport decision instead of adding a lock.
+  Streamable HTTP is stateless per POST: one body in, one dispatch against the
+  immutable `Mcp_kit.Server.t`, one response out, so request ids cannot be
+  confused and a duplicate id on two connections is two calls. stdio is one
+  line stream and is serialised by construction. `serve_connection` carries no
+  lock and must not gain one — a mutex over dispatch would queue every
+  dashboard read behind every provider call.
+
+**The determinism suite** (`test/test_concurrency.ml`, one `Alcotest` case).
+It builds `Server.app` by hand with a fake `Provider.S`, a fake fetcher and a
+real `Agent` over a fake model endpoint, all dialing a second loopback listener
+through audited `Factory` grants (`Factory.grant_of_endpoint`,
+`Factory.probe_net`, `Factory.audit_sink`). The REST projection is served by an
+accept loop handing each socket to `Server.serve_connection` — the same
+function production uses — so six searches, six fetches, six answers, three
+dashboard reads and eight health ticks overlap on real connections. Both clocks
+are one fixed instant and the monitor's `sleep` is a `Fiber.yield`, so no case
+waits: the assertions are exact and order-independent.
+
+They assert:
+
+- each response carries its own request's marker (a body handed to another
+  caller fails even if every aggregate still adds up);
+- the aggregates are arithmetic over the fixture — twelve searches (six direct
+  plus the answers' retrieval steps), six fetches, six answers, `$0.012` of
+  search spend, one dispatch per fake provider/fetcher call;
+- every dashboard read satisfies the same identities at the moment it was
+  taken (lifetime = provider rows = window, recent holds one entry per line);
+- the journal is one complete JSON object per terminal line, ends with a
+  newline, carries the right tool counts and attributes every search line;
+- one `caps.operation` audit event per provider, fetch, model and probe
+  request, and one `health.probe` per tick;
+- the switch drains: no connection outlives it, no gate is open after only
+  successes.
+
+The fixture sets `SEEKWRIGHT_AGENT_API_KEY` and `SEEKWRIGHT_SERPER_API_KEY` so
+agent mode and the probe take their dialing branch rather than refusing before
+any request, and installs `Mirage_crypto_rng_unix.use_default ()` because the
+capability grants mint tokens. No case reaches a real provider.
+
+Gate at landing: `dune build @install`, `dune runtest --force` and
+`dune build @doc` all exit 0 under the opam+GMP environment. The new suite is
+hermetic — loopback and fakes only.
