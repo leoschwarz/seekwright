@@ -1985,3 +1985,107 @@ rather than hand-edited. `dune build @install`, `dune runtest --force` (69 suite
 plus the blessed diff rules) and `dune build @doc` all exit 0. Nothing in this
 change reached a provider endpoint: no live test ran, no key was read, and the
 rows keep `ocaml_live_tested = false`.
+
+
+## 30. F5.1 — the Exa/Parallel pair: session-bearing rows, and the last four names built (2026-11-13)
+
+Landed on `f5-1-mcp`. Spec: `plans/ocaml-finalisation.md` §F5.1 and the F5 common
+acceptance rows. With this wave every one of the seventeen names dispatches: no row
+carries `Deferred` anymore, and the constructor stays only so a later wave could
+express one.
+
+**A seam, not a widened protocol.** Four of the names dial a streamable-MCP endpoint,
+which needs a session — an `initialize`/`notifications/initialized` exchange with an
+`mcp-session-id` header — where the thirteen already in the tree are one-shot request/
+response shapes. The seam is `Seekwright.Provider.session = { adapter; warmup }`:
+the `S` protocol itself gains nothing (an MCP name implements exactly the `S` a REST
+name does, and close stays `S.aclose`), and the registry's `build` is
+`Adapter | Adapter_session | Deferred`, `Adapter_session` closing over
+`args -> Provider.session`. `warmup` is the deferred handshake: building providers
+still opens no socket — startup constructs grants and nothing else — and a readiness
+proof for these names is an MCP handshake, which `--check`'s bodyless-GET probe
+vocabulary cannot express. The factory's build record carries a `warmups` table
+beside `probe_table`, and `build_providers` takes `?log` for the tiered adapter's
+notices. Rows name adapter constants the way every row already does: `Exa.default_uri`,
+`Parallel.endpoint`, `Parallel.mcp_uri`.
+
+**Four builders, and a never-auth rule on both free halves.** `exa` is
+`Exa.make_tiered`: the oracle's `TieredExaProvider` parity — two anonymous attempts
+before the key, escalating on *any* free-leg error rather than only a classified
+quota (the oracle's rate-limit sniff has never seen Exa's real wording), a
+`free_cooldown_seconds` gap before the key is retried, and a `notice` whenever the
+key was spent. `exa:free` is `Exa.make_mcp ~name:"exa:free"`, and `parallel:free` is
+`Parallel.make_mcp` — neither reads a key even when the environment holds one, which
+is pinned at the registry too (`Registry.key_for` answers `None` for both). `parallel`
+rides REST `Parallel.make ~mode`, not the authenticated MCP: REST is the surface that
+carries the filter fields, and `mode` is the preset that decides price.
+
+**Pricing rides one rung with a zero short-circuit.** `exa`, `exa:free` and
+`parallel:free` carry `Extra_results { first = 10; per_extra_1k = 1.0 }` — the
+oracle's `ParallelMcpProvider` subclasses `ExaMcpProvider`, so its `cost_for` is
+Exa's rung and the row models that rather than calling the name flat — and
+`Registry.cost_of`'s `Extra_results` branch returns zero at `cost_per_1k = 0.0`,
+mirroring `Exa.cost_for`'s zero-price guard: the free halves keep their class
+without their price.
+
+**The MCP client landed as its own commit first** (`providers: a narrow MCP client
+for the Exa and Parallel adapters`): a JSON-RPC 2.0 session client riding
+`Provider.Net.t` — `initialize` (reading the session header), the 202-answering
+initialized notification, `tools/call`, and a `DELETE` only where a session actually
+connected. Twenty cases in `test_mcp_client.ml`. One deviation from the oracle: the
+oracle's `exa.retry` debug line is *not* ported — reconnect is the client's
+responsibility, its event vocabulary is pinned in that suite, and a per-retry line
+belongs to the client, not the ladder.
+
+**Tests.** `test/test_exa.ml` (39 cases) and `test/test_parallel.ml` (35) drive the
+adapters over a scripted MCP endpoint that answers the whole session lifecycle, and
+over a fake `Provider.Net.t` for the REST half: parse and shape drift, the block
+format becoming results, highlights joined verbatim into `text` with the ellipsis
+riding the cap, the ladder's attempt order, cooldown and notices, caps with their
+`uncapped_chars` counts, and the costs. Tier-dial assertions pin
+`count ~meth:"tools/call" ~keyed:…` rather than counting key-bearing POSTs, because
+the authed tier's own handshake and notification carry the credential too. The guard
+suites move with the wave: `test_provider.ml` counts seventeen adapter sources in the
+sandbox; `test_provider_contract.ml` drives fourteen REST-shaped modules — `exa` is
+the one excluded, because its status rows are the shared client's and pinned there;
+`test_provider_registry.ml` puts all seventeen rows on the built side with the four
+new price and key pins. `test_routing_sets.ml` needed re-shaping rather than
+name-swapping: with every row built, no real config can produce an `unsupported`
+name, so the two cases that leant on one now use the file's hand-built-pair idiom —
+the build pass's sorted-offenders postcondition has no real-world example left to
+drive it, and the five-way fixture drops `serper` back out of a real build pass's
+output, the exact shape an unbuilt row leaves behind.
+
+**The provider area gains its first hosted-MCP name that *can* ride it — and three
+that deliberately cannot.** `parallel` (REST) joins the corpus with ten cases
+(140–149): basic, constraints, the `advanced` mode preset, a text cap, payment
+required, warnings becoming a notice, a non-object document answering empty, auth
+rejected, rate limited, and a year-long recency whose `today`-relative arithmetic is
+pinned by a frozen clock in the oracle projection (`projections.py`) and the `~now`
+the OCaml projection now takes. All 423 goldens regenerate matching — 10 new, none
+registering in `DIVERGENCES` — and the area's floor moves 105→115. The three
+MCP-session names are *not* corpus cases on purpose: the oracle's MCP SDK client
+will not ride `httpx.MockTransport`, so no projection can dial it; their wire
+behaviour is pinned by the unit suites, and `providers.tsv` says so in the
+verification column rather than claiming a differential that does not run. All
+seventeen matrix rows read `ported`; the two free rows carry `0.00` costs, not the
+`-` an unbuilt row wore.
+
+**Live.** `live/cases.ml` names all seventeen runnable now — the four new cases
+search with a two-result query, and `exa`'s sentence adds the free-tier-first
+expectation — with `live/test_live_cases.ml` pinning the set. All four rows keep
+`ocaml_live_tested = false`: this wave dialed no provider endpoint and read no key,
+and a name leaves that status only in a change that records its OCaml live run.
+
+**Gate at landing.** Nothing outside the task's ownership moved except blessed
+artefacts: `bin/check_unbuilt.expected` and `bin/smoke_notes.expected` (the `--check`
+and smoke reports no longer list any unported name) and
+`test/check_transitional.expected`, all re-blessed by `dune promote` rather than
+hand-edited. `dune build @install`, `dune build @doc` (one benign odoc warning on an
+`!Seekwright.Provider.ignored_constraints` reference in `exa.mli`) and
+`dune runtest --force` all exit 0, 71 suites green, nothing left to promote.
+
+**Follow-up for the health owner.** `lib/health.mli`'s `no_probe` and `run_probes`
+docstrings still say there is "no [warmup] member for yet" — stale since this wave's
+seam landed. The prose move is the health area's, not this wave's; recorded here so
+it is not lost.
