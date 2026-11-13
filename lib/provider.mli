@@ -198,6 +198,37 @@ module Net : sig
       [httpx] call does. *)
 end
 
+(** {1 Naming an endpoint, and reducing one} *)
+
+val policy_of_uri : Uri.t -> Mcp_caps.Policy.endpoint
+(** [policy_of_uri uri] is the same destination in the grant's words:
+    [Mcp_caps.Policy.with_endpoints] pins scheme, host and an explicit port, and
+    this is the one place a URI is read into that triple. An adapter's endpoint
+    and the entry the factory allows its grant to reach are the {i} same fact
+    because both come from here — two spellings of one destination are what drift
+    the first time either is edited (plans/ocaml-finalisation.md, F4.1).
+
+    A URI with no host gives an endpoint with no host, which every grant policy
+    refuses to connect to: a config-derived destination ([searxng]'s instance, an
+    [exa] override) is checked where it is read, by the registry, and this stays
+    a total derivation. *)
+
+val redact_url : string -> string
+(** [redact_url url] is the URL's host and nothing else — the oracle's
+    [urlsplit(url).hostname or "?"], the same reduction the fetch log's [host]
+    field is built with. Every line that names a URL in a log event or a
+    provider error goes through it, and it is load-bearing for [serpapi], the one
+    documented request shape that puts an API key in the query string: a key
+    cannot survive a reduction to a host. *)
+
+val escape_path_segment : string -> string
+(** [escape_path_segment s] is [s] with every byte outside the URI unreserved set
+    percent-encoded: the oracle's [quote(value, safe="")], which is {i} narrower
+    than [Uri.escape] — that one keeps sub-delims like [?] and [&] literal, and a
+    path segment that keeps them is a segment that changes meaning. A value from
+    config that goes into a path ([algolia]'s [index]) goes through this on its
+    way to the request. *)
+
 (** {1 What an adapter returns} *)
 
 type hit = {

@@ -199,6 +199,45 @@ module Net = struct
   let of_grant grant = { request = (fun req -> Caps.Authority.Net.request grant req) }
 end
 
+(* One URI, one grant entry. The adapters used to spell the same destination
+   twice — a [Uri.t] they dial and a [Policy.endpoint] the factory allows — and
+   the second spelling is the one that goes stale, because nothing but a review
+   notices a host that changed in only one of them. Deriving the grant entry from
+   the URI here is what makes the pair one fact (F4.1). *)
+let policy_of_uri (uri : Uri.t) : Caps.Policy.endpoint =
+  {
+    Caps.Policy.scheme = (if Uri.scheme uri = Some "https" then `Https else `Http);
+    host = (match Uri.host uri with Some host -> host | None -> "");
+    port = Uri.port uri;
+  }
+
+(* The oracle's [urlsplit(url).hostname or "?"], and never raises: the malformed
+   URL that [urlsplit] refuses is the same input that would otherwise put a raw
+   request line into a log. [serpapi]'s documented request carries its key in the
+   query string, so for that name this reduction is the difference between
+   "which endpoint failed" and "here is a credential". *)
+let redact_url (url : string) : string =
+  match Uri.host (Uri.of_string url) with
+  | Some host when host <> "" -> host
+  | _ -> "?"
+
+(* [urllib.parse.quote(value, safe="")], the rule the oracle uses wherever a value
+   from config becomes a path segment. [Uri.escape] keeps the sub-delims
+   ([? & = + , ; $]) literal, which is a different contract: an index name
+   containing [&] would split a segment in two. *)
+let escape_path_segment (value : string) : string =
+  let unreserved = function
+    | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '.' | '-' | '~' -> true
+    | _ -> false
+  in
+  let out = Buffer.create (String.length value * 3) in
+  String.iter
+    (fun c ->
+      if unreserved c then Buffer.add_char out c
+      else Buffer.add_string out (Printf.sprintf "%%%02X" (Char.code c)))
+    value;
+  Buffer.contents out
+
 type hit = {
   result : Model.result;
   uncapped_chars : int option

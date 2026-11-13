@@ -8,11 +8,10 @@ let name = "freeserp"
 
 let endpoint = Uri.of_string "https://freeserp.ai/api.php"
 
-(* The endpoint the grant must allow, in the policy's own words: scheme pinned,
-   default port, so the adapter cannot be pointed at another port by a grant
-   that says it allows this host. *)
-let policy_endpoint =
-  { Caps.Policy.scheme = `Https; host = "freeserp.ai"; port = None }
+(* The endpoint the grant must allow, in the policy's own words: derived from
+   the URI this adapter dials rather than written beside it, so scheme, host and
+   port cannot disagree between what is asked for and what is allowed. *)
+let policy_endpoint = Provider.policy_of_uri endpoint
 
 let agent = "seekwright"
 let max_size = 100

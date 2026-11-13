@@ -8,8 +8,9 @@ let name = "anysearch"
 
 let endpoint = Uri.of_string "https://api.anysearch.com/v1/search"
 
-let policy_endpoint =
-  { Caps.Policy.scheme = `Https; host = "api.anysearch.com"; port = None }
+(* The grant entry for the URI this adapter dials, derived rather than spelled
+   again: see [Seekwright.Provider.policy_of_uri]. *)
+let policy_endpoint = Provider.policy_of_uri endpoint
 
 let max_results = 10
 
