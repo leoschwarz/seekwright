@@ -188,7 +188,14 @@ val build_fetch_stack :
     keyed/self-hosted fallbacks are not built: nothing that could bill is left
     around unfired, and when they land their grants stay endpoint-scoped and
     public-only, because that key licenses this process, not a third party's
-    view of the intranet. *)
+    view of the intranet.
+
+    Extraction runs on an {!Seekwright_fetch.Extract_pool:}t — one pool per
+    built stack, its workers fed through the system temp dir,
+    [fetch.timeout_seconds] applied to the parse and twice that to the whole
+    request, and the reader's [aclose] draining the pool
+    (plans/ocaml-finalisation.md, F2.2). A pool that cannot be built refuses
+    the stack rather than quietly extracting inline. *)
 
 val readers : Seekwright.Engine.Fetch.Readers.t
 (** The document readers the fetch engine selects with: [jsondoc]'s path

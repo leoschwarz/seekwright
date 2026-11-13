@@ -20,6 +20,7 @@ module Authority = Caps.Authority
 module Policy = Caps.Policy
 module Fetcher = Seekwright_fetch.Fetcher
 module Extractor = Seekwright_fetch.Extractor
+module Extract_pool = Seekwright_fetch.Extract_pool
 module Jsondoc = Seekwright_fetch.Jsondoc
 module Config = Seekwright.Config
 module Engine = Seekwright.Engine
@@ -363,48 +364,67 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
         ~max_response_bytes:fetch.Config.max_download_bytes ()
     with
     | Error error -> Some (Error (Caps.Error.render error))
-    | Ok decision ->
-        let grant =
-          grant_of_decision ~mono_clock ~timeout_seconds:fetch.Config.timeout_seconds
-            ?audit decision
-        in
-        let fetcher =
-          Fetcher.make ~net:grant ~extractor
-            ~max_download_bytes:fetch.Config.max_download_bytes
-            ~max_text_chars:fetch.Config.max_text_chars
-            ~max_redirects:fetch.Config.max_redirects
-            ~allow_images:fetch.Config.allow_images
-            ~user_agent:fetch.Config.user_agent
-            ()
-        in
-        let local =
-          {
-            Engine.Fetch.name = "http";
-            cost_per_1k = fetch.Config.cost_per_1k;
-            fetch =
-              (fun ~url ~offset ~max_chars ->
-                match
-                  (* Python bounds the whole redirect chain at twice the
-                     per-request timeout (fetcher.py's asyncio.timeout); the
-                     per-hop bound is the grant's, set above. *)
-                  Fetcher.fetch
-                    ~chain_timeout:
-                      (Eio.Time.Timeout.seconds mono_clock
-                         (2. *. fetch.Config.timeout_seconds))
-                    fetcher url ~offset ~max_chars:(cap_of max_chars)
-                with
-                | Ok page -> Ok page
-                | Error error -> Error (error_of error));
-            aclose = (fun () -> ());
-          }
-        in
-        (* The keyed/self-hosted fallbacks are deferred with P6, so the ladder
-           is empty in v1; a primary other than the local reader is refused by
-           the server's startup checks rather than silently read locally. When
-           they land they are built by [grant_of_endpoint], which has no way to
-           ask for the private-web variant: the public-only rule for a
-           third-party route is a property of how its grant is built. *)
-        Some (Ok (local, [])))
+    | Ok decision -> (
+        (* The extraction runner (F2.2): a fixed pool of worker domains so a
+           slow parse costs its own core, not the loop's, and the parse gets a
+           real deadline. The sockets live in the system temp dir — there is
+           deliberately no config key for the directory: the sockets are
+           [0600], process-scoped, and unlinked on close, so the temp dir is
+           the answer everywhere this server runs. *)
+        match
+          Extract_pool.make ~net ~mono_clock
+            ~dir:(Filename.get_temp_dir_name ())
+            ~extractor ~max_body_bytes:fetch.Config.max_download_bytes ()
+        with
+        | Error message -> Some (Error message)
+        | Ok workers ->
+            let grant =
+              grant_of_decision ~mono_clock
+                ~timeout_seconds:fetch.Config.timeout_seconds ?audit decision
+            in
+            let fetcher =
+              Fetcher.make ~net:grant ~extractor
+                ~workers
+                ~parse_timeout_seconds:fetch.Config.timeout_seconds
+                ~max_download_bytes:fetch.Config.max_download_bytes
+                ~max_text_chars:fetch.Config.max_text_chars
+                ~max_redirects:fetch.Config.max_redirects
+                ~allow_images:fetch.Config.allow_images
+                ~user_agent:fetch.Config.user_agent
+                ()
+            in
+            let local =
+              {
+                Engine.Fetch.name = "http";
+                cost_per_1k = fetch.Config.cost_per_1k;
+                fetch =
+                  (fun ~url ~offset ~max_chars ->
+                    match
+                      (* Python bounds the whole redirect chain at twice the
+                         per-request timeout (fetcher.py's asyncio.timeout); the
+                         per-hop bound is the grant's, set above. *)
+                      Fetcher.fetch
+                        ~chain_timeout:
+                          (Eio.Time.Timeout.seconds mono_clock
+                             (2. *. fetch.Config.timeout_seconds))
+                        fetcher url ~offset ~max_chars:(cap_of max_chars)
+                    with
+                    | Ok page -> Ok page
+                    | Error error -> Error (error_of error));
+                (* Closing the reader drains the pool: quit sentinels, then
+                   join, so in-flight parses finish and their sockets go away
+                   (extract_pool.mli, shutdown). *)
+                aclose = (fun () -> Extract_pool.close workers);
+              }
+            in
+            (* The keyed/self-hosted fallbacks are deferred with P6, so the
+               ladder is empty in v1; a primary other than the local reader is
+               refused by the server's startup checks rather than silently read
+               locally. When they land they are built by [grant_of_endpoint],
+               which has no way to ask for the private-web variant: the
+               public-only rule for a third-party route is a property of how
+               its grant is built. *)
+            Some (Ok (local, []))))
 
 let agent_net ~sw ~net ~mono_clock ?audit config =
   match config.Config.agent.Config.base_url with
