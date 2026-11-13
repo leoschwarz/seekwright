@@ -10,6 +10,7 @@
 
 module Config = Seekwright.Config
 module Health = Seekwright.Health
+module Log = Seekwright.Log
 module Provider = Seekwright.Provider
 module Algolia = Seekwright_providers.Algolia
 module Freeserp = Seekwright_providers.Freeserp
@@ -24,6 +25,8 @@ module Search1api = Seekwright_providers.Search1api
 module Serpapi = Seekwright_providers.Serpapi
 module Querit = Seekwright_providers.Querit
 module Deepseek = Seekwright_providers.Deepseek
+module Exa = Seekwright_providers.Exa
+module Parallel = Seekwright_providers.Parallel
 
 let ( let* ) = Result.bind
 
@@ -64,10 +67,12 @@ type args = {
   cost_per_1k : float;
   snippet_chars : int;
   text_chars : int;
+  log : Log.log option;
 }
 
 type build =
   | Adapter of (args -> Provider.t)
+  | Adapter_session of (args -> Provider.session)
   | Deferred of string
 
 type probe_source =
@@ -234,18 +239,32 @@ let rows =
        is what spends. The floor is the MCP handshake's headroom; the [url]
        override and [free_cooldown_seconds] are the two settings its builder reads. *)
     make_row ~name:"exa"
-      ~endpoint:(Url_override (Uri.of_string "https://mcp.exa.ai/mcp")) ~credential:bearer
+      ~endpoint:(Url_override Exa.default_uri) ~credential:bearer
       ~default_cost:(Some 7.00) ~timeout_floor:30.0 ~context:Text
       ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
-      ~settings:[ "free_cooldown_seconds"; "url" ] ~build:(Deferred "F5.1") ();
+      ~settings:[ "free_cooldown_seconds"; "url" ]
+      ~build:
+        (Adapter_session
+           (fun a ->
+             Exa.make_tiered ~cost_per_1k:a.cost_per_1k ~text_chars:a.text_chars
+               ~cooldown_seconds:a.entry.Config.free_cooldown_seconds ~now:a.now ?log:a.log
+               ~key:(require_key "exa" a) ~uri:a.endpoint ~net:a.net ()))
+      ();
     (* Exa's MCP endpoint reached anonymously: the one row that fixes its price at
        zero rather than offering it as a default, and the one name whose key is
        never read even when the environment holds one. No ladder behind it, because
        it cannot bill. *)
     make_row ~name:"exa:free"
-      ~endpoint:(Url_override (Uri.of_string "https://mcp.exa.ai/mcp"))
+      ~endpoint:(Url_override Exa.default_uri)
       ~requires:[] ~default_cost:None ~timeout_floor:30.0 ~context:Text
-      ~settings:[ "url" ] ~build:(Deferred "F5.1") ();
+      ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
+      ~settings:[ "url" ]
+      ~build:
+        (Adapter_session
+           (fun a ->
+             Exa.make_mcp ~cost_per_1k:a.cost_per_1k ~name:"exa:free" ~text_chars:a.text_chars
+               ~uri:a.endpoint ~net:a.net ()))
+      ();
     (* Keyless — no account, no key, no card — and priced at zero: nothing about a
        call here can bill. The probe names [index=web] because that index is not
        this endpoint's default, and a probe of the wrong index proves the wrong
@@ -278,17 +297,34 @@ let rows =
        whose quota a search spends. REST, not the authenticated MCP, is the surface
        that carries the filter fields, and [mode] is the preset that decides price. *)
     make_row ~name:"parallel"
-      ~endpoint:(Fixed_uri (Uri.of_string "https://api.parallel.ai/v1/search"))
+      ~endpoint:(Fixed_uri Parallel.endpoint)
       ~credential:(key_header "x-api-key") ~default_cost:(Some 1.00) ~context:Text
-      ~probe:(probe_at (Uri.of_string "https://api.parallel.ai/v1/search"))
-      ~settings:[ "mode" ] ~build:(Deferred "F5.1") ();
+      ~probe:(probe_at Parallel.endpoint)
+      ~settings:[ "mode" ]
+      ~build:
+        (Adapter
+           (fun a ->
+             Parallel.make ~cost_per_1k:a.cost_per_1k ~text_chars:a.text_chars
+               ~mode:a.entry.Config.mode ~key:(require_key "parallel" a) ~now:a.now ~net:a.net ()))
+      ();
     (* Keyless anonymous hosted MCP, priced at zero like [exa:free], and proven by
-       its MCP handshake rather than a bodyless GET — which this contract cannot
-       drive until a [warmup] member exists. *)
+       its MCP handshake rather than a bodyless GET — the readiness contract's
+       vocabulary cannot drive a handshake, so its {!Provider.session.warmup} is
+       the proof this row carries instead. *)
     make_row ~name:"parallel:free"
-      ~endpoint:(Url_override (Uri.of_string "https://search.parallel.ai/mcp"))
+      ~endpoint:(Url_override Parallel.mcp_uri)
       ~requires:[] ~timeout_floor:30.0 ~context:Text ~settings:[ "url" ]
-      ~build:(Deferred "F5.1") ();
+      (* [ParallelMcpProvider] is a subclass of [ExaMcpProvider] in the oracle, so
+         its [cost_for] is Exa's rung and this row spells the same shape; a config
+         [cost_per_1k] on this name would buy the rung, which is why the row models
+         it rather than calling the name flat. *)
+      ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
+      ~build:
+        (Adapter_session
+           (fun a ->
+             Parallel.make_mcp ~cost_per_1k:a.cost_per_1k ~name:"parallel:free"
+               ~text_chars:a.text_chars ~uri:a.endpoint ~net:a.net ()))
+      ();
     (* Keyed despite the 1,000 free calls/month for the metered-quota reason;
        [default_cost] is the free plan and the PAYG tier corrects it in config. *)
     make_row ~name:"querit"
@@ -398,7 +434,8 @@ let rows =
 
 let row name = List.find_opt (fun r -> r.name = name) rows
 let names = List.map (fun r -> r.name) rows
-let is_built r = match r.build with Adapter _ -> true | Deferred _ -> false
+let is_built r =
+  match r.build with Adapter _ | Adapter_session _ -> true | Deferred _ -> false
 
 (* {1 Reading a row} *)
 
@@ -467,9 +504,14 @@ let price (row : row) (pc : Config.provider_config) =
 let cost_of row ~cost_per_1k n =
   match row.cost_model with
   | Flat -> cost_per_1k /. 1000.
+  (* The rung is Exa's shape, and the zero short-circuit is Exa's too: a name
+     priced at zero cannot buy the extra results, whatever the count, and a row
+     that billed the rung at a zero subscription would quote a free name. *)
   | Extra_results { first; per_extra_1k } ->
-      let extra = float_of_int (max 0 (n - first)) in
-      (cost_per_1k +. (extra *. per_extra_1k)) /. 1000.
+      if cost_per_1k = 0.0 then 0.0
+      else
+        let extra = float_of_int (max 0 (n - first)) in
+        (cost_per_1k +. (extra *. per_extra_1k)) /. 1000.
   (* The vendor's rate is per thousand {i credits}, and a request past [over]
      results spends [multiplier] of them. Written as the vendor states it — the
      per-thousand figure, then the credit count — so it matches the adapter's own

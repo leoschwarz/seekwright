@@ -1,2 +1,1 @@
-INFO startup providers="freeserp" unsupported="exa:free,parallel:free" default_provider=null providers_defaulted=true fetch=true fetch_extractor="stdlib" fetch_primary="http" agent=null
-WARNING startup.providers_unsupported unsupported="exa:free,parallel:free"
+INFO startup providers="exa:free,parallel:free,freeserp" unsupported=null default_provider=null providers_defaulted=true fetch=true fetch_extractor="stdlib" fetch_primary="http" agent=null

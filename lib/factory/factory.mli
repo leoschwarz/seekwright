@@ -71,6 +71,13 @@ type providers = {
       hold a config name with no adapter behind it — and under an implicit
       keyless default they are the skipped keyless names, which the startup
       line names through [startup.providers_unsupported]. *)
+  warmups : (Seekwright.Config.name * (unit -> bool)) list;
+  (** The session-carrying built names — the MCP-backed ones — with the
+      operation that opens each adapter's own session before its first search
+      pays for the handshake ([true] when it opened). The oracle calls
+      [warmup] at startup and in its health monitor; a name with no entry here
+      owns no session, so the startup path skips it. Built in config order,
+      like [built]. *)
 }
 
 (** {1 One routable set, and the configs that may serve it}
@@ -137,6 +144,7 @@ val build_providers :
   mono_clock:_ Eio.Time.Mono.t ->
   now:(unit -> float) ->
   ?audit:(Mcp_caps.Event.t -> unit) ->
+  ?log:Seekwright.Log.log ->
   Seekwright.Config.t ->
   providers
 (** Instantiate every enabled provider that has the credentials and the

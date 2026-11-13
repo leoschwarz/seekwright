@@ -38,6 +38,7 @@ type providers = {
   endpoints : Policy.endpoint list;
   grant_errors : (Config.name * string) list;
   unsupported : Config.name list;
+  warmups : (Config.name * (unit -> bool)) list;
 }
 
 (* {1 The audit trail} *)
@@ -137,11 +138,11 @@ let adapter_of_row ~policy_seconds (row : Registry.row) (pc : Config.provider_co
    the oracle, where the builder returns [None] and [Config.missing_api_keys] is
    the reporting path. Those are different sentences, and conflating them would
    refuse startup over a config the operator can fix by adding a key. *)
-let build_providers ~sw ~net ~mono_clock ~now ?audit config =
+let build_providers ~sw ~net ~mono_clock ~now ?audit ?log config =
   let policy_seconds = config.Config.policy.Config.provider_timeout_seconds in
   let snippet_chars = config.Config.policy.Config.max_snippet_chars in
   let text_chars = config.Config.policy.Config.max_result_text_chars in
-  let rec go built table endpoints errors unsupported = function
+  let rec go built table endpoints errors unsupported warmups = function
     | [] ->
         {
           built = List.rev built;
@@ -152,28 +153,43 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit config =
              names and an operator scanning two renderings of the same set
              should read the same order. *)
           unsupported = List.sort String.compare (List.rev unsupported);
+          warmups = List.rev warmups;
         }
     | (name, pc0) :: rest ->
         (* The annotation is load-bearing: [enabled] is a field of more than one
            config record in this module's scope, and an unannotated pattern would
            resolve it by whichever record type the compiler saw last. *)
         let (pc : Config.provider_config) = pc0 in
-        if not pc.Config.enabled then go built table endpoints errors unsupported rest
+        if not pc.Config.enabled then go built table endpoints errors unsupported warmups rest
         else
           match Registry.row name with
-          | None -> go built table endpoints errors (name :: unsupported) rest
+          | None -> go built table endpoints errors (name :: unsupported) warmups rest
           | Some (row : Registry.row) -> (
-              match row.build with
-              | Registry.Deferred _wave ->
-                  go built table endpoints errors (name :: unsupported) rest
-              | Registry.Adapter make -> (
+              (* The two builder shapes differ only in whether the adapter
+                 arrives with a [warmup] beside it: both become one function
+                 here — adapter and optional warmup — so the prerequisite,
+                 grant and argument plumbing below runs the same for either,
+                 and a [Deferred] row falls to the unsupported path with no
+                 builder to run. *)
+              match
+                (match row.build with
+                | Registry.Adapter make -> Some (fun (args : Registry.args) -> (make args, None))
+                | Registry.Adapter_session make ->
+                    Some
+                      (fun (args : Registry.args) ->
+                        let session = make args in
+                        (session.Provider.adapter, Some session.Provider.warmup))
+                | Registry.Deferred _wave -> None)
+              with
+              | None -> go built table endpoints errors (name :: unsupported) warmups rest
+              | Some produce -> (
                   match Registry.missing_prerequisite row config pc with
-                  | Some _reason -> go built table endpoints errors unsupported rest
+                  | Some _reason -> go built table endpoints errors unsupported warmups rest
                   | None -> (
                       match adapter_of_row ~policy_seconds row pc with
                       | Error message ->
                           go built table endpoints ((name, message) :: errors) unsupported
-                            rest
+                            warmups rest
                       | Ok adapter -> (
                           match
                             grant_of_endpoint ~sw ~net ~mono_clock
@@ -182,7 +198,7 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit config =
                           with
                           | Error message ->
                               go built table endpoints ((name, message) :: errors)
-                                unsupported rest
+                                unsupported warmups rest
                           | Ok grant ->
                               let args : Registry.args =
                                 {
@@ -199,15 +215,26 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit config =
                                   cost_per_1k = Registry.price row pc;
                                   snippet_chars;
                                   text_chars;
+                                  log;
                                 }
                               in
-                              go
-                                ((name, make args) :: built)
-                                ((name, Registry.probe_spec row) :: table)
-                                (adapter.endpoint :: endpoints)
-                                errors unsupported rest))))
+                              match produce args with
+                              | adapter', Some warmup ->
+                                  go
+                                    ((name, adapter') :: built)
+                                    ((name, Registry.probe_spec row) :: table)
+                                    (adapter.endpoint :: endpoints)
+                                    errors unsupported
+                                    ((name, warmup) :: warmups)
+                                    rest
+                              | adapter', None ->
+                                  go
+                                    ((name, adapter') :: built)
+                                    ((name, Registry.probe_spec row) :: table)
+                                    (adapter.endpoint :: endpoints)
+                                    errors unsupported warmups rest))))
   in
-  go [] [] [] [] [] config.Config.providers
+  go [] [] [] [] [] [] config.Config.providers
 
 (* {1 One routable set, and the configs that may serve it} *)
 
@@ -487,7 +514,7 @@ let build_app ~sw
          like a request is. *)
       let audit = audit_sink log in
       let built =
-        build_providers ~sw ~net:(env#net) ~mono_clock ~now ~audit config
+        build_providers ~sw ~net:(env#net) ~mono_clock ~now ~audit ~log config
       in
       match built.grant_errors with
       | (name, message) :: _ ->

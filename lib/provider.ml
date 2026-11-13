@@ -276,4 +276,10 @@ let cost_for (module P : S) n = P.cost_for n
 let search (module P : S) q = P.search q
 let aclose (module P : S) = P.aclose ()
 
+(* The pair, not a wider [S]: [warmup] is a fact about the adapters that own a
+   session, and a member of [S] is a member every adapter must define. The
+   registry rows for the session-backed names build this pair, and everything
+   else keeps holding the bare module. *)
+type session = { adapter : t; warmup : unit -> bool }
+
 let project_url = "https://github.com/leoschwarz/seekwright"

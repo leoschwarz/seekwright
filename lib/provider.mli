@@ -15,12 +15,14 @@
     engine (P5), and the six places a *name* gets wired stay in config and the
     factory (P3, P5) — an adapter never decides whether it is enabled.
 
-    Two Python members are deliberately absent. [warmup] belongs to the
-    MCP-backed adapters only (plans/seekwright-ocaml-port.md, open question 3)
-    and no such adapter exists in this tree yet, and a GADT branch nothing
-    constructs is a warning, so it is not stubbed. [cost_for] is a `getattr`
-    extra in Python and a required member here: every adapter in the tree
-    defines it, and one more member of {!S} costs an adapter one line. *)
+    One Python member is deliberately absent from {!S}: [warmup] belongs to the
+    MCP-backed adapters only, and a member of [S] is a member of {i every}
+    adapter — the stateless HTTP ones would have to stub a session they do not
+    own (plans/ocaml-finalisation.md, F5.1). It rides beside the adapter instead,
+    as {!session}, and only the rows that build a session-carrying adapter say
+    it has one. [cost_for] is a `getattr` extra in Python and a required member
+    here: every adapter in the tree defines it, and one more member of {!S}
+    costs an adapter one line. *)
 
 type search_query = Model.search_query
 (** The request an adapter is handed. Exactly [query], [max_results],
@@ -287,6 +289,22 @@ val cost_for : t -> int -> float
 val search : t -> search_query -> (outcome, error) result
 val aclose : t -> unit
 (** The accessors, so a caller holds a {!t} rather than a module it has to open. *)
+
+(** {1 The session lifecycle some adapters own} *)
+
+type session = {
+  adapter : t;
+  warmup : unit -> bool;
+}
+(** The optional seam member the MCP-backed adapters add: [warmup] opens the
+    adapter's {i own} session — the one its first search will ride — before any
+    request pays for the handshake, and never raises: a cold start at boot is a
+    log line, not a startup failure, exactly as in Python, where [warmup] is
+    [getattr]-ed onto the provider. The close half of that lifecycle is not
+    here: {!S} already carries [aclose], and a session-carrying adapter closes
+    what it owns. A stateless HTTP adapter has no value of this type to hand
+    out, which is the whole reason the pair lives beside {!t} rather than
+    inside {!S}. *)
 
 (** {1 Shared constants} *)
 

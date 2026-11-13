@@ -117,7 +117,10 @@ type endpoint_source =
     ([searxng]'s instance) be dialed from the same reading the grant was built
     from rather than re-parsed from the config key. [entry] rides along because
     which of a name's keys its adapter reads is that adapter's business, and the
-    row names them in its [settings]. *)
+    row names them in its [settings]. [log] rides along for the one adapter that
+    narrates its own ladder — the [exa] row's free-before-key walk logs
+    [exa.escalated], [exa.cooldown] and [exa.both_failed] as it runs — and every
+    other builder ignores it. *)
 type args = {
   net : Seekwright.Provider.Net.t;
   now : unit -> float;
@@ -127,23 +130,30 @@ type args = {
   cost_per_1k : float;
   snippet_chars : int;
   text_chars : int;
+  log : Seekwright.Log.log option;
 }
 
 (** Whether this build holds the adapter. [Deferred wave] is a name the port has
     inventoried but not written: nothing builds it, so it reports as unsupported,
     and the wave says where it is planned. The constructor a built row names is
-    the only producer of a provider value in this tree. *)
+    the only producer of a provider value in this tree. [Adapter_session] is the
+    {i lifecycle-carrying} shape: the row builds a {!Seekwright.Provider.session}
+    pair — the adapter plus its [warmup] — because a session belongs to the
+    MCP-backed adapters and cannot be a member of {e every} adapter's {!
+    Seekwright.Provider.S}. *)
 type build =
   | Adapter of (args -> Seekwright.Provider.t)
+  | Adapter_session of (args -> Seekwright.Provider.session)
   | Deferred of string
 
 (** What the readiness probe asks, or [No_probe] for the MCP-backed names
     ([exa], [exa:free], [parallel:free]) that the oracle proves with a session
-    handshake instead — a [warmup] member this contract does not have yet, so on
-    this port they answer {!Seekwright.Health.outcome} [Unsupported], like a name
-    with no probe at all. The headers are {b not} part of this value: they come
-    from the row's [credential], so a probe cannot authenticate in a shape its
-    adapter does not. *)
+    handshake instead — and the probe vocabulary is a bodyless GET, so on this
+    port they answer {!Seekwright.Health.outcome} [Unsupported], like a name
+    with no probe at all, while their {!Seekwright.Provider.session.warmup}
+    carries the handshake that does prove them. The headers are {b not} part of
+    this value: they come from the row's [credential], so a probe cannot
+    authenticate in a shape its adapter does not. *)
 type probe_source =
   | No_probe
   | Probe of (Seekwright.Config.t -> string option -> string option)
@@ -238,5 +248,5 @@ val probe_spec : row -> Seekwright.Health.probe_spec
     credential shape. [No_probe] gives {!Seekwright.Health.no_probe}. *)
 
 val is_built : row -> bool
-(** Whether this build carries the adapter, i.e. whether the row's [build] is
-    [Adapter]. *)
+(** Whether this build carries the adapter, i.e. whether the row's [build] names
+    a builder — [Adapter] or [Adapter_session]. *)
