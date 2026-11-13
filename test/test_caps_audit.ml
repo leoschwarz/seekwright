@@ -556,14 +556,14 @@ let test_the_factory_builds_grants_through_one_funnel () =
     (fun (file, call) -> includes (file ^ " calls " ^ call) call (factory_source file))
     [
       (funnel_source, "grant_of_decision ~mono_clock ~timeout_seconds ?audit decision");
-      ("lib/factory/factory.ml", "let audit = audit_sink log in");
+      ("lib/factory/app.ml", "let audit = audit_sink log in");
       (* every public builder that can hand back a grant takes the sink and threads
          it to the funnel, so none of them can drop it on the way *)
-      ("lib/factory/factory.ml", "~audit config");
+      ("lib/factory/app.ml", "~audit config");
       ("lib/factory/providers_build.ml", "?audit adapter.endpoint");
       (funnel_source, "?audit decision");
       ("lib/factory/fetch_stack.ml", "?audit decision");
-      ("lib/factory/factory.ml", "?audit endpoint)");
+      ("lib/factory/app.ml", "?audit endpoint)");
     ]
 
 (* The layer's per-operation counter is a caller's ceiling. Server construction
