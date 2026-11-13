@@ -1,0 +1,6 @@
+[providers.serper]
+enabled = true
+[agent]
+enabled = true
+base_url = ""
+model = ""

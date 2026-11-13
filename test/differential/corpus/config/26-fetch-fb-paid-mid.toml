@@ -1,0 +1,2 @@
+[fetch]
+fallback = ["scrappa", "crawl4ai"]

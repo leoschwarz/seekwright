@@ -1,0 +1,10 @@
+area: config
+case: 45-default-empty-string
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config providers.serper.default_provider Extra inputs are not permitted [type=extra_forbidden, input_value='', input_type=str] For further information visit https://errors.pydantic.dev/2.14/v/extra_forbidden
+--- port
+ERR providers.serper.default_provider: unknown key

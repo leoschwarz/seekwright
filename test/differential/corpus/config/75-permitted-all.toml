@@ -1,0 +1,3 @@
+permitted_providers = ["algolia","anysearch","deepseek","exa","exa:free","freeserp","linkup","parallel","parallel:free","querit","scrappa","search1api","searxng","serpapi","serper","serper2","tavily","tinyfish","jina"]
+[providers.serper]
+enabled = true

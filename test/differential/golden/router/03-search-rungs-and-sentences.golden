@@ -1,0 +1,14 @@
+area: router
+case: 03-search-rungs-and-sentences
+verification: differential-golden
+oracle: python
+projection: router
+--- oracle
+rungs= linkup/candidate,tavily/unpermitted,exa:free/candidate
+rungs= serper/skip,linkup/candidate
+notice= serper failed (serper: upstream timed out); served by linkup instead
+notice= serper failed (serper: rate limited); served by linkup instead; linkup: partial results
+note=  Fallbacks also failed: serper, linkup.
+note=  Fallbacks also failed: exa:free. The server was asked for a free-only search, so no paid provider was tried.
+advice=  Retry shortly or try a different phrasing.
+advice=  Do not retry immediately.

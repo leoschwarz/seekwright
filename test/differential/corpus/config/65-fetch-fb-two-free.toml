@@ -1,0 +1,4 @@
+[providers.serper]
+enabled = true
+[fetch]
+fallback = ["jina", "crawl4ai"]

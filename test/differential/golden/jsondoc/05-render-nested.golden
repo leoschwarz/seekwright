@@ -1,0 +1,7 @@
+area: jsondoc
+case: 05-render-nested
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  object(1)\n$.a  object(1)\n$.a.b  object(1)\n$.a.b.c  array(3)\n$.a.b.c[0]  true\n$.a.b.c[1]  false\n$.a.b.c[2]  object(1)\n$.a.b.c[2].d  \"deep\"

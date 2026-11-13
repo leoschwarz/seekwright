@@ -1,0 +1,14 @@
+area: router
+case: 01-search-paid-default
+verification: differential-golden
+oracle: python
+projection: router
+--- oracle
+resolve_search= serper
+resolve_search= linkup
+resolve_search refused= Provider 'kagi' is not enabled on this server. Available: serper, linkup, exa:free. Retry with one of those, or omit `provider` to use the default.
+resolve_search= exa:free
+is_permitted= true
+unnamed_walks_free= false
+free_candidates= exa:free,parallel:free,freeserp,anysearch
+free_walk= exa:free

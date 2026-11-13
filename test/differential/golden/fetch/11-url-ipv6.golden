@@ -1,0 +1,7 @@
+area: fetch
+case: 11-url-ipv6
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+url= http://[::1]:8080/x

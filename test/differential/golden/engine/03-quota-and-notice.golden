@@ -1,0 +1,14 @@
+area: engine
+case: 03-quota-and-notice
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt tavily
+attempt linkup
+events= search.fallback,search.ok
+verdict= ok
+provider= linkup
+results=1
+titles=Hit
+notice=tavily failed (quota exhausted); served by linkup instead; linkup: partial results

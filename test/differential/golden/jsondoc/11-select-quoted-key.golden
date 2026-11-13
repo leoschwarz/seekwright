@@ -1,0 +1,7 @@
+area: jsondoc
+case: 11-select-quoted-key
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+path-refused= expected a member name after '.' at offset 2

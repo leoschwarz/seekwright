@@ -1,0 +1,5 @@
+{
+  "op": "render",
+  "media": "text/csv",
+  "body": "name;score\none;1\ntwo;2\n"
+}

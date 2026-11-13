@@ -1,0 +1,14 @@
+area: engine
+case: 01-default-walk
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt serper
+attempt linkup
+events= search.fallback,search.ok
+verdict= ok
+provider= linkup
+results=1
+titles=Hit
+notice=serper failed (upstream timed out); served by linkup instead

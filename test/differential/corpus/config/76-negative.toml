@@ -1,0 +1,4 @@
+[providers.serper]
+enabled = true
+[policy]
+max_result_text_chars = -1

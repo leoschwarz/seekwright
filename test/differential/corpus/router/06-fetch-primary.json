@@ -1,0 +1,24 @@
+{
+  "table": {
+    "built": [
+      "jina",
+      "scrappa"
+    ],
+    "primary": "jina"
+  },
+  "calls": [
+    {
+      "fn": "fetch_walk"
+    },
+    {
+      "fn": "origin"
+    },
+    {
+      "fn": "choose_instead"
+    },
+    {
+      "fn": "resolve_fetch",
+      "requested": null
+    }
+  ]
+}

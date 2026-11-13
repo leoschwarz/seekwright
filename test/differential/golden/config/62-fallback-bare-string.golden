@@ -1,0 +1,10 @@
+area: config
+case: 62-fallback-bare-string
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config search.fallback Input should be a valid list [type=list_type, input_value='serper', input_type=str] For further information visit https://errors.pydantic.dev/2.14/v/list_type
+--- port
+ERR search.fallback: expected a list of names, found 'serper'

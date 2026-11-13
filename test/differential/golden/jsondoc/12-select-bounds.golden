@@ -1,0 +1,8 @@
+area: jsondoc
+case: 12-select-bounds
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+select= 39:$.xs[1]  2\n$.xs[2]  3
+dropped=0

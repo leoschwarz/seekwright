@@ -1,0 +1,10 @@
+area: config
+case: 66-fetch-fb-two-paid
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config fetch Value error, fetch.fallback: linkup, scrappa can bill and belongs last, so a page reaches every free fallback before a credit is spent [type=value_error, input_value={'fallback': ['linkup', 'scrappa']}, input_type=dict] For further information visit https://errors.pydantic.dev/2.14/v/value_error
+--- port
+ERR fetch.fallback: linkup, scrappa can bill and belongs last, so a page reaches every free fallback before a credit is spent

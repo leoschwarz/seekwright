@@ -1,0 +1,4 @@
+{
+  "op": "structure",
+  "body": "{\"rows\": [{\"id\": 1, \"ok\": true}, {\"id\": 2, \"ok\": false}], \"meta\": {\"n\": 2}}"
+}

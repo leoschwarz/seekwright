@@ -1,0 +1,40 @@
+{
+  "config": {
+    "providers": {
+      "exa:free": {
+        "enabled": true
+      },
+      "parallel:free": {
+        "enabled": true
+      }
+    },
+    "search": {
+      "free_fallback": [
+        "exa:free",
+        "parallel:free"
+      ]
+    }
+  },
+  "providers": [
+    {
+      "name": "exa:free",
+      "kind": "quota",
+      "message": "quota exhausted"
+    },
+    {
+      "name": "parallel:free",
+      "results": [
+        {
+          "title": "Second",
+          "url": "https://e.com/2",
+          "snippet": "another hit"
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "query": "free things to do in vienna"
+    }
+  ]
+}

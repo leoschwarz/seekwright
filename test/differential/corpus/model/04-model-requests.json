@@ -1,0 +1,62 @@
+{
+  "cases": [
+    {
+      "model": "search_request",
+      "body": {
+        "query": "weather in paris",
+        "max_results": 10,
+        "recency": "week"
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "hi",
+        "max_results": 21
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "h"
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "ok query",
+        "mode": "free",
+        "safe_search": true
+      }
+    },
+    {
+      "model": "fetch_request",
+      "body": {
+        "url": "https://example.com/page"
+      }
+    },
+    {
+      "model": "fetch_request",
+      "body": {
+        "url": "http://a.b"
+      }
+    },
+    {
+      "model": "answer_request",
+      "body": {
+        "query": "why is the sky blue",
+        "depth": "report",
+        "extra_queries": [
+          "sky rayleigh"
+        ]
+      }
+    },
+    {
+      "model": "answer_request",
+      "body": {
+        "query": "why",
+        "depth": "essay"
+      }
+    }
+  ]
+}

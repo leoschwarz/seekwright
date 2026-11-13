@@ -1,0 +1,3 @@
+[providers.algolia]
+enabled = true
+app_id = "A"

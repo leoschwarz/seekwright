@@ -1,0 +1,7 @@
+area: fetch
+case: 28-cap-default
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+cap=4000

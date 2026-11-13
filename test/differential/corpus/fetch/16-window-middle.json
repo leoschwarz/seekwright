@@ -1,0 +1,6 @@
+{
+  "op": "window",
+  "text": "hello world",
+  "offset": 4,
+  "max_chars": 5
+}

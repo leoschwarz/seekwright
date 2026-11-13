@@ -1,0 +1,10 @@
+area: config
+case: 64-int-string-frac
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config policy.max_snippet_chars Input should be a valid integer, unable to parse string as an integer [type=int_parsing, input_value='1.5', input_type=str] For further information visit https://errors.pydantic.dev/2.14/v/int_parsing
+--- port
+ERR policy.max_snippet_chars: expected an integer, found '1.5'

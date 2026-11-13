@@ -1,0 +1,6 @@
+{
+  "op": "select",
+  "body": "{\"items\": [{\"name\": \"one\"}, {\"name\": \"two\"}]}",
+  "path": "$.items[*].name",
+  "max_chars": 2000
+}

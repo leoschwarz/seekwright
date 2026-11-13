@@ -245,3 +245,44 @@ Run mechanics, pin verification and the local `odoc` prerequisite are recorded
 in `plans/infra-setup.md`, "CI: the OCaml gate"; the exit observation (a
 documentation-only change proving the job runs) is made on the pull request that
 carries this workflow, not from a local checkout.
+## 9. F0.1 — the differential harness and parity matrix (2026-11-13)
+
+Landed on `f0-1-diff`: `test/differential/` (the matrix tables, 165 corpus
+inputs, 165 pinned goldens, the golden runner, the matrix validator) and
+`ocaml-tools/oracle/` (corpus generator, Python projections, golden generator,
+matrix generator). `dune runtest test/differential` runs 180 cases and needs no
+Python, no network and no keys; re-pinning goldens is the oracle tooling's job
+and reads the Python tree read-only. Format, mutation checks and the regeneration
+recipe: `test/differential/README.md`.
+
+Eight areas are pinned — config, router, model, sanitize, engine, fetch, jsondoc,
+tabledoc — 165 cases, and the two trees agree everywhere except seven registered
+divergences. Each is an `explicit-divergence` golden: the suite fails if the port
+changes shape *or* if the difference closes on its own.
+
+- Two model cases: pydantic's lax mode coerces `"0.5"` and `"200"` to numbers and
+  accepts the body; the port's decoder refuses string-to-number coercion. Decided
+  to keep the port strict — a provider body that lies about a type is exactly the
+  input the policy caps exist for — and pin both verdicts instead of arguing it.
+- One sanitize case: the oracle projection must decode the corpus to call the
+  Python sanitizer, so an ill-formed UTF-8 continuation byte arrives as U+FFFD;
+  the port's sanitizer is byte-faithful. The escape pass itself agrees.
+- Two fetch refusal-sentence cases and the systematic pydantic-report vs
+  one-sentence difference: same verdict, each tree's own wording.
+- The systematic `fetch.extractor` default: the port defaults to `stdlib` and
+  refuses `trafilatura`, which the oracle defaults to. A P6 backend decision, on
+  the record in the matrix and in the goldens.
+
+**Open port gap, not an accepted divergence:** `fetch/12-url-ipv6-broken` —
+the oracle refuses `http://[::1/x` as an invalid IPv6 literal and the port's URL
+parser accepts it. Pinning it as an explicit divergence makes the suite fail the
+day the port closes the gap; closing it is an F-series fetch item, and the golden
+plus the `DIVERGENCES` entry in `ocaml-tools/oracle/gen_goldens.py` are the two
+places that have to change together.
+
+The matrix is four committed TSVs (17 providers, 63 config keys, 21 behaviours,
+16 surface items) validated at every `runtest`: no row may leave a consumer
+unnamed, every row's verification must be one of the plan's kinds or an explicit
+`pending-F*`, every `.ml`/`.py` pointer must resolve to a file in the sandbox,
+and the provider rows must equal `Config.known_providers`. Fifteen adapters are
+`pending-F4`, the fetch fallbacks `F6`, the page cache `F7`.

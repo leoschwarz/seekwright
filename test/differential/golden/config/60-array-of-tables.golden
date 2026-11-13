@@ -1,0 +1,10 @@
+area: config
+case: 60-array-of-tables
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config providers Input should be a valid dictionary [type=dict_type, input_value=[{'enabled': True}], input_type=list] For further information visit https://errors.pydantic.dev/2.14/v/dict_type
+--- port
+ERR providers: expected a table, found a list

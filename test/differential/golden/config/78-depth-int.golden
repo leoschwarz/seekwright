@@ -1,0 +1,10 @@
+area: config
+case: 78-depth-int
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config providers.linkup.depth Input should be a valid string [type=string_type, input_value=5, input_type=int] For further information visit https://errors.pydantic.dev/2.14/v/string_type
+--- port
+ERR providers.linkup.depth: expected a string, found 5

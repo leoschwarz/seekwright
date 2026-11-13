@@ -1,0 +1,7 @@
+default_provider = "tavily"
+[providers.tavily]
+enabled = true
+[agent]
+enabled = true
+base_url = "http://model.internal:8000/v1"
+model = "small"

@@ -1,0 +1,55 @@
+{
+  "table": {
+    "built": [
+      "jina",
+      "scrappa"
+    ],
+    "primary": null
+  },
+  "calls": [
+    {
+      "fn": "fetch_walk"
+    },
+    {
+      "fn": "origin"
+    },
+    {
+      "fn": "provider_names"
+    },
+    {
+      "fn": "choose_names"
+    },
+    {
+      "fn": "choose_instead"
+    },
+    {
+      "fn": "empty_notice",
+      "walked": false
+    },
+    {
+      "fn": "empty_notice",
+      "walked": true
+    },
+    {
+      "fn": "refetched_notice",
+      "reason": "the page needs javascript",
+      "fallback": "jina"
+    },
+    {
+      "fn": "not_enabled",
+      "requested": "crawl4ai"
+    },
+    {
+      "fn": "resolve_fetch",
+      "requested": null
+    },
+    {
+      "fn": "resolve_fetch",
+      "requested": "jina"
+    },
+    {
+      "fn": "resolve_fetch",
+      "requested": "nope"
+    }
+  ]
+}

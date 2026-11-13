@@ -1,0 +1,37 @@
+[providers.algolia]
+enabled = true
+app_id = "A"
+index = "i"
+[providers.anysearch]
+enabled = true
+[providers.deepseek]
+enabled = true
+[providers.exa]
+enabled = true
+[providers."exa:free"]
+enabled = true
+[providers.freeserp]
+enabled = true
+[providers.linkup]
+enabled = true
+[providers.parallel]
+enabled = true
+[providers."parallel:free"]
+enabled = true
+[providers.querit]
+enabled = true
+[providers.scrappa]
+enabled = true
+[providers.search1api]
+enabled = true
+[providers.searxng]
+enabled = true
+url = "http://searx.internal:8080"
+[providers.serpapi]
+enabled = true
+[providers.serper]
+enabled = true
+[providers.tavily]
+enabled = true
+[providers.tinyfish]
+enabled = true

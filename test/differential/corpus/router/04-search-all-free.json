@@ -1,0 +1,44 @@
+{
+  "table": {
+    "providers": [
+      "exa:free",
+      "parallel:free",
+      "freeserp"
+    ],
+    "default": null,
+    "permitted": null,
+    "fallback": [],
+    "free_fallback": [
+      "parallel:free",
+      "exa:free"
+    ],
+    "free": [
+      "exa:free",
+      "freeserp",
+      "parallel:free",
+      "anysearch"
+    ],
+    "free_order": [
+      "exa:free",
+      "parallel:free",
+      "freeserp",
+      "anysearch"
+    ],
+    "effective": [
+      "exa:free",
+      "parallel:free",
+      "freeserp"
+    ]
+  },
+  "calls": [
+    {
+      "fn": "unnamed_walks_free"
+    },
+    {
+      "fn": "free_walk"
+    },
+    {
+      "fn": "resolve_search"
+    }
+  ]
+}

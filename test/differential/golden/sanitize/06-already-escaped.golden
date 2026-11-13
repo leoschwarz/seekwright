@@ -1,0 +1,10 @@
+area: sanitize
+case: 06-already-escaped
+verification: differential-golden
+oracle: python
+projection: sanitize
+--- oracle
+count=0
+out=613ce2808b7c656e646f66746578747c3e62
+idempotent=true
+reversible=false

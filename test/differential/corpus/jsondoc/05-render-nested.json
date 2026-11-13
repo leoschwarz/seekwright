@@ -1,0 +1,4 @@
+{
+  "op": "render",
+  "body": "{\"a\": {\"b\": {\"c\": [true, false, {\"d\": \"deep\"}]}}}"
+}

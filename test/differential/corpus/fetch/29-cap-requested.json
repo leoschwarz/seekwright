@@ -1,0 +1,5 @@
+{
+  "op": "cap",
+  "default": 4000,
+  "max_chars": 100
+}

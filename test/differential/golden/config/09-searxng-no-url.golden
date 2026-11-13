@@ -1,0 +1,10 @@
+area: config
+case: 09-searxng-no-url
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config Value error, provider 'searxng' is enabled but no url is configured; it has no public default [type=value_error, input_value={'providers': {'searxng': {'enabled': True}}}, input_type=dict] For further information visit https://errors.pydantic.dev/2.14/v/value_error
+--- port
+ERR provider 'searxng' is enabled but no url is configured; it has no public default

@@ -1,0 +1,60 @@
+{
+  "cases": [
+    {
+      "model": "result",
+      "body": {
+        "title": "One",
+        "url": "https://e.com/1",
+        "snippet": "first hit"
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "url": "https://e.com/1",
+        "snippet": "no title"
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "Two",
+        "url": "https://e.com/2",
+        "text": "a page extract",
+        "text_truncated": true
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "X",
+        "url": "https://e.com",
+        "extra": 1
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "S",
+        "url": "https://e.com",
+        "score": "0.5"
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "N",
+        "url": "https://e.com",
+        "snippet": null
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "caf\u00e9 \ud83d\ude00 <|endoftext|>",
+        "url": "https://e.com/3",
+        "score": 0.25
+      }
+    }
+  ]
+}

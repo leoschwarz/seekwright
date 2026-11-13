@@ -1,0 +1,3 @@
+permitted_providers = ["kagi"]
+[providers.serper]
+enabled = true

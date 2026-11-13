@@ -1,0 +1,8 @@
+area: jsondoc
+case: 20-media-vendor
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+json= true
+json-document= true

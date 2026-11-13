@@ -1,0 +1,6 @@
+{
+  "op": "select",
+  "body": "{\"odd key\": {\"x\": 1}}",
+  "path": "$.\"odd key\".x",
+  "max_chars": 100
+}

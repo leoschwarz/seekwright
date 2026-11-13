@@ -1,0 +1,18 @@
+area: router
+case: 05-fetch-local
+verification: differential-golden
+oracle: python
+projection: router
+--- oracle
+fetch_walk= jina,scrappa
+origin= local fetch
+provider_names= jina, scrappa
+choose_names= jina, scrappa
+choose_instead=  Other configured fetch providers: jina, scrappa. Retry once with `provider` set to one of those before concluding the page cannot be read.
+empty_notice= Almost no readable text came back from the local fetcher. Other configured fetch providers: jina, scrappa. A page that extracts to nothing usually needs a browser, not a second try at the same reader: retry once with `provider` set to one of those before concluding the page has no text.
+empty_notice= almost no readable text could be extracted (the page may be JavaScript-rendered); try `search` for its content instead
+refetched= local fetch failed (the page needs javascript); refetched via jina
+not_enabled= Fetch provider 'crawl4ai' is not enabled on this server. Available: jina, scrappa. Retry with one of those, or omit `provider` to read the page locally.
+resolve_fetch= local
+resolve_fetch= jina
+resolve_fetch refused= Fetch provider 'nope' is not enabled on this server. Available: jina, scrappa. Retry with one of those, or omit `provider` to read the page locally.

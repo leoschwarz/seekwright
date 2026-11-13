@@ -1,0 +1,7 @@
+area: fetch
+case: 04-url-no-scheme
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+url-refused= scheme '(none)' is not fetchable; only http and https are allowed

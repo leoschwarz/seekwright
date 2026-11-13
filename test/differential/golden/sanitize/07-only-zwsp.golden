@@ -1,0 +1,10 @@
+area: sanitize
+case: 07-only-zwsp
+verification: differential-golden
+oracle: python
+projection: sanitize
+--- oracle
+count=0
+out=e2808be2808b
+idempotent=true
+reversible=false

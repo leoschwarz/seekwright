@@ -1,0 +1,29 @@
+area: config
+case: 49-doc-example
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: the documented example names fetch.extractor = "trafilatura" explicitly; the port ships one backend and refuses that name outright, where the oracle accepts it when the library is installed. The same P6 backend gap as the systematic extractor default divergence, visible here in the acceptance rather than the default.
+--- oracle
+default=serper
+permitted=serper,linkup,exa:free,searxng,algolia,exa
+providers_defaulted=false
+enabled=algolia,exa,exa:free,linkup,searxng,serper
+effective=algolia,exa,exa:free,linkup,searxng,serper
+free_only=false
+missing_keys=algolia,exa,linkup,serper
+missing_agent=
+policy,500,2000,10.000000
+fetch,true,trafilatura,15.000000,8388608,40000,200,6000,3,false,false,seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright),crawl4ai,scrappa,false,http,-,http://crawl4ai.internal:11235,...,60.000000,/var/lib/seekwright/pages,268435456,33554432,300.000000
+search,linkup,exa:free,exa:free,searxng,60.000000,3,120.000000
+agent,false,-,-,90.000000,30.000000,24000,500,2500,0.250000,-,-
+logging,INFO,text,WARNING,false,false,false
+dashboard,true,-
+provider algolia enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=ABC123 index=products title_attr=- url_attr=- snippet_attr=-
+provider exa enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider exa:free enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=https://mcp.exa.ai/mcp cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider linkup enabled=true cost=6.000000 depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider searxng enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=http://searx.internal:8080 cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider serper enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+--- port
+ERR fetch.extractor names unknown extractor 'trafilatura'; supported: stdlib

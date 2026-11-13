@@ -1,0 +1,17 @@
+item	kind	oracle	port	status	verification
+search tool	mcp-tool	server.py:search	lib/server.ml	honoured	official-conformance; unit(test_server)
+fetch tool	mcp-tool	server.py:fetch	lib/server.ml	honoured	official-conformance; unit(test_server)
+answer tool	mcp-tool	server.py:answer	lib/server.ml (off by default, like the oracle)	honoured	unit(test_agent, test_p8_server)
+POST /api/v1/search	rest-route	server.py	lib/server.ml	honoured	unit(test_p8_server)
+POST /api/v1/fetch	rest-route	server.py	lib/server.ml	honoured	unit(test_p8_server)
+POST /api/v1/answer	rest-route	server.py (404 while agent off)	lib/server.ml	honoured	unit(test_p8_server)
+GET /healthz	operational-path	server.py	lib/server.ml	honoured	unit(test_p8_server); loopback-integration(test_http_transport)
+GET /dashboard	operational-path	server.py + dashboard.py	lib/server.ml + dashboard_html.ml	honoured	unit(test_p8_server)
+seekwright search|fetch|answer (client verbs)	cli	cli.py argv[0] dispatch	(pending F-series)	not-ported	pending
+seekwright --check	cli	cli.py	bin/main.ml + factory probes	honoured	unit(test_boot)
+seekwright --http	cli	cli.py	bin/main.ml	honoured	loopback-integration(test_http_transport)
+stdio JSON-RPC session (blessed transcript)	transport	server.py stdio	bin/main.ml + bin/smoke.jsonl	honoured	official-conformance(bin/smoke.expected)
+--host/--port/--path/--allowed-host and friends (ten flags)	cli-flags	cli.py	bin/main.ml (wired set pinned by test_p8_surface.ml)	partial	unit(test_p8_surface)
+seventeen provider names	config-vocabulary	config.py KNOWN_PROVIDERS	config.ml known_providers; cross-checked by test_differential_matrix	honoured	differential-golden(config); unit(matrix)
+log events search.ok/failed/attempt/gate + content events	journal	engine.py binds	engine.ml event list	honoured	differential-golden(engine events)
+usage journal fields	journal	usage.py	usage.ml	honoured	unit(test_usage)

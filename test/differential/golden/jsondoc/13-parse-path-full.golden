@@ -1,0 +1,7 @@
+area: jsondoc
+case: 13-parse-path-full
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+steps= .a[2].b[*][1:3]

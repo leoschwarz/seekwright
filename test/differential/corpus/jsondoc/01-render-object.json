@@ -1,0 +1,4 @@
+{
+  "op": "render",
+  "body": "{\"items\": [{\"name\": \"one\", \"score\": 1.5}, {\"name\": \"two\", \"score\": null}], \"count\": 2}"
+}

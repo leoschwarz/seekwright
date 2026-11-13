@@ -1,0 +1,10 @@
+area: config
+case: 27-fetch-primary-bad
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config fetch Value error, fetch.primary names unknown route 'kagi'; supported: http, crawl4ai, jina, linkup, scrappa, tavily [type=value_error, input_value={'primary': 'kagi'}, input_type=dict] For further information visit https://errors.pydantic.dev/2.14/v/value_error
+--- port
+ERR fetch.primary names unknown route 'kagi'; supported: http, crawl4ai, jina, linkup, scrappa, tavily

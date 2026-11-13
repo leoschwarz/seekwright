@@ -1,0 +1,22 @@
+behaviour	oracle	oracle_suite	port	port_suite	status	verification
+routing decisions: resolve, permit, free walk, rungs, refusal sentences	router.py	tests/test_router.py	lib/router.ml	test_router.ml + corpus/router	ported	unit; differential-golden
+stdlib-only routing core (no seekwright imports)	router.py imports	tests/test_router.py	lib/router.ml	test/dune ocamldep rule	ported	unit(build-time)
+config parsing, defaults, validation, refusal sentences	config.py	tests/test_config.py	lib/config.ml	test_config.ml + test/differential/corpus/config	ported	unit; differential-golden
+special-token escaping (reversible, idempotent, byte-level)	sanitize.py	tests/test_sanitize.py	lib/sanitize.ml	test_sanitize.ml + corpus/sanitize	ported	unit; differential-golden
+wire models: unset dropped, TEXT_FIELDS escaped, provider-boundary nulls kept	models.py WireModel	tests/test_models.py	lib/model.ml	test_model.ml + corpus/model	ported	unit; differential-golden; explicit-divergence(coercion)
+search engine walk: ladder, health gate, notices, caps, events	engine.py SearchEngine	tests/test_engine.py	lib/engine.ml	test_engine.ml + corpus/engine	ported	unit; differential-golden
+fetch URL guardrails, windowing, caps, image sniffing	fetcher.py	tests/fetch/	lib/fetch/fetcher.ml	test_fetch.ml + corpus/fetch	ported	unit; differential-golden; explicit-divergence(ipv6 gap)
+JSON document rendering, schema view, path selection	jsondoc.py	tests/fetch/test_jsondoc.py	lib/fetch/jsondoc.ml	test_jsondoc.ml + corpus/jsondoc	ported	unit; differential-golden
+CSV/TSV table rendering over the same line grammar	tabledoc.py	tests/fetch/test_tabledoc.py	lib/fetch/tabledoc.ml	test_tabledoc.ml + corpus/tabledoc	ported	unit; differential-golden
+provider contract: errors, ignored_constraints, cost_for	providers/base.py	tests/providers/test_provider_contract.py	lib/provider.ml	test_provider_contract.ml	ported	unit
+two scripted adapter parity (anysearch, freeserp)	providers/anysearch.py, providers/freeserp.py	tests/providers/test_anysearch.py, tests/providers/test_freeserp.py	lib/providers/anysearch.ml, lib/providers/freeserp.ml	test_anysearch.ml, test_freeserp.ml	ported	unit(scripted transport); keyless-live
+the other fifteen adapters	providers/	tests/providers/, tests/live/test_live.py	(none)	(none)	not-ported	pending-F4
+health board + monitor	health.py	tests/test_health.py	lib/health.ml	test_health.ml, test_health_monitor.ml	ported	unit
+usage journal and in-memory totals	usage.py	tests/test_usage.py	lib/usage.ml	test_usage.ml	ported	unit
+agent mode: fixed plan, one model call, validated citations, ceiling	agent.py	tests/test_agent.py	lib/agent.ml	test_agent.ml	ported	unit
+MCP server: three tools, stdio+HTTP transports, route guards	server.py	tests/test_server.py, tests/features/	lib/server.ml	test_server.ml, test_p8_server.ml, test_http_transport.ml	ported	unit; loopback-integration; official-conformance(test/conformance)
+REST projection + CLI verbs + --check	server.py routes, cli.py	tests/repo/test_surface.py, tests/features/	(pending: F-series server surface)	test_p8_surface.ml covers what is wired	partial	unit
+logging discipline (event names, binds, no tracebacks, stderr only)	logs.py	tests/test_logs.py	lib/log.ml	test_log.ml	ported	unit
+page cache	(none — deliberately absent)	n/a	(parsed config only)	n/a	not-ported	pending-F7
+extraction backends	extractors/ (trafilatura, stdlib)	tests/fetch/	lib/fetch/extractors/stdlib.ml only	test_fetch.ml, corpus/config extractor refusals	partial	explicit-divergence(trafilatura refused on the port)
+transport security (Host allowlist, /healthz outside it, origin checks)	server.py _transport_security	tests/test_server.py	lib/server.ml + mcp-kit	test_http_transport.ml, conformance transcript	ported	loopback-integration; official-conformance

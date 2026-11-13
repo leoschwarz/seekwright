@@ -1,0 +1,42 @@
+{
+  "config": {
+    "providers": {
+      "exa": {
+        "enabled": true
+      },
+      "exa:free": {
+        "enabled": true
+      }
+    },
+    "default_provider": "exa"
+  },
+  "providers": [
+    {
+      "name": "exa",
+      "results": [
+        {
+          "title": "Hit",
+          "url": "https://e.com/1",
+          "snippet": "first hit"
+        }
+      ],
+      "cost": 2.5
+    },
+    {
+      "name": "exa:free",
+      "results": [
+        {
+          "title": "Second",
+          "url": "https://e.com/2",
+          "snippet": "another hit"
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "query": "mercury retrograde",
+      "mode": "free"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+area: jsondoc
+case: 09-select-budget
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+select= 31:$.items[0]  object(1)
+dropped=3

@@ -1,0 +1,5 @@
+{
+  "op": "child-path",
+  "parent": "$.rows",
+  "key": 3
+}

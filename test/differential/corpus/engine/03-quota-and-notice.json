@@ -1,0 +1,41 @@
+{
+  "config": {
+    "providers": {
+      "tavily": {
+        "enabled": true
+      },
+      "linkup": {
+        "enabled": true
+      }
+    },
+    "default_provider": "tavily",
+    "search": {
+      "fallback": [
+        "linkup"
+      ]
+    }
+  },
+  "providers": [
+    {
+      "name": "tavily",
+      "kind": "quota",
+      "message": "quota exhausted"
+    },
+    {
+      "name": "linkup",
+      "results": [
+        {
+          "title": "Hit",
+          "url": "https://e.com/1",
+          "snippet": "first hit"
+        }
+      ],
+      "notice": "linkup: partial results"
+    }
+  ],
+  "calls": [
+    {
+      "query": "quotation of the day"
+    }
+  ]
+}

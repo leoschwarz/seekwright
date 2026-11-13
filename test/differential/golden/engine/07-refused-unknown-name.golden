@@ -1,0 +1,9 @@
+area: engine
+case: 07-refused-unknown-name
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+events= search.rejected
+verdict= refused
+message= Provider 'kagi' is not enabled on this server. Available: serper. Retry with one of those, or omit `provider` to use the default.

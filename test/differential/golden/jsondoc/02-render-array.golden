@@ -1,0 +1,7 @@
+area: jsondoc
+case: 02-render-array
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  array(3)\n$[0]  1\n$[1]  2\n$[2]  3

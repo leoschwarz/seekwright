@@ -1,0 +1,17 @@
+area: model
+case: 05-model-answer-and-registry
+verification: differential-golden
+oracle: python
+projection: model
+--- oracle
+verdict= accept
+wire= {"answer":"prose","depth":"brief","fetched":0,"model":"small","query":"q","searches":1,"sources":[{"provider":"exa:free","title":"T","url":"https://e.com"}]}
+verdict= accept
+wire= {"provider":"exa","title":"T","url":"https://e.com"}
+verdict= reject
+verdict= accept
+wire= {"country":null,"exclude_domains":[],"include_domains":[],"language":null,"max_results":5,"query":"hello world","recency":null,"safe_search":null}
+verdict= accept
+wire= {"country":null,"exclude_domains":[],"include_domains":["example.com"],"language":null,"max_results":3,"query":"hello","recency":"day","safe_search":null}
+verdict= accept
+wire= {"answer":null,"cost_usd":0.0025000000000000001,"notice":null,"provider":"exa","results":[{"title":"T","url":"https://e.com"}]}

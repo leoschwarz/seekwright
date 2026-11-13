@@ -1,0 +1,10 @@
+area: sanitize
+case: 04-chatml
+verification: differential-golden
+oracle: python
+projection: sanitize
+--- oracle
+count=3
+out=5be2808b494e53545d206869205be2808b2f494e53545d203ce2808b7c696d5f73746172747c3e75736572
+idempotent=true
+reversible=true

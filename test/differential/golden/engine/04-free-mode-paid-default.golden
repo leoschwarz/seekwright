@@ -1,0 +1,13 @@
+area: engine
+case: 04-free-mode-paid-default
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt exa:free
+events= search.ok
+verdict= ok
+provider= exa:free
+results=1
+titles=Second
+notice=-

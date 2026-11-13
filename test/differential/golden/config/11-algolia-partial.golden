@@ -1,0 +1,10 @@
+area: config
+case: 11-algolia-partial
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config Value error, provider 'algolia' is enabled but app_id and index are required; it searches one operator-named index [type=value_error, input_value={'providers': {'algolia':...: True, 'app_id': 'A'}}}, input_type=dict] For further information visit https://errors.pydantic.dev/2.14/v/value_error
+--- port
+ERR provider 'algolia' is enabled but app_id and index are required; it searches one operator-named index

@@ -1,0 +1,7 @@
+area: jsondoc
+case: 14-parse-path-bad
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+steps= .a.b

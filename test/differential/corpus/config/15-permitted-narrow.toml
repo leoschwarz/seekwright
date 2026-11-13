@@ -1,0 +1,5 @@
+permitted_providers = ["serper"]
+[providers.serper]
+enabled = true
+[providers.linkup]
+enabled = true

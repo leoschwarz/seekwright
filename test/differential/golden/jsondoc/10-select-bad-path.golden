@@ -1,0 +1,7 @@
+area: jsondoc
+case: 10-select-bad-path
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+path-refused= a `[` in the path is never closed

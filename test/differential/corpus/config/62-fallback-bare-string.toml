@@ -1,0 +1,4 @@
+[providers.serper]
+enabled = true
+[search]
+fallback = "serper"

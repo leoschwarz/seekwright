@@ -1,0 +1,9 @@
+area: tabledoc
+case: 06-csv-empty
+verification: differential-golden
+oracle: python
+projection: tabledoc
+--- oracle
+delimiter= ,
+table= true
+render= -

@@ -1,0 +1,10 @@
+area: config
+case: 72-output-type-bad
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config providers.linkup.output_type Input should be 'sourcedAnswer' or 'searchResults' [type=literal_error, input_value='nope', input_type=str] For further information visit https://errors.pydantic.dev/2.14/v/literal_error
+--- port
+ERR providers.linkup.output_type: input should be sourcedAnswer or searchResults, not 'nope'

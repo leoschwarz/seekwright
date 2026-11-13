@@ -1,0 +1,7 @@
+area: fetch
+case: 23-sniff-gif
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+image= image/gif

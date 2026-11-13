@@ -1,0 +1,28 @@
+{
+  "config": {
+    "providers": {
+      "serper": {
+        "enabled": true
+      }
+    },
+    "default_provider": "serper"
+  },
+  "providers": [
+    {
+      "name": "serper",
+      "results": [
+        {
+          "title": "Hit",
+          "url": "https://e.com/1",
+          "snippet": "first hit"
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "query": "unconfigured",
+      "provider": "kagi"
+    }
+  ]
+}

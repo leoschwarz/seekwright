@@ -1,0 +1,8 @@
+area: fetch
+case: 15-window-head
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+window= hello\n\n[...]
+more=true

@@ -1,0 +1,3 @@
+[fetch]
+enabled = true
+extractor = "stdlib"

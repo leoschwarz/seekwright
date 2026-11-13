@@ -1,0 +1,4 @@
+[providers.serper]
+enabled = true
+[fetch]
+max_age_seconds = 1

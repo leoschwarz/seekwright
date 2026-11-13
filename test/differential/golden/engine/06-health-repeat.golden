@@ -1,0 +1,22 @@
+area: engine
+case: 06-health-repeat
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt serper
+attempt exa:free
+events= search.fallback,search.ok
+verdict= ok
+provider= exa:free
+results=1
+titles=Hit
+notice=serper failed (bad gateway); served by exa:free instead
+attempt serper
+attempt exa:free
+events= search.fallback,search.ok
+verdict= ok
+provider= exa:free
+results=1
+titles=Hit
+notice=serper failed (bad gateway); served by exa:free instead

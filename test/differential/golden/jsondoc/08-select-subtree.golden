@@ -1,0 +1,8 @@
+area: jsondoc
+case: 08-select-subtree
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+select= 53:$.items[0].name  \"one\"|98:$.items[1].name  \"two\"
+dropped=0

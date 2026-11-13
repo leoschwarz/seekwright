@@ -1,0 +1,42 @@
+area: config
+case: 48-bool-for-int
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: the port has one extraction backend, so its default fetch.extractor is "stdlib"; the oracle's default is "trafilatura", a library this tree carries but the port has not wrapped. A P6 port decision, not a silent drift: the port refuses any other name and the oracle refuses names outside its two.
+--- oracle
+default=-
+permitted=-
+providers_defaulted=true
+enabled=exa:free,freeserp,parallel:free
+effective=exa:free,freeserp,parallel:free
+free_only=true
+missing_keys=
+missing_agent=
+policy,1,2000,10.000000
+fetch,true,trafilatura,15.000000,8388608,40000,200,6000,3,false,false,seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright),-,false,http,-,-,-,60.000000,-,268435456,33554432,300.000000
+search,-,-,60.000000,3,120.000000
+agent,false,-,-,90.000000,30.000000,24000,500,2500,0.250000,-,-
+logging,INFO,text,WARNING,false,false,false
+dashboard,true,-
+provider exa:free enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider freeserp enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider parallel:free enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+--- port
+default=-
+permitted=-
+providers_defaulted=true
+enabled=exa:free,freeserp,parallel:free
+effective=exa:free,freeserp,parallel:free
+free_only=true
+missing_keys=
+missing_agent=
+policy,1,2000,10.000000
+fetch,true,stdlib,15.000000,8388608,40000,200,6000,3,false,false,seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright),-,false,http,-,-,-,60.000000,-,268435456,33554432,300.000000
+search,-,-,60.000000,3,120.000000
+agent,false,-,-,90.000000,30.000000,24000,500,2500,0.250000,-,-
+logging,INFO,text,WARNING,false,false,false
+dashboard,true,-
+provider exa:free enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider freeserp enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider parallel:free enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-

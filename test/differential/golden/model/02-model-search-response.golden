@@ -1,0 +1,11 @@
+area: model
+case: 02-model-search-response
+verification: differential-golden
+oracle: python
+projection: model
+--- oracle
+verdict= accept
+wire= {"provider":"serper","query":"q","results":[]}
+verdict= accept
+wire= {"notice":"linkup: partial results","provider":"linkup","query":"q","results":[{"title":"T","url":"https://e.com"}]}
+verdict= reject

@@ -1,0 +1,6 @@
+{
+  "op": "select",
+  "body": "{\"a\": 1}",
+  "path": "$.a[",
+  "max_chars": 100
+}

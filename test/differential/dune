@@ -1,0 +1,88 @@
+; The parity matrix and the differential golden harness. Everything this phase
+; owns lives in this directory: the matrix tables under [matrix/], the corpus
+; inputs under [corpus/], the pinned expected outputs under [golden/], and the
+; two suites below that read them. [../dune] and [../test_*.ml] belong to the
+; per-module ported suites; this stanza file deliberately touches neither.
+;
+; The shape of the harness, and why each part is where it is, is in [README.md].
+; The short version: [corpus/] holds the inputs, [golden/] holds what the Python
+; oracle answered for them (pinned, no clock, no secrets), and a plain
+; [dune runtest] runs the OCaml projection of each input and diffs it against the
+; pinned answer — so the gate never needs a Python interpreter, a provider
+; endpoint, or a network. Regenerating the goldens is
+; [../../ocaml-tools/oracle/]'s job, and that tool reads the Python tree
+; read-only.
+
+; The shared machinery: the canonical rendering the corpus is written in, and the
+; projection of each area. [unix] is here for one thing — clearing the key
+; environment so a golden cannot depend on what the shell that runs
+; [dune runtest] happens to export.
+(library
+ (name seekwright_diff)
+ (modules canon projection)
+ (libraries seekwright seekwright.fetch unix yojson))
+
+; The regeneration driver. Not a test: it is how a human re-pins a golden after
+; changing the oracle or the corpus, and [dune runtest] never runs it.
+(executable
+ (name drive)
+ (modules drive)
+ (libraries seekwright_diff))
+
+; The golden runner. [golden/] and [corpus/] are declared deps so the sandbox
+; carries them and the runner's directory walks see exactly what is committed —
+; a golden or an input that is not in the tree simply is not there to pass on.
+; The one-glob-per-area list is verbose because dune's [glob_files] recurses
+; only when the pattern ends at the glob: [golden/**] matches a directory's
+; own files, not a subtree's. A new area has to be added here, which is the
+; point: an area the deps forget cannot quietly run against a half-populated
+; sandbox.
+(test
+ (name test_differential_golden)
+ (modules test_differential_golden)
+ (libraries seekwright_diff alcotest)
+ (deps
+  (glob_files golden/config/*.golden)
+  (glob_files golden/sanitize/*.golden)
+  (glob_files golden/fetch/*.golden)
+  (glob_files golden/jsondoc/*.golden)
+  (glob_files golden/tabledoc/*.golden)
+  (glob_files golden/router/*.golden)
+  (glob_files golden/model/*.golden)
+  (glob_files golden/engine/*.golden)
+  (glob_files corpus/config/*)
+  (glob_files corpus/sanitize/*)
+  (glob_files corpus/fetch/*)
+  (glob_files corpus/jsondoc/*)
+  (glob_files corpus/tabledoc/*)
+  (glob_files corpus/router/*)
+  (glob_files corpus/model/*)
+  (glob_files corpus/engine/*)))
+
+; The matrix validator. The source globs are the point of this stanza: a row
+; that credits a consumer module or an oracle suite names a file, and the check
+; that the file exists is only honest when the sandbox carries it. A row about
+; a module nobody wrote fails here rather than in review.
+(test
+ (name test_differential_matrix)
+ (modules test_differential_matrix)
+ (libraries seekwright_diff alcotest)
+ (deps
+  (glob_files matrix/*.tsv)
+  (glob_files ../../lib/*.ml)
+  (glob_files ../../lib/fetch/*.ml)
+  (glob_files ../../lib/fetch/extractors/*.ml)
+  (glob_files ../../lib/factory/*.ml)
+  (glob_files ../../lib/providers/*.ml)
+  (glob_files ../../lib/text/*.ml)
+  (glob_files ../../lib/wire/*.ml)
+  (glob_files ../../bin/*.ml)
+  (glob_files ../../test/test_*.ml)
+  (glob_files ../../src/seekwright/*.py)
+  (glob_files ../../src/seekwright/providers/*.py)
+  (glob_files ../../tests/*.py)
+  (glob_files ../../tests/providers/*.py)
+  (glob_files ../../tests/fetch/*.py)
+  (glob_files ../../tests/repo/*.py)
+  (glob_files ../../tests/features/*.py)
+  (glob_files ../../tests/live/*.py)))

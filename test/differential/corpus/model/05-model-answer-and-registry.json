@@ -1,0 +1,67 @@
+{
+  "cases": [
+    {
+      "model": "answer_response",
+      "body": {
+        "query": "q",
+        "answer": "prose",
+        "sources": [
+          {
+            "title": "T",
+            "url": "https://e.com",
+            "provider": "exa:free"
+          }
+        ],
+        "model": "small",
+        "depth": "brief",
+        "searches": 1,
+        "fetched": 0
+      }
+    },
+    {
+      "model": "answer_source",
+      "body": {
+        "title": "T",
+        "url": "https://e.com",
+        "provider": "exa"
+      }
+    },
+    {
+      "model": "answer_source",
+      "body": {
+        "title": "T",
+        "url": "https://e.com"
+      }
+    },
+    {
+      "model": "search_query",
+      "body": {
+        "query": "hello world"
+      }
+    },
+    {
+      "model": "search_query",
+      "body": {
+        "query": "hello",
+        "max_results": 3,
+        "include_domains": [
+          "example.com"
+        ],
+        "recency": "day"
+      }
+    },
+    {
+      "model": "provider_result",
+      "body": {
+        "provider": "exa",
+        "results": [
+          {
+            "title": "T",
+            "url": "https://e.com"
+          }
+        ],
+        "cost_usd": 0.0025
+      }
+    }
+  ]
+}

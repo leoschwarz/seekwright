@@ -1,0 +1,9 @@
+area: router
+case: 04-search-all-free
+verification: differential-golden
+oracle: python
+projection: router
+--- oracle
+unnamed_walks_free= true
+free_walk= parallel:free,exa:free
+resolve_search= parallel:free

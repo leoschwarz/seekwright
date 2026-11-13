@@ -1,0 +1,14 @@
+area: engine
+case: 05-all-free-unnamed
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt exa:free
+attempt parallel:free
+events= search.fallback,search.ok
+verdict= ok
+provider= parallel:free
+results=1
+titles=Second
+notice=exa:free failed (quota exhausted); served by parallel:free instead

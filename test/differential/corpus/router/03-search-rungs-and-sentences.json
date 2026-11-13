@@ -1,0 +1,101 @@
+{
+  "table": {
+    "providers": [
+      "serper",
+      "linkup",
+      "tavily",
+      "exa:free"
+    ],
+    "default": "serper",
+    "permitted": [
+      "serper",
+      "linkup",
+      "exa:free"
+    ],
+    "fallback": [
+      "linkup",
+      "tavily",
+      "exa:free"
+    ],
+    "free_fallback": [
+      "exa:free"
+    ],
+    "free": [
+      "exa:free",
+      "freeserp",
+      "parallel:free",
+      "anysearch"
+    ],
+    "free_order": [
+      "exa:free",
+      "parallel:free",
+      "freeserp",
+      "anysearch"
+    ],
+    "effective": [
+      "serper",
+      "linkup",
+      "exa:free"
+    ]
+  },
+  "calls": [
+    {
+      "fn": "fallback_rungs",
+      "ladder": [
+        "linkup",
+        "tavily",
+        "exa:free"
+      ],
+      "tried": "serper",
+      "gated": [
+        "tavily"
+      ]
+    },
+    {
+      "fn": "fallback_rungs",
+      "ladder": [
+        "serper",
+        "linkup"
+      ],
+      "tried": "serper",
+      "gated": []
+    },
+    {
+      "fn": "fallback_served_notice",
+      "tried": "serper",
+      "original_reason": "serper: upstream timed out",
+      "fallback": "linkup",
+      "notice": null
+    },
+    {
+      "fn": "fallback_served_notice",
+      "tried": "serper",
+      "original_reason": "serper: rate limited",
+      "fallback": "linkup",
+      "notice": "linkup: partial results"
+    },
+    {
+      "fn": "fallback_exhausted_note",
+      "failed": [
+        "serper",
+        "linkup"
+      ],
+      "mode": null
+    },
+    {
+      "fn": "fallback_exhausted_note",
+      "failed": [
+        "exa:free"
+      ],
+      "mode": "free"
+    },
+    {
+      "fn": "retry_advice",
+      "quota": false
+    },
+    {
+      "fn": "retry_advice",
+      "quota": true
+    }
+  ]
+}

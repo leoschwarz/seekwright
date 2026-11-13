@@ -1,0 +1,4 @@
+[providers."exa:free"]
+enabled = true
+[providers."parallel:free"]
+enabled = true

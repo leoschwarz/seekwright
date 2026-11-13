@@ -1,0 +1,21 @@
+{
+  "config": {
+    "providers": {
+      "serper": {
+        "enabled": true
+      }
+    },
+    "default_provider": "serper"
+  },
+  "providers": [
+    {
+      "name": "serper",
+      "results": []
+    }
+  ],
+  "calls": [
+    {
+      "query": "xkcdqzj name nobody searches"
+    }
+  ]
+}

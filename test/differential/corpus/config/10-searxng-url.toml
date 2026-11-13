@@ -1,0 +1,3 @@
+[providers.searxng]
+enabled = true
+url = "http://searx.internal:8080"

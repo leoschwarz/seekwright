@@ -1,0 +1,44 @@
+{
+  "config": {
+    "providers": {
+      "serper": {
+        "enabled": true
+      },
+      "exa:free": {
+        "enabled": true
+      }
+    },
+    "default_provider": "serper",
+    "search": {
+      "fallback": [
+        "exa:free"
+      ]
+    }
+  },
+  "providers": [
+    {
+      "name": "serper",
+      "kind": "failure",
+      "message": "bad gateway",
+      "retryable": true
+    },
+    {
+      "name": "exa:free",
+      "results": [
+        {
+          "title": "Hit",
+          "url": "https://e.com/1",
+          "snippet": "first hit"
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "query": "first call"
+    },
+    {
+      "query": "second call"
+    }
+  ]
+}

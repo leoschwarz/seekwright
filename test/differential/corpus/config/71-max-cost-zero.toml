@@ -1,0 +1,5 @@
+[providers.serper]
+enabled = true
+[agent]
+enabled = true
+max_cost_usd = 0

@@ -1,0 +1,10 @@
+area: engine
+case: 02-named-terminal
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt serper
+events= search.failed
+verdict= failed
+message= Search failed - serper: upstream timed out. Retry shortly or try a different phrasing.

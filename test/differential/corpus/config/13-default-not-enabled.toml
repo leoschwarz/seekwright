@@ -1,0 +1,3 @@
+[providers.serper]
+enabled = true
+default_provider = "linkup"

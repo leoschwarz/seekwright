@@ -1,0 +1,7 @@
+area: fetch
+case: 24-sniff-webp
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+image= image/webp

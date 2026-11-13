@@ -1,0 +1,7 @@
+area: fetch
+case: 14-url-space-padded
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+url= https://example.com/

@@ -1,0 +1,7 @@
+area: fetch
+case: 05-url-ftp
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+url-refused= scheme 'ftp' is not fetchable; only http and https are allowed

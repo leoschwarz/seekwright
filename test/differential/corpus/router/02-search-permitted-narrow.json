@@ -1,0 +1,50 @@
+{
+  "table": {
+    "providers": [
+      "serper",
+      "linkup"
+    ],
+    "default": "serper",
+    "permitted": [
+      "linkup"
+    ],
+    "fallback": [
+      "linkup"
+    ],
+    "free_fallback": [],
+    "free": [
+      "exa:free",
+      "freeserp",
+      "parallel:free",
+      "anysearch"
+    ],
+    "free_order": [
+      "exa:free",
+      "parallel:free",
+      "freeserp",
+      "anysearch"
+    ],
+    "effective": [
+      "linkup"
+    ]
+  },
+  "calls": [
+    {
+      "fn": "resolve_search"
+    },
+    {
+      "fn": "resolve_search",
+      "requested": "serper"
+    },
+    {
+      "fn": "is_permitted",
+      "name": "serper"
+    },
+    {
+      "fn": "unnamed_walks_free"
+    },
+    {
+      "fn": "free_candidates"
+    }
+  ]
+}

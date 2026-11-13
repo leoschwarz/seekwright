@@ -1,0 +1,16 @@
+area: sanitize
+case: 09-lone-continuation
+verification: explicit-divergence
+oracle: python
+projection: sanitize
+reason: the oracle projection must read the corpus through a text decode (its sanitizer takes str), so the ill-formed byte arrives as U+FFFD before it is called; the port's sanitizer is byte-faithful and passes the lone continuation byte through. The escape pass itself agrees: same count, same reversibility, same idempotence.
+--- oracle
+count=1
+out=efbfbd6162633ce2808b7c656e646f66746578747c3e
+idempotent=true
+reversible=true
+--- port
+count=1
+out=806162633ce2808b7c656e646f66746578747c3e
+idempotent=true
+reversible=true

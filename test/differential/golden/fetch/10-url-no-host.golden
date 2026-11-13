@@ -1,0 +1,7 @@
+area: fetch
+case: 10-url-no-host
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+url-refused= URL has no host

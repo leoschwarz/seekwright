@@ -1,0 +1,7 @@
+area: jsondoc
+case: 01-render-object
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  object(2)\n$.items  array(2)\n$.items[0]  object(2)\n$.items[0].name  \"one\"\n$.items[0].score  1.5\n$.items[1]  object(2)\n$.items[1].name  \"two\"\n$.items[1].score  null\n$.count  2

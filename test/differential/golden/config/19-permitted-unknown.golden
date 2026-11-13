@@ -1,0 +1,10 @@
+area: config
+case: 19-permitted-unknown
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config Value error, permitted_providers names unknown provider(s) kagi; supported: algolia, anysearch, deepseek, exa, exa:free, freeserp, jina, linkup, parallel, parallel:free, querit, scrappa, search1api, searxng, serpapi, serper, tavily, tinyfish [type=value_error, input_value={'permitted_providers': [...er': {'enabled': True}}}, input_type=dict] For further information visit https://errors.pydantic.dev/2.14/v/value_error
+--- port
+ERR permitted_providers names unknown provider(s) kagi; supported: algolia, anysearch, deepseek, exa, exa:free, freeserp, jina, linkup, parallel, parallel:free, querit, scrappa, search1api, searxng, serpapi, serper, tavily, tinyfish

@@ -1,0 +1,3 @@
+[providers.linkup]
+enabled = true
+depth = "deepest"

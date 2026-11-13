@@ -1,0 +1,10 @@
+area: fetch
+case: 08-url-port-range
+verification: explicit-divergence
+oracle: python
+projection: fetch
+reason: both trees refuse http://example.com:99999/; the sentence quotes each implementation's own parser (urlsplit's wording vs the port's rule stated in its own words). The verdict is the contract, and it agrees.
+--- oracle
+url-refused= invalid port: Port out of range 0-65535
+--- port
+url-refused= invalid port: 99999 is not a port in 1-65535

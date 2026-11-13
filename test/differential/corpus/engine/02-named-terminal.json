@@ -1,0 +1,42 @@
+{
+  "config": {
+    "providers": {
+      "serper": {
+        "enabled": true
+      },
+      "linkup": {
+        "enabled": true
+      }
+    },
+    "default_provider": "serper",
+    "search": {
+      "fallback": [
+        "linkup"
+      ]
+    }
+  },
+  "providers": [
+    {
+      "name": "serper",
+      "kind": "failure",
+      "message": "upstream timed out",
+      "retryable": true
+    },
+    {
+      "name": "linkup",
+      "results": [
+        {
+          "title": "Hit",
+          "url": "https://e.com/1",
+          "snippet": "first hit"
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "query": "weather in paris",
+      "provider": "serper"
+    }
+  ]
+}

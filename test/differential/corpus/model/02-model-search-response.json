@@ -1,0 +1,33 @@
+{
+  "cases": [
+    {
+      "model": "search_response",
+      "body": {
+        "query": "q",
+        "provider": "serper",
+        "results": []
+      }
+    },
+    {
+      "model": "search_response",
+      "body": {
+        "query": "q",
+        "provider": "linkup",
+        "results": [
+          {
+            "title": "T",
+            "url": "https://e.com"
+          }
+        ],
+        "notice": "linkup: partial results"
+      }
+    },
+    {
+      "model": "search_response",
+      "body": {
+        "query": "q",
+        "provider": "serper"
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+area: config
+case: 70-level-lower
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config logging.level Input should be 'TRACE', 'DEBUG', 'INFO', 'SUCCESS', 'WARNING', 'ERROR' or 'CRITICAL' [type=literal_error, input_value='debug', input_type=str] For further information visit https://errors.pydantic.dev/2.14/v/literal_error
+--- port
+ERR logging.level: input should be TRACE, DEBUG, INFO, SUCCESS, WARNING, ERROR or CRITICAL, not 'debug'

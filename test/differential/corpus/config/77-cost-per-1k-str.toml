@@ -1,0 +1,3 @@
+[providers.serper]
+enabled = true
+cost_per_1k = "6"

@@ -1,0 +1,10 @@
+area: sanitize
+case: 12-nested
+verification: differential-golden
+oracle: python
+projection: sanitize
+--- oracle
+count=2
+out=3c3ce2808b7c787c3e7c3e203ce2808b7c70726f6d70747c3e
+idempotent=true
+reversible=true

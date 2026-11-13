@@ -1,0 +1,7 @@
+area: config
+case: 06-unquoted-flavour
+verification: differential-golden
+oracle: python
+projection: config
+--- oracle
+PARSE-ERR

@@ -1,0 +1,7 @@
+area: fetch
+case: 03-url-bare-host
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+url= https://example.com/

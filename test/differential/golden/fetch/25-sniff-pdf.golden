@@ -1,0 +1,7 @@
+area: fetch
+case: 25-sniff-pdf
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+image= -

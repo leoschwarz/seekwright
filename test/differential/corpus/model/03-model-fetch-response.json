@@ -1,0 +1,56 @@
+{
+  "cases": [
+    {
+      "model": "fetch_response",
+      "body": {
+        "url": "https://e.com/",
+        "requested_url": "https://e.com"
+      }
+    },
+    {
+      "model": "fetch_response",
+      "body": {
+        "url": "https://e.com/",
+        "requested_url": "https://e.com",
+        "title": "Page",
+        "text": "body text",
+        "content_type": "text/html",
+        "status_code": 200,
+        "truncated": true,
+        "total_chars": 90000,
+        "matches": [
+          {
+            "offset": 10,
+            "text": "body"
+          }
+        ],
+        "image": {
+          "byte_count": 4,
+          "base64": "aGVsbG8="
+        }
+      }
+    },
+    {
+      "model": "fetch_response",
+      "body": {
+        "url": "https://e.com/",
+        "requested_url": "https://e.com",
+        "status_code": "200"
+      }
+    },
+    {
+      "model": "fetch_match",
+      "body": {
+        "offset": 3,
+        "text": "span"
+      }
+    },
+    {
+      "model": "fetch_image",
+      "body": {
+        "byte_count": 2,
+        "base64": "aGk="
+      }
+    }
+  ]
+}

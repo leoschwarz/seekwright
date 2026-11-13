@@ -1,0 +1,7 @@
+area: jsondoc
+case: 22-sniffs-object
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+sniffs= true

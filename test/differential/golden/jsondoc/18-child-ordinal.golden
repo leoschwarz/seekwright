@@ -1,0 +1,7 @@
+area: jsondoc
+case: 18-child-ordinal
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+child= $.rows[3]

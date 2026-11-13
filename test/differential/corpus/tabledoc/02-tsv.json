@@ -1,0 +1,5 @@
+{
+  "op": "render",
+  "media": "text/tab-separated-values",
+  "body": "name\tscore\none\t1\n"
+}

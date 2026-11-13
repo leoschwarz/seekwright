@@ -1,0 +1,7 @@
+area: jsondoc
+case: 07-structure-invalid
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= -

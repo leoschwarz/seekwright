@@ -1,0 +1,7 @@
+area: fetch
+case: 30-cap-zero
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+cap=0

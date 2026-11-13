@@ -1,0 +1,13 @@
+area: engine
+case: 08-zero-results
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt serper
+events= search.ok
+verdict= ok
+provider= serper
+results=0
+titles=
+notice=No results from serper. serper is the only enabled provider. Zero results usually means the phrasing, not an empty web: retry once on a different provider or rephrase before concluding the answer does not exist.

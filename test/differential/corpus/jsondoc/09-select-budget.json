@@ -1,0 +1,6 @@
+{
+  "op": "select",
+  "body": "{\"items\": [{\"name\": \"aaaaaaaaaa\"}, {\"name\": \"bbbbbbbbbb\"}]}",
+  "path": "$.items[*]",
+  "max_chars": 40
+}

@@ -1,0 +1,7 @@
+area: fetch
+case: 02-url-uppercase-scheme
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+url= https://Example.COM/Path

@@ -1,0 +1,10 @@
+area: fetch
+case: 09-url-port-word
+verification: explicit-divergence
+oracle: python
+projection: fetch
+reason: same as fetch/08 on a non-numeric port: refusal on both sides, wording is each parser's own.
+--- oracle
+url-refused= invalid port: Port could not be cast to integer value as 'notaport'
+--- port
+url-refused= invalid port: notaport is not a port in 1-65535

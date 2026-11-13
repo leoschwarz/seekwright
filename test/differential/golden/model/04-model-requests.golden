@@ -1,0 +1,19 @@
+area: model
+case: 04-model-requests
+verification: differential-golden
+oracle: python
+projection: model
+--- oracle
+verdict= accept
+wire= {"max_results":10,"query":"weather in paris","recency":"week"}
+verdict= reject
+verdict= reject
+verdict= accept
+wire= {"max_results":5,"mode":"free","query":"ok query","safe_search":true}
+verdict= accept
+wire= {"structure":false,"url":"https://example.com/page"}
+verdict= accept
+wire= {"structure":false,"url":"http://a.b"}
+verdict= accept
+wire= {"depth":"report","extra_queries":["sky rayleigh"],"query":"why is the sky blue"}
+verdict= reject

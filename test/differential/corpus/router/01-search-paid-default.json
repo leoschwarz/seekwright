@@ -1,0 +1,63 @@
+{
+  "table": {
+    "providers": [
+      "serper",
+      "linkup",
+      "exa:free"
+    ],
+    "default": "serper",
+    "permitted": null,
+    "fallback": [
+      "linkup",
+      "exa:free"
+    ],
+    "free_fallback": [],
+    "free": [
+      "exa:free",
+      "freeserp",
+      "parallel:free",
+      "anysearch"
+    ],
+    "free_order": [
+      "exa:free",
+      "parallel:free",
+      "freeserp",
+      "anysearch"
+    ],
+    "effective": [
+      "serper",
+      "linkup",
+      "exa:free"
+    ]
+  },
+  "calls": [
+    {
+      "fn": "resolve_search"
+    },
+    {
+      "fn": "resolve_search",
+      "requested": "linkup"
+    },
+    {
+      "fn": "resolve_search",
+      "requested": "kagi"
+    },
+    {
+      "fn": "resolve_search",
+      "mode": "free"
+    },
+    {
+      "fn": "is_permitted",
+      "name": "exa:free"
+    },
+    {
+      "fn": "unnamed_walks_free"
+    },
+    {
+      "fn": "free_candidates"
+    },
+    {
+      "fn": "free_walk"
+    }
+  ]
+}

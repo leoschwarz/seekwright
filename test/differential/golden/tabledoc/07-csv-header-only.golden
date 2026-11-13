@@ -1,0 +1,9 @@
+area: tabledoc
+case: 07-csv-header-only
+verification: differential-golden
+oracle: python
+projection: tabledoc
+--- oracle
+delimiter= ,
+table= true
+render= $  object(1)\n$.rows  array(0)

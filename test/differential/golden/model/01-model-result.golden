@@ -1,0 +1,31 @@
+area: model
+case: 01-model-result
+verification: explicit-divergence
+oracle: python
+projection: model
+reason: pydantic's lax mode coerces the string "0.5" to a float and accepts the body; the port's decoder refuses string-to-number coercion. Both verdicts pinned so the gap is on the record, not in a comment.
+--- oracle
+verdict= accept
+wire= {"snippet":"first hit","title":"One","url":"https://e.com/1"}
+verdict= reject
+verdict= accept
+wire= {"text":"a page extract","text_truncated":true,"title":"Two","url":"https://e.com/2"}
+verdict= reject
+verdict= accept
+wire= {"score":0.5,"title":"S","url":"https://e.com"}
+verdict= accept
+wire= {"title":"N","url":"https://e.com"}
+verdict= accept
+wire= {"score":0.25,"title":"caf\u00e9 \ud83d\ude00 <\u200b|endoftext|>","url":"https://e.com/3"}
+--- port
+verdict= accept
+wire= {"snippet":"first hit","title":"One","url":"https://e.com/1"}
+verdict= reject
+verdict= accept
+wire= {"text":"a page extract","text_truncated":true,"title":"Two","url":"https://e.com/2"}
+verdict= reject
+verdict= reject
+verdict= accept
+wire= {"title":"N","url":"https://e.com"}
+verdict= accept
+wire= {"score":0.25,"title":"caf\u00e9 \ud83d\ude00 <\u200b|endoftext|>","url":"https://e.com/3"}

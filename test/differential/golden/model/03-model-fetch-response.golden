@@ -1,0 +1,27 @@
+area: model
+case: 03-model-fetch-response
+verification: explicit-divergence
+oracle: python
+projection: model
+reason: the same coercion gap as model/01 on a different field: pydantic turns "200" into the int 200, the port's decoder refuses it. The refusal sentences themselves are not pinned (accepted difference: pydantic reports a structured error list, the port states one sentence).
+--- oracle
+verdict= accept
+wire= {"requested_url":"https://e.com","truncated":false,"url":"https://e.com/"}
+verdict= accept
+wire= {"content_type":"text/html","image":{"base64":"aGVsbG8=","byte_count":4},"matches":[{"offset":10,"text":"body"}],"requested_url":"https://e.com","status_code":200,"text":"body text","title":"Page","total_chars":90000,"truncated":true,"url":"https://e.com/"}
+verdict= accept
+wire= {"requested_url":"https://e.com","status_code":200,"truncated":false,"url":"https://e.com/"}
+verdict= accept
+wire= {"offset":3,"text":"span"}
+verdict= accept
+wire= {"base64":"aGk=","byte_count":2}
+--- port
+verdict= accept
+wire= {"requested_url":"https://e.com","truncated":false,"url":"https://e.com/"}
+verdict= accept
+wire= {"content_type":"text/html","image":{"base64":"aGVsbG8=","byte_count":4},"matches":[{"offset":10,"text":"body"}],"requested_url":"https://e.com","status_code":200,"text":"body text","title":"Page","total_chars":90000,"truncated":true,"url":"https://e.com/"}
+verdict= reject
+verdict= accept
+wire= {"offset":3,"text":"span"}
+verdict= accept
+wire= {"base64":"aGk=","byte_count":2}

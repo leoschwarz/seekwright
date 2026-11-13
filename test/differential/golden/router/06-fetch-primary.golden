@@ -1,0 +1,10 @@
+area: router
+case: 06-fetch-primary
+verification: differential-golden
+oracle: python
+projection: router
+--- oracle
+fetch_walk= scrappa
+origin= jina
+choose_instead=  Other configured fetch providers: scrappa. Retry once with `provider` set to one of those before concluding the page cannot be read.
+resolve_fetch= local

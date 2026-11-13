@@ -1,0 +1,7 @@
+area: fetch
+case: 01-url-plain
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+url= https://example.com/a?b=1
