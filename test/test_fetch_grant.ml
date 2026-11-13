@@ -193,7 +193,10 @@ let served_reader (switch : bool) env sw =
   | None -> Alcotest.fail "fetch is enabled by default; the stack must build"
   | Some (Error message) -> Alcotest.failf "build_fetch_stack: %s" message
   | Some (Ok (local, fallbacks)) ->
-      Test_support.check_int "no fallbacks in v1" 0 (List.length fallbacks)
+      (* The fixture's config names no [fetch.fallback], so the ladder is empty
+         and this suite reads only the primary route. What a built ladder looks
+         like is [test_fetch_ladder]'s. *)
+      Test_support.check_int "the default config names no fallback" 0 (List.length fallbacks)
       ;
       local
 

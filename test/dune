@@ -778,6 +778,26 @@
  (alias runtest)
  (action (diff no_output.expected cli_startup_primary.out)))
 
+; F6.1: the ladder the factory builds — which names a deployment gets (the
+; permission set, the credential and prerequisite gates) and what each built
+; row carries (its price), plus one round trip through a loopback renderer
+; fixture so the grant, the target vet and the vendor mapping meet in one call.
+(test
+ (name test_fetch_ladder)
+ (libraries
+  seekwright
+  seekwright.factory
+  seekwright.fetch
+  seekwright.fetch.stdlib
+  mcp-caps
+  cohttp-eio
+  http
+  eio
+  eio_main
+  unix
+  mirage-crypto-rng.unix
+  alcotest test_support))
+
 ; F6.1: the five vendor fallback modules over the scripted seam in
 ; [fetch_support/] — request shape, status arms, and envelope mapping, with no
 ; socket and no third party. Each suite is the port of its Python test module
