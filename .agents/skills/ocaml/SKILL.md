@@ -1032,3 +1032,64 @@ full evidence and Learning notes are in
 20. Library direction is stated in the `dune` comment and honoured:
     `mcp-caps → seekwright → seekwright.providers/fetch`; nothing in `lib/`
     names a fetch backend; `mcp-caps` never depends on a seekwright library.
+
+## Verified building F2.2 — the extraction pool (2026-11-13)
+
+- eio 1.6 flow types are **parameterised by the backend's resource tag**, and a
+  record type cannot carry an existential tag (`_` is rejected in a type
+  declaration). The pattern is `policy_net.ml`'s: parameterise the record and
+  hide the tags with a single-constructor GADT — `type ('tag,'clock) pool = …`
+  then `type t = T : ('tag,'clock) pool -> t`; destructure at the entry points.
+- `Eio.Net.t` takes one argument (`'tag Eio.Net.t`); `Eio.Time.Mono.t` takes
+  one; `Timeout.seconds : _ Mono.t -> float -> Timeout.t`. Wildcards in `val`
+  signatures are fine, wildcards in record declarations are not.
+- `Eio.Buf_read.take : int -> t -> string` (not bytes); the over-limit
+  exception is `Eio.Buf_read.Buffer_limit_exceeded` (arity 0 — not
+  `Exceed_buffer_limit`); there is **no** `Eio.Buf_read.Impossible` and short
+  reads raise `End_of_file`. Write side: `Eio.Buf_write.with_flow` —
+  `Eio.Flow.write` is cstruct-based and won't take a `string` list.
+- `Eio.Io` has arity 2 (`err * context`); `Eio.Net.connect` takes `~sw`.
+  AF_UNIX connect from eio (`env#net (`Unix path)`) works on both eio_main
+  backends (default linux and `EIO_BACKEND=posix`), which is what makes the
+  pool's transport cancellable.
+- A bound `AF_UNIX` socket answers `connect` **only after `Unix.listen`** —
+  bind alone leaves connects refused and `accept` a hot-spinning `EINVAL`.
+  Socket paths are limited to 107 chars (`sockaddr_un`); `bind`'s mode comes
+  from the umask, so `chmod 0o600` explicitly.
+- `Domain.spawn` needs a `unit -> 'a`: a labelled partial application that
+  already evaluates to `unit` must be wrapped `(fun () -> worker …)`.
+  Main-domain exit terminates the process even with live domains (verified),
+  so an un-joined pool cannot keep a dying test binary alive.
+- `Atomic.incr` / `Atomic.modify` do **not** exist (5.3); use
+  `Atomic.fetch_and_add` and a `compare_and_set` loop for max-tracking.
+  `Domain.id` supports `=`/`<>`, so "ran on another domain" is an `Atomic`
+  `Domain.id` compared with the test's `Domain.self ()`.
+- **`Eio.Semaphore.acquire` leaks a permit when a parked fiber is cancelled**
+  (verified with a standalone probe; the source's cancel hook answers "already
+  resumed" and the grant is dropped). A pool that cancels queue-waiters on a
+  deadline therefore shrinks its own budget forever and dead-locks the *next*
+  case's pool — it surfaced as a hang under `dune runtest`, not on the
+  standalone run. The safe shape: `Eio.Cancel.protect (fun () ->
+  Semaphore.acquire permits)` so the cancellation lands *after* the permit is
+  in hand, then `Eio.Fiber.check ()` **inside** the `Fun.protect` that
+  releases it (before it, the check itself would leak the just-taken permit),
+  and run the timeout only around the work. `Eio.Cancel.protect : (unit -> 'a)
+  -> 'a` and `Eio.Fiber.check : unit -> unit` both exist in eio 1.6.
+- Frame grammar hazard, caught by the port's own tests: an optional
+  length-prefixed field ([absent] or [len, bytes]) must consume **one** length
+  — a reader that matches on the length and then calls the generic
+  length+bytes reader reads a second length and desynchronises the frame.
+  Both sides (request and response) had this bug until tested.
+- **`Unix.file_descr`s are process-wide under `Domain.spawn`** — domains are
+  threads over one fd table. An fd handed to a spawned domain (e.g. a
+  readiness-pipe write-end the child `close`s) must be closed **exactly once
+  in total**: a second `close` from the parent lands on whatever number another
+  domain has reused in between and silently kills that domain's socket — the
+  observed symptom was an accept loop that never received its quit sentinel
+  and a `Domain.join` that hung forever, at flaky per-run odds. For a
+  readiness handshake: the worker closes the write-end, the parent only ever
+  closes the read-end; EOF then can't occur, so make the child always write a
+  byte ('R'/'E') before it can die instead of relying on EOF.
+- The GMP env from `plans/infra-setup.md` is `CPATH` / `LIBRARY_PATH` /
+  `PKG_CONFIG_PATH` under `/home/leo/.local/opt/gmp-dev` — not `GMP_H`/`GMP_L`;
+  wrong names pass small builds and fail linking `zarith`-using targets.
