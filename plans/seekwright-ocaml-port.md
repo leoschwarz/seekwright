@@ -467,3 +467,77 @@ library direction changed.
 
 Gate at landing: `dune build @install`, `dune runtest --force` and
 `dune build @doc` exit 0. No default-gate step contacts a provider.
+=======
+## 13. F1.1 — one routable provider set (2026-11-13)
+
+Landed on `f1-1-routing`. Spec: `plans/ocaml-finalisation.md` §F1.1.
+
+**One set, read once.** `Engine.Search`'s routing table now derives every
+dispatchable field from the adapter registry it was handed: `providers` is the
+registry, and `effective` is the registry narrowed by the permission set — not
+`Config.effective_providers`, which stays what `--check` says about a *file*.
+That closes the split the port had opened: with an enabled name this build has
+no adapter for, a caller naming it got the router's "not enabled on this
+server" refusal while the default route resolved to it and the engine's
+no-adapter branch answered 502. The same pair of values cannot now produce both
+answers, and `search.fallback` rungs for unbuilt names are inert for the same
+reason they are inert in Python — `Router.fallback_rungs` filters against the
+registry, and the registry is what routing describes. `Config.effective_providers`
+is untouched: `unnamed_walks_free` reads the table's `effective`, so the free
+walk now asks whether the *built* set is all free.
+
+**The construction-time decision.** `Factory.startup_verdict` runs inside
+`build_app` before an engine exists, and refuses three pairings: an explicitly
+enabled name with no adapter (all offenders in one sorted line, naming what this
+build *can* dispatch); an implicit keyless default that leaves no keyless
+adapter built (the transition exception stops applying once applying it would
+serve nothing); and a `default_provider` outside the built set, wherever it came
+from — config validation already refuses one outside `enabled`, and this is the
+enabled⇒built step. `bin/main.ml` turns an `Error` there into its existing
+"seekwright: …" plus exit 1. The exception to the rule is exactly Python's
+implicit-default exception, kept for the transition because the port carries one
+of the three keyless names: an unconfigured install starts over `freeserp` and
+the startup line and `startup.providers_unsupported` name the two it skipped.
+
+**`Factory.classify` and `--check`.** One classification feeds both paths:
+`set_report` carries `enabled`, `effective`, `built`, `unsupported` (explicit,
+startup-fatal) and `skipped` (implicit, disclosed by name) — the same fact split
+by how the config came to hold it — plus `untested`, which is this port's own
+status: Python's four untested names *plus every name this build dispatches*,
+until the OCaml live runner records a run of its own. A reachability probe never
+moves a name, so `untested` prints beside the ready count and is never folded
+into it. `--check` prints all six lines and every offending per-name row
+("not built on this port", one problem each) instead of the old
+"unsupported (no connectivity probe)", which read as a connectivity verdict on a
+name that has no adapter at all. The classification lives in `lib/factory`, not
+`bin`, so F3.2's CLI extraction moves a call site rather than a rule; the
+coordinator approved editing `bin/main.ml` for the startup line and this section
+alone.
+
+**Reports and pins.** `/healthz` documents and answers the built set — the one
+set every route resolves against — and the startup line's `providers` field is
+now that set too, so `bin/smoke_notes.expected` is re-pinned from
+`providers="exa:free,freeserp,parallel:free"` to `providers="freeserp"` (the
+`unsupported=` field and its WARNING line are unchanged). Two suites carry the
+tests: `test/test_routing_sets.ml` (10 cases — the shipped default over its built
+remainder, the no-keyless-left refusal, only-`exa:free` as fatal, an explicit
+mix refused once and sorted, `build_app` refusing end to end, permission
+narrowing, the five sets apart on one config, and `/healthz` ×2), and
+`test_engine.ml`'s "one routable set" group (4 cases — a named unbuilt name
+refuses rather than failing, the free walk over built∩permitted, an unbuilt
+ladder rung skipped with no phantom "Fallbacks also failed", and the runtime
+no-adapter branch staying a returned value rather than a crash).
+`Engine.Search.create`'s signature is unchanged on purpose: the off-limits suites
+(`log_guard/field_sets`, `differential/projection`, `test_health_monitor`) build
+engines directly, so construction-time validation belongs to `build_app`, and the
+engine's own promise — fail through the return value — is what the fourth case
+pins. A third pin is new at the CLI: `bin/check_unbuilt.toml` plus a `bin/dune`
+rule runs `--check` over a deployment that enables only unbuilt names, so
+nothing is constructed, nothing is dialled, and the five-set rendering and the
+problem-count exit code are blessed in `bin/check_unbuilt.expected`
+(`check_unbuilt_notes.expected` pins the empty stderr a diagnosis must keep).
+No suite reached a provider endpoint.
+
+Gate at landing: `dune build @install`, `dune runtest --force` and
+`dune build @doc` all exit 0, including the stdio smoke and the new `--check`
+rule.
