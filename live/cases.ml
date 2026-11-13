@@ -176,6 +176,9 @@ let price_note row =
     | Registry.Extra_results { first; per_extra_1k } ->
         Printf.sprintf "$%.2f per 1k for the first %d results, then $%.2f per 1k"
           price first per_extra_1k
+    | Registry.Credit_multiplier { over; multiplier } ->
+        Printf.sprintf "$%.2f per 1k credits, x%d past %d results" price multiplier
+          over
 
 let cost_class selector =
   match selector with
