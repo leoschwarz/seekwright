@@ -11,7 +11,34 @@
     {!Mcp_caps.Policy.endpoint}), so a provider can dial only the vendor it
     was built for; [fetch]'s local reader gets the public-web grant
     ([Policy.with_public_web]). The grant sets are derived from enabled
-    provider names — there is no second egress config key. *)
+    provider names — there is no second egress config key.
+
+    {1 The audit trail}
+
+    Every grant this module builds for the served process goes through one
+    funnel, which sets the config's per-operation bound and wraps the grant in
+    {!audit_sink} exactly once. One line per low-level operation therefore
+    reaches the application's log: {!audit_sink} renders an {!Mcp_caps.Event.t}
+    as the [caps.operation] event, and an [Event.t] cannot carry a URL, a query,
+    a header, a body or a secret. A grant built without a sink is a diagnostic
+    grant ([--check] probing a deployment), never a serving one.
+
+    [Authority.with_operation_budget] is deliberately absent from this module.
+    A budget is a caller's counter, and server construction has no caller scope
+    to attach one to; see {!Mcp_caps.Budget}. *)
+
+(** The audit sink: one [caps.operation] line per authority operation.
+
+    Fields: [operation] (a constant name from the capability API), [outcome]
+    ([ok] or [failed:<kind>]), [bytes] when the operation measured a payload, and
+    one field per bounded note the operation attached ([status] for a network
+    request, [entries] for a directory listing). A note whose key would collide
+    with one of the three fixed fields is written under [note_<key>], so the
+    line's shape never depends on what an operation happened to report.
+
+    Exported so the field dictionary can be pinned without driving a socket;
+    {!build_app} is what installs it, on every grant. *)
+val audit_sink : Seekwright.Engine.log -> Mcp_caps.Event.t -> unit
 
 (** What one pass of {!build_providers} produced. *)
 type providers = {
@@ -40,20 +67,26 @@ val build_providers :
   net:_ Eio.Net.t ->
   mono_clock:_ Eio.Time.Mono.t ->
   now:(unit -> float) ->
+  ?audit:(Mcp_caps.Event.t -> unit) ->
   Seekwright.Config.t ->
   providers
 (** Instantiate every enabled provider that has the credentials and the
-    adapter this build carries. *)
+    adapter this build carries.
+
+    [?audit] is the sink each built adapter's grant is wrapped with; [build_app]
+    supplies it, and [--check] does not, because a probe of a deployment is not a
+    served request. *)
 
 val grant_of_endpoint :
   sw:Eio.Switch.t ->
   net:_ Eio.Net.t ->
   mono_clock:_ Eio.Time.Mono.t ->
   timeout_seconds:float ->
+  ?audit:(Mcp_caps.Event.t -> unit) ->
   Mcp_caps.Policy.endpoint ->
   (Mcp_caps.Authority.Net.t, string) result
-(** One endpoint-scoped [Net] grant, with its per-operation bound set from
-    config — [policy.provider_timeout_seconds] for a provider or a probe,
+(** One endpoint-scoped [Net] grant, wrapped once in [?audit], with its
+    per-operation bound set from config — [policy.provider_timeout_seconds] for a provider or a probe,
     [fetch.timeout_seconds] for the fetch grant, [agent.model_timeout_seconds]
     for the model request. Exposed so the timeout's behaviour can be pinned
     against a stalling loopback server. *)
@@ -63,10 +96,12 @@ val probe_net :
   net:_ Eio.Net.t ->
   mono_clock:_ Eio.Time.Mono.t ->
   timeout_seconds:float ->
+  ?audit:(Mcp_caps.Event.t -> unit) ->
   Mcp_caps.Policy.endpoint list ->
   Seekwright.Provider.Net.t
 (** The shared network seam for the readiness probes: one grant over the union
-    of the given endpoints, bounded by [timeout_seconds]. An empty list answers
+    of the given endpoints, bounded by [timeout_seconds], wrapped once in
+    [?audit]. An empty list answers
     [Unavailable] to every request rather than building a grant that allows
     nothing. [--check] and the serving path's health monitor both read it, so
     the two probes dial under the same policy. *)
@@ -80,6 +115,7 @@ val build_fetch_stack :
   sw:Eio.Switch.t ->
   net:_ Eio.Net.t ->
   mono_clock:_ Eio.Time.Mono.t ->
+  ?audit:(Mcp_caps.Event.t -> unit) ->
   Seekwright.Config.t ->
   ((Seekwright.Engine.Fetch.fetcher * Seekwright.Engine.Fetch.fetcher list), string) result option
 (** [None] when [[fetch] enabled = false]. Otherwise the local reader as the
