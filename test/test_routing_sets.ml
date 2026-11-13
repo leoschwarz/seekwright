@@ -20,7 +20,6 @@ module Usage = Seekwright.Usage
 module A = Alcotest
 open Test_support
 
-let no_log _level _event _fields = ()
 let now () = 1768478400.
 let clock () = 1768478400.
 
@@ -50,33 +49,37 @@ let the_default_config_starts_over_its_built_remainder () =
   with_env (fun ~env ~sw ->
     let built = build ~env ~sw Config.default in
     let sets = Factory.classify Config.default built in
-    A.(check (list string) "the implicit default dispatches the one free adapter it carries"
-         [ "freeserp" ] sets.Factory.built);
-    (* The skipped keyless names are disclosed by name — that is what keeps
-       the exception honest — and land in [skipped], never in [unsupported],
-       because no [providers] table asked for them. *)
-    A.(check (list string) "the unported keyless defaults are the skipped set"
-         [ "exa:free"; "parallel:free" ] sets.Factory.skipped);
+    (* The implicit keyless default is the whole keyless set, and every name in
+       it is now built on this port: the transition's exception has nothing left
+       to skip. *)
+    A.(check (list string) "the implicit default dispatches every keyless adapter it carries"
+         [ "exa:free"; "freeserp"; "parallel:free" ] sets.Factory.built);
+    (* The skip lane is where an unported keyless default would be disclosed by
+       name — that is what keeps the exception honest — and it is empty because
+       no keyless default is unported. The pin's job is that emptiness: a name
+       that moved to [unsupported] under an implicit config would turn a
+       config the operator never wrote into a startup failure. *)
+    A.(check (list string) "no keyless default is left to skip" [] sets.Factory.skipped);
     A.(check (list string) "nothing is startup-fatal under an implicit config"
          [] sets.Factory.unsupported);
-    A.(check (list string) "the build pass still discloses them beside the startup line"
-         [ "exa:free"; "parallel:free" ] built.Factory.unsupported);
+    A.(check (list string) "and the build pass discloses nothing beside the startup line"
+         [] built.Factory.unsupported);
     A.(check bool "and the default config may start" true
          (Result.is_ok (Factory.startup_verdict Config.default built))))
 
 let the_built_free_remainder_is_ocaml_live_tested () =
   (* OCaml-untested is this port's own status: a name leaves it only in the
      change that records its successful OCaml live run, never because Python
-     was green for it. F4.3's first acceptance check ran the two keyless built
-     names, so the one name the implicit config dispatches is now tested and
-     the untested set is empty. *)
+     was green for it. F4.3's first acceptance check ran [freeserp]; the two MCP
+     keyless names F5.1 registered have not run live from this port yet, so the
+     implicit config dispatches three names and reports two as untested. *)
   with_env (fun ~env ~sw ->
     let built = build ~env ~sw Config.default in
     let sets = Factory.classify Config.default built in
-    A.(check (list string) "the one dispatched name is live-tested on this port"
-         [ "freeserp" ] sets.Factory.built);
-    A.(check (list string) "and no built name is OCaml-untested" []
-         sets.Factory.untested))
+    A.(check (list string) "the dispatched set is the keyless default"
+         [ "exa:free"; "freeserp"; "parallel:free" ] sets.Factory.built);
+    A.(check (list string) "the names still awaiting their OCaml live run"
+         [ "exa:free"; "parallel:free" ] sets.Factory.untested))
 
 let no_keyless_adapter_left_refuses_the_implicit_config () =
   (* The transition exception stops applying when it would serve nothing: a
@@ -91,6 +94,7 @@ let no_keyless_adapter_left_refuses_the_implicit_config () =
       endpoints = [];
       grant_errors = [];
       unsupported = [ "exa:free"; "freeserp"; "parallel:free" ];
+      warmups = [];
     }
   in
   let text = refusal (Factory.startup_verdict Config.default empty) in
@@ -103,43 +107,70 @@ let no_keyless_adapter_left_refuses_the_implicit_config () =
 let only_exa_free_is_startup_fatal () =
   (* [exa:free] is a keyless name, so an *explicit* table enabling it is the
      operator asking for a route this port does not carry — and that is fatal,
-     not a skip: the skip lane belongs to the implicit default alone. *)
-  with_env (fun ~env ~sw ->
-    let cfg = config [ "exa:free" ] in
-    let built = build ~env ~sw cfg in
-    let sets = Factory.classify cfg built in
-    A.(check (list string) "built: nothing" [] sets.Factory.built);
-    A.(check (list string) "unsupported: the explicit name" [ "exa:free" ]
-         sets.Factory.unsupported);
-    A.(check (list string) "skipped: the skip lane is not for explicit names"
-         [] sets.Factory.skipped);
-    let text = refusal (Factory.startup_verdict cfg built) in
-    includes "the phrase the operator searches for" "not built on this port" text;
-    includes "the offending name" "exa:free" text)
+     not a skip: the skip lane belongs to the implicit default alone. Every
+     keyless default is built here now, so the pair is hand-built the way
+     [no_keyless_adapter_left_refuses_the_implicit_config] builds its pair: the
+     distinction is a rule about verdicts, not a fact about which rows happen
+     to be ported this week. *)
+  let cfg = config [ "exa:free" ] in
+  let unbuilt =
+    {
+      Factory.built = [];
+      probe_table = [];
+      endpoints = [];
+      grant_errors = [];
+      unsupported = [ "exa:free" ];
+      warmups = [];
+    }
+  in
+  let sets = Factory.classify cfg unbuilt in
+  A.(check (list string) "built: nothing" [] sets.Factory.built);
+  A.(check (list string) "unsupported: the explicit name" [ "exa:free" ]
+       sets.Factory.unsupported);
+  A.(check (list string) "skipped: the skip lane is not for explicit names"
+       [] sets.Factory.skipped);
+  let text = refusal (Factory.startup_verdict cfg unbuilt) in
+  includes "the phrase the operator searches for" "not built on this port" text;
+  includes "the offending name" "exa:free" text
+
+let stub (n : string) : Provider.t =
+  (module struct
+     let name = n
+     let cost_per_1k = 0.001
+     let cost_for n = float_of_int n /. 1000.
+     let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
+     let aclose () = ()
+   end)
 
 let an_explicit_mix_names_every_offender_sorted_in_one_line () =
-  (* Enabled: a built name, and two unbuilt ones written out of order. The
-     refusal carries both, sorted, in one message — fixing a config should
-     take one restart, not one per offender — and the built name's presence
-     does not rescue the pairing. *)
-  with_env (fun ~env ~sw ->
-    let cfg = config ~default:"freeserp" [ "exa:free"; "freeserp"; "exa" ] in
-    let built = build ~env ~sw cfg in
-    A.(check (list string) "the offenders are sorted by the build pass itself"
-         [ "exa"; "exa:free" ] built.Factory.unsupported);
-    let text = refusal (Factory.startup_verdict cfg built) in
-    includes "both in one line, sorted" "exa, exa:free" text;
-    includes "the phrase" "not built on this port" text;
-    includes "and what can be dispatched instead" "freeserp" text;
-    (* End to end: [build_app] refuses the same config with the same words,
-       before any engine exists to serve it. *)
-    match
-      Factory.build_app ~sw ~env ~now ~log:no_log ~allowed_hosts:[] cfg
-    with
-    | Ok _ -> A.fail "build_app served an explicitly unbuilt provider"
-    | Error message ->
-        includes "the app refusal is the verdict's own" "not built on this port"
-          message)
+  (* Enabled: a built name and two this build cannot dispatch. Since the F5.1
+     wave every row carries an adapter, so no real config's build pass leaves
+     an offender to find and the pair is hand-built — written in the shape the
+     build pass produces, its postcondition that offenders arrive sorted
+     included. The rule pinned is the refusal's: it carries every offender,
+     sorted, in one message — fixing a config should take one restart, not one
+     per offender — and the built name's presence does not rescue the pairing.
+     [build_app] consults this same verdict before any engine exists, and
+     [test_boot.ml] pins that path at its green end: the shipped default
+     passes it. *)
+  let cfg = config ~default:"freeserp" [ "search1api"; "freeserp"; "serpapi" ] in
+  let unbuilt =
+    {
+      Factory.built = [ ("freeserp", stub "freeserp") ];
+      probe_table = [];
+      endpoints = [];
+      grant_errors = [];
+      unsupported = [ "search1api"; "serpapi" ];
+      warmups = [];
+    }
+  in
+  let sets = Factory.classify cfg unbuilt in
+  A.(check (list string) "the built half of the mix still builds" [ "freeserp" ]
+         sets.Factory.built);
+  let text = refusal (Factory.startup_verdict cfg unbuilt) in
+  includes "both in one line, sorted" "search1api, serpapi" text;
+  includes "the phrase" "not built on this port" text;
+  includes "and what can be dispatched instead" "freeserp" text
 
 let a_default_outside_the_built_set_is_refused_wherever_it_came_from () =
   (* Config validation already refuses a default outside [enabled]; this is
@@ -152,6 +183,7 @@ let a_default_outside_the_built_set_is_refused_wherever_it_came_from () =
       endpoints = [];
       grant_errors = [];
       unsupported = [];
+      warmups = [];
     }
   in
   let text = refusal (Factory.startup_verdict (config ~default:"freeserp" [ "freeserp" ]) lying) in
@@ -177,38 +209,6 @@ let permission_narrowing_narrows_the_sets_not_the_startup () =
     A.(check bool "and the server starts" true
          (Result.is_ok (Factory.startup_verdict cfg built))))
 
-(* {1 [--check]'s five-way distinction} *)
-
-let the_five_sets_are_reported_apart () =
-  (* One config that touches all five categories at once: [exa] is enabled,
-     unsupported and startup-fatal; [search1api] is enabled, permitted and
-     built — its key stands in the environment so the build pass constructs it —
-     and remains in the untested set because this port has never run its OCaml
-     live test; [freeserp] is enabled, permitted, built and OCaml live-tested by
-     F4.3's keyless run, so it is no longer in the untested set. No category
-     collapses into another, and none of them says "ready": the ready count is
-     the probe's, printed elsewhere. *)
-  Unix.putenv (Config.api_key_env_var "search1api") "fixture-key";
-  with_env (fun ~env ~sw ->
-    let cfg =
-      config ~permitted:[ "freeserp"; "search1api" ] [ "freeserp"; "exa"; "search1api" ]
-    in
-    let sets = Factory.classify cfg (build ~env ~sw cfg) in
-    A.(check (list string) "enabled" [ "exa"; "freeserp"; "search1api" ]
-         sets.Factory.enabled);
-    A.(check (list string) "effective" [ "freeserp"; "search1api" ] sets.Factory.effective);
-    A.(check (list string) "built" [ "freeserp"; "search1api" ] sets.Factory.built);
-    A.(check (list string) "unsupported" [ "exa" ] sets.Factory.unsupported);
-    A.(check (list string) "OCaml-untested, built names included"
-         [ "search1api" ] sets.Factory.untested);
-    A.(check bool "and the verdict is the startup-fatal reading" false
-         (Result.is_ok (Factory.startup_verdict cfg (build ~env ~sw cfg)))));
-  (* [Unix] has no unsetenv, and [Config.api_key] reads an empty value as
-     absent, so restoring means writing the empty form. *)
-  Unix.putenv (Config.api_key_env_var "search1api") ""
-
-(* {1 [/healthz] reports the built set} *)
-
 let stub (n : string) : Provider.t =
   (module struct
      let name = n
@@ -217,6 +217,49 @@ let stub (n : string) : Provider.t =
      let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
      let aclose () = ()
    end)
+
+(* {1 [--check]'s five-way distinction} *)
+
+let the_five_sets_are_reported_apart () =
+  (* One config that touches all five categories at once: [serper] is enabled
+     and unsupported so the verdict is startup-fatal; [search1api] is enabled,
+     permitted and built — its key stands in the environment so the build pass
+     constructs it — and remains in the untested set because this port has
+     never run its OCaml live test; [freeserp] is enabled, permitted, built
+     and OCaml live-tested by F4.3's keyless run, so it is no longer in the
+     untested set. Since the F5.1 wave every row is built, so the one
+     unbuilt name comes from dropping [serper] back out of the real build
+     pass's output — the exact shape an unbuilt row leaves behind. No category
+     collapses into another, and none of them says "ready": the ready count is
+     the probe's, printed elsewhere. *)
+  Unix.putenv (Config.api_key_env_var "search1api") "fixture-key";
+  with_env (fun ~env ~sw ->
+    let cfg =
+      config ~permitted:[ "freeserp"; "search1api" ] [ "freeserp"; "serper"; "search1api" ]
+    in
+    let real = build ~env ~sw cfg in
+    let unbuilt_serper =
+      {
+        real with
+        Factory.built = List.filter (fun (name, _) -> name <> "serper") real.Factory.built;
+        unsupported = [ "serper" ];
+      }
+    in
+    let sets = Factory.classify cfg unbuilt_serper in
+    A.(check (list string) "enabled" [ "freeserp"; "search1api"; "serper" ]
+         sets.Factory.enabled);
+    A.(check (list string) "effective" [ "freeserp"; "search1api" ] sets.Factory.effective);
+    A.(check (list string) "built" [ "freeserp"; "search1api" ] sets.Factory.built);
+    A.(check (list string) "unsupported" [ "serper" ] sets.Factory.unsupported);
+    A.(check (list string) "OCaml-untested, built names included"
+         [ "search1api" ] sets.Factory.untested);
+    A.(check bool "and the verdict is the startup-fatal reading" false
+         (Result.is_ok (Factory.startup_verdict cfg unbuilt_serper))));
+  (* [Unix] has no unsetenv, and [Config.api_key] reads an empty value as
+     absent, so restoring means writing the empty form. *)
+  Unix.putenv (Config.api_key_env_var "search1api") ""
+
+(* {1 [/healthz] reports the built set} *)
 
 let make_app ~(enabled : string list) ?default ?permitted (built : string list) =
   let cfg = config ?default ?permitted enabled in

@@ -115,20 +115,17 @@ let every_name_has_a_row_built_or_deferred () =
     List.filter_map
       (fun r ->
         match r.Registry.build with
-        | Registry.Adapter _ -> None
+        | Registry.Adapter _ | Registry.Adapter_session _ -> None
         | Registry.Deferred wave ->
             if wave <> "" then Some r.Registry.name else A.failf "%s defers with no wave named" r.Registry.name)
       Registry.rows
   in
-  let unbuilt =
-    List.sort String.compare
-      [ "exa"; "exa:free"; "parallel"; "parallel:free" ]
-  in
   A.(check (list string) "the built rows"
-         [ "algolia"; "anysearch"; "deepseek"; "freeserp"; "linkup"; "querit"; "scrappa";
-           "search1api"; "searxng"; "serpapi"; "serper"; "tavily"; "tinyfish" ]
+         [ "algolia"; "anysearch"; "deepseek"; "exa"; "exa:free"; "freeserp"; "linkup"
+         ; "parallel"; "parallel:free"; "querit"; "scrappa"; "search1api"; "searxng"
+         ; "serpapi"; "serper"; "tavily"; "tinyfish" ]
          (List.sort String.compare built);
-    check (list string) "the deferred rows are the rest" unbuilt
+    check (list string) "no row defers any more — the F5.1 wave landed" []
        (List.sort String.compare deferred);
     check int "the two halves are the seventeen" 17 (List.length built + List.length deferred));
   (* live-tested is a property of this port: the runner (F4.3) retires a name in
@@ -186,7 +183,11 @@ let the_rows_price_their_names () =
 
 (* Exa publishes a subscription plus a per-result rung above it; Serper publishes a
    credit count that doubles past ten results; every other name charges the same per
-   query. *)
+   query. The two MCP halves ride Exa's rung because their adapters inherit its
+   [cost_for] — [exa:free] is the same class at a fixed zero, and the oracle's
+   [ParallelMcpProvider] is a subclass of [ExaMcpProvider] — so the row models the
+   rung and the zero short-circuit in [Registry.cost_of] is what keeps a free name
+   quoting zero. *)
 let the_cost_models_are_the_published_shapes () =
   List.iter
     (fun r ->
@@ -219,8 +220,8 @@ let the_cost_models_are_the_published_shapes () =
       (fun r -> match r.Registry.cost_model with Registry.Flat -> None | _ -> Some r.Registry.name)
       Registry.rows
   in
-  A.(check (list string) "two names bill differently per query, and they are the billed halves"
-         [ "exa"; "serper" ] (List.sort String.compare rung))
+  A.(check (list string) "four names bill differently per query, and they are the two Exa names and the two MCP halves that inherit its rung"
+         [ "exa"; "exa:free"; "parallel:free"; "serper" ] (List.sort String.compare rung))
 
 (* {1 Timeout floor: config lengthens, never shortens} *)
 
@@ -428,8 +429,10 @@ let the_probe_asks_the_endpoint_the_grant_allows () =
       match (asked, Registry.grant_endpoint row pc) with
       | None, _ ->
           (* the MCP-backed names the oracle proves with a session handshake,
-             which this contract has no [warmup] member for yet: no probe, and
-             [--check] reports them as unsupported rather than unreachable *)
+             which the readiness contract's bodyless-GET vocabulary cannot
+             drive: no probe, and [--check] reports them as unsupported rather
+             than unreachable — {!Provider.session.warmup} is the proof the
+             rows carry instead, handed out through the factory's [warmups] *)
           A.(check bool (name ^ " is probe-free because it is MCP-backed") true
                (List.mem name mcp_backed))
       | Some url, Ok endpoint ->
@@ -681,30 +684,38 @@ let build_all () =
 let construction_answers_from_the_rows () =
   let providers = build_all () in
   A.
-    (check (list string) "this build dispatches thirteen of the seventeen"
-       [ "algolia"; "anysearch"; "deepseek"; "freeserp"; "linkup"; "querit"; "scrappa";
-         "search1api"; "searxng"; "serpapi"; "serper"; "tavily"; "tinyfish" ]
+    (check (list string) "this build dispatches all seventeen"
+       [ "algolia"; "anysearch"; "deepseek"; "exa"; "exa:free"; "freeserp"; "linkup"
+       ; "parallel"; "parallel:free"; "querit"; "scrappa"; "search1api"; "searxng"
+       ; "serpapi"; "serper"; "tavily"; "tinyfish" ]
        (List.sort String.compare (List.map fst providers.Factory.built));
      (* a deferred row is an inventoried name with no dispatch, reported as such
-        rather than dropped, and sorted because two sentences print this set *)
-     check (list string) "the other four are unsupported"
-       [ "exa"; "exa:free"; "parallel"; "parallel:free" ]
+        rather than dropped, and sorted because two sentences print this set;
+        the F5.1 wave retired the last four *)
+     check (list string) "nothing is left unsupported" []
        providers.Factory.unsupported;
      check (list (pair string string)) "and no grant was refused along the way" []
        providers.Factory.grant_errors);
+  (* the MCP-backed rows hand their [warmup] to the startup path; the HTTP
+     adapters own no session and contribute nothing to that list *)
+  A.(check (list string) "the session-carrying names"
+       [ "exa"; "exa:free"; "parallel:free" ]
+       (List.sort String.compare (List.map fst providers.Factory.warmups)));
   (* the probe rows and the allowlist entries come from the built names' rows,
      so [--check] and the grant answer from the same table *)
   A.(check (list string) "one probe row per built name"
-       [ "algolia"; "anysearch"; "deepseek"; "freeserp"; "linkup"; "querit"; "scrappa";
-         "search1api"; "searxng"; "serpapi"; "serper"; "tavily"; "tinyfish" ]
+       [ "algolia"; "anysearch"; "deepseek"; "exa"; "exa:free"; "freeserp"; "linkup"
+       ; "parallel"; "parallel:free"; "querit"; "scrappa"; "search1api"; "searxng"
+       ; "serpapi"; "serper"; "tavily"; "tinyfish" ]
        (List.sort String.compare (List.map fst providers.Factory.probe_table)));
   List.iter
     (fun name ->
       let endpoint = ok (Registry.grant_endpoint (row_of name) (entry_of name)) in
       A.(check bool (name ^ "'s allowlist entry is its row's endpoint") true
            (List.mem (show_endpoint endpoint) (List.map show_endpoint providers.Factory.endpoints))))
-    [ "anysearch"; "freeserp"; "linkup"; "scrappa"; "searxng"; "serper"; "tavily";
-      "tinyfish"; "search1api"; "serpapi"; "querit"; "deepseek" ];
+    [ "anysearch"; "exa"; "exa:free"; "freeserp"; "linkup"; "parallel"; "parallel:free"
+    ; "scrappa"; "searxng"; "serper"; "tavily"; "tinyfish"; "search1api"; "serpapi"
+    ; "querit"; "deepseek" ];
   (* the row's probe is the one in the table, so [--check] asks what the row
      says rather than what a probe table somewhere else says *)
   List.iter
@@ -724,6 +735,19 @@ let an_adapter_is_built_at_its_rows_figures () =
   let unused_net =
     { Provider.Net.request = (fun _request -> failwith "this fixture never dials") }
   in
+  let direct_args (row : Registry.row) (name : string) : Registry.args =
+    {
+      Registry.net = unused_net;
+      now = (fun () -> 1768478400.);
+      key = Some sentinel;
+      entry = entry_of name;
+      cost_per_1k = 1.25;
+      snippet_chars = 400;
+      text_chars = 2000;
+      endpoint = ok (Registry.uri row (entry_of name));
+      log = None;
+    }
+  in
   List.iter
     (fun name ->
       let row = row_of name in
@@ -732,39 +756,36 @@ let an_adapter_is_built_at_its_rows_figures () =
         | Some adapter -> adapter
         | None -> A.failf "%s did not build" name
       in
-      A.(check string "the adapter answers to the row's name" name (Provider.name adapter);
-        check (float 1e-9) (name ^ " is priced by its row")
-          (Registry.price row (entry_of name)) (Provider.cost_per_1k adapter));
-      match row.Registry.build with
-      | Registry.Adapter make ->
-          (* the row's builder is the only producer of a provider here, and a
-             builder run with a price of its own passes that price through *)
-          let args : Registry.args =
-            {
-              Registry.net = unused_net;
-              now = (fun () -> 1768478400.);
-              key = Some sentinel;
-              entry = entry_of name;
-              cost_per_1k = 1.25;
-              snippet_chars = 400;
-              text_chars = 2000;
-              endpoint = ok (Registry.uri row (entry_of name));
-            }
-          in
-          let built = make args in
-          A.(check (float 1e-9) "a builder run directly takes its price from its arguments" 1.25
-               (Provider.cost_per_1k built));
-          List.iter
-            (fun n ->
-              (* the row's pricing model is the figure the adapter reports:
-                 [--check --live] prints the row's [cost_of], a caller's notice
-                 carries the adapter's [cost_for], and two spellings of a quote is
-                 how one of them starts lying *)
-              A.(check (float 1e-9) (name ^ " prices " ^ string_of_int n ^ " results like its row")
-                   (Registry.cost_of row ~cost_per_1k:1.25 n) (Provider.cost_for built n)))
-            [ 1; 10; 20 ]
-      | Registry.Deferred wave -> A.failf "%s built from a row deferred to %s" name wave)
-    [ "anysearch"; "freeserp" ]
+      A.(check string "the adapter answers to the row's name" name (Provider.name adapter));
+      (* the row's builder is the only producer of a provider here, and a
+         builder run with a price of its own passes that price through: the
+         [1.25] handed to [args] is the figure the adapter shows, and it is
+         the figure the row's [cost_of] model then prices by — for a session
+         row the pair arrives beside the adapter, and it is the pair's
+         adapter that carries the price *)
+      let built =
+        match row.Registry.build with
+        | Registry.Adapter make -> make (direct_args row name)
+        | Registry.Adapter_session make ->
+            (make (direct_args row name)).Provider.adapter
+        | Registry.Deferred wave -> A.failf "%s built from a row deferred to %s" name wave
+      in
+      A.(check (float 1e-9) "a builder run directly takes its price from its arguments" 1.25
+           (Provider.cost_per_1k built));
+      List.iter
+        (fun n ->
+          (* the row's pricing model is the figure the adapter reports:
+             [--check --live] prints the row's [cost_of], a caller's notice
+             carries the adapter's [cost_for], and two spellings of a quote is
+             how one of them starts lying *)
+          A.(check (float 1e-9) (name ^ " prices " ^ string_of_int n ^ " results like its row")
+               (Registry.cost_of row ~cost_per_1k:1.25 n) (Provider.cost_for built n)))
+        [ 1; 10; 20 ])
+    [ "anysearch"; "exa"; "exa:free"; "freeserp"; "parallel"; "parallel:free" ]
+  (* [parallel:free]'s row fixes its price at zero but passes [a.cost_per_1k]
+     into the builder, which defaults to the row's figure through [Registry.price]
+     — the pass-through walk above sees the entry's price on that name only when
+     the row itself can bill, and this name shows the row's zero either way. *)
 
 (* A config correction reaches the adapter through the row, which is the whole
    point of [cost_per_1k] being a config key: the figure [--check --live] prints

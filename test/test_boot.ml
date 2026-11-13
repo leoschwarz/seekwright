@@ -50,10 +50,19 @@ let test_the_names_this_build_cannot_dispatch_are_reported () =
     Factory.build_providers ~sw ~net:(env#net) ~mono_clock:(env#mono_clock)
       ~now:Unix.gettimeofday Config.default
   in
-  A.(check (list string) "the keyless names with no adapter"
-       [ "exa:free"; "parallel:free" ] built.Factory.unsupported);
-  A.(check (list string) "the one this build carries" [ "freeserp" ]
-       (List.map fst built.Factory.built))
+  (* The keyless default is fully buildable on this port: with [exa:free] and
+     [parallel:free] built, the default config carries no name it cannot
+     dispatch, and [unsupported] stays the sentence it is — a name enabled by
+     the operator that no row on this port serves. *)
+  A.(check (list string) "no keyless name is left without an adapter" []
+       built.Factory.unsupported);
+  A.(check (list string) "the keyless default is what this build carries"
+       [ "exa:free"; "parallel:free"; "freeserp" ]
+       (List.map fst built.Factory.built));
+  (* And the two MCP-backed names come with the [warmup] their rows carry;
+     [freeserp] owns no session and contributes nothing to that list. *)
+  A.(check (list string) "the session-carrying names" [ "exa:free"; "parallel:free" ]
+       (List.map fst built.Factory.warmups))
 
 let () =
   Mirage_crypto_rng_unix.use_default ();

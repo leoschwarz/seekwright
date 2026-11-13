@@ -6,9 +6,9 @@ permitted   (unset: every enabled provider)
 providers
   enabled   exa:free
   effective exa:free
-  built     (none)
-  unsupported exa:free  (not built on this port; the server refuses to start on this config)
-  exa:free  not built on this port
+  built     exa:free
+  untested  exa:free is untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
+  exa:free  unsupported (no connectivity probe) unbilled
 no providers ready -- searches would fail until configured
 fetch
   enabled   40000 chars max, 3 redirects, private addresses allowed (the local reader is built with the private-web grant)

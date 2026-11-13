@@ -20,9 +20,12 @@
    what that failure is called are per-vendor facts, pinned in each adapter's
    own suite, exactly as the Python suite leaves that split.
 
-   The MCP-backed adapters ([exa], [parallel]) have no status line to map and do
-   not exist in this tree yet (plans/seekwright-ocaml-port.md, open question 3),
-   so the adapter set driven here is every adapter module on disk. *)
+   The MCP-backed half of this inventory ([exa], [exa:free], and the free half
+   of [parallel:free]) has no REST status line to map: its status mapping
+   belongs to the shared {!Seekwright_providers.Mcp_client}, pinned by its own
+   suite, so the adapter set driven here is every adapter module on disk except
+   that client and [exa]. [parallel] is driven for its REST half, which is what
+   the [parallel] row builds. *)
 
 module Caps = Mcp_caps
 module Model = Seekwright.Model
@@ -47,16 +50,21 @@ let probe_query =
 
 let clock () = 1_700_000_000.
 
-(* One adapter: its name, how to build it behind a given Net, and the two places
+(* One adapter: its name, how to build it behind a given Net, and the places
    the shared table lets a backend speak for itself. [auth_message] overrides the
    auth row's wording where an adapter names what the operator has to fix;
    [quota_statuses] narrows the statuses this backend reads as "you have run out"
-   — a self-hosted instance bills nobody, so a payment status is not its answer. *)
+   — a self-hosted instance bills nobody, so a payment status is not its answer;
+   [non_object_is_empty] marks the backend whose shared parser answers a
+   non-object document with an empty result set — an honest "this is not a
+   result set", pinned in that adapter's own suite — instead of calling it a
+   malformed response. *)
 type adapter = {
   name : string;
   build : Provider.Net.t -> Provider.t;
   auth_message : string option;
   quota_statuses : int list;
+  non_object_is_empty : bool;
 }
 
 let shared_quota_statuses = [ 402; 429 ]
@@ -77,12 +85,14 @@ let adapters =
       (* 402 is Algolia's [FeatureNotEnabled] — a plan question like the 429 rate
          limit — so the widened house row is this name's own. *)
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
     {
       name = "anysearch";
       build = (fun net -> Seekwright_providers.Anysearch.make ~net ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
     {
       name = "deepseek";
@@ -96,12 +106,14 @@ let adapters =
          retryable like the table says, with a wording of its own — and is pinned
          in the adapter's own suite. *)
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
     {
       name = "freeserp";
       build = (fun net -> Seekwright_providers.Freeserp.make ~now:clock ~net ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
     {
       name = "linkup";
@@ -112,6 +124,7 @@ let adapters =
       (* Linkup's 402 belongs to the keyless x402 lane this adapter never enters,
          so a payment status on a bearer-keyed request is the [HTTP 402] row. *)
       quota_statuses = [ 429 ];
+      non_object_is_empty = false;
     };
     {
       name = "querit";
@@ -121,6 +134,7 @@ let adapters =
       (* 429 is the documented 1 QPS free limit and the exhausted monthly
          allowance answers the same code; 402 says the same about the account. *)
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
     {
       name = "scrappa";
@@ -128,6 +142,7 @@ let adapters =
         (fun net -> Seekwright_providers.Scrappa.make ~net ~key:probe_key ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
     {
       name = "search1api";
@@ -137,6 +152,24 @@ let adapters =
       (* 402 is documented ([application/problem+json]) for a bearer-keyed
          client: the credits are gone, the same failure as the rate limit. *)
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
+    };
+    {
+      name = "parallel";
+      build =
+        (fun net ->
+          Seekwright_providers.Parallel.make ~net ~key:probe_key ~now:clock ());
+      auth_message = None;
+      (* 402 and 429 are one sentence for this backend — "rate limited or out
+         of credits" — because the payment status and the rate limit are the
+         same account fact at this endpoint. And its parser reads [results]
+         through the shared [parse_results], which answers a non-object
+         document with an empty result set — "a JSON array or scalar is not a
+         result set" — rather than calling it malformed; that honesty is
+         pinned in [test_parallel.ml], so the non-object row is not driven
+         here. *)
+      quota_statuses = shared_quota_statuses;
+      non_object_is_empty = true;
     };
     {
       name = "searxng";
@@ -148,6 +181,7 @@ let adapters =
          adapter names what to fix. *)
       auth_message = Some "authentication rejected (enable `format=json` for this client)";
       quota_statuses = [ 429 ];
+      non_object_is_empty = false;
     };
     {
       name = "serpapi";
@@ -160,6 +194,7 @@ let adapters =
          grant's refusal message carries [probe_key], and the URL it was built
          from carries the real credential. *)
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
     {
       name = "serper";
@@ -167,6 +202,7 @@ let adapters =
         (fun net -> Seekwright_providers.Serper.make ~net ~key:probe_key ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
     {
       name = "tavily";
@@ -177,6 +213,7 @@ let adapters =
          402 is not a status this vendor answers with, so it stays on the plain
          [HTTP 402] row rather than being read as a spent quota. *)
       quota_statuses = [ 429; 432 ];
+      non_object_is_empty = false;
     };
     {
       name = "tinyfish";
@@ -187,6 +224,7 @@ let adapters =
          the account question the quota row is for — the same status is the plain
          HTTP row for [linkup], which prices it as x402 instead. *)
       quota_statuses = shared_quota_statuses;
+      non_object_is_empty = false;
     };
   ]
 
@@ -335,6 +373,10 @@ let probes_for adapter row =
   | "quota-kind-only" ->
       List.map (fun code -> responding (Printf.sprintf "status %d" code) ~status:code ())
         adapter.quota_statuses
+  (* A backend whose parser answers a non-object document with an empty
+     result set is not departing from the row — it holds a different, pinned
+     sentence for that body, so the row's probes are simply not its contract. *)
+  | "non-object" when adapter.non_object_is_empty -> []
   | _ -> row.probes
 
 let expected_message adapter row status =
@@ -419,14 +461,16 @@ let () =
                       directory: a new adapter that skips this suite skips the
                       contract, and a name driven here that no longer exists
                       tests nothing. [dune] and [dune-project] are not modules,
-                      and [mcp_client] is the client the two MCP-backed
-                      adapters share rather than an adapter, so it owes no row
-                      here. *)
+                      [mcp_client] is the client the MCP-backed adapters share
+                      rather than an adapter, and [exa] is one of those
+                      MCP-backed names — its status rows are the shared
+                      client's, pinned in [test_mcp_client.ml], so neither owes
+                      a row here. *)
                    let on_disk =
                      Array.to_list (Sys.readdir "../lib/providers")
                      |> List.filter (fun name -> Filename.check_suffix name ".ml")
                      |> List.map Filename.chop_extension
-                     |> List.filter (fun name -> name <> "mcp_client")
+                     |> List.filter (fun name -> name <> "mcp_client" && name <> "exa")
                      |> List.sort Stdlib.compare
                    in
                    let driven = List.map (fun a -> a.name) adapters |> List.sort Stdlib.compare in

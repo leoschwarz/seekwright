@@ -387,15 +387,15 @@ let an_adapter_never_reaches_for_the_values_that_leak () =
   (* The guard above proves nothing if it read nothing: the contract module, every
      adapter and the MCP client have to be there. The client is scanned because it
      builds provider errors, so it owes the same redaction rule. *)
-  check_int "adapter sources in the sandbox" 15
+  check_int "adapter sources in the sandbox" 17
     (List.length (List.filter (fun path -> Filename.check_suffix path ".ml") adapter_sources));
   List.iter
     (fun name ->
       A.(check bool) (name ^ " is scanned") true
         (List.exists (fun path -> Filename.basename path = name) adapter_sources))
-    [ "provider.ml"; "algolia.ml"; "anysearch.ml"; "deepseek.ml"; "freeserp.ml"; "linkup.ml"
-    ; "mcp_client.ml"; "querit.ml"; "scrappa.ml"; "search1api.ml"; "searxng.ml"; "serpapi.ml"
-    ; "serper.ml"; "tavily.ml"; "tinyfish.ml" ]
+    [ "provider.ml"; "algolia.ml"; "anysearch.ml"; "deepseek.ml"; "exa.ml"; "freeserp.ml"
+    ; "linkup.ml"; "mcp_client.ml"; "parallel.ml"; "querit.ml"; "scrappa.ml"; "search1api.ml"
+    ; "searxng.ml"; "serpapi.ml"; "serper.ml"; "tavily.ml"; "tinyfish.ml" ]
 
 let () =
   A.(
