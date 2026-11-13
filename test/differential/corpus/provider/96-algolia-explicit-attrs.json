@@ -1,0 +1,16 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products",
+  "title_attr": "heading",
+  "url_attr": "path",
+  "snippet_attr": "body",
+  "query": {
+    "query": "explicit schema",
+    "max_results": 3
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"hits\": [{\"heading\": \"Chosen heading\", \"path\": \"https://one.example/chosen\", \"body\": \"The configured snippet field.\", \"description\": \"ignored once body is named\"}, {\"title\": \"Chain title\", \"url\": \"https://two.example/chain\"}]}"
+  }
+}

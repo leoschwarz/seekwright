@@ -1764,3 +1764,115 @@ arm the old implementation needed; the function it projects no longer raises.
 **Gate at landing.** `dune build @install`, `dune runtest --force` (64 suites)
 and `dune build @doc` exit 0 under the opam+GMP environment. Nothing in the wave
 reached a provider endpoint: no live test ran and no key was read.
+=======
+
+## 28. F5.4 — the Algolia adapter: a deployment the operator configures (2026-11-13)
+
+Landed on `f5-4-algolia`. Spec: `plans/ocaml-finalisation.md` §F5.4 and the F5 common
+acceptance rows.
+
+**The destination is config, so the derivation lives in one function.** Every other
+adapter in the tree dials a host the port knows; `Seekwright_providers.Algolia`
+(`lib/providers/algolia.ml{,i}`) dials a host the *operator* names —
+`https://{app_id}-dsn.algolia.net/1/indexes/{index}/query`, where the DSN host **is**
+the deployment and the index is what gets searched. `Algolia.endpoint_of_deployment
+~app_id ~index` is the one spelling of that derivation, and it is now read three ways:
+`Registry.uri`'s `Algolia_index` arm calls it instead of assembling the host and path
+itself (the hand-written `Provider.escape_path_segment` path is gone — the F4.1 rule is
+that a row and its adapter may not hold two spellings of one destination), the grant is
+confined to the URI that call returns, and the adapter dials that same URI as its
+`~endpoint` argument rather than re-deriving it. The index name is percent-encoded
+because it is a path segment: an unescaped slash there moves the `/query` segment to
+another route, and the app id is host config, never a request value. Both credentials
+ride their own headers — `x-algolia-application-id` names the deployment,
+`x-algolia-api-key` authorises the index — and neither rides the URL: a key alone names
+nothing in this API, which is the same reason this name is never an `algolia:free`.
+
+**The parse is the adapter's whole shape, because the records are the operator's.**
+`hits[]` holds schemaless JSON, so the mapping is common-name chains — title
+`title`/`name`/`question` then the DocSearch `hierarchy.lvl0..lvl6` at the deepest
+non-empty level, url `url`/`link`, snippet
+`description`/`summary`/`excerpt`/`content`/`answer` — and a wrong type counts as absent
+so the chain continues instead of failing the hit. `Algolia.scalar_text` is the oracle's
+`_first_str`: string, int and float become text, a JSON `true` does not, because a
+boolean is not the prose a field claims to be. An explicitly configured `*_attr` is used
+**alone** — no chain, no hierarchy fallback — since an operator who names an attribute
+has said what their records hold. A hit with no title or no url is dropped rather than
+shipped as a result the caller cannot cite or follow, and the limit slices the upstream
+list *before* anything is dropped, so a non-object record costs a slot.
+
+**Two numbers, and one boundary neither tree reaches through the surface.** The float
+coercion goes through Yojson's renderer, which writes `7.0` and `100.0` where Python's
+`str()` writes the same, so the coercion is identical for the scalars this API returns;
+the only risk in that reading is an exotic float spelling neither tree can be handed
+through the tool surface. The other boundary is `hits` itself: a truthy non-list (`"hits":
+5`) is a `TypeError` in the oracle and an empty result list here, which is how every
+sibling adapter already treats a list field it cannot read. The corpus carries neither
+case, so neither is pinned; both are stated here rather than left to be discovered.
+
+**One name's quota pair, and the status that is not quota.** `401` and `403` are
+authentication — 403 is Algolia's real answer for a bad Application-ID or key, and 401 is
+the spelling a caller writes when it reads the vendor's status list, so both land on the
+same row; the oracle's own suite parameterises only the quota pair, which is why the auth
+row is pinned in the unit suite and the differential area instead. `402` joins `429` on the
+quota row with the default `quota exhausted` sentence: `402` is `FeatureNotEnabled`, a
+plan question like a spent rate limit, and it moves the fallback walk the way any quota
+does. That is the opposite of the decision F5.3 recorded for `linkup`, which keeps 402
+out because its 402 belongs to a lane that adapter never enters — the difference is a
+`quota_statuses` field on the shared-contract record, not a row dropped from the sweep.
+Cost is flat: `cost_for` ignores its argument because Algolia bills the request whatever
+it returns, and the row's `default_cost` is the cheapest paid rate.
+
+**The row was already wired; flipping it is the whole factory change.** `make_row
+"algolia"` carried `App_id_and_key`, `requires:[Api_key; App_id; Index]`, the
+`app_id`/`index`/`*_attr` settings list and the `Health.algolia_endpoint` probe from
+F4.1, so `build` moves from `Deferred "F5.4"` to an `Adapter` builder that reads the
+config entry and hands the adapter what it needs. `Registry.require_setting` joins
+`require_key` for that: the row declares the prerequisite and `missing_prerequisite`
+declines the name before the builder is asked, and an empty `app_id` would otherwise
+build a request to a host the grant was never meant to allow. `live/cases.ml` and
+`live/checks.ml` already carried the algolia steps and its `Billed` cost class; the only
+`live/**` line that moves is the inventory pin, `F5.4` → `runnable`, which is exactly
+what the registry now says. The row keeps `ocaml_live_tested = false`.
+
+**Tests.** `test/test_algolia.ml` (25 cases) drives the adapter over a scripted
+`Provider.Net.t`: the three chains and the hierarchy level, both drop cases, an
+explicitly configured attr used alone, non-object records and the slice-before-filter
+limit, numeric coercion through the whole chain, the POST body as one document
+(`query` and `hitsPerPage`, and no invented `filters`/`facetFilters`/`numericFilters`/
+`tagFilters`/`restrictSearchableAttributes` key — silence there would be a filter the
+caller believes ran), both headers with the app id pinned in the host *and* the header,
+the encoded index, the four-bucket notice, the 402/429 pair, 401, a transport failure
+that must not echo the key, and the flat cost. `test/test_provider_contract.ml` runs the
+shared table over nine adapters now, algolia's quota statuses being the shared
+`[402; 429]`. `test/test_provider_registry.ml` moves the built half to nine names and
+the deferred half to eight, and `test/test_provider.ml`'s sandbox pin goes from ten
+adapter sources to eleven.
+
+**The provider area gains its first config-derived destination.** 15 cases (95–109) join
+the 73, and both projections build the adapter from the case's own `app_id` and `index`:
+the OCaml half calls `Algolia.endpoint_of_deployment`, the oracle half lets its adapter
+constructor build the string, so the golden compares two derivations rather than one
+spelling twice. `97-algolia-encoded-index` is the case the derivation is really about —
+`products/2026` must reach the wire as `products%2F2026` on both sides.
+`104-algolia-non-string-fields` pins the type guards (a `7` title and a `1.5` url are
+text, a list and a `true` are absent and the chain moves on), `107-algolia-shape-drift`
+pins the slice, and `100-algolia-feature-not-enabled` sits beside `93-linkup-payment-lane`
+so the corpus carries both readings of x402 rather than one. All 88 goldens are
+`differential-golden`: no divergence had to be registered, so the request, the parse, the
+notice and the failure vocabulary match the oracle case for case. `min_cases` for the
+area moves from 70 to 85.
+
+**The matrix says what the adapter now consumes.** `providers.tsv` puts algolia at
+`ported` with `unit(test_algolia scripted transport); differential-golden(provider)`, and
+the five config rows it reads — `providers.*.app_id`, `.index`, `.title_attr`,
+`.url_attr`, `.snippet_attr` — move from `transitional` to `honoured`, naming the
+consumer instead of a future wave; the three `*_attr` rows are widened to say they
+configure the searxng **and** algolia parsers. The behaviour row becomes nine scripted
+adapters, and the not-ported row names the other eight.
+
+**Gate at landing.** Base `ocaml-port@ 5a85eaf`; nothing outside this task's ownership
+was edited except the one live pin line named above. `dune build @install`, `dune
+runtest --force` (65 suites) and `dune build @doc` all exit 0. Nothing in this change
+reached a provider endpoint: no live test ran, no key was read, and the row keeps
+`ocaml_live_tested = false`.

@@ -1,0 +1,9 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products",
+  "query": {
+    "query": "slow index"
+  },
+  "refuse": "timeout"
+}

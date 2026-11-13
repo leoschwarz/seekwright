@@ -38,7 +38,7 @@ from pydantic import ValidationError
 
 from seekwright import engine as engine_module
 from seekwright import fetcher, jsondoc, models, router, sanitize, tabledoc
-from seekwright.providers import linkup, scrappa, searxng, serper, tavily, tinyfish
+from seekwright.providers import algolia, linkup, scrappa, searxng, serper, tavily, tinyfish
 from seekwright.config import Config, ProviderConfig, SearchConfig, load_config
 from seekwright.providers.base import ProviderError, QuotaExhausted, SearchProvider
 
@@ -883,6 +883,19 @@ def provider_case(spec_text: str) -> list[str]:
         adapter = scrappa.ScrappaProvider(client, PROBE_KEY)
     elif name == "searxng":
         adapter = searxng.SearxngProvider(client, url=spec["endpoint"])
+    elif name == "algolia":
+        # The deployment is config here: [app_id] names the host's left half and
+        # [index] the path segment, so the case carries both and each tree builds
+        # the destination from its own adapter's derivation.
+        adapter = algolia.AlgoliaProvider(
+            client,
+            PROBE_KEY,
+            app_id=spec["app_id"],
+            index=spec["index"],
+            title_attr=spec.get("title_attr"),
+            url_attr=spec.get("url_attr"),
+            snippet_attr=spec.get("snippet_attr"),
+        )
     elif name == "tavily":
         adapter = tavily.TavilyProvider(client, PROBE_KEY)
     elif name == "tinyfish":

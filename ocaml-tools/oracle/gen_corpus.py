@@ -1064,6 +1064,38 @@ _LINKUP_RESULTS = _body(
     }
 )
 
+# Schemaless records, so the fixture walks the whole mapping: the [title/url/
+# description] chain, the [name/link/summary] chain, the DocSearch [hierarchy]
+# shape whose title is the deepest non-empty level ([lvl2] is null, so [lvl1]
+# wins), and the two drop cases — a hit with no url and a hit with no title.
+_ALGOLIA_HITS = _body(
+    {
+        "hits": [
+            {
+                "objectID": "1",
+                "title": "Write-Ahead Logging",
+                "url": "https://one.example/wal",
+                "description": "The default method by which SQLite implements atomic commit.",
+            },
+            {
+                "objectID": "2",
+                "name": "SQLite WAL mode explained",
+                "link": "https://two.example/wal-explained",
+                "summary": "WAL allows readers and one writer to proceed concurrently.",
+            },
+            {
+                "objectID": "3",
+                "hierarchy": {"lvl0": "Docs", "lvl1": "Search", "lvl2": None},
+                "url": "https://three.example/search",
+                "content": "How full-text search works in this index.",
+            },
+            {"objectID": "4", "title": "A hit with no url", "description": "unfollowable"},
+            {"objectID": "5", "url": "https://five.example/x", "description": "uncitable"},
+        ],
+        "nbHits": 5,
+    }
+)
+
 
 def _searxng_pages(counts: list[int], statuses: list[int] | None = None) -> list[dict[str, Any]]:
     """One page per entry: ``counts[i]`` records, answered with ``statuses[i]``."""
@@ -1649,6 +1681,200 @@ PROVIDER_CASES: dict[str, dict[str, Any]] = {
         "provider": "linkup",
         "query": {"query": "slow vendor"},
         "refuse": "timeout",
+    },
+    # {2 Algolia: the destination is config, and the record schema is the operator's}
+    "95-algolia-basic": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "wal mode"},
+        "response": {"status": 200, "body": _ALGOLIA_HITS},
+    },
+    "96-algolia-explicit-attrs": {
+        # A named attribute is used alone: no chain, no hierarchy fallback, so the
+        # record that only fills [title] and [url] loses its slot.
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "title_attr": "heading",
+        "url_attr": "path",
+        "snippet_attr": "body",
+        "query": {"query": "explicit schema", "max_results": 3},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "hits": [
+                        {
+                            "heading": "Chosen heading",
+                            "path": "https://one.example/chosen",
+                            "body": "The configured snippet field.",
+                            "description": "ignored once body is named",
+                        },
+                        {"title": "Chain title", "url": "https://two.example/chain"},
+                    ]
+                }
+            ),
+        },
+    },
+    "97-algolia-encoded-index": {
+        # The index name rides the path, so it is percent-encoded: an unencoded
+        # slash would move the [query] segment to another route.
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products/2026",
+        "query": {"query": "encoded index", "max_results": 2},
+        "response": {"status": 200, "body": _ALGOLIA_HITS},
+    },
+    "98-algolia-constraints": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {
+            "query": "constrained",
+            "include_domains": ["docs.example.com"],
+            "exclude_domains": ["blog.example.com"],
+            "country": "DE",
+            "language": "de",
+            "recency": "week",
+            "safe_search": True,
+        },
+        "response": {"status": 200, "body": _ALGOLIA_HITS},
+    },
+    "99-algolia-rate-limited": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "over the plan"},
+        "response": {"status": 429, "body": _body({"message": "Rate exceeded"})},
+    },
+    "100-algolia-feature-not-enabled": {
+        # The x402 lane is quota for this name and an ordinary failure for
+        # [linkup]: same status, opposite verdict, one row per adapter.
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "plan does not allow this"},
+        "response": {"status": 402, "body": _body({"message": "FeatureNotEnabled"})},
+    },
+    "101-algolia-auth-rejected": {
+        # 403 is Algolia's answer for a bad Application-ID or key; the provider's
+        # own test names 401, and both statuses land on the same row.
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "wrong key"},
+        "response": {"status": 403, "body": "Forbidden"},
+    },
+    "102-algolia-unauthorized": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "no such key"},
+        "response": {"status": 401, "body": _body({"message": "Invalid Application-ID or API key"})},
+    },
+    "103-algolia-timeout": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "slow index"},
+        "refuse": "timeout",
+    },
+    "104-algolia-non-string-fields": {
+        # Schemaless means a field may hold a number, a list or a boolean. A scalar
+        # is coerced to text; the rest counts as absent and the chain continues.
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "types", "max_results": 2},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "hits": [
+                        {
+                            "title": 7,
+                            "url": 1.5,
+                            "description": 42,
+                        },
+                        {
+                            "title": ["list", "of", "words"],
+                            "name": True,
+                            "question": "Chain lands on question",
+                            "url": {"nested": 1},
+                            "link": "https://two.example/kept",
+                            "description": {"nested": 1},
+                            "summary": ["list"],
+                            "excerpt": "Chain lands on excerpt",
+                        },
+                    ]
+                }
+            ),
+        },
+    },
+    "105-algolia-snippet-cap": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "long description", "max_results": 1},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "hits": [
+                        {
+                            "title": "Long",
+                            "url": "https://long.example/",
+                            "description": "word " * 200,
+                        }
+                    ]
+                }
+            ),
+        },
+    },
+    "106-algolia-zero-results": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "nothing in this index"},
+        "response": {"status": 200, "body": _body({"hits": [], "nbHits": 0})},
+    },
+    "107-algolia-shape-drift": {
+        # Non-object rows in [hits] cost their slot, and the limit slices the
+        # upstream list before anything is dropped — the last two records never
+        # reach the mapping at all.
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "drift", "max_results": 3},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "hits": [
+                        "not an object",
+                        {"title": "Kept", "url": "https://kept.example/", "description": "kept"},
+                        None,
+                        {"title": "Past the limit", "url": "https://past.example/"},
+                        {"title": "Also past", "url": "https://also.example/"},
+                    ]
+                }
+            ),
+        },
+    },
+    "108-algolia-json-array": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "wrong shape"},
+        "response": {"status": 200, "body": "[1, 2, 3]"},
+    },
+    "109-algolia-malformed-json": {
+        "provider": "algolia",
+        "app_id": "app123",
+        "index": "products",
+        "query": {"query": "broken body"},
+        "response": {"status": 200, "body": "{"},
     },
 }
 

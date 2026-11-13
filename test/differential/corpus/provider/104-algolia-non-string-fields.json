@@ -1,0 +1,13 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products",
+  "query": {
+    "query": "types",
+    "max_results": 2
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"hits\": [{\"title\": 7, \"url\": 1.5, \"description\": 42}, {\"title\": [\"list\", \"of\", \"words\"], \"name\": true, \"question\": \"Chain lands on question\", \"url\": {\"nested\": 1}, \"link\": \"https://two.example/kept\", \"description\": {\"nested\": 1}, \"summary\": [\"list\"], \"excerpt\": \"Chain lands on excerpt\"}]}"
+  }
+}

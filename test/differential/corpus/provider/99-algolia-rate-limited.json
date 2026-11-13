@@ -1,0 +1,12 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products",
+  "query": {
+    "query": "over the plan"
+  },
+  "response": {
+    "status": 429,
+    "body": "{\"message\": \"Rate exceeded\"}"
+  }
+}

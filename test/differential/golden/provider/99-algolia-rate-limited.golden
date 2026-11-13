@@ -1,0 +1,15 @@
+area: provider
+case: 99-algolia-rate-limited
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://app123-dsn.algolia.net/1/indexes/products/query
+query= 
+headers= content-type=application/json,x-algolia-api-key=sentinel,x-algolia-application-id=app123
+body= {"hitsPerPage":5,"query":"over the plan"}
+verdict= error
+kind= quota
+retryable= false
+message= quota exhausted

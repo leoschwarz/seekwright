@@ -967,6 +967,18 @@ let provider_adapter name ~endpoint spec =
   | "serper" -> fun ~net () -> Seekwright_providers.Serper.make ~key:probe_key ~net ()
   | "scrappa" -> fun ~net () -> Seekwright_providers.Scrappa.make ~key:probe_key ~net ()
   | "searxng" -> fun ~net () -> Seekwright_providers.Searxng.make ~endpoint ~net ()
+  | "algolia" ->
+      (* The deployment is config here: [app_id] names the host's left half and
+         [index] the path segment, so the projection derives the destination from
+         the same spec the Python half hands to its adapter constructor. *)
+      fun ~net () ->
+        Seekwright_providers.Algolia.make ~app_id:(want_string "app_id" spec)
+          ~key:probe_key
+          ~endpoint:(Seekwright_providers.Algolia.endpoint_of_deployment
+            ~app_id:(want_string "app_id" spec) ~index:(want_string "index" spec))
+          ?title_attr:(maybe_string "title_attr" spec)
+          ?url_attr:(maybe_string "url_attr" spec)
+          ?snippet_attr:(maybe_string "snippet_attr" spec) ~net ()
   | "tavily" -> fun ~net () -> Seekwright_providers.Tavily.make ~key:probe_key ~net ()
   | "tinyfish" -> fun ~net () -> Seekwright_providers.Tinyfish.make ~key:probe_key ~net ()
   | "linkup" ->

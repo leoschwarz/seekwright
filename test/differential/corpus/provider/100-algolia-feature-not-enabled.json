@@ -1,0 +1,12 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products",
+  "query": {
+    "query": "plan does not allow this"
+  },
+  "response": {
+    "status": 402,
+    "body": "{\"message\": \"FeatureNotEnabled\"}"
+  }
+}

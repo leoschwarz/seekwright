@@ -1,0 +1,12 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products",
+  "query": {
+    "query": "no such key"
+  },
+  "response": {
+    "status": 401,
+    "body": "{\"message\": \"Invalid Application-ID or API key\"}"
+  }
+}

@@ -11,6 +11,7 @@
 module Config = Seekwright.Config
 module Health = Seekwright.Health
 module Provider = Seekwright.Provider
+module Algolia = Seekwright_providers.Algolia
 module Freeserp = Seekwright_providers.Freeserp
 module Anysearch = Seekwright_providers.Anysearch
 module Scrappa = Seekwright_providers.Scrappa
@@ -160,12 +161,26 @@ let require_key name args =
   | Some key -> key
   | None -> invalid_arg (Printf.sprintf "Registry: %s was built with no key" name)
 
+(* The same invariant as {!require_key}: the row declares the prerequisite,
+   {!missing_prerequisite} declines the name before the builder is asked, and an
+   empty value would turn a config mistake into a request to a host the grant was
+   never meant to allow. [App_id] names the DSN host's left half as well as the
+   header, so this one reads the config entry rather than the environment. *)
+let require_setting name setting value =
+  match value with
+  | Some value -> value
+  | None ->
+      invalid_arg (Printf.sprintf "Registry: %s was built with no %s" name setting)
+
 let rows =
   [
     (* The DSN host {i is} the deployment: [app_id] names it, [index] names what is
        searched, and both are config rather than a constant. [hitsPerPage] is
        malformed in the probe on purpose — a valid bodyless GET would run a search,
-       and every search bills the monthly quota. *)
+       and every search bills the monthly quota. The builder gets the destination
+       from {!args} and the Application-ID from the same config reading, so the
+       host in the request, the host in the header and the host in the grant are
+       one derivation ({!Algolia.endpoint_of_deployment}) three ways. *)
     make_row ~name:"algolia" ~endpoint:Algolia_index
       ~credential:
         (App_id_and_key
@@ -173,7 +188,16 @@ let rows =
       ~requires:[ Api_key; App_id; Index ] ~default_cost:(Some 0.50)
       ~probe:(Probe Health.algolia_endpoint)
       ~settings:[ "app_id"; "index"; "snippet_attr"; "title_attr"; "url_attr" ]
-      ~build:(Deferred "F5.4") ();
+      ~build:
+        (Adapter
+           (fun a ->
+             Algolia.make
+               ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~app_id:(require_setting "algolia" "app_id" a.entry.Config.app_id)
+               ?title_attr:a.entry.Config.title_attr ?url_attr:a.entry.Config.url_attr
+               ?snippet_attr:a.entry.Config.snippet_attr
+               ~key:(require_key "algolia" a) ~endpoint:a.endpoint ~net:a.net ()))
+      ();
     (* Keyless and priced at zero, but built only because this config named it:
        the explicit-only stance keeps it out of the keyless default and the free
        set, so this row is the only route to the adapter. Its endpoint is
@@ -392,14 +416,11 @@ let uri (row : row) (pc : Config.provider_config) =
       | None -> Error (Printf.sprintf "[providers.%s] url is not set" row.name))
   | Algolia_index -> (
       (* [app_id] and [index] are validated as a pair at config load; the guard is
-         what narrows them to present strings here, and an index name is escaped
-         because it is a path segment, not a query value. *)
+         what narrows them to present strings here. The endpoint itself is the
+         adapter's own derivation — one spelling of the host, read three ways by
+         the request, the header and the grant. *)
       match (non_empty pc.Config.app_id, non_empty pc.Config.index) with
-      | Some app_id, Some index ->
-          Ok
-            (Uri.make ~scheme:"https" ~host:(app_id ^ "-dsn.algolia.net")
-               ~path:(Printf.sprintf "/1/indexes/%s/query" (Provider.escape_path_segment index))
-               ())
+      | Some app_id, Some index -> Ok (Algolia.endpoint_of_deployment ~app_id ~index)
       | _ ->
           Error
             (Printf.sprintf "[providers.%s] app_id and index are not set" row.name))

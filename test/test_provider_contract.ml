@@ -64,6 +64,21 @@ let shared_quota_statuses = [ 402; 429 ]
 let adapters =
   [
     {
+      name = "algolia";
+      build =
+        (fun net ->
+          Seekwright_providers.Algolia.make
+            ~app_id:"app123"
+            ~endpoint:
+              (Seekwright_providers.Algolia.endpoint_of_deployment ~app_id:"app123"
+                 ~index:"products")
+            ~key:probe_key ~net ());
+      auth_message = None;
+      (* 402 is Algolia's [FeatureNotEnabled] — a plan question like the 429 rate
+         limit — so the widened house row is this name's own. *)
+      quota_statuses = shared_quota_statuses;
+    };
+    {
       name = "anysearch";
       build = (fun net -> Seekwright_providers.Anysearch.make ~net ());
       auth_message = None;

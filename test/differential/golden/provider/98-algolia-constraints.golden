@@ -1,0 +1,40 @@
+area: provider
+case: 98-algolia-constraints
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://app123-dsn.algolia.net/1/indexes/products/query
+query= 
+headers= content-type=application/json,x-algolia-api-key=sentinel,x-algolia-application-id=app123
+body= {"hitsPerPage":5,"query":"constrained"}
+verdict= ok
+name= algolia
+result title=Write-Ahead Logging
+result url=https://one.example/wal
+result snippet=The default method by which SQLite implements atomic commit.
+result uncapped=60
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+result title=SQLite WAL mode explained
+result url=https://two.example/wal-explained
+result snippet=WAL allows readers and one writer to proceed concurrently.
+result uncapped=58
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+result title=Search
+result url=https://three.example/search
+result snippet=How full-text search works in this index.
+result uncapped=41
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.000500
+answer= -
+notice=cannot filter by domain or dates or country/language or safe-search; that constraint was ignored

@@ -1,0 +1,13 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products",
+  "query": {
+    "query": "drift",
+    "max_results": 3
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"hits\": [\"not an object\", {\"title\": \"Kept\", \"url\": \"https://kept.example/\", \"description\": \"kept\"}, null, {\"title\": \"Past the limit\", \"url\": \"https://past.example/\"}, {\"title\": \"Also past\", \"url\": \"https://also.example/\"}]}"
+  }
+}

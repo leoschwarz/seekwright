@@ -1,0 +1,13 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products/2026",
+  "query": {
+    "query": "encoded index",
+    "max_results": 2
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"hits\": [{\"objectID\": \"1\", \"title\": \"Write-Ahead Logging\", \"url\": \"https://one.example/wal\", \"description\": \"The default method by which SQLite implements atomic commit.\"}, {\"objectID\": \"2\", \"name\": \"SQLite WAL mode explained\", \"link\": \"https://two.example/wal-explained\", \"summary\": \"WAL allows readers and one writer to proceed concurrently.\"}, {\"objectID\": \"3\", \"hierarchy\": {\"lvl0\": \"Docs\", \"lvl1\": \"Search\", \"lvl2\": null}, \"url\": \"https://three.example/search\", \"content\": \"How full-text search works in this index.\"}, {\"objectID\": \"4\", \"title\": \"A hit with no url\", \"description\": \"unfollowable\"}, {\"objectID\": \"5\", \"url\": \"https://five.example/x\", \"description\": \"uncitable\"}], \"nbHits\": 5}"
+  }
+}

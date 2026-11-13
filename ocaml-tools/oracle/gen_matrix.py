@@ -24,10 +24,12 @@ PROVIDERS_HEADER = [
 
 UNTESTED = "untested-in-repo"
 PROVIDERS = [
-    ("algolia", "providers/algolia.py", "-", "not-ported", "serp",
+    ("algolia", "providers/algolia.py", "providers/algolia.ml", "ported", "serp",
      "{app_id}-dsn.algolia.net/1/indexes/{index}/query", "x-algolia-application-id+x-algolia-api-key",
-     "0.50", POLICY_TIMEOUT, "domains:query-filters;recency:none;ignored-constraints-notice",
-     "snippet", "keyed-free-tier", "keyed-live-fixture", "pending-F4"),
+     "0.50", POLICY_TIMEOUT,
+     "domains:query-filters;recency:none;title/url/snippet attrs select record fields;ignored-constraints-notice",
+     "snippet", "keyed-free-tier", "keyed-live-fixture",
+     "unit(test_algolia scripted transport); differential-golden(provider)"),
     ("anysearch", "providers/anysearch.py", "providers/anysearch.ml", "ported", "serp",
      "api.anysearch.com", "none", "0.0", POLICY_TIMEOUT,
      "country+language:query-fold;domains:none;ignored-constraints-notice",
@@ -117,11 +119,11 @@ CONFIG_FIELDS = [
     ("providers.*.output_type", "config.py:ProviderConfig.output_type (parallel presets)", "config.ml:parsed; adapter wave F4", "transitional", "differential-golden(config)"),
     ("providers.*.mode", "config.py:ProviderConfig.mode (parallel presets)", "config.ml:parsed; adapter wave F4", "transitional", "differential-golden(config)"),
     ("providers.*.url", "config.py:ProviderConfig.url (searxng required)", "config.ml:parsed + startup rule; adapter wave F4", "transitional", "differential-golden(config)"),
-    ("providers.*.app_id", "config.py:ProviderConfig.app_id (algolia required)", "config.ml:parsed; health.ml:probe gate; adapter wave F4", "transitional", "differential-golden(config)"),
-    ("providers.*.index", "config.py:ProviderConfig.index (algolia required)", "config.ml:parsed; health.ml:probe gate; adapter wave F4", "transitional", "differential-golden(config)"),
-    ("providers.*.title_attr", "config.py:ProviderConfig.title_attr (searxng parser)", "config.ml:parsed; adapter wave F4", "transitional", "differential-golden(config)"),
-    ("providers.*.url_attr", "config.py:ProviderConfig.url_attr (searxng parser)", "config.ml:parsed; adapter wave F4", "transitional", "differential-golden(config)"),
-    ("providers.*.snippet_attr", "config.py:ProviderConfig.snippet_attr (searxng parser)", "config.ml:parsed; adapter wave F4", "transitional", "differential-golden(config)"),
+    ("providers.*.app_id", "config.py:ProviderConfig.app_id (algolia required)", "config.ml:parsed; health.ml:probe gate; factory/registry.ml + providers/algolia.ml:endpoint_of_deployment", "honoured", "differential-golden(config); differential-golden(provider)"),
+    ("providers.*.index", "config.py:ProviderConfig.index (algolia required)", "config.ml:parsed; health.ml:probe gate; factory/registry.ml + providers/algolia.ml:endpoint_of_deployment", "honoured", "differential-golden(config); differential-golden(provider)"),
+    ("providers.*.title_attr", "config.py:ProviderConfig.title_attr (searxng and algolia parsers)", "config.ml:parsed; providers/searxng.ml + providers/algolia.ml:attribute chains", "honoured", "differential-golden(config); differential-golden(provider)"),
+    ("providers.*.url_attr", "config.py:ProviderConfig.url_attr (searxng and algolia parsers)", "config.ml:parsed; providers/searxng.ml + providers/algolia.ml:attribute chains", "honoured", "differential-golden(config); differential-golden(provider)"),
+    ("providers.*.snippet_attr", "config.py:ProviderConfig.snippet_attr (searxng and algolia parsers)", "config.ml:parsed; providers/searxng.ml + providers/algolia.ml:attribute chains", "honoured", "differential-golden(config); differential-golden(provider)"),
     ("providers.*.free_cooldown_seconds", "config.py:ProviderConfig.free_cooldown_seconds (TieredExaProvider)", "config.ml:parsed; adapter wave F4 (no tiered adapter yet)", "transitional", "differential-golden(config)"),
     ("policy.max_snippet_chars", "config.py:PolicyConfig -> providers.base.truncate_snippet", "engine.ml:Search capping", "honoured", "unit(test_engine); differential-golden(engine)"),
     ("policy.max_result_text_chars", "config.py:PolicyConfig -> providers.base.truncate_text", "engine.ml:Search capping", "honoured", "unit(test_engine)"),
@@ -212,18 +214,19 @@ BEHAVIOURS = [
     ("provider contract: errors, ignored_constraints, cost_for",
      "providers/base.py", "tests/providers/test_provider_contract.py", "lib/provider.ml", "test_provider_contract.ml",
      "ported", "unit"),
-    ("eight scripted adapters, wire shape and verdict (anysearch, freeserp, serper, scrappa, searxng, tavily, tinyfish, linkup)",
+    ("nine scripted adapters, wire shape and verdict (anysearch, freeserp, serper, scrappa, searxng, tavily, tinyfish, linkup, algolia)",
      "providers/anysearch.py, providers/freeserp.py, providers/serper.py, providers/scrappa.py, providers/searxng.py, "
-     "providers/tavily.py, providers/tinyfish.py, providers/linkup.py",
+     "providers/tavily.py, providers/tinyfish.py, providers/linkup.py, providers/algolia.py",
      "tests/providers/test_anysearch.py, tests/providers/test_freeserp.py, tests/providers/test_serper.py, "
      "tests/providers/test_scrappa.py, tests/providers/test_searxng.py, tests/providers/test_tavily.py, "
-     "tests/providers/test_tinyfish.py, tests/providers/test_linkup.py",
+     "tests/providers/test_tinyfish.py, tests/providers/test_linkup.py, tests/providers/test_algolia.py",
      "lib/providers/anysearch.ml, lib/providers/freeserp.ml, lib/providers/serper.ml, lib/providers/scrappa.ml, "
-     "lib/providers/searxng.ml, lib/providers/tavily.ml, lib/providers/tinyfish.ml, lib/providers/linkup.ml",
+     "lib/providers/searxng.ml, lib/providers/tavily.ml, lib/providers/tinyfish.ml, lib/providers/linkup.ml, "
+     "lib/providers/algolia.ml",
      "test_anysearch.ml, test_freeserp.ml, test_serper.ml, test_scrappa.ml, test_searxng.ml, test_tavily.ml, "
-     "test_tinyfish.ml, test_linkup.ml, corpus/provider",
+     "test_tinyfish.ml, test_linkup.ml, test_algolia.ml, corpus/provider",
      "ported", "unit(scripted transport); differential-golden; keyless-live"),
-    ("the other nine adapters", "providers/", "tests/providers/, tests/live/test_live.py", "(none)", "(none)",
+    ("the other eight adapters", "providers/", "tests/providers/, tests/live/test_live.py", "(none)", "(none)",
      "not-ported", "pending-F4"),
     ("health board + monitor", "health.py", "tests/test_health.py", "lib/health.ml", "test_health.ml, test_health_monitor.ml",
      "ported", "unit"),

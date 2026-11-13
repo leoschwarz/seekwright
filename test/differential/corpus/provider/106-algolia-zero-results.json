@@ -1,0 +1,12 @@
+{
+  "provider": "algolia",
+  "app_id": "app123",
+  "index": "products",
+  "query": {
+    "query": "nothing in this index"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"hits\": [], \"nbHits\": 0}"
+  }
+}
