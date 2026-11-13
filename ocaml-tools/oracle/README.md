@@ -8,7 +8,7 @@ goldens, not Python.
 
 | Tool | What it does | Run |
 | --- | --- | --- |
-| `gen_corpus.py` | Writes every corpus input under `test/differential/corpus/`. The case lists in this file are the reviewable form of the corpus: a reviewer reads the matrix of cases here rather than diffing 173 files. It reads no oracle and no port. | `python3 ocaml-tools/oracle/gen_corpus.py` |
+| `gen_corpus.py` | Writes every corpus input under `test/differential/corpus/`. The case lists in this file are the reviewable form of the corpus: a reviewer reads the matrix of cases here rather than diffing 294 files. It reads no oracle and no port. | `python3 ocaml-tools/oracle/gen_corpus.py` |
 | `projections.py` | The oracle half of each area: the same projection the OCaml side writes, expressed against `seekwright`'s own modules and canonicalised the way `test/differential/canon.ml` does. | imported by `gen_goldens.py` |
 | `gen_goldens.py` | Runs both projections over one corpus directory and writes one golden per case. | see below |
 | `gen_matrix.py` | Writes the four parity tables under `test/differential/matrix/`. The TSVs are committed data; the validator reads the tables, not this generator. | `python3 ocaml-tools/oracle/gen_matrix.py` |

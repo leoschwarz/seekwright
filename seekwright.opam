@@ -21,6 +21,8 @@ depends: [
   "eio_main" {>= "1.6"}
   "mirage-crypto-rng" {>= "1.5"}
   "alcotest" {with-test}
+  "qcheck-core" {with-test}
+  "qcheck-alcotest" {with-test}
   "odoc" {with-doc}
 ]
 build: [

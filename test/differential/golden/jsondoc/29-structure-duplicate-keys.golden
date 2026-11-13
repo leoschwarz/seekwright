@@ -1,0 +1,8 @@
+area: jsondoc
+case: 29-structure-duplicate-keys
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  object(2)\n$.a  3\n$.b  2
+schema= $  object(2)\n$.a  number\n$.b  number

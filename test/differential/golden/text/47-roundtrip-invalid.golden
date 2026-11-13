@@ -1,0 +1,10 @@
+area: text
+case: 47-roundtrip-invalid
+verification: explicit-divergence
+oracle: python
+projection: text
+reason: the same step as text/10, seen through decode-and-re-encode: of_string reads this lead and the two bytes after it as one three-byte codepoint, so the round trip does not return the input bytes, while the oracle's errors='replace' form is lossy but stable. Pinned to say in the open that the port is not byte-identical on ill-formed input; the sentence is the port's behaviour, not a target.
+--- oracle
+roundtrip= efbfbd616263
+--- port
+roundtrip= e2a1a263

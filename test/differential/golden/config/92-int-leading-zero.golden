@@ -1,0 +1,7 @@
+area: config
+case: 92-int-leading-zero
+verification: differential-golden
+oracle: python
+projection: config
+--- oracle
+PARSE-ERR

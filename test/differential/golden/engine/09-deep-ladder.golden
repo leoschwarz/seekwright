@@ -1,0 +1,17 @@
+area: engine
+case: 09-deep-ladder
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt serper
+attempt linkup
+attempt tavily
+attempt exa:free
+attempt freeserp
+events= search.fallback_failed,search.fallback_failed,search.fallback_failed,search.fallback,search.ok
+verdict= ok
+provider= freeserp
+results=1
+titles=Second
+notice=serper failed (upstream timed out); served by freeserp instead

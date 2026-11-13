@@ -1,0 +1,7 @@
+area: text
+case: 28-words-only-space
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+words= 0

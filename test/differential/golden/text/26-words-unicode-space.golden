@@ -1,0 +1,10 @@
+area: text
+case: 26-words-unicode-space
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+words= 3
+word= 61
+word= 62
+word= 63

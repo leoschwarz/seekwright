@@ -1,0 +1,7 @@
+area: text
+case: 25-rstrip-unicode-space
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+rstrip= 2078

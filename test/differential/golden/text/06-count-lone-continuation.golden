@@ -1,0 +1,7 @@
+area: text
+case: 06-count-lone-continuation
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+count= 4

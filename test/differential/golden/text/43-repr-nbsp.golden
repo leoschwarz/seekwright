@@ -1,0 +1,10 @@
+area: text
+case: 43-repr-nbsp
+verification: explicit-divergence
+oracle: python
+projection: text
+reason: py_repr passes every non-ASCII codepoint through as its UTF-8 bytes by design (a log line is read by a machine that keeps UTF-8, and rewriting a printable would hide what the page said), where Python's repr escapes a non-printable such as U+00A0 or U+200B. The port's rule is the contract and the two reprs are not interchangeable on non-printable non-ASCII; pinned so the boundary is measured, not assumed.
+--- oracle
+repr= 'a\\xa0b'
+--- port
+repr= 'a\u00a0b'

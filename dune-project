@@ -122,4 +122,13 @@
   (mirage-crypto-rng
    (>= 1.5))
   (alcotest
+   :with-test)
+  ; F3.3: the property runs under [test/differential/]. Test-only, so a bare
+  ; [opam install seekwright] does not pull a generator engine; the two packages
+  ; cost about 5 MB installed and add no transitive dependency this tree does not
+  ; already carry (dune, alcotest, base-unix). The decision and its measurement
+  ; are in plans/seekwright-ocaml-port.md §F3.3 and test/differential/README.md.
+  (qcheck-core
+   :with-test)
+  (qcheck-alcotest
    :with-test)))

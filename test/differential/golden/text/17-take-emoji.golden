@@ -1,0 +1,7 @@
+area: text
+case: 17-take-emoji
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+take= f09f9880

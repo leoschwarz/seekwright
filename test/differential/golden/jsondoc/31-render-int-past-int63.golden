@@ -1,0 +1,7 @@
+area: jsondoc
+case: 31-render-int-past-int63
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  object(1)\n$.n  4611686018427387904

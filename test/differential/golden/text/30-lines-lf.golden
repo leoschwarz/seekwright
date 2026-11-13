@@ -1,0 +1,15 @@
+area: text
+case: 30-lines-lf
+verification: explicit-divergence
+oracle: python
+projection: text
+reason: splitlines appends the tail after every break, so a string ending in a break gains a final empty line; Python's str.splitlines() drops it ('a\nb\n' is two lines, not three). test/test_text.ml pins the port's reading as intended and utf8.mli's doc-comment claims Python parity — the comment is what is wrong, and the behaviour is the port's. lib/** is outside this corpus's ownership, so the difference is pinned and raised.
+--- oracle
+lines= 2
+line= 61
+line= 62
+--- port
+lines= 3
+line= 61
+line= 62
+line= 

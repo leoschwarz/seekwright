@@ -1,0 +1,7 @@
+area: jsondoc
+case: 44-select-negative-index
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+path-refused= a negative index is not supported; the array's length is on its header line, so ask for the range you want, as in [0:5]

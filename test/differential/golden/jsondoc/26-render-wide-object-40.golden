@@ -1,0 +1,7 @@
+area: jsondoc
+case: 26-render-wide-object-40
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  object(40)\n$.k0  0\n$.k1  1\n$.k2  2\n$.k3  3\n$.k4  4\n$.k5  5\n$.k6  6\n$.k7  7\n$.k8  8\n$.k9  9\n$.k10  10\n$.k11  11\n$.k12  12\n$.k13  13\n$.k14  14\n$.k15  15\n$.k16  16\n$.k17  17\n$.k18  18\n$.k19  19\n$.k20  20\n$.k21  21\n$.k22  22\n$.k23  23\n$.k24  24\n$.k25  25\n$.k26  26\n$.k27  27\n$.k28  28\n$.k29  29\n$.k30  30\n$.k31  31\n$.k32  32\n$.k33  33\n$.k34  34\n$.k35  35\n$.k36  36\n$.k37  37\n$.k38  38\n$.k39  39

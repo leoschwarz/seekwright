@@ -1,0 +1,6 @@
+{
+  "op": "select",
+  "body": "{\"xs\": [1, 2, 3]}",
+  "path": "$.xs[*]",
+  "max_chars": 0
+}

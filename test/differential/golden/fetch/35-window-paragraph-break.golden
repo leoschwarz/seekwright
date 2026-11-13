@@ -1,0 +1,8 @@
+area: fetch
+case: 35-window-paragraph-break
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+window= alpha beta gamma\n\n[...]
+more=true

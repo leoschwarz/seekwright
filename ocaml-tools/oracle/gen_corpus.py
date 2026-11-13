@@ -124,6 +124,26 @@ CONFIG_CASES.update(
         "80-depth-bad": '[providers.linkup]\nenabled = true\ndepth = "deepest"\n',
         "81-fetch-enabled-no-library": '[fetch]\nenabled = true\nextractor = "stdlib"\n',
         "82-agent-paid-default": 'default_provider = "tavily"\n[providers.tavily]\nenabled = true\n[agent]\nenabled = true\nbase_url = "http://model.internal:8000/v1"\nmodel = "small"\n',
+        # Whitespace is transport here too: a CRLF checkout, a tab indent and a
+        # bare `enabled=true` are the same table, and a TOML file written by a
+        # Windows editor is a deployment this project has to accept.
+        "83-crlf-and-tabs": '[providers.serper]\r\n\tenabled = true\r\n[policy]\r\n\tmax_snippet_chars = 250\r\n',
+        "84-whitespace-around-dot": "[ providers . serper ]\nenabled = true\n",
+        # Integers at the edge of an OCaml [int] and past it: the port must
+        # refuse an overflow as a value it cannot hold, never raise through the
+        # config loader, and the number spellings a TOML file may legally use
+        # (underscores, hex, a leading plus) have to read as the same integer.
+        "85-int-int63-max": "[policy]\nmax_snippet_chars = 4611686018427387903\n",
+        "86-int-past-int63": "[policy]\nmax_snippet_chars = 4611686018427387904\n",
+        "87-int-huge": "[policy]\nmax_snippet_chars = 1180591620717411303424\n",
+        "88-int-underscores": "[policy]\nmax_snippet_chars = 1_000\n",
+        "89-int-hex": "[policy]\nmax_snippet_chars = 0x10\n",
+        "90-int-plus": "[policy]\nmax_snippet_chars = +100\n",
+        "91-int-negative-zero": "[policy]\nmax_snippet_chars = -0\n",
+        "92-int-leading-zero": "[policy]\nmax_snippet_chars = 0100\n",
+        "93-float-nan": "[fetch]\ntimeout_seconds = nan\n",
+        "94-float-inf": "[fetch]\ntimeout_seconds = inf\n",
+        "95-datetime-value": "[logging]\nlog_content = 1979-05-27\n",
     }
 )
 
@@ -152,6 +172,17 @@ SANITIZE_CASES: dict[str, bytes] = {
     "10-angle-no-token": b"a < | endoftext | > b",
     "11-controls": b"tab\there\nnewline",
     "12-nested": b"<<|x|>|> <|prompt|>",
+    "13-printable-unicode": "caf\u00e9 \u2014 \u65e5\u672c\u8a9e \U0001f600".encode(),
+    "14-zwsp-inside-token": "a<|\u200bendoftext|>b".encode(),
+    "15-unterminated-angle": b"a<|endoftext",
+    "16-fullwidth-bars": "a<\uff5cendoftext\uff5c>b".encode(),
+    "17-token-newline": b"a<|end\noftext|>b",
+    "18-long-token-name": b"<|" + b"a" * 80 + b"|>",
+    "19-token-max-name": b"<|" + b"a" * 64 + b"|>",
+    "20-token-at-end": b"abc<|im_end|>",
+    "21-nonprintable-c0": b"a\x01b\x7f",
+    "22-malformed-mid": b"caf\xe2abc<|x|>",
+    "23-malformed-overlong": b"\xc0\xaf<|x|>",
 }
 
 
@@ -207,9 +238,47 @@ FETCH_CASES: dict[str, dict[str, Any]] = {
     "29-cap-requested": {"op": "cap", "default": 4000, "max_chars": 100},
     "30-cap-zero": {"op": "cap", "default": 4000, "max_chars": 0},
     "31-cap-uncapped": {"op": "cap", "default": 4000, "max_chars": 2147483647},
+    "32-window-offset-one": {"op": "window", "text": "hello world", "offset": 1, "max_chars": 5},
+    "33-window-offset-at-end": {"op": "window", "text": "hello world", "offset": 11, "max_chars": 5},
+    "34-window-offset-past-end-one": {"op": "window", "text": "hello world", "offset": 12, "max_chars": 5},
+    "35-window-paragraph-break": {
+        "op": "window",
+        "text": "alpha beta gamma\n\ndelta epsilon zeta",
+        "offset": 0,
+        "max_chars": 20,
+    },
+    "36-window-paragraph-back-half": {
+        "op": "window",
+        "text": "alpha beta gamma delta epsilon\n\nzeta",
+        "offset": 0,
+        "max_chars": 40,
+    },
+    "37-window-unicode-boundary": {"op": "window", "text": "caf\u00e9 \U0001f600 na\u00efve", "offset": 5, "max_chars": 2},
+    "38-window-emoji-mid": {"op": "window", "text": "\U0001f600\U0001f600", "offset": 1, "max_chars": 1},
+    "39-window-newlines-only": {"op": "window", "text": "\n\n\n", "offset": 0, "max_chars": 2},
+    "40-window-whitespace": {"op": "window", "text": "  a  b  ", "offset": 2, "max_chars": 3},
+    "41-window-shorter-than-cap": {"op": "window", "text": "hi", "offset": 0, "max_chars": 100},
+    "42-window-max-one": {"op": "window", "text": "hello", "offset": 2, "max_chars": 1},
+    "43-window-offset-negative": {"op": "window", "text": "hello world", "offset": -1, "max_chars": 5},
+    "44-window-cap-negative": {"op": "window", "text": "hello world", "offset": 0, "max_chars": -3},
 }
 
 # {4 jsondoc: render, structure, select, path grammar, media}
+
+
+def _nested_object(depth: int) -> str:
+    """[depth] levels of [{"a": ...}], the deepest document the render must walk."""
+
+    return '{"a": ' * depth + "1" + "}" * depth
+
+
+def _wide_object(count: int) -> str:
+    return "{" + ", ".join(f'"k{i}": {i}' for i in range(count)) + "}"
+
+
+def _wide_array(count: int) -> str:
+    return "[" + ", ".join(str(i) for i in range(count)) + "]"
+
 
 JSONDOC_CASES: dict[str, dict[str, Any]] = {
     "01-render-object": {
@@ -269,6 +338,57 @@ JSONDOC_CASES: dict[str, dict[str, Any]] = {
     "21-media-html": {"op": "media", "type": "text/html"},
     "22-sniffs-object": {"op": "sniffs-json", "body": "  {\"a\": 1}"},
     "23-sniffs-prose": {"op": "sniffs-json", "body": "<html><body>hi"},
+    # Depth and width are the two shapes a caller's `path` has to survive: the
+    # render is a worklist walk, so a 50-level document arrives as one line per
+    # level and a wide one as one line per member, never as a recursion that
+    # could overflow on a stranger's page.
+    "24-render-deep-50": {"op": "render", "body": _nested_object(50)},
+    "25-structure-deep-50": {"op": "structure", "body": _nested_object(50)},
+    "26-render-wide-object-40": {"op": "render", "body": _wide_object(40)},
+    "27-render-wide-array-40": {"op": "render", "body": _wide_array(40)},
+    # A duplicate key is where the two JSON readers part company: Python keeps
+    # the last value under the first position, and a tree that keeps both would
+    # print the column twice. Pinned rather than fixed, because neither answer
+    # is the file's -- the file says both.
+    "28-render-duplicate-keys": {"op": "render", "body": '{"a": 1, "b": 2, "a": 3}'},
+    "29-structure-duplicate-keys": {"op": "structure", "body": '{"a": 1, "b": 2, "a": 3}'},
+    # Numbers: the largest OCaml [int] and one past it, an arbitrary-precision
+    # magnitude, and the floats whose Python repr is the one the render writes.
+    "30-render-int-int63-max": {"op": "render", "body": '{"n": 4611686018427387903}'},
+    "31-render-int-past-int63": {"op": "render", "body": '{"n": 4611686018427387904}'},
+    "32-render-int-huge": {"op": "render", "body": '{"n": 123456789012345678901234567890}'},
+    "33-render-int-int63-min": {"op": "render", "body": '{"n": -4611686018427387904}'},
+    "34-render-floats": {
+        "op": "render",
+        "body": '{"a": 0.1, "b": 1.0, "c": -0.0, "d": 1e-7, "e": 1.5e300, "f": 3.141592653589793}',
+    },
+    "35-render-float-extremes": {
+        "op": "render",
+        "body": '{"inf": 1e309, "ninf": -1e309, "tiny": 5e-324, "sub": 2.2250738585072014e-308}',
+    },
+    # Whitespace is transport, not content: any mix of it between tokens is the
+    # same document, and a body made only of it is no document at all.
+    "36-render-whitespace-variants": {"op": "render", "body": '{\n\t"a" :\r\n [ 1 ,\t2 ]\n }'},
+    "37-render-whitespace-only": {"op": "render", "body": " \n\t\r\n "},
+    "38-render-bom": {"op": "render", "body": '\ufeff{"a": 1}'},
+    "39-render-trailing-garbage": {"op": "render", "body": '{"a": 1} x'},
+    "40-render-jsonl": {"op": "render", "body": '{"a": 1}\n{"b": 2}'},
+    "41-render-scalar-string": {"op": "render", "body": '"hi"'},
+    "42-render-scalar-null": {"op": "render", "body": "null"},
+    "43-select-empty-array": {"op": "select", "body": '{"xs": []}', "path": "$.xs[*]", "max_chars": 100},
+    "44-select-negative-index": {"op": "select", "body": '{"xs": [1, 2, 3]}', "path": "$.xs[-1]", "max_chars": 100},
+    "45-select-unicode-key": {
+        "op": "select",
+        "body": '{"caf\u00e9": {"\u65e5": 1}}',
+        "path": '$."caf\u00e9"."\u65e5"',
+        "max_chars": 100,
+    },
+    "46-parse-path-quoted-escape": {"op": "parse-path", "path": '$."a\\"b"'},
+    "47-child-path-empty-name": {"op": "child-path", "parent": "$.rows", "key": ""},
+    "48-child-path-dot-and-space": {"op": "child-path", "parent": "$.rows", "key": "a.b c"},
+    "49-sniffs-whitespace-only": {"op": "sniffs-json", "body": " \n\t "},
+    "50-sniffs-bom": {"op": "sniffs-json", "body": '\ufeff{}'},
+    "51-select-budget-zero": {"op": "select", "body": '{"xs": [1, 2, 3]}', "path": "$.xs[*]", "max_chars": 0},
 }
 
 
@@ -283,6 +403,75 @@ TABLEDOC_CASES: dict[str, dict[str, Any]] = {
     "06-csv-empty": {"op": "render", "media": "text/csv", "body": ""},
     "07-csv-header-only": {"op": "render", "media": "text/csv", "body": "a,b\n"},
     "08-media-text": {"op": "render", "media": "text/plain", "body": "a,b\n1,2\n"},
+    "09-csv-crlf": {"op": "render", "media": "text/csv", "body": "a,b\r\n1,2\r\n"},
+    "10-csv-blank-lines": {"op": "render", "media": "text/csv", "body": "a,b\n\n1,2\n\n"},
+    "11-csv-whitespace-cells": {"op": "render", "media": "text/csv", "body": " a , b \n 1 , 2 \n"},
+    "12-csv-wide": {
+        "op": "render",
+        "media": "text/csv",
+        "body": ",".join(f"c{i}" for i in range(20)) + "\n" + ",".join(str(i) for i in range(20)) + "\n",
+    },
+    "13-csv-semicolon-with-commas": {"op": "render", "media": "text/csv", "body": "a;b\n1,5;2,5\n"},
+    "14-csv-quoted-multiline": {"op": "render", "media": "text/csv", "body": 'a,b\n"one\ntwo",3\n'},
+    "15-csv-bom": {"op": "render", "media": "text/csv", "body": "\ufeffa,b\n1,2\n"},
+    "16-csv-single-column": {"op": "render", "media": "text/csv", "body": "a\n1\n2\n"},
+    "17-csv-trailing-delimiter": {"op": "render", "media": "text/csv", "body": "a,b,\n1,2,\n"},
+    "18-csv-unicode-cells": {"op": "render", "media": "text/csv", "body": "name,note\ncaf\u00e9,\u65e5\u672c\u8a9e\n"},
+}
+
+# {5b text: the codepoint walk and the repr pass, over raw bytes in hex}
+
+# The hex spelling is the point of this area: a malformed sequence has to reach
+# both projections as the bytes it is, not as whatever the corpus file's own
+# decode did to it.
+TEXT_CASES: dict[str, dict[str, Any]] = {
+    "01-count-empty": {"op": "count", "hex": ""},
+    "02-count-ascii": {"op": "count", "hex": b"a plain query".hex()},
+    "03-count-latin1": {"op": "count", "hex": "caf\u00e9 r\u00e9sum\u00e9".encode().hex()},
+    "04-count-emoji": {"op": "count", "hex": "\U0001f600\U0001f600".encode().hex()},
+    "05-count-combining": {"op": "count", "hex": "e\u0301e\u0301".encode().hex()},
+    "06-count-lone-continuation": {"op": "count", "hex": b"\x80abc".hex()},
+    "07-count-truncated-two-byte": {"op": "count", "hex": b"caf\xc3".hex()},
+    "08-count-truncated-three-byte": {"op": "count", "hex": b"\xe2\x80".hex()},
+    "09-count-truncated-four-byte": {"op": "count", "hex": b"\xf0\x9f\x98".hex()},
+    "10-count-lead-then-ascii": {"op": "count", "hex": b"\xe2abc".hex()},
+    "11-count-overlong": {"op": "count", "hex": b"\xc0\xaf".hex()},
+    "12-count-surrogate": {"op": "count", "hex": b"\xed\xa0\x80".hex()},
+    "13-count-five-byte-lead": {"op": "count", "hex": b"\xf8\x88\x80\x80\x80".hex()},
+    "14-take-zero": {"op": "take", "hex": b"hello".hex(), "limit": 0},
+    "15-take-ascii-mid": {"op": "take", "hex": b"hello world".hex(), "limit": 5},
+    "16-take-latin1": {"op": "take", "hex": "caf\u00e9".encode().hex(), "limit": 3},
+    "17-take-emoji": {"op": "take", "hex": "\U0001f600x".encode().hex(), "limit": 1},
+    "18-take-past-end": {"op": "take", "hex": b"hi".hex(), "limit": 50},
+    "19-take-combining": {"op": "take", "hex": "e\u0301x".encode().hex(), "limit": 1},
+    "20-strip-unicode-space": {"op": "strip", "hex": "\u00a0\u2003x\u3000\u2028".encode().hex()},
+    "21-strip-ascii": {"op": "strip", "hex": b"  a b\t\n".hex()},
+    "22-strip-nel": {"op": "strip", "hex": "\u0085x\u0085".encode().hex()},
+    "23-strip-no-space": {"op": "strip", "hex": "caf\u00e9".encode().hex()},
+    "24-lstrip-unicode-space": {"op": "lstrip", "hex": "\u2003 x ".encode().hex()},
+    "25-rstrip-unicode-space": {"op": "rstrip", "hex": " x \u2003".encode().hex()},
+    "26-words-unicode-space": {"op": "words", "hex": "a\u00a0b\u2003c".encode().hex()},
+    "27-words-tabs": {"op": "words", "hex": b"  a\tb\n\nc  ".hex()},
+    "28-words-only-space": {"op": "words", "hex": b" \t\n".hex()},
+    "29-words-zwsp": {"op": "words", "hex": "a\u200bb".encode().hex()},
+    "30-lines-lf": {"op": "lines", "hex": b"a\nb\n".hex()},
+    "31-lines-trailing-break": {"op": "lines", "hex": b"a\n\n".hex()},
+    "32-lines-crlf": {"op": "lines", "hex": b"a\r\nb".hex()},
+    "33-lines-lone-cr": {"op": "lines", "hex": b"a\rb".hex()},
+    "34-lines-unicode-separators": {"op": "lines", "hex": "a\u2028b\u0085c\u000bd".encode().hex()},
+    "35-slices-ascii": {"op": "slices", "hex": b"abc".hex()},
+    "36-slices-emoji": {"op": "slices", "hex": "\U0001f600x".encode().hex()},
+    "37-slices-combining": {"op": "slices", "hex": "e\u0301".encode().hex()},
+    "38-repr-ascii": {"op": "repr", "hex": b"plain text".hex()},
+    "39-repr-single-quote": {"op": "repr", "hex": b"it's".hex()},
+    "40-repr-both-quotes": {"op": "repr", "hex": b"it's a \"quote\"".hex()},
+    "41-repr-controls": {"op": "repr", "hex": b"a\tb\nc\rd\x00e\x7f".hex()},
+    "42-repr-non-ascii": {"op": "repr", "hex": "caf\u00e9 \u2014 \u65e5\u672c\u8a9e".encode().hex()},
+    "43-repr-nbsp": {"op": "repr", "hex": "a\u00a0b".encode().hex()},
+    "44-repr-zwsp": {"op": "repr", "hex": "a\u200bb".encode().hex()},
+    "45-repr-backslash": {"op": "repr", "hex": b"a\\b".hex()},
+    "46-roundtrip-valid": {"op": "roundtrip", "hex": "caf\u00e9 \U0001f600".encode().hex()},
+    "47-roundtrip-invalid": {"op": "roundtrip", "hex": b"\xe2abc".hex()},
 }
 
 # {6 router: the decisions, over frozen tables}
@@ -406,6 +595,65 @@ ROUTER_CASES: dict[str, dict[str, Any]] = {
             {"fn": "resolve_fetch", "requested": None},
         ],
     },
+    # A five-rung ladder is where the ordering rules stop being obvious: the
+    # default that the walk already tried is not a rung, a gated name keeps its
+    # place but is skipped, and the exhaustion sentence has to name the names it
+    # actually attempted rather than the ladder it was given.
+    "07-search-deep-ladder": {
+        "table": {
+            "providers": ["serper", "linkup", "tavily", "exa:free", "freeserp"],
+            "default": "serper",
+            "permitted": None,
+            "fallback": ["linkup", "tavily", "exa:free", "freeserp", "serper"],
+            "free_fallback": ["freeserp", "exa:free"],
+            "free": ["exa:free", "freeserp", "parallel:free", "anysearch"],
+            "free_order": ["exa:free", "parallel:free", "freeserp", "anysearch"],
+            "effective": ["serper", "linkup", "tavily", "exa:free", "freeserp"],
+        },
+        "calls": [
+            {
+                "fn": "fallback_rungs",
+                "ladder": ["linkup", "tavily", "exa:free", "freeserp", "serper"],
+                "tried": "serper",
+                "gated": [],
+            },
+            {
+                "fn": "fallback_rungs",
+                "ladder": ["linkup", "tavily", "exa:free", "freeserp", "serper"],
+                "tried": "serper",
+                "gated": ["tavily", "freeserp"],
+            },
+            {"fn": "free_walk"},
+            {
+                "fn": "fallback_exhausted_note",
+                "failed": ["serper", "linkup", "tavily", "exa:free", "freeserp"],
+                "mode": None,
+            },
+            {"fn": "resolve_search", "mode": "free"},
+            {"fn": "unnamed_walks_free"},
+        ],
+    },
+    # The request name is free text a model wrote, so a refusal quotes it back:
+    # the sentence has to survive a combining mark, an emoji and a zero-width
+    # space without turning into bytes or breaking the line.
+    "08-search-unicode-request": {
+        "table": {
+            "providers": ["serper", "exa:free"],
+            "default": "serper",
+            "permitted": None,
+            "fallback": [],
+            "free_fallback": [],
+            "free": ["exa:free", "freeserp", "parallel:free", "anysearch"],
+            "free_order": ["exa:free", "parallel:free", "freeserp", "anysearch"],
+            "effective": ["serper", "exa:free"],
+        },
+        "calls": [
+            {"fn": "resolve_search", "requested": "caf\u00e9"},
+            {"fn": "resolve_search", "requested": "exa\U0001f600"},
+            {"fn": "resolve_search", "requested": "serper\u200b"},
+            {"fn": "is_permitted", "name": "caf\u00e9"},
+        ],
+    },
 }
 
 
@@ -479,8 +727,7 @@ MODEL_CASES: dict[str, dict[str, Any]] = {
             {"model": "answer_request", "body": {"query": "why", "depth": "essay"}},
         ]
     },
-    "05-model-answer-and-registry": {
-        "cases": [
+    "05-model-answer-and-registry": {        "cases": [
             {
                 "model": "answer_response",
                 "body": {
@@ -504,6 +751,42 @@ MODEL_CASES: dict[str, dict[str, Any]] = {
                 "model": "provider_result",
                 "body": {"provider": "exa", "results": [{"title": "T", "url": "https://e.com"}], "cost_usd": 0.0025},
             },
+        ]
+    },
+    # Extremes: the bounds a calling model can name, the largest integers the two
+    # decoders hold, and the numeric spellings that are one value to an integer
+    # field and another to a float one.
+    "06-model-extremes": {
+        "cases": [
+            {"model": "search_request", "body": {"query": "q", "max_results": 0}},
+            {"model": "search_request", "body": {"query": "q", "max_results": 1}},
+            {"model": "search_request", "body": {"query": "q", "max_results": 20}},
+            {"model": "search_request", "body": {"query": "q", "max_results": 21}},
+            {"model": "search_request", "body": {"query": "q", "max_results": -1}},
+            {"model": "search_request", "body": {"query": "q", "max_results": 2.0}},
+            {"model": "search_request", "body": {"query": "q", "max_results": 2.5}},
+            # 2**70: an integer JSON can carry and an OCaml [int] cannot.
+            {"model": "search_request", "body_text": '{"query": "q", "max_results": 1180591620717411303424}'},
+            {"model": "search_request", "body_text": '{"query": "q", "max_results": 4611686018427387904}'},
+            {"model": "fetch_request", "body": {"url": "https://example.com/", "offset": -1}},
+            {"model": "fetch_request", "body": {"url": "https://example.com/", "offset": 0}},
+            {"model": "fetch_request", "body_text": '{"url": "https://example.com/", "offset": 1180591620717411303424}'},
+            {"model": "result", "body": {"title": "T", "url": "https://e.com", "score": 5e-324}},
+            {"model": "result", "body": {"title": "T", "url": "https://e.com", "score": 1e308}},
+            {"model": "result", "body": {"title": "T", "url": "https://e.com", "score": -1.5}},
+            {"model": "result", "body": {"title": "", "url": "https://e.com", "snippet": ""}},
+        ]
+    },
+    # A duplicate key has no single value: Python's object model keeps the last
+    # one under the first position, and a JSON tree that keeps both lets each
+    # lookup resolve the first. The body arrives as text precisely so neither
+    # projection is handed the already-collapsed object.
+    "07-model-duplicate-keys": {
+        "cases": [
+            {"model": "result", "body_text": '{"url": "https://e.com/1", "url": "https://e.com/2", "title": "t"}'},
+            {"model": "search_request", "body_text": '{"query": "first", "query": "second"}'},
+            {"model": "fetch_request", "body_text": '{"url": "https://example.com/a", "url": "https://example.com/b"}'},
+            {"model": "result", "body_text": '{"title": "a", "title": "b", "url": "https://e.com", "score": 0.5, "score": 0.75}'},
         ]
     },
 }
@@ -603,6 +886,65 @@ ENGINE_CASES: dict[str, dict[str, Any]] = {
         "providers": [{"name": "serper", "results": []}],
         "calls": [{"query": "xkcdqzj name nobody searches"}],
     },
+    # A four-rung ladder that ends in a hit: the attempt record is the whole
+    # claim, because the answer alone cannot say how many vendors were spent.
+    "09-deep-ladder": {
+        "config": {
+            "providers": {
+                "serper": {"enabled": True},
+                "linkup": {"enabled": True},
+                "tavily": {"enabled": True},
+                "exa:free": {"enabled": True},
+                "freeserp": {"enabled": True},
+            },
+            "default_provider": "serper",
+            "search": {"fallback": ["linkup", "tavily", "exa:free", "freeserp"]},
+        },
+        "providers": [
+            {"name": "serper", "kind": "failure", "message": "upstream timed out", "retryable": True},
+            {"name": "linkup", "kind": "failure", "message": "bad gateway", "retryable": True},
+            {"name": "tavily", "kind": "failure", "message": "connection reset", "retryable": True},
+            {"name": "exa:free", "kind": "quota", "message": "quota exhausted"},
+            {"name": "freeserp", "results": [_ENGINE_RESULT["ok2"]]},
+        ],
+        "calls": [{"query": "deep ladder"}],
+    },
+    "10-ladder-exhausted": {
+        "config": {
+            "providers": {"serper": {"enabled": True}, "linkup": {"enabled": True}, "exa:free": {"enabled": True}},
+            "default_provider": "serper",
+            "search": {"fallback": ["linkup", "exa:free"]},
+        },
+        "providers": [
+            {"name": "serper", "kind": "failure", "message": "upstream timed out", "retryable": True},
+            {"name": "linkup", "kind": "quota", "message": "quota exhausted"},
+            {"name": "exa:free", "kind": "failure", "message": "service unavailable", "retryable": False},
+        ],
+        "calls": [{"query": "nothing will answer"}],
+    },
+    # Non-ASCII reaches the engine twice: in the query the caller wrote and in
+    # the page text a provider returned. Both leave through the sanitize and
+    # escape boundary, so this case is what catches a byte-wise truncation or a
+    # raw special-token literal on the response path.
+    "11-unicode-query-and-results": {
+        "config": {
+            "providers": {"serper": {"enabled": True}},
+            "default_provider": "serper",
+        },
+        "providers": [
+            {
+                "name": "serper",
+                "results": [
+                    {
+                        "title": "caf\u00e9 na\u00efve \u65e5\u672c\u8a9e \U0001f600",
+                        "url": "https://e.com/unicode",
+                        "snippet": "a r\u00e9sum\u00e9 <|endoftext|> and \u200b a zero-width space",
+                    }
+                ],
+            }
+        ],
+        "calls": [{"query": "caf\u00e9 \U0001f600 <|endoftext|>", "max_results": 1}],
+    },
 }
 
 
@@ -612,6 +954,7 @@ def main() -> None:
     write_specs("fetch", FETCH_CASES)
     write_specs("jsondoc", JSONDOC_CASES)
     write_specs("tabledoc", TABLEDOC_CASES)
+    write_specs("text", TEXT_CASES)
     write_specs("router", ROUTER_CASES)
     write_specs("model", MODEL_CASES)
     write_specs("engine", ENGINE_CASES)

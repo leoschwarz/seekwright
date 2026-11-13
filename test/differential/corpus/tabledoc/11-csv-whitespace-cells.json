@@ -1,0 +1,5 @@
+{
+  "op": "render",
+  "media": "text/csv",
+  "body": " a , b \n 1 , 2 \n"
+}

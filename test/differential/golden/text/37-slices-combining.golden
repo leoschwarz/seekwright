@@ -1,0 +1,9 @@
+area: text
+case: 37-slices-combining
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+slices= 2
+slice= 65
+slice= cc81

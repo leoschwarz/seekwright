@@ -1,0 +1,10 @@
+area: text
+case: 35-slices-ascii
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+slices= 3
+slice= 61
+slice= 62
+slice= 63

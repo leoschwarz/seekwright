@@ -1,0 +1,12 @@
+area: router
+case: 07-search-deep-ladder
+verification: differential-golden
+oracle: python
+projection: router
+--- oracle
+rungs= linkup/candidate,tavily/candidate,exa:free/candidate,freeserp/candidate,serper/skip
+rungs= linkup/candidate,tavily/open,exa:free/candidate,freeserp/open,serper/skip
+free_walk= freeserp,exa:free
+note=  Fallbacks also failed: serper, linkup, tavily, exa:free, freeserp.
+resolve_search= freeserp
+unnamed_walks_free= false

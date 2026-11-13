@@ -1,0 +1,7 @@
+area: text
+case: 04-count-emoji
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+count= 2

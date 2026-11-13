@@ -1,0 +1,7 @@
+area: text
+case: 19-take-combining
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+take= 65

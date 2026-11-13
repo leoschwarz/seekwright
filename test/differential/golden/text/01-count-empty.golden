@@ -1,0 +1,7 @@
+area: text
+case: 01-count-empty
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+count= 0

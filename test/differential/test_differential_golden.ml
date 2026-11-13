@@ -117,14 +117,15 @@ let read_text path =
    dropped fails rather than shrinking the gate in silence. *)
 let min_cases =
   [
-    ("config", 60);
-    ("sanitize", 10);
-    ("fetch", 25);
-    ("jsondoc", 20);
-    ("tabledoc", 6);
-    ("router", 6);
-    ("model", 5);
-    ("engine", 8);
+    ("config", 80);
+    ("sanitize", 20);
+    ("fetch", 40);
+    ("jsondoc", 45);
+    ("tabledoc", 16);
+    ("text", 42);
+    ("router", 7);
+    ("model", 7);
+    ("engine", 10);
   ]
 
 let projection area =

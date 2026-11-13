@@ -1,0 +1,8 @@
+area: fetch
+case: 41-window-shorter-than-cap
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+window= hi
+more=false

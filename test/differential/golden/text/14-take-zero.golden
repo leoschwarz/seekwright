@@ -1,0 +1,7 @@
+area: text
+case: 14-take-zero
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+take= 

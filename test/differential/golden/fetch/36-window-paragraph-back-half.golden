@@ -1,0 +1,8 @@
+area: fetch
+case: 36-window-paragraph-back-half
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+window= alpha beta gamma delta epsilon\n\nzeta
+more=false

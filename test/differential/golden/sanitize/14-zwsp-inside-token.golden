@@ -1,0 +1,10 @@
+area: sanitize
+case: 14-zwsp-inside-token
+verification: differential-golden
+oracle: python
+projection: sanitize
+--- oracle
+count=1
+out=613ce2808b7ce2808b656e646f66746578747c3e62
+idempotent=true
+reversible=false

@@ -14,6 +14,7 @@ val sanitize : string -> string list
 val fetch : string -> string list
 val jsondoc : string -> string list
 val tabledoc : string -> string list
+val text : string -> string list
 val router : string -> string list
 val model : string -> string list
 val engine : string -> string list

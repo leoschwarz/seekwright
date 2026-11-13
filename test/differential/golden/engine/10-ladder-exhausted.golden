@@ -1,0 +1,12 @@
+area: engine
+case: 10-ladder-exhausted
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt serper
+attempt linkup
+attempt exa:free
+events= search.fallback_failed,search.fallback_failed,search.failed
+verdict= failed
+message= Search failed - serper: upstream timed out. Fallbacks also failed: linkup, exa:free. Retry shortly or try a different phrasing.

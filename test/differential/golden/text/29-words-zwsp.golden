@@ -1,0 +1,8 @@
+area: text
+case: 29-words-zwsp
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+words= 1
+word= 61e2808b62

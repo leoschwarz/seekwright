@@ -76,6 +76,28 @@ let contains_text haystack needle =
   in
   go 0
 
+(* A wave token is a capital [F] followed by one or two digits and delimited by
+   non-alphanumerics. The boundary matters: a port cell names files such as
+   [lib/text/utf8.ml], and a case-folded substring test reads its [f8] as a wave. *)
+let names_wave text =
+  let is_digit c = c >= '0' && c <= '9' in
+  let is_alnum c = is_digit c || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') in
+  let length = String.length text in
+  let rec digit_run at = if at < length && is_digit text.[at] then digit_run (at + 1) else at in
+  let rec go at =
+    if at >= length
+    then false
+    else if text.[at] = 'F' && (at = 0 || not (is_alnum text.[at - 1])) && at + 1 < length && is_digit text.[at + 1]
+    then (
+      let stops = digit_run (at + 1) in
+      let digits = stops - at - 1 in
+      if digits <= 2 && (stops >= length || not (is_alnum text.[stops]))
+      then true
+      else go stops)
+    else go (at + 1)
+  in
+  go 0
+
 let read_lines path =
   if not (Sys.file_exists path)
   then failwith (Printf.sprintf "the matrix has no %s — regenerate with ocaml-tools/oracle/gen_matrix.py" path);
@@ -266,16 +288,10 @@ let check_row table header row =
         then
           if contains_text (String.lowercase_ascii text) "pending"
           then failwith (Printf.sprintf "%s: %S = %S yet %S points at pending work: %S" name table.state_column state header_name text)
-          else
-            let upper = String.uppercase_ascii text in
-            let waves =
-              List.init 9 (fun n -> "F" ^ string_of_int (n + 1))
-              @ List.init 9 (fun n -> "F" ^ string_of_int (n + 1) ^ "0")
-            in
-            if List.exists (fun wave -> contains_text upper wave) waves
-            then
-              failwith
-                (Printf.sprintf "%s: %S = %S yet %S points at a later wave: %S" name table.state_column state header_name text))
+          else if names_wave text
+          then
+            failwith
+              (Printf.sprintf "%s: %S = %S yet %S points at a later wave: %S" name table.state_column state header_name text))
       (List.mapi (fun at value -> (at, value)) row)
 
 (* ---------- the four tables ---------- *)

@@ -1,0 +1,7 @@
+area: text
+case: 07-count-truncated-two-byte
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+count= 4

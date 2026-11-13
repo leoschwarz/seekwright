@@ -1,0 +1,5 @@
+{
+  "op": "render",
+  "media": "text/csv",
+  "body": "\ufeffa,b\n1,2\n"
+}

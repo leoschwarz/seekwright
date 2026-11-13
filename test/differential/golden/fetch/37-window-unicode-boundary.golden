@@ -1,0 +1,8 @@
+area: fetch
+case: 37-window-unicode-boundary
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+window= \ud83d\ude00\n\n[...]
+more=true

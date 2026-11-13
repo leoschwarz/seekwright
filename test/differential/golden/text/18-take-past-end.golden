@@ -1,0 +1,7 @@
+area: text
+case: 18-take-past-end
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+take= 6869

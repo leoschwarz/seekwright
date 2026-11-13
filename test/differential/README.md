@@ -21,6 +21,7 @@ them lives in `../../ocaml-tools/oracle/` and is never run by the gate.
 | `projection.ml` | One projection per area: reads a corpus input, calls the port, renders answer lines. |
 | `drive.ml` | `drive.exe <area> <corpus-dir>` — prints `case<TAB>line` for every input. Regeneration only; `dune runtest` never runs it. |
 | `test_differential_golden.ml` | The golden runner. One test per golden, plus coverage and floor checks per area. |
+| `test_differential_properties.ml` | The property runner: deterministic QCheck properties over the same port surfaces the corpus pins. |
 | `test_differential_matrix.ml` | The matrix validator. One test per table, plus cross-checks against `Config.known_providers` and the corpus areas. |
 | `corpus/<area>/` | The inputs, written by `ocaml-tools/oracle/gen_corpus.py`. |
 | `golden/<area>/` | The pinned answers. |
@@ -58,8 +59,11 @@ url-refused= invalid port: 99999 is not a port in 1-65535
   `Canon.reset_key_environment` clears `SEEKWRIGHT_*` key variables at startup, so
   a golden cannot depend on the shell that runs the suite.
 - Corpus input by area: `config` inputs are TOML, `sanitize` inputs are raw bytes,
-  every other area is a JSON spec. The runner derives the input path from
-  `area`/`case`, so a golden without its input is a failure, not an orphan.
+  `text` inputs are a JSON spec whose `hex` field carries the raw bytes — so a
+  malformed sequence reaches both projections as bytes instead of being
+  re-encoded by the test driver — and every other area is a JSON spec. The
+  runner derives the input path from `area`/`case`, so a golden without its
+  input is a failure, not an orphan.
 
 ## What the runner requires
 
@@ -74,6 +78,48 @@ For every area: at least `min_cases` goldens (the floor list in
 `test_differential_golden.ml`), and every corpus input has a golden. Those two
 checks are what the plan's mutation requirement means in practice — emptying a
 corpus or dropping an area thins the gate loudly instead of quietly.
+
+## Property runs (F3.3)
+
+The corpus is an enumeration: a person chose each case, and a golden pins the
+answer. Properties are the other half of the same claim. A case list can only
+say what someone thought of; a property says what must hold for every input the
+generator can make, and the generator is what makes a malformed byte, a lone CR
+or a past-the-end offset show up without anyone predicting it.
+
+`test_differential_properties.ml` runs 14 properties, 200 cases each, in five
+groups:
+
+| Group | Properties |
+| --- | --- |
+| `sanitize` | escaping twice changes nothing; removing the inserted zero-width spaces gives the input back (modulo a U+200B the caller wrote) |
+| `utf8` | the codepoint slices concatenate to the input and `count` agrees with the array; decoding then encoding valid text is the identity; `take` keeps a prefix and counts what it kept; `strip` reaches a fixed point on any bytes |
+| `fetch window` | the window is a prefix of the extraction and the marker appears exactly when `more` is set; an offset past the end is empty text with a truthful flag; an uncapped window is the extraction itself |
+| `jsondoc` | every path a rendering prints parses; every path the shape view prints parses; a member's path reads back as that member; an element's path reads back as that element |
+| `tabledoc` | a cell's path selects exactly that cell's line |
+
+The `text` area is the enumerated half of the same surface: `count`, `take`,
+`strip`/`lstrip`/`rstrip`, `words`, `lines`, `slices`, `repr` and `roundtrip`
+over valid Unicode, C0 controls, NBSP/ZWSP, combining marks, emoji, lone
+continuations, truncated and overlong sequences, a surrogate encoding and a
+five-byte lead. Its inputs are hex, so malformed UTF-8 reaches both projections
+as bytes rather than as a string some driver already replaced.
+
+**Determinism is explicit, not environmental.** Each property gets its own
+`Random.State` built from the literal seed `20261113` and a per-property salt,
+and every test passes `~count:200` and `~long:false`. `QCHECK_SEED`,
+`QCHECK_COUNT` and `QCHECK_LONG` are therefore bypassed: the shell a developer
+happens to have cannot change what the gate ran. `QCHECK_SEED=1 QCHECK_COUNT=2`
+still runs the same 14 tests over 200 cases each.
+
+**Dependency decision.** `qcheck-core` and `qcheck-alcotest` (`:with-test`, not
+a runtime dependency) were chosen over a hand-rolled loop because the only work
+left for a framework here is generation and shrinking, and writing those is how
+a suite grows a second, worse one. Measured cost in the `default` switch: two
+packages, about 5 MB installed, BSD-2-Clause, no transitive dependency this
+tree does not already carry (`dune`, `alcotest`, `base-unix`). The decision is
+recorded in `dune-project` beside the dependency and in
+`plans/seekwright-ocaml-port.md` §F3.3.
 
 ## Mutation checks
 
@@ -95,6 +141,8 @@ afterwards.
 | rename a matrix column | the table fails: *the header changed* |
 | let a not-ported row claim a real verification kind | the table fails: *it must say which wave will verify it (pending-F\*)* |
 | drop a provider row from `providers.tsv` | the cross-check fails: *only in the config: freeserp* |
+| raise an area's `min_cases` above its golden count | `coverage:<area>` fails: *pins N goldens, below the floor of N+1* |
+| invert the `utf8` slice-partition assertion in the property suite | `utf8: the codepoint slices are the input, in order` fails with a shrunk counterexample |
 
 ## Regenerating
 

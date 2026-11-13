@@ -1,0 +1,7 @@
+area: text
+case: 46-roundtrip-valid
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+roundtrip= 636166c3a920f09f9880

@@ -1,0 +1,24 @@
+area: model
+case: 07-model-duplicate-keys
+verification: explicit-divergence
+oracle: python
+projection: model
+reason: a body with a duplicate key has no single value: Python's json.loads keeps the last value under the first position, so the oracle re-encodes the second url/query/score; Yojson keeps both members and every lookup in the port resolves the first, so its wire object names the first. Both trees accept the body — this is a decoder difference on an ambiguous document, recorded rather than normalised, because a caller can use it to show a validator one value and the response another.
+--- oracle
+verdict= accept
+wire= {"title":"t","url":"https://e.com/2"}
+verdict= accept
+wire= {"max_results":5,"query":"second"}
+verdict= accept
+wire= {"structure":false,"url":"https://example.com/b"}
+verdict= accept
+wire= {"score":0.75,"title":"b","url":"https://e.com"}
+--- port
+verdict= accept
+wire= {"title":"t","url":"https://e.com/1"}
+verdict= accept
+wire= {"max_results":5,"query":"first"}
+verdict= accept
+wire= {"structure":false,"url":"https://example.com/a"}
+verdict= accept
+wire= {"score":0.5,"title":"a","url":"https://e.com"}

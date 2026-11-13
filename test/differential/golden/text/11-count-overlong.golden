@@ -1,0 +1,10 @@
+area: text
+case: 11-count-overlong
+verification: explicit-divergence
+oracle: python
+projection: text
+reason: the oracle decodes the corpus with Python's utf-8 and errors='replace', which spends one U+FFFD per maximal ill-formed subsequence; lib/text/utf8.ml's next_index steps by the lead byte's nominal width and only clamps at the end of the string, without checking that the continuation bytes follow, so the codepoint count differs. This is a lib/text defect pinned rather than fixed (lib/** is outside this corpus's ownership): every walk that consumes it — count, take, slices, strip, words, lines, roundtrip — inherits it, and the cases below are the ones that reach it.
+--- oracle
+count= 2
+--- port
+count= 1

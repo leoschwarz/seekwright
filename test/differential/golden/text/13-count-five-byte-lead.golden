@@ -1,0 +1,7 @@
+area: text
+case: 13-count-five-byte-lead
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+count= 5

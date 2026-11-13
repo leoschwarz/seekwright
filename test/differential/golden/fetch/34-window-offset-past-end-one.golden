@@ -1,0 +1,8 @@
+area: fetch
+case: 34-window-offset-past-end-one
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+window= 
+more=true

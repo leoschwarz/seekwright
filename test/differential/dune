@@ -20,7 +20,7 @@
 (library
  (name seekwright_diff)
  (modules canon projection)
- (libraries seekwright seekwright.fetch unix yojson))
+ (libraries seekwright seekwright.fetch seekwright.text unix yojson))
 
 ; The regeneration driver. Not a test: it is how a human re-pins a golden after
 ; changing the oracle or the corpus, and [dune runtest] never runs it.
@@ -28,6 +28,17 @@
  (name drive)
  (modules drive)
  (libraries seekwright_diff))
+
+; The property runs. [corpus/] answers "does the port answer this case the way
+; Python did"; this answers "does it hold for every input a generator can make",
+; with a fixed seed so the gate is reproducible and no fixture, Python or network
+; in sight. [qcheck-core] is the generator engine, [qcheck-alcotest] the
+; adapter that makes a property an alcotest case; both are [:with-test] in
+; [dune-project] (F3.3 records why QCheck rather than a hand-rolled loop).
+(test
+ (name test_differential_properties)
+ (modules test_differential_properties)
+ (libraries seekwright seekwright.fetch seekwright.text qcheck-core qcheck-alcotest alcotest))
 
 ; The golden runner. [golden/] and [corpus/] are declared deps so the sandbox
 ; carries them and the runner's directory walks see exactly what is committed —
@@ -47,6 +58,7 @@
   (glob_files golden/fetch/*.golden)
   (glob_files golden/jsondoc/*.golden)
   (glob_files golden/tabledoc/*.golden)
+  (glob_files golden/text/*.golden)
   (glob_files golden/router/*.golden)
   (glob_files golden/model/*.golden)
   (glob_files golden/engine/*.golden)
@@ -55,6 +67,7 @@
   (glob_files corpus/fetch/*)
   (glob_files corpus/jsondoc/*)
   (glob_files corpus/tabledoc/*)
+  (glob_files corpus/text/*)
   (glob_files corpus/router/*)
   (glob_files corpus/model/*)
   (glob_files corpus/engine/*)))

@@ -1,0 +1,7 @@
+area: jsondoc
+case: 32-render-int-huge
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  object(1)\n$.n  123456789012345678901234567890

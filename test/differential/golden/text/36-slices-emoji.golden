@@ -1,0 +1,9 @@
+area: text
+case: 36-slices-emoji
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+slices= 2
+slice= f09f9880
+slice= 78

@@ -1,0 +1,9 @@
+area: tabledoc
+case: 14-csv-quoted-multiline
+verification: differential-golden
+oracle: python
+projection: tabledoc
+--- oracle
+delimiter= ,
+table= true
+render= $  object(1)\n$.rows  array(1)\n$.rows[0]  object(2)\n$.rows[0].a  \"one\\ntwo\"\n$.rows[0].b  \"3\"

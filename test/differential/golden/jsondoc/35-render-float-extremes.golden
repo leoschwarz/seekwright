@@ -1,0 +1,7 @@
+area: jsondoc
+case: 35-render-float-extremes
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  object(4)\n$.inf  Infinity\n$.ninf  -Infinity\n$.tiny  5e-324\n$.sub  2.2250738585072014e-308

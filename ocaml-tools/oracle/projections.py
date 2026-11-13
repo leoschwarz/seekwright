@@ -418,6 +418,38 @@ def _table_render(spec: dict[str, Any]) -> list[str]:
 TABLEDOC_OPS = {"render": _table_render}
 
 
+# {1 text (mirror of Projection.text)}
+
+
+def _text_decode(spec: dict[str, Any]) -> str:
+    """The input bytes under Python's own decoder — the semantics ``Utf8`` claims.
+
+    The corpus spells these inputs as hex so a malformed sequence reaches this
+    side as the bytes it is; ``errors="replace"`` is the rule the port's walk
+    says it implements, so a case where the two disagree is a statement about
+    the walk.
+    """
+    return of_hex(spec["hex"]).decode("utf-8", errors="replace")
+
+
+def _counted(kind: str, items: list[str]) -> list[str]:
+    return [f"{kind}s= {len(items)}"] + [f"{kind}= " + to_hex(item.encode("utf-8")) for item in items]
+
+
+TEXT_OPS = {
+    "count": lambda spec: ["count= " + str(len(_text_decode(spec)))],
+    "take": lambda spec: ["take= " + to_hex(_text_decode(spec)[: spec["limit"]].encode("utf-8"))],
+    "strip": lambda spec: ["strip= " + to_hex(_text_decode(spec).strip().encode("utf-8"))],
+    "lstrip": lambda spec: ["lstrip= " + to_hex(_text_decode(spec).lstrip().encode("utf-8"))],
+    "rstrip": lambda spec: ["rstrip= " + to_hex(_text_decode(spec).rstrip().encode("utf-8"))],
+    "words": lambda spec: _counted("word", _text_decode(spec).split()),
+    "lines": lambda spec: _counted("line", _text_decode(spec).splitlines()),
+    "slices": lambda spec: _counted("slice", list(_text_decode(spec))),
+    "repr": lambda spec: ["repr= " + esc(repr(_text_decode(spec)))],
+    "roundtrip": lambda spec: ["roundtrip= " + to_hex(_text_decode(spec).encode("utf-8"))],
+}
+
+
 def _op_lines(table: dict[str, Any], area: str, spec: dict[str, Any]) -> list[str]:
     try:
         return table[spec["op"]](spec)
@@ -566,8 +598,11 @@ def model_case(spec_text: str) -> list[str]:
     lines: list[str] = []
     for case in spec["cases"]:
         cls = _MODEL_CLASSES[case["model"]]
+        # ``body_text`` is the raw document a duplicate key survives in; a spec
+        # written as an object would have collapsed it already.
+        body = json.loads(case["body_text"]) if "body_text" in case else case["body"]
         try:
-            validated = cls.model_validate(case["body"])
+            validated = cls.model_validate(body)
         except ValidationError:
             lines.append("verdict= reject")
             continue
@@ -706,6 +741,7 @@ AREAS: dict[str, Any] = {
     "fetch": lambda text: _op_lines(FETCH_OPS, "fetch", json.loads(text)),
     "jsondoc": lambda text: _op_lines(JSONDOC_OPS, "jsondoc", json.loads(text)),
     "tabledoc": lambda text: _op_lines(TABLEDOC_OPS, "tabledoc", json.loads(text)),
+    "text": lambda text: _op_lines(TEXT_OPS, "text", json.loads(text)),
     "router": router_case,
     "model": model_case,
     "engine": engine_case,

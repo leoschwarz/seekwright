@@ -1,0 +1,14 @@
+area: text
+case: 32-lines-crlf
+verification: explicit-divergence
+oracle: python
+projection: text
+reason: is_line_boundary deliberately omits CR, which test/test_text.ml and utf8.mli both record as load-bearing for the fetch path's CSV reader (it refuses a bare carriage return itself, which it can only see if the split leaves it in). Python's str.splitlines() breaks on CR and treats CRLF as one break, so the CRLF line keeps its CR here and a lone CR does not break at all.
+--- oracle
+lines= 2
+line= 61
+line= 62
+--- port
+lines= 2
+line= 610d
+line= 62

@@ -1,0 +1,70 @@
+{
+  "config": {
+    "providers": {
+      "serper": {
+        "enabled": true
+      },
+      "linkup": {
+        "enabled": true
+      },
+      "tavily": {
+        "enabled": true
+      },
+      "exa:free": {
+        "enabled": true
+      },
+      "freeserp": {
+        "enabled": true
+      }
+    },
+    "default_provider": "serper",
+    "search": {
+      "fallback": [
+        "linkup",
+        "tavily",
+        "exa:free",
+        "freeserp"
+      ]
+    }
+  },
+  "providers": [
+    {
+      "name": "serper",
+      "kind": "failure",
+      "message": "upstream timed out",
+      "retryable": true
+    },
+    {
+      "name": "linkup",
+      "kind": "failure",
+      "message": "bad gateway",
+      "retryable": true
+    },
+    {
+      "name": "tavily",
+      "kind": "failure",
+      "message": "connection reset",
+      "retryable": true
+    },
+    {
+      "name": "exa:free",
+      "kind": "quota",
+      "message": "quota exhausted"
+    },
+    {
+      "name": "freeserp",
+      "results": [
+        {
+          "title": "Second",
+          "url": "https://e.com/2",
+          "snippet": "another hit"
+        }
+      ]
+    }
+  ],
+  "calls": [
+    {
+      "query": "deep ladder"
+    }
+  ]
+}

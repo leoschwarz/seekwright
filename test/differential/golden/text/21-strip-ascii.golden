@@ -1,0 +1,7 @@
+area: text
+case: 21-strip-ascii
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+strip= 612062

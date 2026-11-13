@@ -1,0 +1,7 @@
+area: jsondoc
+case: 39-render-trailing-garbage
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= -

@@ -1,0 +1,26 @@
+area: config
+case: 86-int-past-int63
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: the port's TOML reader holds an integer in an OCaml int, 63 bits, and reports a value it cannot represent as invalid TOML; Python's tomllib keeps arbitrary precision and the loader accepts the document because policy.max_snippet_chars has no upper bound. The port refuses rather than truncates, so this is a capability limit stated in the wrong sentence ('invalid TOML' for a valid file) — lib/config.ml is outside this corpus's ownership, so it is pinned and raised.
+--- oracle
+default=-
+permitted=-
+providers_defaulted=true
+enabled=exa:free,freeserp,parallel:free
+effective=exa:free,freeserp,parallel:free
+free_only=true
+missing_keys=
+missing_agent=
+policy,4611686018427387904,2000,10.000000
+fetch,true,trafilatura,15.000000,8388608,40000,200,6000,3,false,false,seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright),-,false,http,-,-,-,60.000000,-,268435456,33554432,300.000000
+search,-,-,60.000000,3,120.000000
+agent,false,-,-,90.000000,30.000000,24000,500,2500,0.250000,-,-
+logging,INFO,text,WARNING,false,false,false
+dashboard,true,-
+provider exa:free enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider freeserp enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+provider parallel:free enabled=true cost=- depth=standard output=sourcedAnswer mode=fast url=- cooldown=60.000000 app=- index=- title_attr=- url_attr=- snippet_attr=-
+--- port
+PARSE-ERR

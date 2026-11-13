@@ -1,0 +1,10 @@
+area: text
+case: 27-words-tabs
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+words= 3
+word= 61
+word= 62
+word= 63

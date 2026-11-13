@@ -1,0 +1,7 @@
+area: text
+case: 38-repr-ascii
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+repr= 'plain text'

@@ -1,0 +1,93 @@
+{
+  "table": {
+    "providers": [
+      "serper",
+      "linkup",
+      "tavily",
+      "exa:free",
+      "freeserp"
+    ],
+    "default": "serper",
+    "permitted": null,
+    "fallback": [
+      "linkup",
+      "tavily",
+      "exa:free",
+      "freeserp",
+      "serper"
+    ],
+    "free_fallback": [
+      "freeserp",
+      "exa:free"
+    ],
+    "free": [
+      "exa:free",
+      "freeserp",
+      "parallel:free",
+      "anysearch"
+    ],
+    "free_order": [
+      "exa:free",
+      "parallel:free",
+      "freeserp",
+      "anysearch"
+    ],
+    "effective": [
+      "serper",
+      "linkup",
+      "tavily",
+      "exa:free",
+      "freeserp"
+    ]
+  },
+  "calls": [
+    {
+      "fn": "fallback_rungs",
+      "ladder": [
+        "linkup",
+        "tavily",
+        "exa:free",
+        "freeserp",
+        "serper"
+      ],
+      "tried": "serper",
+      "gated": []
+    },
+    {
+      "fn": "fallback_rungs",
+      "ladder": [
+        "linkup",
+        "tavily",
+        "exa:free",
+        "freeserp",
+        "serper"
+      ],
+      "tried": "serper",
+      "gated": [
+        "tavily",
+        "freeserp"
+      ]
+    },
+    {
+      "fn": "free_walk"
+    },
+    {
+      "fn": "fallback_exhausted_note",
+      "failed": [
+        "serper",
+        "linkup",
+        "tavily",
+        "exa:free",
+        "freeserp"
+      ],
+      "mode": null
+    },
+    {
+      "fn": "resolve_search",
+      "mode": "free"
+    },
+    {
+      "fn": "unnamed_walks_free"
+    }
+  ]
+}

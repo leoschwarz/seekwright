@@ -1,0 +1,4 @@
+[providers.serper]
+	enabled = true
+[policy]
+	max_snippet_chars = 250

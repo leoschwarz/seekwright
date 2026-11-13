@@ -1,0 +1,16 @@
+area: sanitize
+case: 23-malformed-overlong
+verification: explicit-divergence
+oracle: python
+projection: sanitize
+reason: the oracle projection must read the corpus through a text decode (its sanitizer takes str), so an ill-formed byte arrives as U+FFFD before the escape pass runs; the port's sanitizer is byte-faithful and passes the original bytes through. The pass itself agrees on every case the walk does not touch: same count, same idempotence, same reversibility. The bytes reach the two sanitizers differently, not the rule.
+--- oracle
+count=1
+out=efbfbdefbfbd3ce2808b7c787c3e
+idempotent=true
+reversible=true
+--- port
+count=1
+out=c0af3ce2808b7c787c3e
+idempotent=true
+reversible=true

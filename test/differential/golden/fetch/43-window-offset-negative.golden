@@ -1,0 +1,11 @@
+area: fetch
+case: 43-window-offset-negative
+verification: explicit-divergence
+oracle: python
+projection: fetch
+reason: not reachable through the tool surface — Model.fetch_request_of_yojson checks offset ≥ 0 and max_chars is the config constant (Default or Uncapped) — so this pins Fetcher.window_text's own boundary. Python's slice clamps or wraps a negative index: the oracle answers text taken from the end (negative offset) or a window at least partly past the end (negative cap). The port raises Invalid_argument from Array.sub on a negative offset and returns an empty window on a negative cap. Recorded as a library-boundary difference, raised in the plan rather than fixed: lib/** is outside this corpus's ownership.
+--- oracle
+window= d
+more=false
+--- port
+raised= Invalid_argument(Array.sub)

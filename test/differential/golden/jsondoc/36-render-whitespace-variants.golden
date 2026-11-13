@@ -1,0 +1,7 @@
+area: jsondoc
+case: 36-render-whitespace-variants
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  object(1)\n$.a  array(2)\n$.a[0]  1\n$.a[1]  2

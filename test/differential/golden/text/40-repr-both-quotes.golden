@@ -1,0 +1,7 @@
+area: text
+case: 40-repr-both-quotes
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+repr= 'it\\'s a \"quote\"'

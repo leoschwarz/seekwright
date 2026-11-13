@@ -1,0 +1,111 @@
+{
+  "cases": [
+    {
+      "model": "search_request",
+      "body": {
+        "query": "q",
+        "max_results": 0
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "q",
+        "max_results": 1
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "q",
+        "max_results": 20
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "q",
+        "max_results": 21
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "q",
+        "max_results": -1
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "q",
+        "max_results": 2.0
+      }
+    },
+    {
+      "model": "search_request",
+      "body": {
+        "query": "q",
+        "max_results": 2.5
+      }
+    },
+    {
+      "model": "search_request",
+      "body_text": "{\"query\": \"q\", \"max_results\": 1180591620717411303424}"
+    },
+    {
+      "model": "search_request",
+      "body_text": "{\"query\": \"q\", \"max_results\": 4611686018427387904}"
+    },
+    {
+      "model": "fetch_request",
+      "body": {
+        "url": "https://example.com/",
+        "offset": -1
+      }
+    },
+    {
+      "model": "fetch_request",
+      "body": {
+        "url": "https://example.com/",
+        "offset": 0
+      }
+    },
+    {
+      "model": "fetch_request",
+      "body_text": "{\"url\": \"https://example.com/\", \"offset\": 1180591620717411303424}"
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "T",
+        "url": "https://e.com",
+        "score": 5e-324
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "T",
+        "url": "https://e.com",
+        "score": 1e+308
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "T",
+        "url": "https://e.com",
+        "score": -1.5
+      }
+    },
+    {
+      "model": "result",
+      "body": {
+        "title": "",
+        "url": "https://e.com",
+        "snippet": ""
+      }
+    }
+  ]
+}

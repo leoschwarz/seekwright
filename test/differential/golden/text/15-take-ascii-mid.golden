@@ -1,0 +1,7 @@
+area: text
+case: 15-take-ascii-mid
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+take= 68656c6c6f

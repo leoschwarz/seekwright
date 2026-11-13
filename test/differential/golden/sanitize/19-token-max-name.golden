@@ -1,0 +1,10 @@
+area: sanitize
+case: 19-token-max-name
+verification: differential-golden
+oracle: python
+projection: sanitize
+--- oracle
+count=1
+out=3ce2808b7c616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161616161617c3e
+idempotent=true
+reversible=true

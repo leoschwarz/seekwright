@@ -1,0 +1,46 @@
+{
+  "table": {
+    "providers": [
+      "serper",
+      "exa:free"
+    ],
+    "default": "serper",
+    "permitted": null,
+    "fallback": [],
+    "free_fallback": [],
+    "free": [
+      "exa:free",
+      "freeserp",
+      "parallel:free",
+      "anysearch"
+    ],
+    "free_order": [
+      "exa:free",
+      "parallel:free",
+      "freeserp",
+      "anysearch"
+    ],
+    "effective": [
+      "serper",
+      "exa:free"
+    ]
+  },
+  "calls": [
+    {
+      "fn": "resolve_search",
+      "requested": "caf\u00e9"
+    },
+    {
+      "fn": "resolve_search",
+      "requested": "exa\ud83d\ude00"
+    },
+    {
+      "fn": "resolve_search",
+      "requested": "serper\u200b"
+    },
+    {
+      "fn": "is_permitted",
+      "name": "caf\u00e9"
+    }
+  ]
+}

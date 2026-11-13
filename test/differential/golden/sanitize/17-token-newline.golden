@@ -1,0 +1,10 @@
+area: sanitize
+case: 17-token-newline
+verification: differential-golden
+oracle: python
+projection: sanitize
+--- oracle
+count=0
+out=613c7c656e640a6f66746578747c3e62
+idempotent=true
+reversible=true

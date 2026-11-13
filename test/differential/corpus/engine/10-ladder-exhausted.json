@@ -1,0 +1,46 @@
+{
+  "config": {
+    "providers": {
+      "serper": {
+        "enabled": true
+      },
+      "linkup": {
+        "enabled": true
+      },
+      "exa:free": {
+        "enabled": true
+      }
+    },
+    "default_provider": "serper",
+    "search": {
+      "fallback": [
+        "linkup",
+        "exa:free"
+      ]
+    }
+  },
+  "providers": [
+    {
+      "name": "serper",
+      "kind": "failure",
+      "message": "upstream timed out",
+      "retryable": true
+    },
+    {
+      "name": "linkup",
+      "kind": "quota",
+      "message": "quota exhausted"
+    },
+    {
+      "name": "exa:free",
+      "kind": "failure",
+      "message": "service unavailable",
+      "retryable": false
+    }
+  ],
+  "calls": [
+    {
+      "query": "nothing will answer"
+    }
+  ]
+}

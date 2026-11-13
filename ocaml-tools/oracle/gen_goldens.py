@@ -39,6 +39,105 @@ CORPUS = ROOT / "test" / "differential" / "corpus"
 GOLDEN = ROOT / "test" / "differential" / "golden"
 DRIVE = ROOT / "_build" / "default" / "test" / "differential" / "drive.exe"
 
+_ILL_FORMED_STEP_REASON = (
+    "the oracle decodes the corpus with Python's utf-8 and errors='replace', which spends one U+FFFD per "
+    "maximal ill-formed subsequence; lib/text/utf8.ml's next_index steps by the lead byte's nominal width "
+    "and only clamps at the end of the string, without checking that the continuation bytes follow, so the "
+    "codepoint count differs. This is a lib/text defect pinned rather than fixed (lib/** is outside this "
+    "corpus's ownership): every walk that consumes it — count, take, slices, strip, words, lines, roundtrip — "
+    "inherits it, and the cases below are the ones that reach it."
+)
+
+_ILL_FORMED_ROUNDTRIP_REASON = (
+    "the same step as text/10, seen through decode-and-re-encode: of_string reads this lead and the two bytes "
+    "after it as one three-byte codepoint, so the round trip does not return the input bytes, while the oracle's "
+    "errors='replace' form is lossy but stable. Pinned to say in the open that the port is not byte-identical on "
+    "ill-formed input; the sentence is the port's behaviour, not a target."
+)
+
+_TRAILING_LINE_REASON = (
+    "splitlines appends the tail after every break, so a string ending in a break gains a final empty line; "
+    "Python's str.splitlines() drops it ('a\\nb\\n' is two lines, not three). test/test_text.ml pins the port's "
+    "reading as intended and utf8.mli's doc-comment claims Python parity — the comment is what is wrong, and the "
+    "behaviour is the port's. lib/** is outside this corpus's ownership, so the difference is pinned and raised."
+)
+
+_LONE_CR_REASON = (
+    "is_line_boundary deliberately omits CR, which test/test_text.ml and utf8.mli both record as load-bearing for "
+    "the fetch path's CSV reader (it refuses a bare carriage return itself, which it can only see if the split "
+    "leaves it in). Python's str.splitlines() breaks on CR and treats CRLF as one break, so the CRLF line keeps "
+    "its CR here and a lone CR does not break at all."
+)
+
+_NON_PRINTABLE_REPR_REASON = (
+    "py_repr passes every non-ASCII codepoint through as its UTF-8 bytes by design (a log line is read by a "
+    "machine that keeps UTF-8, and rewriting a printable would hide what the page said), where Python's repr "
+    "escapes a non-printable such as U+00A0 or U+200B. The port's rule is the contract and the two reprs are not "
+    "interchangeable on non-printable non-ASCII; pinned so the boundary is measured, not assumed."
+)
+
+_MALFORMED_SANITIZE_REASON = (
+    "the oracle projection must read the corpus through a text decode (its sanitizer takes str), so an "
+    "ill-formed byte arrives as U+FFFD before the escape pass runs; the port's sanitizer is byte-faithful and "
+    "passes the original bytes through. The pass itself agrees on every case the walk does not touch: same "
+    "count, same idempotence, same reversibility. The bytes reach the two sanitizers differently, not the rule."
+)
+
+_WINDOW_NEGATIVE_REASON = (
+    "not reachable through the tool surface — Model.fetch_request_of_yojson checks offset ≥ 0 and max_chars is "
+    "the config constant (Default or Uncapped) — so this pins Fetcher.window_text's own boundary. Python's slice "
+    "clamps or wraps a negative index: the oracle answers text taken from the end (negative offset) or a window "
+    "at least partly past the end (negative cap). The port raises Invalid_argument from Array.sub on a negative "
+    "offset and returns an empty window on a negative cap. Recorded as a library-boundary difference, raised in "
+    "the plan rather than fixed: lib/** is outside this corpus's ownership."
+)
+
+_TRAILING_CELL_REASON = (
+    "lib/fetch/tabledoc.ml's reader loses a field that is empty and last in its record: the delimiter switches to "
+    "Start_field without saving, and the newline's save only happens when a byte had been read, so the trailing "
+    "empty cell never reaches the header and the width follows it. Python's csv yields the empty trailing cell, "
+    "so the oracle renders a third column named column3 that the port does not have. The row is padded to the "
+    "header's width either way, so a file whose every line ends with a delimiter loses its last column silently "
+    "rather than failing — which is why this is pinned and raised instead of normalised away."
+)
+
+_TOML_WIDE_INT_REASON = (
+    "the port's TOML reader holds an integer in an OCaml int, 63 bits, and reports a value it cannot represent "
+    "as invalid TOML; Python's tomllib keeps arbitrary precision and the loader accepts the document because "
+    "policy.max_snippet_chars has no upper bound. The port refuses rather than truncates, so this is a capability "
+    "limit stated in the wrong sentence ('invalid TOML' for a valid file) — lib/config.ml is outside this corpus's "
+    "ownership, so it is pinned and raised."
+)
+
+_TOML_SUBSET_REASON = (
+    "the port's TOML reader implements a subset of TOML 1.0: a hexadecimal integer (0x10) and the nan/inf float "
+    "spellings are valid and tomllib reads them, while the port answers PARSE-ERR for the whole file. A parser gap "
+    "in lib/config.ml, outside this corpus's ownership; pinned so the subset is measured instead of assumed. The "
+    "same file with a decimal spelling is a passing case beside it."
+)
+
+_WIDE_INT_MODEL_REASON = (
+    "pydantic holds a Python int of any width and FetchRequest.offset has no upper bound, so a 2**70 offset is "
+    "accepted and re-encoded exactly; the port's decoder accepts a Yojson Int (or an integral Float) only and "
+    "reports Intlit as a type error, so the same body is refused. Refusing is honest at a 63-bit int, but the "
+    "sentence ('expected an integer, got an integer') is not — pinned and raised for the port's model layer."
+)
+
+_DUPLICATE_KEY_REASON = (
+    "a body with a duplicate key has no single value: Python's json.loads keeps the last value under the first "
+    "position, so the oracle re-encodes the second url/query/score; Yojson keeps both members and every lookup in "
+    "the port resolves the first, so its wire object names the first. Both trees accept the body — this is a "
+    "decoder difference on an ambiguous document, recorded rather than normalised, because a caller can use it to "
+    "show a validator one value and the response another."
+)
+
+_REPR_IN_REFUSAL_REASON = (
+    "the same repr rule as text/43, surfacing in a refusal sentence: the router quotes the requested name back "
+    "through py_repr, Python's repr escapes the zero-width space as \\u200b while the port passes the codepoint "
+    "through and the projection's escape renders it as \\u200b too — so the two sentences differ by one backslash. "
+    "Same verdict, same wording otherwise; the difference is the repr's non-printable rule."
+)
+
 # Accepted divergences, keyed by (area, case): the reason the two trees answer
 # differently and why that is fine rather than a bug to chase. Every mismatch
 # must appear here, or be classifiable by one of the two systematic rules
@@ -48,7 +147,11 @@ DIVERGENCES: dict[tuple[str, str], str] = {
     (
         "sanitize",
         "09-lone-continuation",
-    ): "the oracle projection must read the corpus through a text decode (its sanitizer takes str), so the ill-formed byte arrives as U+FFFD before it is called; the port's sanitizer is byte-faithful and passes the lone continuation byte through. The escape pass itself agrees: same count, same reversibility, same idempotence.",
+    ): _MALFORMED_SANITIZE_REASON,
+    ("sanitize", "22-malformed-mid"): _MALFORMED_SANITIZE_REASON,
+    ("sanitize", "23-malformed-overlong"): _MALFORMED_SANITIZE_REASON,
+    ("fetch", "43-window-offset-negative"): _WINDOW_NEGATIVE_REASON,
+    ("fetch", "44-window-cap-negative"): _WINDOW_NEGATIVE_REASON,
     (
         "fetch",
         "08-url-port-range",
@@ -69,6 +172,25 @@ DIVERGENCES: dict[tuple[str, str], str] = {
         "model",
         "03-model-fetch-response",
     ): "the same coercion gap as model/01 on a different field: pydantic turns \"200\" into the int 200, the port's decoder refuses it. The refusal sentences themselves are not pinned (accepted difference: pydantic reports a structured error list, the port states one sentence).",
+    ("tabledoc", "17-csv-trailing-delimiter"): _TRAILING_CELL_REASON,
+    ("config", "86-int-past-int63"): _TOML_WIDE_INT_REASON,
+    ("config", "87-int-huge"): _TOML_WIDE_INT_REASON,
+    ("config", "89-int-hex"): _TOML_SUBSET_REASON,
+    ("config", "93-float-nan"): _TOML_SUBSET_REASON,
+    ("config", "94-float-inf"): _TOML_SUBSET_REASON,
+    ("router", "08-search-unicode-request"): _REPR_IN_REFUSAL_REASON,
+    ("model", "06-model-extremes"): _WIDE_INT_MODEL_REASON,
+    ("model", "07-model-duplicate-keys"): _DUPLICATE_KEY_REASON,
+    ("text", "10-count-lead-then-ascii"): _ILL_FORMED_STEP_REASON,
+    ("text", "11-count-overlong"): _ILL_FORMED_STEP_REASON,
+    ("text", "12-count-surrogate"): _ILL_FORMED_STEP_REASON,
+    ("text", "30-lines-lf"): _TRAILING_LINE_REASON,
+    ("text", "31-lines-trailing-break"): _TRAILING_LINE_REASON,
+    ("text", "32-lines-crlf"): _LONE_CR_REASON,
+    ("text", "33-lines-lone-cr"): _LONE_CR_REASON,
+    ("text", "43-repr-nbsp"): _NON_PRINTABLE_REPR_REASON,
+    ("text", "44-repr-zwsp"): _NON_PRINTABLE_REPR_REASON,
+    ("text", "47-roundtrip-invalid"): _ILL_FORMED_ROUNDTRIP_REASON,
 }
 
 _WORDING_REASON = (

@@ -1,0 +1,10 @@
+area: config
+case: 95-datetime-value
+verification: explicit-divergence
+oracle: python
+projection: config
+reason: same verdict, different sentence: pydantic reports a structured validation list and the port states one sentence naming the key and the fault. The projection already strips the path prefix and collapses the report to one line; pinning both sentences keeps the difference visible.
+--- oracle
+ERR 1 validation error for Config logging.log_content Input should be a valid boolean [type=bool_type, input_value=datetime.date(1979, 5, 27), input_type=date] For further information visit https://errors.pydantic.dev/2.14/v/bool_type
+--- port
+ERR logging.log_content: expected a boolean, found a date

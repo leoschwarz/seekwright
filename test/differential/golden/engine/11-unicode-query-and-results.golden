@@ -1,0 +1,13 @@
+area: engine
+case: 11-unicode-query-and-results
+verification: differential-golden
+oracle: python
+projection: engine
+--- oracle
+attempt serper
+events= search.ok
+verdict= ok
+provider= serper
+results=1
+titles=caf\u00e9 na\u00efve \u65e5\u672c\u8a9e \ud83d\ude00
+notice=-

@@ -1,0 +1,7 @@
+area: jsondoc
+case: 37-render-whitespace-only
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= -

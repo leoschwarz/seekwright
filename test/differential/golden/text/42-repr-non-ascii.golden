@@ -1,0 +1,7 @@
+area: text
+case: 42-repr-non-ascii
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+repr= 'caf\u00e9 \u2014 \u65e5\u672c\u8a9e'

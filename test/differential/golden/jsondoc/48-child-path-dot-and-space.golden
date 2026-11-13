@@ -1,0 +1,7 @@
+area: jsondoc
+case: 48-child-path-dot-and-space
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+child= $.rows[\"a.b c\"]

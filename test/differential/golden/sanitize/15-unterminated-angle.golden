@@ -1,0 +1,10 @@
+area: sanitize
+case: 15-unterminated-angle
+verification: differential-golden
+oracle: python
+projection: sanitize
+--- oracle
+count=0
+out=613c7c656e646f6674657874
+idempotent=true
+reversible=true

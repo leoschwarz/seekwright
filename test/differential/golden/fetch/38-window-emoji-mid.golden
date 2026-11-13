@@ -1,0 +1,8 @@
+area: fetch
+case: 38-window-emoji-mid
+verification: differential-golden
+oracle: python
+projection: fetch
+--- oracle
+window= \ud83d\ude00
+more=false

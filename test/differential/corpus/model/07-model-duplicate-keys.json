@@ -1,0 +1,20 @@
+{
+  "cases": [
+    {
+      "model": "result",
+      "body_text": "{\"url\": \"https://e.com/1\", \"url\": \"https://e.com/2\", \"title\": \"t\"}"
+    },
+    {
+      "model": "search_request",
+      "body_text": "{\"query\": \"first\", \"query\": \"second\"}"
+    },
+    {
+      "model": "fetch_request",
+      "body_text": "{\"url\": \"https://example.com/a\", \"url\": \"https://example.com/b\"}"
+    },
+    {
+      "model": "result",
+      "body_text": "{\"title\": \"a\", \"title\": \"b\", \"url\": \"https://e.com\", \"score\": 0.5, \"score\": 0.75}"
+    }
+  ]
+}

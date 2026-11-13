@@ -24,9 +24,11 @@ module Fetcher = Seekwright_fetch.Fetcher
 module Jsondoc = Seekwright_fetch.Jsondoc
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
+module Repr = Seekwright_text.Repr
 module Router = Seekwright.Router
 module Sanitize = Seekwright.Sanitize
 module Tabledoc = Seekwright_fetch.Tabledoc
+module Utf8 = Seekwright_text.Utf8
 
 (* {1 Reading a corpus spec} *)
 
@@ -329,8 +331,17 @@ let window_case spec =
   let text = want_string "text" spec in
   let offset = want_int "offset" spec in
   let max_chars = want_int "max_chars" spec in
-  let window, more = Fetcher.window_text text ~offset ~max_chars in
-  [ "window= " ^ Canon.escape_text window; "more=" ^ flag more ]
+  (* A negative offset is out of contract for the tool surface ([Model] checks
+     offset ≥ 0) but in contract for this function, whose docs say only that an
+     offset past the end yields an empty window and a truthful flag. [window_text]
+     reaches [Array.sub] with a negative index there, so the projection states
+     the raise instead of aborting the area: a robustness case whose fact is a
+     crash has to be pinnable. Only [Invalid_argument] is caught, so a malformed
+     corpus spec — which fails with [Failure] — still stops the run. *)
+  match Fetcher.window_text text ~offset ~max_chars with
+  | window, more -> [ "window= " ^ Canon.escape_text window; "more=" ^ flag more ]
+  | exception Invalid_argument name ->
+      [ "raised= Invalid_argument(" ^ Canon.escape_text name ^ ")" ]
 
 let sniff_case spec =
   let body = Canon.of_hex (want_string "hex" spec) in
@@ -450,6 +461,51 @@ let tabledoc_ops =
   ]
 
 let tabledoc spec_text = op_lines tabledoc_ops "tabledoc" (read_json spec_text)
+
+(* {1 text: the codepoint walk and the repr pass}
+
+   The corpus carries these inputs as hex, not as the file's own bytes, for one
+   reason: this area is where malformed UTF-8 is the subject rather than an
+   accident. The oracle's projection decodes the same bytes with Python's
+   [errors="replace"], which is the semantics [Utf8] claims, so a case that
+   disagrees is a statement about the walk and not about how the file was read.
+   Every value that leaves here is hex or an escaped [repr], so a golden stays
+   one ASCII line per fact. *)
+
+let text_bytes spec = Canon.of_hex (want_string "hex" spec)
+
+let counted kind items =
+  (kind ^ "s= " ^ string_of_int (List.length items))
+  :: List.map (fun item -> kind ^ "= " ^ Canon.to_hex item) items
+
+let text_ops =
+  [
+    ( "count",
+      fun spec ->
+        let text = text_bytes spec in
+        [ "count= " ^ string_of_int (Utf8.count text) ] );
+    ( "take",
+      fun spec ->
+        let text = text_bytes spec in
+        [ "take= " ^ Canon.to_hex (Utf8.take (want_int "limit" spec) text) ] );
+    ("strip", fun spec -> [ "strip= " ^ Canon.to_hex (Utf8.strip (text_bytes spec)) ]);
+    ("lstrip", fun spec -> [ "lstrip= " ^ Canon.to_hex (Utf8.lstrip (text_bytes spec)) ]);
+    ("rstrip", fun spec -> [ "rstrip= " ^ Canon.to_hex (Utf8.rstrip (text_bytes spec)) ]);
+    ( "words",
+      fun spec -> counted "word" (Utf8.split_whitespace (text_bytes spec)) );
+    ( "lines",
+      fun spec ->
+        counted "line" (List.map Utf8.to_string (Utf8.splitlines (Utf8.of_string (text_bytes spec)))) );
+    ( "slices",
+      fun spec -> counted "slice" (Array.to_list (Utf8.slices (text_bytes spec))) );
+    ( "repr",
+      fun spec -> [ "repr= " ^ Canon.escape_text (Repr.py_repr (text_bytes spec)) ] );
+    ( "roundtrip",
+      fun spec ->
+        [ "roundtrip= " ^ Canon.to_hex (Utf8.to_string (Utf8.of_string (text_bytes spec))) ] );
+  ]
+
+let text spec_text = op_lines text_ops "text" (read_json spec_text)
 
 (* {1 router} *)
 
@@ -594,7 +650,14 @@ let model spec_text =
   List.concat_map
     (fun case ->
       let name = want_string "model" case in
-      let body = "body" $ case in
+      (* [body_text] carries a raw JSON document so a duplicate key can reach the
+         decoder with both members still in it: a corpus spec written as an
+         object would have collapsed them before the port saw anything. *)
+      let body =
+        match member "body_text" case with
+        | Some (`String text) -> read_json text
+        | _ -> "body" $ case
+      in
       match decode_encode name body with
       | Ok encoded -> [ "verdict= accept"; "wire= " ^ Canon.canon_json encoded ]
       | Error _ -> [ "verdict= reject" ])
@@ -794,6 +857,7 @@ let areas =
     ("fetch", fetch);
     ("jsondoc", jsondoc);
     ("tabledoc", tabledoc);
+    ("text", text);
     ("router", router);
     ("model", model);
     ("engine", engine);

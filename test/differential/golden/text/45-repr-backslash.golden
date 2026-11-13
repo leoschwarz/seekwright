@@ -1,0 +1,7 @@
+area: text
+case: 45-repr-backslash
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+repr= 'a\\\\b'

@@ -1,0 +1,7 @@
+area: jsondoc
+case: 49-sniffs-whitespace-only
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+sniffs= false

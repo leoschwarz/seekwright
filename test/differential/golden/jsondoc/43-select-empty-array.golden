@@ -1,0 +1,8 @@
+area: jsondoc
+case: 43-select-empty-array
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+select= 
+dropped=0

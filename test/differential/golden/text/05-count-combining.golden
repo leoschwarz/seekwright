@@ -1,0 +1,7 @@
+area: text
+case: 05-count-combining
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+count= 4

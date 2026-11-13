@@ -1,0 +1,7 @@
+area: text
+case: 02-count-ascii
+verification: differential-golden
+oracle: python
+projection: text
+--- oracle
+count= 13

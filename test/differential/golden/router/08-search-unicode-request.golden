@@ -1,0 +1,16 @@
+area: router
+case: 08-search-unicode-request
+verification: explicit-divergence
+oracle: python
+projection: router
+reason: the same repr rule as text/43, surfacing in a refusal sentence: the router quotes the requested name back through py_repr, Python's repr escapes the zero-width space as \u200b while the port passes the codepoint through and the projection's escape renders it as \u200b too — so the two sentences differ by one backslash. Same verdict, same wording otherwise; the difference is the repr's non-printable rule.
+--- oracle
+resolve_search refused= Provider 'caf\u00e9' is not enabled on this server. Available: serper, exa:free. Retry with one of those, or omit `provider` to use the default.
+resolve_search refused= Provider 'exa\ud83d\ude00' is not enabled on this server. Available: serper, exa:free. Retry with one of those, or omit `provider` to use the default.
+resolve_search refused= Provider 'serper\\u200b' is not enabled on this server. Available: serper, exa:free. Retry with one of those, or omit `provider` to use the default.
+is_permitted= true
+--- port
+resolve_search refused= Provider 'caf\u00e9' is not enabled on this server. Available: serper, exa:free. Retry with one of those, or omit `provider` to use the default.
+resolve_search refused= Provider 'exa\ud83d\ude00' is not enabled on this server. Available: serper, exa:free. Retry with one of those, or omit `provider` to use the default.
+resolve_search refused= Provider 'serper\u200b' is not enabled on this server. Available: serper, exa:free. Retry with one of those, or omit `provider` to use the default.
+is_permitted= true

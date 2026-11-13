@@ -1,0 +1,7 @@
+area: jsondoc
+case: 42-render-scalar-null
+verification: differential-golden
+oracle: python
+projection: jsondoc
+--- oracle
+render= $  null
