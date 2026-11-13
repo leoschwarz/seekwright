@@ -6,10 +6,14 @@
       file, because files get committed. The one exception is
       [fetch.crawl4ai_token], which authenticates this server to an internal
       service the same file already names.
-    - Nothing is inferred. An unknown provider name, an unknown key, a ladder
-      name that cannot run, or an enabled provider with no key is a startup
-      failure naming the file and the fault: a setting that parses, loads and
-      does nothing is the failure mode every validator here exists to remove.
+    - Nothing is inferred. An unknown provider name, an unknown key (every one
+      of them in a section, in one sentence, sorted — a typo-fixing pass should
+      not be a restart loop), a ladder name that cannot run, or an enabled
+      provider with no key is a startup failure naming the file and the fault:
+      a setting that parses, loads and does nothing is the failure mode every
+      validator here exists to remove. The two keys this port genuinely cannot
+      honour, [logging.library_level] and [logging.access_log], are refused at a
+      non-default value for the same reason — see {!type:logging_config}.
 
     What is *not* a failure is a config that enables nothing. That resolves to
     {!keyless_providers} -- the names that reach their endpoint with no account,
@@ -156,7 +160,12 @@ type fetch_config = {
   min_text_chars : int;  (** under this the page counts as having no content *)
   max_match_chars : int;
   max_redirects : int;
-  allow_private_addresses : bool;  (** off: the URL is model-supplied *)
+  allow_private_addresses : bool;
+  (** off: the URL is model-supplied. When on, it is the operator saying this
+      deployment reads its own intranet, and the factory builds the local
+      reader's grant in the capability layer's private-web variant
+      ([Mcp_caps.Policy.with_private_web]) instead of the public-web one. A
+      third-party fetch fallback keeps its public-only rule whatever this says. *)
   allow_images : bool;
   user_agent : string;
   fallback : string list option;  (** the walk's order; [None] is the absent key *)
@@ -199,11 +208,21 @@ type agent_config = {
   cost_per_1k_out : float option;
 }
 
+(** What this process logs, and at what level. [level], [format], [log_queries]
+    and [log_content] are honoured by the port's own sink.
+
+    [library_level] and [access_log] are the two keys that speak about uvicorn,
+    and there is no uvicorn on this port: the transport is mcp-kit over
+    cohttp-eio. Their defaults therefore load and do nothing, and an explicitly
+    {i non-default} value is a load-time refusal rather than a key that is
+    silently inert — see {!validate_logging_on_this_port}. No other field here is
+    inert, and nothing else in this configuration is "parsed, not honoured"
+    except the keys a later phase owns. *)
 type logging_config = {
   level : log_level;
   format : log_format;
-  library_level : log_level;
-  access_log : bool;
+  library_level : log_level;  (** inert at its default; refused at any other value *)
+  access_log : bool;  (** inert at its default; refused at [true] *)
   log_queries : bool;  (** query text and fetched URLs are the caller's *)
   log_content : bool;
 }
@@ -327,6 +346,11 @@ val validate_permitted_providers : name list -> (name list option, string) resul
     to [None], because "*" is not a provider name and "everything" is the same
     list as no list. An explicitly empty list stays [Some [] ]. *)
 
+val validate_logging_on_this_port : logging_config -> (unit, string) result
+(** The two uvicorn-shaped keys, refused when they carry a non-default value:
+    see {!type:logging_config}. Exposed because [--check] and the tests read the
+    same fact, and a key made honest later stops being refused in one place. *)
+
 (** {2 Resolution and loading} *)
 
 val resolve
@@ -346,11 +370,15 @@ val resolve
     names, the keyless default, [searxng]'s url, [algolia]'s index, the default
     provider, the two ladders' enabled names), then the permission set. *)
 
-val config_path : name option -> string
+val config_path : string option -> string
 (** [path], else [$SEEKWRIGHT_CONFIG], else {!default_config_path}; [~] expanded
-    either way. An empty value is unset, as Python's [or] chain treats it. *)
+    either way. An empty value is unset, as Python's [or] chain treats it.
 
-val load : name option -> (t, string) result
+    A path is a {i path}, not a {!name}: the two are different vocabularies, and
+    the [string] alias here would say otherwise, so this takes a plain [string]
+    and the vocabulary stays where the validators can enforce it. *)
+
+val load : string option -> (t, string) result
 (** Read one config file. A missing file is the first run and loads the
     defaults; a malformed one is an [Error] naming the path and the fault, with
     the keyless example appended when the file itself named providers. *)

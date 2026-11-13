@@ -274,6 +274,60 @@
  (name test_jsondoc)
  (libraries seekwright.fetch alcotest test_support))
 
+; F1.4: fetch.allow_private_addresses — the capability variant the local
+; reader is built with, pinned through a loopback fixture (the same shape as
+; test_fetch_http.ml's), through the stack builder, and by a source pin that
+; the private-web grant is constructed exactly once, in the branch that reads
+; the key. The private-web cases dial 127.0.0.1 deliberately: that is the
+; axis under test, and the fixture lives in the same case.
+(test
+ (name test_fetch_grant)
+ (libraries
+  seekwright
+  seekwright.factory
+  seekwright.fetch
+  seekwright.fetch.stdlib
+  mcp-caps
+  cohttp-eio
+  http
+  eio
+  eio_main
+  mirage-crypto-rng.unix
+  alcotest test_support)
+ (deps
+  ../lib/factory/factory.ml
+  ../bin/main.ml))
+
+; F1.4: the [--check] disclosure. The config's keys all load and validate;
+; this rule pins that the diagnosis says, beside each row and in one
+; aggregated list at the end, that the cache, the third-party fetch ladder
+; and the private-web widening are not run by this binary. The exit code is
+; the problem count, so the rule accepts 1: a key that loads and changes
+; nothing is a problem [--check] has to name. Nothing is built under this
+; config, so nothing is dialled.
+(rule
+ (deps ../bin/main.exe check_transitional.toml)
+ (targets check_transitional.out check_transitional.err)
+ (action
+  (with-accepted-exit-codes
+   (or
+    1
+    (not 0))
+   (with-stderr-to check_transitional.err
+    (with-stdout-to check_transitional.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=check_transitional.toml ../bin/main.exe --check"))))))
+
+(rule
+ (alias runtest)
+ (action (diff check_transitional.expected check_transitional.out)))
+
+(rule
+ (alias runtest)
+ (action (diff check_transitional_notes.expected check_transitional.err)))
+
 (test
  (name test_tabledoc)
  (libraries seekwright.fetch alcotest test_support))

@@ -348,8 +348,18 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
     | Error message -> Some (Error message)
     | Ok extractor -> (
     match
-      Policy.with_public_web ~sw ~net
-        ~port_policy:Policy.Any_port
+      (* The local reader's grant, and the one place a config key decides a
+         capability's address rule. [fetch.allow_private_addresses] picks the
+         web variant the reader is built in — [with_private_web] when the
+         operator approved intranet reads, [with_public_web] otherwise — rather
+         than letting a per-request check widen an already-built grant. The
+         third-party fallbacks below are not built this way and never will be:
+         their grant is [grant_of_endpoint] over the vendor they dial, and the
+         URL handed to them stays public-only whatever this key says, because
+         the key says {i this server} may reach the intranet, not that an
+         internal hostname may be posted to someone else's API. *)
+      (if fetch.Config.allow_private_addresses then Policy.with_private_web else Policy.with_public_web)
+        ~sw ~net ~port_policy:Policy.Any_port
         ~max_response_bytes:fetch.Config.max_download_bytes ()
     with
     | Error error -> Some (Error (Caps.Error.render error))
@@ -390,7 +400,10 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
         in
         (* The keyed/self-hosted fallbacks are deferred with P6, so the ladder
            is empty in v1; a primary other than the local reader is refused by
-           the server's startup checks rather than silently read locally. *)
+           the server's startup checks rather than silently read locally. When
+           they land they are built by [grant_of_endpoint], which has no way to
+           ask for the private-web variant: the public-only rule for a
+           third-party route is a property of how its grant is built. *)
         Some (Ok (local, [])))
 
 let agent_net ~sw ~net ~mono_clock ?audit config =

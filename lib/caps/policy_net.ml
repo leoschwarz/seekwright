@@ -52,6 +52,9 @@ type port_policy =
 type policy =
   | Endpoints of destination list
   | Public_web of port_policy
+  | Private_web of port_policy
+      (** The same destination shape as [Public_web], and a wider address rule:
+          see [with_private_web] and [satisfies_address]. *)
 
 (* [Eio.Net.t] is parameterised by the backend's resource tag ([ `Posix ],
    [ `Linux ], …), and a record type cannot carry an existential tag — [_] is not
@@ -109,6 +112,14 @@ let refuse error = raise (Refusal error)
 
 let scheme_port = function `Http -> http_port | `Https -> https_port
 let scheme_name = function `Http -> "http" | `Https -> "https"
+
+(* Which web mode a refusal came from. A refusal sentence that says "public-web"
+   about a grant the operator built for their intranet sends them looking at the
+   wrong key, so the mode is named rather than assumed. *)
+let web_mode_name = function
+  | Public_web _ -> "public-web"
+  | Private_web _ -> "private-web"
+  | Endpoints _ -> "endpoint-list"
 
 (* A host is either an IP literal (TLS then verifies the certificate against the
    address) or a domain name (TLS verifies the name). Trying the address first
@@ -253,35 +264,43 @@ let decide_destination (t : 'tag confinement) uri =
              ~message:
                (Printf.sprintf "%s://%s:%d is not one of the endpoints this grant allows"
                   (scheme_name scheme) (Error.sanitize host) port))
-  | Public_web port_policy -> (
+  | ((Public_web port_policy | Private_web port_policy) as web) -> (
       (* The port half of the policy is a mode, not a second allow-list: the
          safe default pins the scheme's own port, and [Any_port] is the
-         seekwright mode that matches Python. The address half — public
-         destinations only — is [satisfies_address]'s and is unaffected by this
-         choice; private-address permission is a separate axis. *)
+         seekwright mode that matches Python. The address half is
+         [satisfies_address]'s, and it is the one difference between the two
+         web modes: [Public_web] accepts a globally routable destination,
+         [Private_web] also accepts the operator's own network. Which mode a
+         grant was built in is fixed at construction, so nothing here decides
+         it per request; the private mode is only ever reached by the
+         constructor the config's [fetch.allow_private_addresses] selects. *)
       match port_policy with
       | Default_ports when port <> scheme_port scheme ->
           Error
             (Error.make Error.Denied
                ~message:
                  (Printf.sprintf
-                    "%s://%s:%d is refused: the public-web grant uses port %d for %s, and an \
+                    "%s://%s:%d is refused: the %s grant uses port %d for %s, and an \
                      explicit port needs an endpoint list or the any-port mode"
-                    (scheme_name scheme) (Error.sanitize host) port (scheme_port scheme)
-                    (scheme_name scheme)))
+                    (scheme_name scheme) (Error.sanitize host) port (web_mode_name web)
+                    (scheme_port scheme) (scheme_name scheme)))
       | Default_ports | Any_port ->
           (* [port_of_uri] has already bounded an explicit port to 1..65535, so
              [Any_port] accepts every port that reaches this point. *)
           Ok candidate)
 
-(** {1 Address classification for the public-web policy}
+(** {1 Address classification for the two web policies}
 
     ipaddr's [is_global] covers the classic scopes: loopback, RFC1918,
     link-local, multicast, unspecified, broadcast, and the IPv4-mapped IPv6
     forms (whose scope ipaddr computes from the embedded v4 address, which is
     the IPv4-mapped case §5 names). What it still calls global, and this table
     refuses, is the IANA special-purpose space and the transition mechanisms
-    that smuggle an address in from another family. *)
+    that smuggle an address in from another family.
+
+    The [Private_web] policy needs none of that table — its whole point is that
+    the operator's own network is reachable — and instead refuses the three
+    addresses that are not hosts at all. *)
 
 let special_use : (string * int) list =
   [
@@ -350,22 +369,51 @@ let mem_network network bits ip =
 let in_special_use ip =
   List.exists (fun (network, bits) -> mem_network network bits ip) special_use
 
-(* The address half of the two policies, and the asymmetry that is the reason
-   there are two constructors.
+(* The three addresses that are not hosts: [0.0.0.0] and [::] name "any local
+   address" (something to bind, not something to dial — Linux routes a connect to
+   them back to this machine), and [255.255.255.255] is limited broadcast. Read
+   from the octets so the family does not matter: four zero bytes is v4's
+   unspecified, sixteen is v6's, and four [0xff] bytes is the broadcast. *)
+let not_a_host ip =
+  let octets = Ipaddr.to_octets ip in
+  let all ch = String.for_all (fun byte -> byte = ch) octets in
+  all '\x00' || (String.length octets = 4 && all '\xff')
+
+(* The address half of the policies, and the asymmetry that is the reason there
+   are three constructors.
 
    An endpoint list pins {b names}: an operator who writes [searxng.internal] or
    [127.0.0.1] has decided that destination is allowed, and this layer's job is
    to make the connection really go to whatever that name resolves to, not to
-   second-guess the choice. The public-web policy decides {b addresses}: every
-   answer must be globally routable unicast, outside the table above.
+   second-guess the choice.
 
-   That is also why a loopback test server is a normal [with_endpoints] fixture
-   while the same address is a refusal under [with_public_web]. *)
+   The two web policies decide {b addresses}. The public-web one accepts only a
+   globally routable unicast answer, outside the table above. The private-web
+   one is the operator-approved variant [fetch.allow_private_addresses] buys:
+   the point is that an intranet name resolving to a private, loopback or
+   link-local address is fetchable, so the special-use table does not apply —
+   while a multicast group, a broadcast address and the unspecified address
+   still are not destinations, on any network.
+
+   That is also why a loopback test server is a normal [with_endpoints] fixture,
+   a refusal under [with_public_web], and an ordinary destination under
+   [with_private_web]. *)
 let satisfies_address policy ip =
   match policy with
   | Endpoints _ -> true
   | Public_web _ ->
       Ipaddr.is_global ip && not (Ipaddr.is_multicast ip) && not (in_special_use ip)
+  | Private_web _ -> not (Ipaddr.is_multicast ip) && not (not_a_host ip)
+
+(* The same refusal sentence has to describe the right policy: telling an
+   operator who approved intranet reads that "the public-web policy" blocked a
+   name sends them looking at a key they never set. *)
+let address_policy_note = function
+  | Endpoints _ -> "the endpoint list pins the destinations this grant may dial"
+  | Public_web _ -> "the public-web policy allows only globally routable unicast addresses"
+  | Private_web _ ->
+      "the private-web policy reaches the operator's own network, but not a multicast \
+       group, a broadcast address or the unspecified address"
 
 (** {1 Resolution, and the binding to one vetted address} *)
 
@@ -453,9 +501,9 @@ let resolve (t : 'tag confinement) destination =
         (Error.make Error.Denied
            ~message:
              (Printf.sprintf
-                "%s resolved to %d address(es), none of which this grant may connect to (the \
-                 public-web policy allows only globally routable unicast addresses)"
-                (Error.sanitize destination.host) (List.length on_port)))
+                "%s resolved to %d address(es), none of which this grant may connect to (%s)"
+                (Error.sanitize destination.host) (List.length on_port)
+                (address_policy_note t.policy)))
     else (* The [Eio] form, because that is what [Eio.Net.connect] takes: the
             vetting and the connection name the same address, which is the whole
             point of resolving here rather than letting the HTTP client do it. *)
@@ -754,3 +802,16 @@ let with_public_web ~sw:_ ~net ?(port_policy = Default_ports) ~max_response_byte
   let* max_response_bytes = response_ceiling max_response_bytes in
   tls_config () >>= (fun tls ->
     Ok (T { net; max_response_bytes; policy = Public_web port_policy; tls = Some tls }))
+
+(* The other half of the address axis, and the reason [fetch.allow_private_addresses]
+   has a consumer: the same HTTP(S) shape, the same port mode, the same trust
+    anchors — only the address rule is the operator-approved one, so an intranet
+    name that resolves to a private, loopback or link-local address is a
+    destination. Nothing about a request decides which mode it is dialled under;
+    a grant is built in one mode and cannot be widened afterwards, which is what
+    keeps a third-party fallback's grant public-only whatever the config says. *)
+let with_private_web ~sw:_ ~net ?(port_policy = Default_ports) ~max_response_bytes () =
+  let ( let* ) = Result.bind in
+  let* max_response_bytes = response_ceiling max_response_bytes in
+  tls_config () >>= (fun tls ->
+    Ok (T { net; max_response_bytes; policy = Private_web port_policy; tls = Some tls }))

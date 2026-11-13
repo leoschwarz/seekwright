@@ -1,7 +1,8 @@
 (** The checked DNS, connection, redirect and response-bound machinery behind a
     [Net] grant.
 
-    [t] is abstract and [Policy.with_endpoints] / [Policy.with_public_web] are
+    [t] is abstract and [Policy.with_endpoints] / [Policy.with_public_web] /
+    [Policy.with_private_web] are
     the only producers of one, exactly as [Policy_fs] is for the filesystem
     (§4, §5); [Authority.Net.of_confinement] turns a witness into the grant a
     tool is registered with. This module has no public constructor and no way to
@@ -12,7 +13,8 @@
 
     - {b The endpoint decision.} A request is matched against the grant's
       policy — an exact (scheme, host, port) set for [with_endpoints], or
-      HTTP(S) with the port policy [with_public_web] was built with (the
+      HTTP(S) with the port policy [with_public_web] or [with_private_web] was
+      built with (the
       scheme's own port by default, any port in [Any_port] mode) — before any
       name is looked up. An unlisted host is refused without a DNS query, so a
       grant cannot be probed by resolver traffic.
@@ -130,6 +132,29 @@ val with_public_web :
     The port mode and the address rule are separate axes: [Any_port] widens
     which port a public destination may be reached on, never which addresses
     are public. *)
+
+val with_private_web :
+  sw:Eio.Switch.t ->
+  net:_ Eio.Net.t ->
+  ?port_policy:port_policy ->
+  max_response_bytes:int ->
+  unit ->
+  (t, Error.t) result
+(** The operator-approved private-web variant, and the only way a grant reaches a
+    non-public address without naming it: HTTP(S), the same port modes, and every
+    resolved destination that is a host on {i some} network — loopback, RFC1918,
+    link-local, unique-local and CGNAT included, because the operator's intranet
+    is the point of the variant. What it still refuses is a multicast group, a
+    broadcast address and the unspecified address, which are not destinations on
+    any network; see [satisfies_address] in the implementation.
+
+    This variant exists so the widening is a named construction decision at the
+    grant, not a rule that reads a config value per request. A grant built for a
+    third-party fetch fallback is never built this way: the oracle's rule is that
+    the private-address permission lets {i this server} reach the intranet and
+    says nothing about handing internal hostnames to someone else, so the
+    fallback routes keep [with_endpoints] (a pinned vendor name) and the URL they
+    are handed stays public-only. *)
 
 val request :
   controls:Controls_raw.t ->

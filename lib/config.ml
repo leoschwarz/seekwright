@@ -664,12 +664,40 @@ let validate_search_section search =
   let* () = validate_search_fallbacks (Option.value ~default:[] search.fallback) in
   validate_search_free_fallbacks (Option.value ~default:[] search.free_fallback)
 
+(* Two keys of [logging] that the Python deployment reads and this port has
+   nothing to feed: [library_level] holds down uvicorn's loggers and
+   [access_log] is uvicorn's per-request line, and there is no uvicorn in this
+   build — the transport is mcp-kit over cohttp-eio, and its library loggers are
+   not a set this config can name. Inheriting the defaults is harmless, so the
+   defaults load; inheriting a {i non-default} value is the failure mode every
+   validator here exists to remove — a key the operator set, that changes
+   nothing. An operator who wants third-party or access logging on this port
+   needs the logging built first, and that change deletes this refusal in the
+   same pull request. *)
+let validate_logging_on_this_port logging =
+  if logging.library_level <> default_logging_config.library_level
+  then
+    Error
+      "logging.library_level is not honoured on this port: there is no uvicorn here, so no \
+       third-party logger has a level to hold down (remove the key; the default loads and does \
+       nothing)"
+  else if logging.access_log <> default_logging_config.access_log then
+    Error
+      "logging.access_log is not honoured on this port: there is no uvicorn here, so there is \
+       no per-request access log to switch on or off (remove the key; the default loads and \
+       does nothing)"
+  else Ok ()
+
 (* pydantic's order: the section validators ran while the fields were built, so
-   they come first; then the provider block; then the permission set. *)
+   they come first; then the provider block; then the permission set. The
+   port-side refusals go first of all: they are about this build, not about the
+   file's shape, and an operator who set one deserves to read that before the
+   list of anything else the file got wrong. *)
 let resolve ?(providers = []) ?default_provider ?permitted_providers
     ?(policy = default_policy_config) ?(fetch = default_fetch_config)
     ?(search = default_search_config) ?(agent = default_agent_config)
     ?(logging = default_logging_config) ?(dashboard = default_dashboard_config) () =
+  let* () = validate_logging_on_this_port logging in
   let* () = validate_fetch_section fetch in
   let* () = validate_search_section search in
   let providers = List.sort (fun (a, _) (b, _) -> String.compare a b) providers in
@@ -897,6 +925,15 @@ let float_from_string s =
         | Some digits -> float_of_string_opt digits
         | None -> None)
 
+(* Every key the section did not read, in one sentence, sorted. An operator who
+   mistyped two of them fixes the file in one pass rather than one restart per
+   typo, and the order is stable, so the same file reports the same sentence.
+   Each key keeps its own [path: unknown key] clause, so a reader scanning for
+   one key still finds it — with a single extra key the sentence is exactly what
+   it has always been. *)
+let unknown_keys loc keys =
+  String.concat "; " (List.map (fun key -> unknown_key loc key) (List.sort String.compare keys))
+
 let section loc table decode =
   let fields = bindings table in
   let read = ref Name_set.empty in
@@ -907,7 +944,7 @@ let section loc table decode =
   let* value = decode get in
   match List.filter (fun (key, _) -> not (Name_set.mem key !read)) fields with
   | [] -> Ok value
-  | (key, _) :: _ -> Error (unknown_key loc key)
+  | extras -> Error (unknown_keys loc (List.map fst extras))
 
 let bool_field get loc key default =
   let refuse loc key value = Error (type_error loc key "a boolean" value) in

@@ -1,0 +1,24 @@
+seekwright check
+================
+config      check_transitional.toml  (present)
+default     exa:free
+permitted   (unset: every enabled provider)
+providers
+  enabled   exa:free
+  effective exa:free
+  built     (none)
+  unsupported exa:free  (not built on this port; the server refuses to start on this config)
+  exa:free  not built on this port
+no providers ready -- searches would fail until configured
+fetch
+  enabled   40000 chars max, 3 redirects, private addresses allowed (the local reader is built with the private-web grant)
+  primary   jina unsupported on this port
+  extractor stdlib
+  fallback  jina  unsupported on this port
+  jina      unsupported on this port
+  cache     .cache (256 MiB cap, ttl 300s)  unsupported on this port
+agent
+  disabled in config
+unsupported on this port
+  cache     cache_dir is set (.cache), and no page cache is built on this port: every fetch reaches the origin, and the size and ttl keys configure nothing
+  fallback  jina, and no third-party fetch fallback is built on this port: the local reader is the only fetch route this build runs

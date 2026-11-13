@@ -1,0 +1,16 @@
+# The [--check] disclosure smoke: a config whose keys all load and validate,
+# pointed at by SEEKWRIGHT_CONFIG in the [check_transitional] rule in [../test/
+# dune]. Only names this port does not carry are enabled, so nothing is built
+# and nothing is dialled; what the run does exercise is the honest disclosure:
+# a set [cache_dir], an unbuilt fetch primary and ladder, and
+# [fetch.allow_private_addresses] on, each marked "unsupported on this port"
+# beside its row and collected in the aggregated list at the end.
+[providers."exa:free"]
+enabled = true
+
+[fetch]
+extractor = "stdlib"
+primary = "jina"
+fallback = ["jina"]
+cache_dir = ".cache"
+allow_private_addresses = true

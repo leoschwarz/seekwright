@@ -9,8 +9,9 @@
     Each adapter is built with its own endpoint-scoped [Net] grant
     ([Policy.with_endpoints] over the adapter's single
     {!Mcp_caps.Policy.endpoint}), so a provider can dial only the vendor it
-    was built for; [fetch]'s local reader gets the public-web grant
-    ([Policy.with_public_web]). The grant sets are derived from enabled
+    was built for; [fetch]'s local reader gets a web grant — [Policy.with_public_web],
+    or [Policy.with_private_web] when [fetch.allow_private_addresses] says the
+    operator approved intranet reads. The grant sets are derived from enabled
     provider names — there is no second egress config key.
 
     {1 The audit trail}
@@ -179,10 +180,15 @@ val build_fetch_stack :
   Seekwright.Config.t ->
   ((Seekwright.Engine.Fetch.fetcher * Seekwright.Engine.Fetch.fetcher list), string) result option
 (** [None] when [[fetch] enabled = false]. Otherwise the local reader as the
-    primary route (behind the public-web grant) plus the fallback ladder —
-    empty in v1, where the third-party fallbacks are deferred with P6 — adapted
-    to the engine's [fetcher] record. The keyed/self-hosted fallbacks are not
-    built: nothing that could bill is left around unfired. *)
+    primary route plus the fallback ladder — empty in v1, where the third-party
+    fallbacks are deferred with P6 — adapted to the engine's [fetcher] record.
+    The local reader's grant is the web variant the config's
+    [fetch.allow_private_addresses] names: [Policy.with_private_web] when the
+    operator approved intranet reads, [Policy.with_public_web] otherwise. The
+    keyed/self-hosted fallbacks are not built: nothing that could bill is left
+    around unfired, and when they land their grants stay endpoint-scoped and
+    public-only, because that key licenses this process, not a third party's
+    view of the intranet. *)
 
 val readers : Seekwright.Engine.Fetch.Readers.t
 (** The document readers the fetch engine selects with: [jsondoc]'s path

@@ -523,6 +523,58 @@ let logging_cases =
         unsetenv "SEEKWRIGHT_CONFIG")
   ]
 
+(* The two keys that speak about uvicorn. There is no uvicorn on this port, so
+   the defaults load and do nothing — and a key the operator set to something
+   {i other} than the default is the failure the whole of this module exists to
+   remove: a setting that parses, loads and changes nothing. *)
+let uvicorn_key_cases =
+  [ ("library_level", "library_level = \"INFO\"", "logging.library_level")
+  ; ("access_log", "access_log = true", "logging.access_log") ]
+
+let test_a_uvicorn_key_is_refused_at_load (key, setting, needle) =
+  clear_keys ();
+  let path =
+    write_config ("[providers.serper]\nenabled = true\n\n[logging]\n" ^ setting ^ "\n")
+  in
+  setenv "SEEKWRIGHT_CONFIG" path;
+  (match Config.load None with
+  | Ok _ ->
+      (* The key loaded, which is the bug the whole suite is written against. *)
+      A.failf "%s loaded: it is not honoured on this port" key
+  | Error fault -> refuses_naming [ needle; "no uvicorn here" ] (Error fault));
+  unsetenv "SEEKWRIGHT_CONFIG"
+
+let test_resolve_refuses_a_non_default_uvicorn_key key =
+  let logging =
+    match key with
+    | "library_level" ->
+        { Config.default_logging_config with library_level = Config.Log_debug }
+    | _ -> { Config.default_logging_config with access_log = true }
+  in
+  refuses_with "no uvicorn here" (Config.resolve ~logging ())
+
+let test_the_uvicorn_keys_load_at_their_defaults () =
+  clear_keys ();
+  (* Explicitly the default is not a non-default value: the operator's own
+     documented example writes both keys this way, and it has to keep loading. *)
+  setenv "SEEKWRIGHT_CONFIG"
+    (write_config
+       "[providers.serper]\nenabled = true\n\n[logging]\nlibrary_level = \"WARNING\"\n\
+        access_log = false\n");
+  let section = (expect (Config.load None)).Config.logging in
+  A.(
+    check log_level "the default loads" Config.Log_warning section.library_level;
+    check bool "the default loads" false section.access_log);
+  (match Config.validate_logging_on_this_port section with
+  | Ok () -> ()
+  | Error fault -> A.failf "the defaults were refused: %s" fault);
+  unsetenv "SEEKWRIGHT_CONFIG"
+
+let test_the_default_logging_section_passes_the_port_rule () =
+  match Config.validate_logging_on_this_port Config.default_logging_config with
+  | Ok () -> ()
+  | Error fault -> A.failf "the defaults are refused: %s" fault
+
 let dashboard_cases =
   [ ( "on by default, with no journal"
     , fun () ->
@@ -574,8 +626,32 @@ let test_a_typo_is_a_startup_error (section, text) =
   | Ok _ -> A.failf "%s: the typo loaded silently" section);
   unsetenv "SEEKWRIGHT_CONFIG"
 
-let test_a_removed_key_says_so key =
+(* One pass, not one restart per typo: a section with three keys it cannot read
+   names all three, sorted, each as its own [path: unknown key] clause so a
+   reader scanning for one key still finds it. *)
+let test_every_unknown_key_is_named_sorted () =
   clear_keys ();
+  let path =
+    write_config
+      "[providers.serper]\nenabled = true\n\n[fetch]\nzebra_key = 1\nalpha_key = 2\n\
+       middle_key = 3\n"
+  in
+  setenv "SEEKWRIGHT_CONFIG" path;
+  refuses_with
+    "fetch.alpha_key: unknown key; fetch.middle_key: unknown key; fetch.zebra_key: unknown key"
+    (Config.load None);
+  unsetenv "SEEKWRIGHT_CONFIG";
+  (* The top-level section is a section too, and the order is the sorted one, not
+     the file's. Top-level keys have to be written before any table header. *)
+  clear_keys ();
+  let path =
+    write_config "zeta = 1\nalpha = 2\n\n[providers.serper]\nenabled = true\n"
+  in
+  setenv "SEEKWRIGHT_CONFIG" path;
+  refuses_with "alpha: unknown key; zeta: unknown key" (Config.load None);
+  unsetenv "SEEKWRIGHT_CONFIG"
+
+let test_a_removed_key_says_so key =  clear_keys ();
   let path = write_config (Printf.sprintf "[providers.serper]\nenabled = true\n\n[fetch]\n%s = 1\n" key) in
   setenv "SEEKWRIGHT_CONFIG" path;
   refuses_with key (Config.load None);
@@ -1501,7 +1577,23 @@ let () =
            ; ( "refresh_token says so", fun () -> test_a_removed_key_says_so "refresh_token" )
            ; ( "the knowledge section is rejected"
              , fun () -> test_the_removed_knowledge_section_is_rejected () )
-           ])
+           ; ( "every unknown key in a section is named, sorted"
+             , fun () -> test_every_unknown_key_is_named_sorted () ) ])
+     ; cases
+         "the uvicorn-shaped logging keys"
+         (List.map
+            (fun (key, setting, needle) ->
+              ( Printf.sprintf "%s at a non-default value is refused at load" key
+              , fun () -> test_a_uvicorn_key_is_refused_at_load (key, setting, needle) ))
+            uvicorn_key_cases
+         @ [ ( "resolve refuses a non-default logging value too"
+             , fun () ->
+                 test_resolve_refuses_a_non_default_uvicorn_key "library_level";
+                 test_resolve_refuses_a_non_default_uvicorn_key "access_log" )
+           ; ( "the defaults load, set explicitly or not"
+             , fun () -> test_the_uvicorn_keys_load_at_their_defaults () )
+           ; ( "the defaults pass the port rule"
+             , fun () -> test_the_default_logging_section_passes_the_port_rule () ) ])
      ; ( "the documented example"
       , [ A.test_case "it loads" `Quick test_the_documented_example_loads
         ; A.test_case "every section is documented" `Quick

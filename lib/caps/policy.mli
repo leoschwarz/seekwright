@@ -100,6 +100,28 @@ val with_public_web :
   unit ->
   (Policy_net.t, Error.t) result
 
+(** F1.4: the operator-approved private-web variant, and the only way this layer
+    reaches a non-public address without an endpoint list naming it. Same HTTP(S)
+    shape, same port modes, same trust anchors as [with_public_web]; what differs
+    is one axis — the address rule admits the operator's own network (loopback,
+    private, link-local, unique-local) while still refusing a multicast group, a
+    broadcast address and the unspecified address.
+
+    The variant is a construction decision, not a per-request one: a grant built
+    here stays private-web for its whole life, and a grant built anywhere else
+    cannot be widened. That is what enforces the oracle's asymmetry —
+    [fetch.allow_private_addresses] lets {i this server} read the intranet, and
+    says nothing about handing an internal hostname to a third-party fetch
+    service, so a fallback's grant is [with_endpoints] over its vendor and never
+    this. *)
+val with_private_web :
+  sw:Eio.Switch.t ->
+  net:_ Eio.Net.t ->
+  ?port_policy:port_policy ->
+  max_response_bytes:int ->
+  unit ->
+  (Policy_net.t, Error.t) result
+
 (* [with_operation_timeout] and [with_log] (§6) live in [Authority], beside the
    grant type they change: an endo-function on an abstract grant that returns its
    argument unchanged would compile and silently promise a bound it never

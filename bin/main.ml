@@ -180,22 +180,95 @@ let default_route_line config =
         "none (a bare search walks the free set)"
       else "none (callers must pass provider)"
 
+(* One phrase for a feature the config asks for and this build does not run, so
+   the per-row marker and the aggregated list cannot drift apart. *)
+let unsupported_here = "unsupported on this port"
+
+(* What the config says about one fallback row, next to the fact that this port
+   has no such route to run. The old rendering answered "keyed", "keyless" or
+   "configured" — true of the config, and read as a promise about the ladder,
+   which this build cannot keep. The config-side reasons stay, because they are
+   what the operator would have to fix {i after} the route lands. *)
 let fallback_state config (row : Config.fetch_fallback) =
-  if row.Config.endpoint <> None && not (Config.is_permitted config row.Config.name) then
-    "(inactive: not permitted)"
-  else if row.Config.billable && Config.api_key config row.Config.name = None then
-    "(inactive: no API key)"
+  let config_reason =
+    if row.Config.endpoint <> None && not (Config.is_permitted config row.Config.name) then
+      Some "not permitted"
+    else if row.Config.billable && Config.api_key config row.Config.name = None then
+      Some "no API key"
+    else
+      match row.Config.fetch_key with
+      | Some "crawl4ai_url" ->
+          if config.Config.fetch.Config.crawl4ai_url <> None then None
+          else Some "no fetch.crawl4ai_url"
+      | Some key -> Some ("no fetch." ^ key)
+      | None -> None
+  in
+  match config_reason with
+  | None -> unsupported_here
+  | Some reason -> unsupported_here ^ ", " ^ reason
+
+(* A fetch route this port does not build: [http] is the local reader, and
+   everything else in the registry is a third-party call this build has no
+   adapter for. *)
+let requested_fetch_routes (fetch : Config.fetch_config) =
+  let named = Option.value ~default:[] fetch.Config.fallback in
+  let routes =
+    List.sort_uniq String.compare
+      (named @ (if fetch.Config.primary = "http" then [] else [ fetch.Config.primary ]))
+  in
+  (* A crawl4ai endpoint the operator configured is a route they asked for even
+     when no ladder names it. *)
+  match fetch.Config.crawl4ai_url with
+  | Some _ when not (List.mem "crawl4ai" routes) -> routes @ [ "fetch.crawl4ai_url" ]
+  | _ -> routes
+
+(* {1 Features the config asks for and this port has not built}
+
+   During the port's transition a config key can load, validate, and have no
+   consumer yet. [--check] says so twice: beside the row it qualifies, and in one
+   aggregated list at the end of the run, so a single diagnosis names everything
+   the operator's file asks for that this binary does not do. Each entry names the
+   phase that lands its consumer, and disappears from this list in that phase's
+   pull request — a permanent entry here is the "parsed, not honoured" table the
+   plan refuses. *)
+let transitional_features config =
+  let fetch = config.Config.fetch in
+  if not fetch.Config.enabled then []
   else
-    match row.Config.endpoint with
-    | Some _ -> if row.Config.billable then "keyed" else "keyless"
-    | None -> (
-        match row.Config.fetch_key with
-        | None -> "(inactive: the fallback row names no host)"
-        | Some "crawl4ai_url" -> (
-            match config.Config.fetch.Config.crawl4ai_url with
-            | Some _ -> "configured"
-            | None -> "(inactive: no fetch.crawl4ai_url)")
-        | Some key -> "(inactive: no fetch." ^ key ^ ")")
+    let routes = requested_fetch_routes fetch in
+    (match fetch.Config.cache_dir with
+    | None -> []
+    | Some dir ->
+        [
+          ( "cache"
+          , Printf.sprintf
+              "cache_dir is set (%s), and no page cache is built on this port: every fetch \
+               reaches the origin, and the size and ttl keys configure nothing"
+              dir )
+        ])
+    @
+    if routes = []
+    then []
+    else
+      [
+        ( "fallback"
+        , Printf.sprintf
+            "%s, and no third-party fetch fallback is built on this port: the local reader is \
+             the only fetch route this build runs"
+            (String.concat ", " routes) )
+      ]
+
+let print_transitional features problems =
+  if features = []
+  then ()
+  else begin
+    print_endline "unsupported on this port";
+    List.iter
+      (fun (feature, detail) ->
+        Printf.printf "  %-9s %s\n" feature detail;
+        problems := !problems + 1)
+      features
+  end
 
 let report_fetch config problems =
   let fetch = config.Config.fetch in
@@ -204,18 +277,21 @@ let report_fetch config problems =
   else begin
     Printf.printf "  enabled   %d chars max, %d redirects, private addresses %s\n"
       fetch.Config.max_text_chars fetch.Config.max_redirects
-      (if fetch.Config.allow_private_addresses then "allowed" else "blocked");
+      (if fetch.Config.allow_private_addresses then
+         "allowed (the local reader is built with the private-web grant)"
+       else "blocked");
     if fetch.Config.primary = "http" then print_endline "  primary   http (the local reader)"
     else begin
       let row = List.find_opt (fun (r : Config.fetch_fallback) -> r.Config.name = fetch.Config.primary) Config.known_fetch_fallbacks in
       let state =
         match row with
         | Some row -> fallback_state config row
-        | None -> "(inactive: no row in the fallback registry)"
+        | None -> unsupported_here ^ ", no row in the fallback registry"
       in
       Printf.printf "  primary   %s %s\n" fetch.Config.primary state;
-      if String.length state > 9 && String.sub state 0 9 = "(inactive" then
-        problems := !problems + 1
+      (* A primary this port cannot serve is a config the server refuses to
+         start on, whatever the permission set and the keys look like. *)
+      problems := !problems + 1
     end;
     (match Factory.build_extractor config with
     | Ok _ -> Printf.printf "  extractor %s\n" fetch.Config.extractor
@@ -225,20 +301,20 @@ let report_fetch config problems =
     (match fetch.Config.fallback with
     | None | Some [] -> ()
     | Some names ->
-        Printf.printf "  fallback  %s\n" (String.concat " -> " names);
+        Printf.printf "  fallback  %s  %s\n" (String.concat " -> " names) unsupported_here;
         List.iter
           (fun name ->
             match
               List.find_opt (fun (r : Config.fetch_fallback) -> r.Config.name = name) Config.known_fetch_fallbacks
             with
             | Some row -> Printf.printf "  %-9s %s\n" name (fallback_state config row)
-            | None -> Printf.printf "  %-9s (inactive: no row in the fallback registry)\n" name)
+            | None -> Printf.printf "  %-9s %s, no row in the fallback registry\n" name unsupported_here)
           names);
     (match fetch.Config.cache_dir with
     | Some dir ->
-        Printf.printf "  cache     %s (%.0f MiB cap, ttl %.0fs)\n" dir
+        Printf.printf "  cache     %s (%.0f MiB cap, ttl %.0fs)  %s\n" dir
           (float_of_int fetch.Config.cache_max_bytes /. 1_048_576.0)
-          fetch.Config.cache_ttl_seconds
+          fetch.Config.cache_ttl_seconds unsupported_here
     | None -> print_endline "  cache     off")
   end
 
@@ -376,6 +452,11 @@ let check ~env ~sw ~live =
           (String.concat ", " (List.filter (fun name -> not (List.mem name effective)) enabled));
       report_fetch config problems;
       report_agent config problems;
+      (* Printed last and named together: what the file asks for that this binary
+         does not do, one line per feature, and each one counted as a problem
+         because a key that loads and changes nothing is exactly what an operator
+         needs to be told about. *)
+      print_transitional (transitional_features config) problems;
       if !problems > 0 then 1 else 0
 
 (* {1 Metrics} *)

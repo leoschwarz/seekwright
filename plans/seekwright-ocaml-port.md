@@ -541,3 +541,95 @@ No suite reached a provider endpoint.
 Gate at landing: `dune build @install`, `dune runtest --force` and
 `dune build @doc` all exit 0, including the stdio smoke and the new `--check`
 rule.
+
+## 14. F1.4 — every config field honoured or honestly rejected (2026-11-13)
+
+F1's exit criterion is that no key loads, validates and then changes nothing
+without saying so. Three answers are possible and each is taken by exactly the
+class of key that deserves it: wire the consumer now, refuse the value at load
+where this port will never honour it, or — only for a key whose consumer a named
+later phase owns — disclose it in `--check` until that phase lands.
+
+**`fetch.allow_private_addresses` — wired now.** The switch picks the capability
+variant the local reader's grant is *built with*: `Policy_net` gains a third
+address rule, `Private_web`, beside `Public_web` and `Endpoints`, and
+`Factory.build_fetch_stack` selects `Policy.with_private_web` or
+`Policy.with_public_web` from the key at construction. It is not an empty
+endpoint list — an endpoint list pins names and trusts them, and this key says
+something about a *network*, so it gets its own variant. The address rule is one
+axis wide: loopback, private, link-local and unique-local addresses become
+dialable, while a multicast group, a broadcast address and the unspecified
+address stay refused on any network, and the port modes are unchanged — the
+widening is only ever an address widening. Every refusal sentence names the
+policy that fired (`the private-web policy reaches the operator's own network…`
+under this variant), so an operator who approved intranet reads is never sent
+looking at a key they never set. Third-party routes stay public-only by
+construction whatever the key says: their grants come from
+`Factory.grant_of_endpoint` over the vendor they dial, and the key licenses
+*this* process, not someone else's view of the intranet. The policy layer's own
+docstring records that a loopback test server is a normal `with_endpoints`
+fixture, a refusal under `with_public_web`, and an ordinary destination under
+`with_private_web` — which is how `test/test_fetch_grant.ml` runs its real-socket
+cases without any test reaching beyond loopback.
+
+**`logging.library_level` / `logging.access_log` — refused at load.** Both exist
+only to steer uvicorn's loggers, and there is no uvicorn on this port.
+`Config.validate_logging_on_this_port` runs first inside `resolve`, so a file
+load and a programmatic `resolve` refuse alike, and the refusal says so: no
+uvicorn on this port, name the key and the value, and point at the logging keys
+that *do* bite here. The inert defaults (`"WARNING"`, `false`) still load — the
+corpus's own doc-example sets both, and refusing the default would refuse every
+config — and if real third-party or access logging lands later, that phase
+removes the refusal in the same change.
+
+**Unknown keys — all of them, sorted.** `Config.section` used to name one
+unread key per section and return; it now emits every unread key as its own
+`<path>: unknown key` clause, sorted, joined with `; `. Single-key sentences are
+byte-identical to what they were — every `differential/golden/config` pin that
+quotes one still passes — and a section carrying three typos now costs one fix
+instead of three reloads.
+
+**`--check` discloses the transition.** `transitional_features` collects what
+the file asks for and this binary does not run — a set `cache_dir` (no page
+cache until F7) and a non-`http` fetch primary or fallback ladder (no
+third-party fetch route until F6) — and the diagnosis prints each one twice:
+`unsupported on this port` beside the row it qualifies, and in one aggregated
+list at the end of the run, with every entry counted as a problem (exit 1). The
+private-web widening is not in that list — it is honoured — but the fetch row
+says `private addresses allowed (the local reader is built with the private-web
+grant)` so the capability the binary runs is visible in one line. Provider
+option keys need no rows: the names that carry them already print "not built on
+this port". The marker phrase is one constant, `unsupported_here`, so the row
+and the aggregate cannot drift; each entry disappears from the list in the pull
+request that lands its consumer, which is what keeps a permanent "parsed, not
+honoured" table from forming.
+
+**Config path parameters.** `Config.config_path` and `Config.load` take a
+`string option` — the provider-name `name` alias no longer appears where a file
+path is meant.
+
+**Pins.** `test/test_fetch_grant.ml` (8 cases) pins both halves of the switch:
+the public-web grant refuses a loopback connect while the private-web grant
+serves a loopback page over a real fixture; the widening is real at the address
+*and* port axes (a loopback dial on an unlistened port fails in the kernel, not
+in the policy) while multicast, broadcast and the unspecified address stay
+refused and their sentences name the private-web rule; `build_fetch_stack`
+selects the variant from the key and the served reader answers for a loopback
+page only when the switch is on; and a source pin keeps the private-web
+construction at exactly one site — the factory branch that reads the key — so
+no other route can gain the grant. `test/check_transitional.toml` plus
+`test/dune` rules run `--check` over a config that sets `cache_dir`, names a
+`jina` primary and ladder, and turns the switch on: only unbuilt provider names
+are enabled, so nothing is constructed, nothing is dialled, and the per-row
+markers, the aggregated list, the private-web disclosure line and the exit-1
+problem count are all blessed (`check_transitional_notes.expected` pins the
+empty stderr). `test/test_config.ml` adds the uvicorn-key cases (non-default
+refused at load and through `resolve`, defaults load and pass the rule) and the
+all-unknown-keys-sorted case. The parity matrix moves `fetch.allow_private_addresses`
+from `transitional` to `honoured` (with the new loopback-integration
+verification) and both uvicorn keys to `refused`.
+
+Gate at landing: `dune build @install`, `dune runtest --force` and
+`dune build @doc` all exit 0 — including both `--check` pins, the stdio smoke,
+the differential suite and the matrix guard. No suite reached a provider
+endpoint.

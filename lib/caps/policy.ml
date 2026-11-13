@@ -21,3 +21,4 @@ type port_policy = Policy_net.port_policy = Default_ports | Any_port
 
 let with_endpoints = Policy_net.with_endpoints
 let with_public_web = Policy_net.with_public_web
+let with_private_web = Policy_net.with_private_web

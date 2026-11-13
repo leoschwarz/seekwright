@@ -17,7 +17,8 @@
     {1 Where a grant comes from}
 
     [Policy.with_root] is the only producer of an [Fs] grant and
-    [Policy.with_endpoints] / [Policy.with_public_web] the only producers of a
+    [Policy.with_endpoints] / [Policy.with_public_web] /
+    [Policy.with_private_web] the only producers of a
     [Net] one. Each hands back a confinement decision — [Policy_fs.t],
     [Policy_net.t] — and [of_confinement] wraps that decision in the grant type
     a tool is registered with. The split is not decoration: an abstract type's
@@ -143,8 +144,9 @@ module Net : sig
   val of_confinement : mono_clock:_ Eio.Time.Mono.t -> Policy_net.t -> t
   (** [of_confinement ~mono_clock decision] wraps the endpoint decision — the
       allowlisted destinations, the byte ceiling and the TLS configuration — in a
-      grant. Not a way to build a grant: [Policy.with_endpoints] and
-      [Policy.with_public_web] are the only producers of [Policy_net.t].
+      grant. Not a way to build a grant: [Policy.with_endpoints],
+      [Policy.with_public_web] and [Policy.with_private_web] are the only
+      producers of [Policy_net.t].
 
       The grant carries [Policy_net]'s default whole-operation bound (DNS,
       connect, TLS, headers and body together) and no audit sink, and no
