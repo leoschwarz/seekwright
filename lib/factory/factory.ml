@@ -29,8 +29,6 @@ module Provider = Seekwright.Provider
 module Usage = Seekwright.Usage
 module Agent = Seekwright.Agent
 module Server = Seekwright.Server
-module Freeserp = Seekwright_providers.Freeserp
-module Anysearch = Seekwright_providers.Anysearch
 
 let ( let* ) = Result.bind
 
@@ -111,41 +109,37 @@ let grant_of_endpoint ~sw ~net ~mono_clock ~timeout_seconds ?audit
       Ok (grant_of_decision ~mono_clock ~timeout_seconds ?audit decision)
   | Error error -> Error (Caps.Error.render error)
 
-let keyless_headers _config _key = []
-
-(* The adapters this build carries, keyed by config name. A name absent here
-   is not built; its probe row is absent too, so [--check] reports it
-   unsupported rather than probing an endpoint nothing will serve. *)
+(* A row and this deployment's config answer the two questions the builder asks
+   before it can build a grant: which endpoint the name's grant may reach, and the
+   least time the name gets. Pairing them is what keeps every grant construction
+   site naming one endpoint and one bound from one source. *)
 type adapter = {
-  make : net:Provider.Net.t -> now:(unit -> float) -> cost_per_1k:float -> snippet_chars:int -> Provider.t;
   endpoint : Policy.endpoint;
-  probe_url : string;
+  timeout_seconds : float;
 }
 
-let adapters : (Config.name * adapter) list =
-  [
-    ( "freeserp",
-      {
-        make =
-          (fun ~net ~now ~cost_per_1k ~snippet_chars ->
-            Freeserp.make ~cost_per_1k ~snippet_chars ~now ~net ());
-        endpoint = Freeserp.policy_endpoint;
-        probe_url = Uri.to_string Freeserp.endpoint ^ "?index=web&q=probe";
-      } );
-    ( "anysearch",
-      {
-        make =
-          (fun ~net ~now:_ ~cost_per_1k ~snippet_chars ->
-            Anysearch.make ~cost_per_1k ~snippet_chars ~net ());
-        endpoint = Anysearch.policy_endpoint;
-        probe_url = Uri.to_string Anysearch.endpoint;
-      } );
-  ]
+let adapter_of_row ~policy_seconds (row : Registry.row) (pc : Config.provider_config) =
+  match Registry.grant_endpoint row pc with
+  | Error message -> Error message
+  | Ok endpoint ->
+      Ok { endpoint; timeout_seconds = Registry.timeout_seconds row ~policy_seconds }
 
-let cost_of (pc : Config.provider_config) = Option.value ~default:0.0 pc.Config.cost_per_1k
+(* Building a name is the row's job: what it costs, what it needs, the least time
+   it gets, the endpoint its grant may reach, and the probe that re-verifies it.
+   The three decisions this function makes for itself are the ones a row cannot
+   make — whether the name is enabled, whether it is built on this port, and
+   whether this deployment gave it what it needs.
 
+   A name with a row but no adapter in this build is {b unsupported}, which is
+   the startup-fatal fact [startup_verdict] refuses; a name whose row can build it
+   but whose key or instance the deployment never supplied is simply absent, as in
+   the oracle, where the builder returns [None] and [Config.missing_api_keys] is
+   the reporting path. Those are different sentences, and conflating them would
+   refuse startup over a config the operator can fix by adding a key. *)
 let build_providers ~sw ~net ~mono_clock ~now ?audit config =
+  let policy_seconds = config.Config.policy.Config.provider_timeout_seconds in
   let snippet_chars = config.Config.policy.Config.max_snippet_chars in
+  let text_chars = config.Config.policy.Config.max_result_text_chars in
   let rec go built table endpoints errors unsupported = function
     | [] ->
         {
@@ -159,36 +153,52 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit config =
           unsupported = List.sort String.compare (List.rev unsupported);
         }
     | (name, pc0) :: rest ->
+        (* The annotation is load-bearing: [enabled] is a field of more than one
+           config record in this module's scope, and an unannotated pattern would
+           resolve it by whichever record type the compiler saw last. *)
         let (pc : Config.provider_config) = pc0 in
         if not pc.Config.enabled then go built table endpoints errors unsupported rest
         else
-          match List.assoc_opt name adapters with
+          match Registry.row name with
           | None -> go built table endpoints errors (name :: unsupported) rest
-          | Some adapter -> (
-              match
-                grant_of_endpoint ~sw ~net ~mono_clock
-                  ~timeout_seconds:config.Config.policy.Config.provider_timeout_seconds
-                  ?audit adapter.endpoint
-              with
-              | Error message ->
-                  go built table endpoints ((name, message) :: errors) unsupported rest
-              | Ok grant ->
-                  let net = Provider.Net.of_grant grant in
-                  let provider =
-                    adapter.make ~net ~now ~cost_per_1k:(cost_of pc) ~snippet_chars
-                  in
-                  let row =
-                    ( name,
-                      {
-                        Health.endpoint = Health.probe_endpoint_const adapter.probe_url;
-                        headers = keyless_headers;
-                      } )
-                  in
-                  go
-                    ((name, provider) :: built)
-                    (row :: table)
-                    (adapter.endpoint :: endpoints)
-                    errors unsupported rest)
+          | Some (row : Registry.row) -> (
+              match row.build with
+              | Registry.Deferred _wave ->
+                  go built table endpoints errors (name :: unsupported) rest
+              | Registry.Adapter make -> (
+                  match Registry.missing_prerequisite row config pc with
+                  | Some _reason -> go built table endpoints errors unsupported rest
+                  | None -> (
+                      match adapter_of_row ~policy_seconds row pc with
+                      | Error message ->
+                          go built table endpoints ((name, message) :: errors) unsupported
+                            rest
+                      | Ok adapter -> (
+                          match
+                            grant_of_endpoint ~sw ~net ~mono_clock
+                              ~timeout_seconds:adapter.timeout_seconds
+                              ?audit adapter.endpoint
+                          with
+                          | Error message ->
+                              go built table endpoints ((name, message) :: errors)
+                                unsupported rest
+                          | Ok grant ->
+                              let args : Registry.args =
+                                {
+                                  Registry.net = Provider.Net.of_grant grant;
+                                  now;
+                                  key = Registry.key_for row config;
+                                  entry = pc;
+                                  cost_per_1k = Registry.price row pc;
+                                  snippet_chars;
+                                  text_chars;
+                                }
+                              in
+                              go
+                                ((name, make args) :: built)
+                                ((name, Registry.probe_spec row) :: table)
+                                (adapter.endpoint :: endpoints)
+                                errors unsupported rest))))
   in
   go [] [] [] [] [] config.Config.providers
 
@@ -208,11 +218,21 @@ let classify config (built : providers) =
   let missing = built.unsupported in
   (* OCaml-untested is a property of this port, not of Python's live history:
      [Config.untested_providers] are the names Python itself has never run
-     live, and {i every} name this build dispatches joins them until the OCaml
-     live runner records its own passing run. A probe ([--check], the
-     health monitor) is a reachability check, not a live run — that is why
-     this set is printed beside the ready count and never folded into it. *)
-  let untested_pool = Config.untested_providers @ built_names in
+     live, and {i every} name this build dispatches joins them until its own
+     OCaml live run is recorded — which is what the row's [ocaml_live_tested]
+     says, so the disclosure and the registry agree by reading one field
+     rather than two lists kept in step. A probe ([--check], the health
+     monitor) is a reachability check, not a live run — that is why this set
+     is printed beside the ready count and never folded into it. *)
+  let ocaml_untested =
+    List.filter
+      (fun name ->
+        match Registry.row name with
+        | Some row -> not row.Registry.ocaml_live_tested
+        | None -> true)
+      built_names
+  in
+  let untested_pool = Config.untested_providers @ ocaml_untested in
   {
     enabled = Config.enabled_providers config;
     effective = Config.effective_providers config;
@@ -430,15 +450,13 @@ let agent_net ~sw ~net ~mono_clock ?audit config =
   match config.Config.agent.Config.base_url with
   | None -> Error "agent mode is enabled but [agent] base_url is unset"
   | Some url -> (
-      let uri = Uri.of_string url in
-      let scheme =
-        match Uri.scheme uri with Some "https" -> `Https | _ -> `Http
-      in
-      let host = Option.value ~default:"" (Uri.host uri) in
-      let endpoint = { Policy.scheme; host; port = Uri.port uri } in
+      (* The same URI-to-grant-entry derivation the adapters use
+         ([Seekwright.Provider.policy_of_uri]): [agent] is not a provider, but a
+         second spelling of "scheme, host, port" is how two endpoints start to
+         disagree. *)
+      let endpoint = Provider.policy_of_uri (Uri.of_string url) in
       grant_of_endpoint ~sw ~net ~mono_clock
-        ~timeout_seconds:config.Config.agent.Config.model_timeout_seconds
-        ?audit endpoint)
+        ~timeout_seconds:config.Config.agent.Config.model_timeout_seconds ?audit endpoint)
 
 let build_app ~sw
     ~(env : < net : [> [> `Generic ] Eio.Net.ty] Eio.Resource.t;

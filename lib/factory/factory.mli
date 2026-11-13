@@ -14,6 +14,12 @@
     operator approved intranet reads. The grant sets are derived from enabled
     provider names — there is no second egress config key.
 
+    What each name is — its endpoint, price, timeout floor, credential
+    placement, probe and live-test status — is one data row in
+    [Seekwright_factory.Registry], so [build_providers] is a loop over rows
+    rather than a table of builder closures, and a row is the single place a
+    name's wire facts are written.
+
     {1 The audit trail}
 
     Every grant this module builds for the served process goes through one
@@ -44,13 +50,15 @@ val audit_sink : Seekwright.Engine.log -> Mcp_caps.Event.t -> unit
 (** What one pass of {!build_providers} produced. *)
 type providers = {
   built : (Seekwright.Config.name * Seekwright.Provider.t) list;
-  (** The adapters this deployment can dispatch, in config order. A name with
-      no adapter in this build (the MCP-backed and keyed adapters deferred past
-      P4) is absent — and is listed in [unsupported] rather than silently
-      dropped; Python raises for a missing key and never skips. *)
+  (** The adapters this deployment can dispatch, in config order. A name whose
+      registry row defers its adapter to a later wave is absent — and is listed
+      in [unsupported] rather than silently dropped. A name whose row can build
+      but whose key or instance the config never supplied is absent and not
+      reported here: [Config.missing_api_keys] is the path that names it, as in
+      Python, where the builder returns [None]. *)
   probe_table : (Seekwright.Config.name * Seekwright.Health.probe_spec) list;
-  (** The [--check] probe rows for the built names, built from the adapters'
-      own endpoint constants. *)
+  (** The [--check] probe rows for the built names, taken from each name's
+      registry row — the same row that said which endpoint its grant got. *)
   endpoints : Mcp_caps.Policy.endpoint list;
   (** The union of the built adapters' endpoints: the allowlist one shared
       [--check] grant is built over. *)
@@ -132,7 +140,10 @@ val build_providers :
   Seekwright.Config.t ->
   providers
 (** Instantiate every enabled provider that has the credentials and the
-    adapter this build carries.
+    adapter this build carries: one pass over the registry rows, where a row
+    answers the endpoint, the bound, the price, the credential and the probe,
+    and this function answers only whether the name is enabled, built on this
+    port, and supplied with what its row requires.
 
     [?audit] is the sink each built adapter's grant is wrapped with; [build_app]
     supplies it, and [--check] does not, because a probe of a deployment is not a
