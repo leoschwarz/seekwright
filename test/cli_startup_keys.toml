@@ -1,0 +1,5 @@
+[providers.exa]
+enabled = true
+
+[providers.parallel]
+enabled = true

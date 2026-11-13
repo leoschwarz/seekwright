@@ -1,0 +1,5 @@
+# --port needs a port number: the scan refuses "eighty" before the listener.
+# The refusal happens before this file is read; it parses anyway so a config
+# error cannot stand in for the sentence under test.
+[providers."exa:free"]
+enabled = true

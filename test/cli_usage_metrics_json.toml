@@ -1,0 +1,9 @@
+# The [--metrics --json] fixture: an empty board, so the snapshot is the
+# fixed empty shape and the pinned stdout cannot rot with the calendar —
+# the report's window is 14 days counted from the run's clock, so any dated
+# journal here would fall out of it. The journal fold and the provider table
+# are pinned by [test_cli_metrics.ml], which injects the clock. The only name
+# enabled is one that needs no key, so the run builds no client and dials
+# nothing.
+[providers."exa:free"]
+enabled = true

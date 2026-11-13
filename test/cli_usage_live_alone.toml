@@ -1,0 +1,5 @@
+# --live is meaningful only next to --check. The refusal happens before this
+# file is read; it parses anyway so a config error cannot stand in for the
+# sentence under test. A provider that needs no key, so nothing is dialled.
+[providers."exa:free"]
+enabled = true

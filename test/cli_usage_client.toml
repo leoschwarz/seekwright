@@ -1,0 +1,4 @@
+# Not a config file: TOML that would fail to parse if it were read. The client
+# reads no config and resolves no provider, so [search] must still reach the
+# connection-refused path and exit 1.
+this is not = [valid toml

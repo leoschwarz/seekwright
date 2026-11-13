@@ -439,3 +439,165 @@
  (libraries seekwright alcotest test_support)
  (deps (glob_files ../lib/*.mli)))
 
+(test
+ (name test_cli_extract)
+ (modules test_cli_extract)
+ (libraries seekwright seekwright_cli yojson alcotest))
+
+(test
+ (name test_cli_flags)
+ (modules test_cli_flags)
+ (libraries seekwright seekwright_cli alcotest str unix))
+
+(test
+ (name test_cli_client)
+ (modules test_cli_client)
+ (libraries seekwright seekwright_cli alcotest str test_support)
+ (deps ../lib/cli/cli_client.ml))
+
+(test
+ (name test_cli_check)
+ (modules test_cli_check)
+ (libraries seekwright seekwright.factory seekwright_cli alcotest str unix eio eio_main))
+
+(test
+ (name test_cli_metrics)
+ (modules test_cli_metrics)
+ (libraries seekwright_cli alcotest str unix))
+
+; The frozen flag sentences and startup refusals, pinned at the executable:
+; the library returns the sentence and the code, and this is where the
+; stream and the exit happen. Each run dials nothing — the refusal happens
+; before any network is opened, and no fixture config builds a provider.
+; The [--metrics --json] fixture reports an empty board: the snapshot's
+; shape is fixed, and the journal fold is pinned with an injected clock in
+; [test_cli_metrics.ml] instead.
+(rule
+ (deps ../bin/main.exe cli_usage_metrics_json.toml)
+ (targets cli_usage_metrics_json.out cli_usage_metrics_json.err)
+ (action
+  (with-accepted-exit-codes
+   0
+   (with-stderr-to cli_usage_metrics_json.err
+    (with-stdout-to cli_usage_metrics_json.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=cli_usage_metrics_json.toml ../bin/main.exe --metrics --json"))))))
+
+(rule
+ (alias runtest)
+ (action (diff cli_usage_metrics_json.expected cli_usage_metrics_json.out)))
+
+(rule
+ (alias runtest)
+ (action (diff cli_usage_metrics_json_notes.expected cli_usage_metrics_json.err)))
+
+(rule
+ (deps ../bin/main.exe cli_usage_live_alone.toml)
+ (targets cli_usage_live_alone.out cli_usage_live_alone.err)
+ (action
+  (with-accepted-exit-codes
+   2
+   (with-stderr-to cli_usage_live_alone.err
+    (with-stdout-to cli_usage_live_alone.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=cli_usage_live_alone.toml ../bin/main.exe --live"))))))
+
+(rule
+ (alias runtest)
+ (action (diff cli_usage_live_alone.expected cli_usage_live_alone.err)))
+
+(rule
+ (alias runtest)
+ (action (diff no_output.expected cli_usage_live_alone.out)))
+
+(rule
+ (deps ../bin/main.exe cli_usage_port.toml)
+ (targets cli_usage_port.out cli_usage_port.err)
+ (action
+  (with-accepted-exit-codes
+   2
+   (with-stderr-to cli_usage_port.err
+    (with-stdout-to cli_usage_port.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=cli_usage_port.toml ../bin/main.exe --http --port eighty"))))))
+
+(rule
+ (alias runtest)
+ (action (diff cli_usage_port.expected cli_usage_port.err)))
+
+(rule
+ (alias runtest)
+ (action (diff no_output.expected cli_usage_port.out)))
+
+(rule
+ (deps ../bin/main.exe cli_usage_client.toml)
+ (targets cli_usage_client.out cli_usage_client.err)
+ (action
+  (with-accepted-exit-codes
+   2
+   (with-stderr-to cli_usage_client.err
+    (with-stdout-to cli_usage_client.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=cli_usage_client.toml ../bin/main.exe search"))))))
+
+(rule
+ (alias runtest)
+ (action (diff cli_usage_client.expected cli_usage_client.err)))
+
+(rule
+ (alias runtest)
+ (action (diff no_output.expected cli_usage_client.out)))
+
+; Startup refusals: exit 1, one sentence on stderr, nothing on stdout, and no
+; provider built — so the run reaches no endpoint. The keys rule clears both
+; variables it names: a developer shell that holds a real Exa key would
+; otherwise start a server on the build machine instead of refusing.
+(rule
+ (deps ../bin/main.exe cli_startup_keys.toml)
+ (targets cli_startup_keys.out cli_startup_keys.err)
+ (action
+  (with-accepted-exit-codes
+   1
+   (with-stderr-to cli_startup_keys.err
+    (with-stdout-to cli_startup_keys.out
+     (run
+      sh
+      -c
+      "env -u SEEKWRIGHT_EXA_API_KEY -u SEEKWRIGHT_PARALLEL_API_KEY SEEKWRIGHT_CONFIG=cli_startup_keys.toml ../bin/main.exe"))))))
+
+(rule
+ (alias runtest)
+ (action (diff cli_startup_keys.expected cli_startup_keys.err)))
+
+(rule
+ (alias runtest)
+ (action (diff no_output.expected cli_startup_keys.out)))
+
+(rule
+ (deps ../bin/main.exe cli_startup_primary.toml)
+ (targets cli_startup_primary.out cli_startup_primary.err)
+ (action
+  (with-accepted-exit-codes
+   1
+   (with-stderr-to cli_startup_primary.err
+    (with-stdout-to cli_startup_primary.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=cli_startup_primary.toml ../bin/main.exe"))))))
+
+(rule
+ (alias runtest)
+ (action (diff cli_startup_primary.expected cli_startup_primary.err)))
+
+(rule
+ (alias runtest)
+ (action (diff no_output.expected cli_startup_primary.out)))
