@@ -32,8 +32,11 @@ let read path =
     Alcotest.failf "%s is missing from the test sandbox (test/dune declares it)" path;
   read_file path
 
-(* Only the module path is checked: prose in a comment may name mcp-kit freely,
-   an import may not. *)
+(* The check is over the whole file text, not the import lines: prose that
+   spells a module path is refused too. This suite's sandbox holds only the
+   [.ml] files, so the interface half of the same rule lives in
+   [test/log_guard/source_discipline.ml], whose [source_tree] dependency puts
+   the [.mli] files in reach. *)
 let no_module_imports_mcp_kit () =
   List.iter
     (fun module_name ->

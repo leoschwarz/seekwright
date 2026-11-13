@@ -145,21 +145,40 @@ val max_body_size : int
 (** The request-body bound, pinned so an upstream default change is a visible
     diff (the mcp-kit adapter's own default is 1 MiB). *)
 
+type serve_error =
+  | Bind_address_unresolved
+  (** The bind address could not be parsed or resolved. *)
+  | Listener_unavailable
+  (** The socket could not be opened, or the listener stopped with an error. *)
+(** The listener's startup failures as values with a constant classification:
+    {!serve_http}'s [Error] channel. The type deliberately carries no payload —
+    a host, a path or an exception message can name operator infrastructure or a
+    credential, and a classification is the redaction boundary. *)
+
 val serve_http :
   env:< net : _ Eio.Net.t; fs : _ Eio.Path.t; mono_clock : _ Eio.Time.Mono.t; .. > ->
   sw:Eio.Switch.t ->
+  log:Log.log ->
   app ->
   Mcp_kit.Server.t ->
   host:string ->
   port:int ->
-  unit
+  (unit, serve_error) result
 (** Serve Streamable HTTP on [host]:[port]: [/mcp] is delegated to the mcp-kit
     adapter's handler (which owns body bound, routing headers and Origin), and
     every other path goes through {!handle_custom} under the same Host
     allowlist. [app.health] runs as a fiber on the same switch — so a cancelled
     listener takes its monitor with it — when
     [[search] health_interval_seconds] is positive. Runs until the enclosing
-    switch ends; the listener is registered on [sw], which owns the grants. *)
+    switch ends; the listener is registered on [sw], which owns the grants.
+
+    Startup and listener failures are returned, not raised: [Error error] after
+    logging [http.listen_failed] with the error's constant [kind], and
+    [Ok ()] only when the listener returns on its own. Per-connection failures
+    are logged as [http.connection_error] with a bounded
+    {!Log.classify_exn} [kind]; a rejected Origin is the expected
+    [http.origin_rejected] refusal at INFO, not a fault. Neither path ever
+    renders an exception. *)
 
 (** {1 The frozen surface, as data}
 

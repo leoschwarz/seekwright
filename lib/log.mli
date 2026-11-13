@@ -20,6 +20,14 @@ type log =
     this one, so a new parameter is a change in one place and the type checker
     points at it there. *)
 
+val classify_exn : exn -> string
+(** A bounded classification of a raised exception: one of a fixed set of
+    constant strings ([io], [cancelled], [sys_error], …), never its message and
+    never its payload. This is the only exception fact a log field or an
+    operator-facing sentence may carry: arbitrary exception text can hold the
+    URL, headers or credential that was in scope when it was raised, so the
+    classification is the redaction boundary rather than a formatting choice. *)
+
 type t
 (** A configured logger: the level floor and the format, from [logging]. *)
 

@@ -626,13 +626,26 @@ let path_of_request_line line =
       | None -> resource)
   | _ -> "/"
 
-let addr_of_host ~net host =
+type serve_error =
+  | Bind_address_unresolved
+  | Listener_unavailable
+
+(* The two startup failures are values with a constant classification, not an
+   exception: the address may carry the operator's host and a bind failure may
+   carry a socket fact, and neither belongs in a log line or a sentence. *)
+let serve_error_kind = function
+  | Bind_address_unresolved -> "bind_address_unresolved"
+  | Listener_unavailable -> "listener_unavailable"
+
+let addr_of_host ~net host : (Eio.Net.Ipaddr.v4v6, serve_error) result =
   match Ipaddr.of_string host with
-  | Ok ip -> Eio.Net.Ipaddr.of_raw (Ipaddr.to_octets ip)
+  | Ok ip -> Ok (Eio.Net.Ipaddr.of_raw (Ipaddr.to_octets ip))
   | Error _ -> (
       match Eio.Net.getaddrinfo_stream ~service:"" net host with
-      | `Tcp (addr, _) :: _ -> addr
-      | _ -> failwith ("seekwright: cannot resolve bind address " ^ host))
+      | exception (Eio.Cancel.Cancelled _ as exn) -> raise exn
+      | exception _ -> Error Bind_address_unresolved
+      | `Tcp (addr, _) :: _ -> Ok addr
+      | _ -> Error Bind_address_unresolved)
 
 (* The replayed head arrives as lines, not as an [Http.Header]; fold it through
    the same header type so the transport's [Host] read is not a hand-rolled
@@ -683,77 +696,103 @@ let run_health_monitor (health : health) ~(config : Config.t)
   in
   loop ()
 
-let serve_http ~env ~sw app server ~host ~port =
-  let addr = addr_of_host ~net:(env#net) host in
-  let socket = Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (addr, port)) in
-  (match app.health with
-  | Some health when app.config.Config.search.Config.health_interval_seconds > 0.0 ->
-      let interval =
-        app.config.Config.search.Config.health_interval_seconds
-      in
-      Eio.Fiber.fork ~sw (fun () ->
-        run_health_monitor health ~config:app.config
-          ~sleep:(fun () -> Eio.Time.Mono.sleep env#mono_clock interval))
-  | _ -> ());
-  let handler =
-    Mcp_kit_cohttp_eio.handler ~max_body_size
-      ~allowed_origins:(origin_allowlist app.allowed_hosts)
-      server
-  in
-  let stop, _resolve = Eio.Promise.create () in
-  let on_error = function
-    | Mcp_kit_cohttp_eio.Rejected_origin ->
-        prerr_endline "seekwright: origin rejected"
-    | exn -> prerr_endline ("seekwright: connection: " ^ Printexc.to_string exn)
-  in
-  let custom = custom_handler app in
-  Eio.Net.run_server ~stop ~on_error socket
-  @@ fun sock peer ->
-  Eio.Switch.run @@ fun conn_sw ->
-  (* The tap records every byte read through [ic], so the request line this
-     loop consumes can be replayed for whichever handler takes the
-     connection. *)
-  let recorded = Buffer.create 8192 in
-  let tap_handler = Eio.Flow.Pi.source (module Tap) in
-  let tapped : Eio.Flow.source_ty Eio.Resource.t =
-    (Eio.Resource.T ({ Tap.flow = (sock :> Eio.Flow.two_way_ty Eio.Resource.t); recorded }, tap_handler)
-      :> Eio.Flow.source_ty Eio.Resource.t)
-  in
-  let ic = Eio.Buf_read.of_flow ~max_size:max_int tapped in
-  Eio.Buf_write.with_flow sock @@ fun oc ->
-  (* Peek the request line and the header block, then hand the whole
-     connection — replayed from the tap — to the mcp-kit handler for [/mcp] or
-     to the custom-route handler for everything else. Each driver loops
-     keep-alive itself, so the first request decides the connection. The Host
-     allowlist is applied here, in the surrounding route, because the mcp-kit
-     adapter owns Origin but not Host (plans/capability-gated-mcp-server.md
-     §7); [/healthz] is exempt. *)
-  let rec peek_headers acc =
-    match Eio.Buf_read.line ic with
-    | exception End_of_file -> List.rev acc
-    | "" | "\r" -> List.rev acc
-    | line -> peek_headers (line :: acc)
-  in
-  match Eio.Buf_read.line ic with
-  | exception End_of_file -> ()
-  | request_line ->
-      let headers = headers_of_lines (peek_headers []) in
-      let path = path_of_request_line request_line in
-      let host = Http.Header.get headers "host" in
-      let replay () =
-        let replay_handler = Eio.Flow.Pi.source (module Replay) in
-        let replay : Eio.Flow.source_ty Eio.Resource.t =
-          ( Eio.Resource.T
-              ({ Replay.prefix = Buffer.contents recorded; flow = (sock :> Eio.Flow.two_way_ty Eio.Resource.t) }, replay_handler)
-            :> Eio.Flow.source_ty Eio.Resource.t )
-        in
-        Eio.Buf_read.of_flow ~max_size:max_int replay
-      in
-      if not (host_gate app ~path ~host) then
-        Eio.Buf_write.string oc (http_text_response 421 "Invalid Host header")
-      else if path = "/mcp" then
-        Cohttp_eio.Server.callback handler (conn_sw, peer) (replay ()) oc
-      else Cohttp_eio.Server.callback custom (conn_sw, peer) (replay ()) oc
+let serve_http ~env ~sw ~log app server ~host ~port =
+  match addr_of_host ~net:(env#net) host with
+  | Error error ->
+      log Config.Log_warning "http.listen_failed"
+        [ ("kind", `String (serve_error_kind error)) ];
+      Error error
+  | Ok addr -> (
+      match Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (addr, port)) with
+      | exception (Eio.Cancel.Cancelled _ as exn) -> raise exn
+      | exception _ ->
+          let error = Listener_unavailable in
+          log Config.Log_warning "http.listen_failed"
+            [ ("kind", `String (serve_error_kind error)) ];
+          Error error
+      | socket ->
+          (match app.health with
+          | Some health when app.config.Config.search.Config.health_interval_seconds > 0.0 ->
+              let interval =
+                app.config.Config.search.Config.health_interval_seconds
+              in
+              Eio.Fiber.fork ~sw (fun () ->
+                run_health_monitor health ~config:app.config
+                  ~sleep:(fun () -> Eio.Time.Mono.sleep env#mono_clock interval))
+          | _ -> ());
+          let handler =
+            Mcp_kit_cohttp_eio.handler ~max_body_size
+              ~allowed_origins:(origin_allowlist app.allowed_hosts)
+              server
+          in
+          let stop, _resolve = Eio.Promise.create () in
+          (* Every connection failure is one fixed event with a bounded
+             classification: a rejected Origin is an expected refusal at INFO,
+             anything else is a WARNING. Neither arm renders the exception. *)
+          let on_error = function
+            | Mcp_kit_cohttp_eio.Rejected_origin ->
+                log Config.Log_info "http.origin_rejected"
+                  [ ("kind", `String "rejected_origin") ]
+            | exn ->
+                log Config.Log_warning "http.connection_error"
+                  [ ("kind", `String (Log.classify_exn exn)) ]
+          in
+          let custom = custom_handler app in
+          let serve_connection sock peer =
+            Eio.Switch.run @@ fun conn_sw ->
+            (* The tap records every byte read through [ic], so the request line this
+               loop consumes can be replayed for whichever handler takes the
+               connection. *)
+            let recorded = Buffer.create 8192 in
+            let tap_handler = Eio.Flow.Pi.source (module Tap) in
+            let tapped : Eio.Flow.source_ty Eio.Resource.t =
+              (Eio.Resource.T ({ Tap.flow = (sock :> Eio.Flow.two_way_ty Eio.Resource.t); recorded }, tap_handler)
+                :> Eio.Flow.source_ty Eio.Resource.t)
+            in
+            let ic = Eio.Buf_read.of_flow ~max_size:max_int tapped in
+            Eio.Buf_write.with_flow sock @@ fun oc ->
+            (* Peek the request line and the header block, then hand the whole
+               connection — replayed from the tap — to the mcp-kit handler for [/mcp] or
+               to the custom-route handler for everything else. Each driver loops
+               keep-alive itself, so the first request decides the connection. The Host
+               allowlist is applied here, in the surrounding route, because the mcp-kit
+               adapter owns Origin but not Host (plans/capability-gated-mcp-server.md
+               §7); [/healthz] is exempt. *)
+            let rec peek_headers acc =
+              match Eio.Buf_read.line ic with
+              | exception End_of_file -> List.rev acc
+              | "" | "\r" -> List.rev acc
+              | line -> peek_headers (line :: acc)
+            in
+            match Eio.Buf_read.line ic with
+            | exception End_of_file -> ()
+            | request_line ->
+                let headers = headers_of_lines (peek_headers []) in
+                let path = path_of_request_line request_line in
+                let host = Http.Header.get headers "host" in
+                let replay () =
+                  let replay_handler = Eio.Flow.Pi.source (module Replay) in
+                  let replay : Eio.Flow.source_ty Eio.Resource.t =
+                    ( Eio.Resource.T
+                        ({ Replay.prefix = Buffer.contents recorded; flow = (sock :> Eio.Flow.two_way_ty Eio.Resource.t) }, replay_handler)
+                      :> Eio.Flow.source_ty Eio.Resource.t )
+                  in
+                  Eio.Buf_read.of_flow ~max_size:max_int replay
+                in
+                if not (host_gate app ~path ~host) then
+                  Eio.Buf_write.string oc (http_text_response 421 "Invalid Host header")
+                else if path = "/mcp" then
+                  Cohttp_eio.Server.callback handler (conn_sw, peer) (replay ()) oc
+                else Cohttp_eio.Server.callback custom (conn_sw, peer) (replay ()) oc
+          in
+          match Eio.Net.run_server ~stop ~on_error socket serve_connection with
+          | () -> Ok ()
+          | exception (Eio.Cancel.Cancelled _ as exn) -> raise exn
+          | exception exn ->
+              let kind = Log.classify_exn exn in
+              log Config.Log_warning "http.listener_error"
+                [ ("kind", `String kind) ];
+              Error Listener_unavailable)
 
 (* {1 The frozen surface data} *)
 

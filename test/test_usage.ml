@@ -743,8 +743,11 @@ let append_failure_is_logged_once_then_the_writer_gives_up () =
     search ~ms:5 rec_;
     let errors = events lines "dashboard.journal_error" in
     A.(check int) "reported once for the process" 1 (List.length errors);
-    A.(check bool) "with the reason, not a traceback" true
-      (List.mem "path" (List.map fst (List.hd errors)));
+    let fields = List.hd errors in
+    A.(check bool) "with a bounded reason, not a traceback" true
+      (List.mem "reason" (List.map fst fields));
+    A.(check bool) "and no operator path on the log line" false
+      (contains ~haystack:(Yojson.Safe.to_string (`Assoc fields)) ~needle:file);
     let snap = Usage.snapshot rec_ in
     A.(check bool) "the snapshot says the journal broke" true (get "failed" (get "journal" snap) = `Bool true);
     A.(check int) "and the aggregates kept counting" 2 (int (get "searches" (get "totals" snap)));

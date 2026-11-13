@@ -11,6 +11,20 @@
 type log =
   Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
 
+(* A raised exception is classified by constructor family, never rendered:
+   rendering it would carry the payload, and an [Eio.Io]'s payload names the
+   path or endpoint that failed. The set is deliberately finite so a log field
+   says the same thing on every run. *)
+let classify_exn = function
+  | Eio.Io _ -> "io"
+  | Eio.Cancel.Cancelled _ -> "cancelled"
+  | End_of_file -> "end_of_file"
+  | Sys_error _ -> "sys_error"
+  | Failure _ -> "failure"
+  | Invalid_argument _ -> "invalid_value"
+  | Not_found -> "not_found"
+  | _ -> "other"
+
 let level_rank = function
   | Config.Log_trace -> 0
   | Config.Log_debug -> 1

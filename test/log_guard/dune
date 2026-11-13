@@ -1,0 +1,19 @@
+; F1.3's two pins live beside each other because both read the log contract
+; rather than the serving path.
+;
+; [field_sets] drives the real engines over stub providers and a stub fetcher,
+; so no socket is opened and no provider key is read. [source_discipline] reads
+; the library and binary sources, which is why its stanza declares both trees as
+; inputs: a source guard whose files are not inputs to the action can pass by
+; scanning nothing after a build layout change.
+
+(test
+ (name field_sets)
+ (libraries seekwright alcotest test_support))
+
+(test
+ (name source_discipline)
+ (libraries alcotest test_support)
+ (deps
+  (source_tree ../../lib)
+  (source_tree ../../bin)))

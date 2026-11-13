@@ -116,6 +116,7 @@
     ../lib/provider.cmi \
     ../lib/prompts.cmi \
     ../lib/model.cmi \
+    ../lib/log.cmi \
     ../lib/health.cmi \
     ../lib/engine.cmi \
     ../lib/dashboard_html.cmi \
@@ -128,6 +129,7 @@
     ../lib/provider.cmx \
     ../lib/prompts.cmx \
     ../lib/model.cmx \
+    ../lib/log.cmx \
     ../lib/health.cmx \
     ../lib/engine.cmx \
     ../lib/dashboard_html.cmx \
@@ -138,14 +140,17 @@
     ../lib/usage.cmi \
     ../lib/provider.cmi \
     ../lib/model.cmi \
+    ../lib/log.cmi \
     ../lib/health.cmi \
     ../lib/engine.cmi \
     ../lib/config.cmi \
     ../lib/agent.cmi
 ../lib/usage.cmo : \
+    ../lib/log.cmi \
     ../lib/config.cmi \
     ../lib/usage.cmi
 ../lib/usage.cmx : \
+    ../lib/log.cmx \
     ../lib/config.cmx \
     ../lib/usage.cmi
 ../lib/usage.cmi : \

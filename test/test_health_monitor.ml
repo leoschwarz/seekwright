@@ -107,7 +107,9 @@ let test_the_listener_starts_and_stops_the_monitor () =
   (try
      Eio.Switch.run (fun sw ->
        Eio.Fiber.fork ~sw (fun () ->
-           Server.serve_http ~env ~sw app server ~host:"127.0.0.1" ~port:0);
+           ignore
+             (Server.serve_http ~env ~sw ~log:(fun _ _ _ -> ()) app server
+                ~host:"127.0.0.1" ~port:0));
        Eio.Time.with_timeout_exn (Eio.Stdenv.clock env) 2.0 (fun () ->
            Eio.Promise.await first_probe);
        (* End the switch the way a shutdown does: an exception cancels every

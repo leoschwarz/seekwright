@@ -26,6 +26,10 @@ module Usage = Seekwright.Usage
 module A = Alcotest
 open Test_support
 
+(* An exception the classifier has never heard of, carrying a value that must
+   not reach a log line. *)
+exception Opaque of string
+
 (* {2 The compile-time pin} *)
 
 let configured_sink : Log.log = Log.sink (Log.make Config.default_logging_config)
@@ -169,6 +173,25 @@ let test_one_function_records_from_the_engine_and_the_board () =
   A.(check bool) "and the engine line names what was asked for" true
     (List.mem "requested" (field_names "search.rejected"))
 
+let test_an_exception_is_classified_never_rendered () =
+  (* The redaction boundary: a caught exception may become one of a fixed set
+     of constants, and a payload that looks like a key or a URL never gets a
+     second chance to become a log field. *)
+  let secret = "sk-live-not-for-the-log" in
+  A.(check string) "a failure is its family" "failure"
+    (Log.classify_exn (Failure ("the endpoint said " ^ secret)));
+  A.(check string) "a missing file is a syscall fact" "sys_error"
+    (Log.classify_exn (Sys_error ("/home/operator/" ^ secret)));
+  A.(check string) "not_found is its own constant" "not_found"
+    (Log.classify_exn Not_found);
+  A.(check string) "an unknown constructor is just other" "other"
+    (Log.classify_exn (Opaque secret));
+  List.iter
+    (fun exn ->
+      A.(check bool) "the classification never carries the payload" false
+        (contains ~haystack:(Log.classify_exn exn) ~needle:secret))
+    [ Failure ("the endpoint said " ^ secret); Sys_error ("/home/operator/" ^ secret) ]
+
 let () =
   A.run "log"
     [
@@ -181,5 +204,10 @@ let () =
               test_the_board_hands_its_levels_and_fields_to_the_sink;
             A.test_case "one function records from the engine and the board" `Quick
               test_one_function_records_from_the_engine_and_the_board;
-          ] )
+          ] );
+      ( "exception classification",
+        [
+          A.test_case "an exception is classified, never rendered" `Quick
+            test_an_exception_is_classified_never_rendered;
+        ] );
     ]

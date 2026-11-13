@@ -907,7 +907,17 @@ let run_server ~env ~sw opts =
                 let port = Option.value ~default:8000 opts.port in
                 log Config.Log_info "http.listening"
                   [ ("host", `String host); ("port", `Int port) ];
-                Server.serve_http ~env ~sw app server ~host ~port
+                (match
+                   Server.serve_http ~env ~sw ~log app server ~host ~port
+                 with
+                | Ok () -> ()
+                | Error Server.Bind_address_unresolved ->
+                    prerr_endline
+                      "seekwright: cannot resolve the HTTP bind address";
+                    exit 1
+                | Error Server.Listener_unavailable ->
+                    prerr_endline "seekwright: cannot open the HTTP listener";
+                    exit 1)
               end
               else Mcp_kit_stdio.run_channels server stdin stdout)
 

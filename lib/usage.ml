@@ -804,10 +804,10 @@ let apply (t : t) (entry : Yojson.Safe.t) : bool =
 
 (* {1 The journal} *)
 
-let render_exn (exn : exn) : string =
-  (* The reason is a log field, never a stack: [Printexc.to_string] gives the
-     constructor and its payload, which for an [Eio.Io] is the syscall fact. *)
-  Printexc.to_string exn
+(* The journal's own path is operator configuration, not content: the snapshot
+   may report it (the operator needs to find the file), but a log line does not.
+   A failure is therefore a constant [stage] and a bounded [reason]
+   classification — [Log.classify_exn] never carries the exception payload. *)
 
 (* Fold an existing journal into the aggregates. A missing file is fine —
    construction created it. A line that will not parse is skipped and counted
@@ -852,8 +852,8 @@ let append (t : t) (entry : Yojson.Safe.t) : unit =
         t.journal_failed <- true;
         emit t Config.Log_warning "dashboard.journal_error"
           [
-            ("path", `String (Option.value ~default:"?" t.journal_native));
-            ("reason", `String (render_exn exn));
+            ("stage", `String "append");
+            ("reason", `String (Log.classify_exn exn));
           ]
 
 let create ~now ?log ?history_path ?(recent = recent_default) ?(keep_days = keep_days_default)
@@ -915,7 +915,9 @@ let create ~now ?log ?history_path ?(recent = recent_default) ?(keep_days = keep
           backfill t path;
           Ok t
         | exception exn ->
-          Error (Printf.sprintf "not writable: %s (%s)" shown (render_exn exn)))
+          Error
+            (Printf.sprintf "not writable: %s (%s)" shown
+               (Log.classify_exn exn)))
 
 (* {1 Recording} *)
 

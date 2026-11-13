@@ -245,6 +245,7 @@ Run mechanics, pin verification and the local `odoc` prerequisite are recorded
 in `plans/infra-setup.md`, "CI: the OCaml gate"; the exit observation (a
 documentation-only change proving the job runs) is made on the pull request that
 carries this workflow, not from a local checkout.
+
 ## 9. F0.1 — the differential harness and parity matrix (2026-11-13)
 
 Landed on `f0-1-diff`: `test/differential/` (the matrix tables, 165 corpus
@@ -286,3 +287,44 @@ unnamed, every row's verification must be one of the plan's kinds or an explicit
 `pending-F*`, every `.ml`/`.py` pointer must resolve to a file in the sandbox,
 and the provider rows must equal `Config.known_providers`. Fifteen adapters are
 `pending-F4`, the fetch fallbacks `F6`, the page cache `F7`.
+
+## 10. F1.3 — error discipline and log privacy (2026-11-13)
+
+Landed on `f1-3-errors`. The boundary that raised now returns: `Server.serve_http`
+answers `(unit, serve_error) result`, with `Bind_address_unresolved` and
+`Listener_unavailable` as payload-free constructors, and `bin/main.ml` turns
+either into one operator sentence plus exit 1. The type is deliberately not a
+`string` or an exception wrapper — a host, a path or a socket fact can name
+operator infrastructure, and the constructors are the redaction boundary.
+
+Exceptions are classified, never rendered. `Log.classify_exn` is the only
+exception-to-string conversion on a serving path: it maps a raised value to one
+of a finite set of constants (`io`, `cancelled`, `sys_error`, `failure`,
+`invalid_value`, `not_found`, `other`), so a log field says the same thing on
+every run and cannot carry the URL, header or credential that was in scope when
+it was raised. `Printexc.to_string` is gone from `lib/usage.ml`; a journal append
+failure now logs `dashboard.journal_error` with a constant `stage="append"` and a
+bounded `reason`, while the snapshot and the `create` error keep the operator
+path they need. The listener logs three fixed events: `http.listen_failed`
+(startup, WARNING), `http.connection_error` (per connection, WARNING) and
+`http.listener_error` (a listener that returned with an exception); a rejected
+Origin is the expected refusal `http.origin_rejected` at INFO, not a fault.
+
+Two suites pin the rules where a type cannot. `test/log_guard/field_sets.ml`
+drives the real engines over a stub provider and a stub fetcher — the position
+Python's `MockTransport` holds — and asserts the exact `search.ok` and `fetch.ok`
+key dictionaries both with `log_content` on and off, plus the absence of every
+caller sentinel (query, URL/path, title, snippet, body, answer) from the decision
+line and their presence in the content event that owns them when logging is on.
+`test/log_guard/source_discipline.ml` scans every `.ml` and `.mli` under `lib/`
+and `bin/` as whole text: no `Printexc`, no direct stderr outside `lib/log.ml`'s
+sink and the thin CLI, no `failwith`/`invalid_arg` left in the serving-path
+modules, and no `Mcp_kit` reference in the capability core beyond `server.ml` and
+`server.mli`. Its `source_tree` dependencies and positive controls make an empty
+or renamed sandbox fail instead of passing vacuously; `test_core_no_mcp_kit.ml`
+now states that its own scan is whole-text too.
+
+`test/router_dependencies.expected` grew the `log.cmi`/`log.cmx` edges because
+`server.mli` names `Log.log` and `usage.ml` calls `Log.classify_exn`; the pin is
+regenerated from ocamldep, not hand-edited. Gate at this commit:
+`dune build @install`, `dune runtest --force` and `dune build @doc` all exit 0.
