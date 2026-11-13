@@ -1,0 +1,15 @@
+area: provider
+case: 47-searxng-rate-limited
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=1&q=too fast
+headers= 
+body= -
+verdict= error
+kind= quota
+retryable= false
+message= rate limited by the instance

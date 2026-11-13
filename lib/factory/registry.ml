@@ -13,6 +13,9 @@ module Health = Seekwright.Health
 module Provider = Seekwright.Provider
 module Freeserp = Seekwright_providers.Freeserp
 module Anysearch = Seekwright_providers.Anysearch
+module Scrappa = Seekwright_providers.Scrappa
+module Searxng = Seekwright_providers.Searxng
+module Serper = Seekwright_providers.Serper
 
 let ( let* ) = Result.bind
 
@@ -36,6 +39,7 @@ type prerequisite =
 type cost_model =
   | Flat
   | Extra_results of { first : int; per_extra_1k : float }
+  | Credit_multiplier of { over : int; multiplier : int }
 
 type endpoint_source =
   | Fixed_uri of Uri.t
@@ -47,6 +51,7 @@ type args = {
   net : Provider.Net.t;
   now : unit -> float;
   key : string option;
+  endpoint : Uri.t;
   entry : Config.provider_config;
   cost_per_1k : float;
   snippet_chars : int;
@@ -130,6 +135,19 @@ let serpapi_probe (uri : Uri.t) = Probe (Health.serpapi_endpoint ~base:(Uri.to_s
 
 let key_header header = Header { header; prefix = "" }
 let bearer = Header { header = "Authorization"; prefix = "Bearer " }
+
+(* A row that declares [Api_key] reaches its builder only after two guards have
+   passed: [Config] makes an enabled name with no key startup-fatal, and
+   {!missing_prerequisite} declines the name before the builder is asked. So [None]
+   here means an invariant above the rows has already been broken — and the answer is
+   to say so at the row that noticed, rather than to dial a vendor with an empty
+   credential and read its 401. The option stays in {!args} because a keyless row's
+   builder {i} must see [None]: that is what keeps [exa:free] anonymous while [exa]
+   spends the same variable. *)
+let require_key name args =
+  match args.key with
+  | Some key -> key
+  | None -> invalid_arg (Printf.sprintf "Registry: %s was built with no key" name)
 
 let rows =
   [
@@ -226,12 +244,19 @@ let rows =
       ~credential:bearer ~probe:(probe_at (Uri.of_string "https://api.querit.ai/v1/search"))
       ~build:(Deferred "F5.5") ();
     (* A scraping backend, not a cached SERP index: slower than [serper] on the same
-       query, which is what the 15-second floor buys. *)
+       query, which is what the 15-second floor buys. One credit per request on
+       every endpoint, so the row is [Flat] where [serper] above is not, and the
+       cheapest figure in the table. *)
     make_row ~name:"scrappa"
-      ~endpoint:(Fixed_uri (Uri.of_string "https://scrappa.co/api/search-light"))
+      ~endpoint:(Fixed_uri Scrappa.endpoint)
       ~credential:(key_header "x-api-key") ~default_cost:(Some 0.30) ~timeout_floor:15.0
-      ~probe:(probe_at (Uri.of_string "https://scrappa.co/api/search-light"))
-      ~build:(Deferred "F5.2") ();
+      ~probe:(probe_at Scrappa.endpoint)
+      ~build:
+        (Adapter
+           (fun a ->
+             Scrappa.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~key:(require_key "scrappa" a) ~net:a.net ()))
+      ();
     (* Keyed despite the 100 free credits: a metered allowance is a billable quota.
        The figure is the entry Basic plan's rate; a cheaper plan corrects it. *)
     make_row ~name:"search1api"
@@ -242,9 +267,17 @@ let rows =
     (* A metasearch instance queries its upstream engines live, so it answers at
        scraper speed, not SERP-API speed: the 15-second floor. The instance is
        config, with no default and no key — and the key stays absent whatever the
-       environment holds, because this name's grant is to the operator's own host. *)
+       environment holds, because this name's grant is to the operator's own host.
+       Its builder gets the destination from {!args} rather than re-reading the
+       config key, so the URL it dials and the entry its grant allows are the one
+       reading of one value. *)
     make_row ~name:"searxng" ~endpoint:Url_required ~requires:[ Config_url ] ~timeout_floor:15.0
-      ~probe:(Probe Health.searxng_endpoint) ~settings:[ "url" ] ~build:(Deferred "F5.2")
+      ~probe:(Probe Health.searxng_endpoint) ~settings:[ "url" ]
+      ~build:
+        (Adapter
+           (fun a ->
+             Searxng.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~endpoint:a.endpoint ~net:a.net ()))
       ();
     (* Keyed despite the 250 searches/month free tier. The documented request puts
        the key in the {i query string}, so this is the one row whose credential is
@@ -256,12 +289,21 @@ let rows =
       ~probe:(serpapi_probe (Uri.of_string "https://serpapi.com/search"))
       ~build:(Deferred "F5.5") ();
     (* An API with its own SERP cache, not a scrape: the policy timeout is enough,
-       and its header spelling is the vendor's own. *)
+       and its header spelling is the vendor's own. The one name whose per-query
+       figure doubles past {!Seekwright_providers.Serper.credit_over} results —
+       two credits for more than ten — so [--check --live] and the caller's notice
+       both report the search that actually bills. *)
     make_row ~name:"serper"
-      ~endpoint:(Fixed_uri (Uri.of_string "https://google.serper.dev/search"))
+      ~endpoint:(Fixed_uri Serper.endpoint)
       ~credential:(key_header "X-API-KEY") ~default_cost:(Some 1.00)
-      ~probe:(probe_at (Uri.of_string "https://google.serper.dev/search"))
-      ~build:(Deferred "F5.2") ();
+      ~cost_model:(Credit_multiplier { over = Serper.credit_over; multiplier = 2 })
+      ~probe:(probe_at Serper.endpoint)
+      ~build:
+        (Adapter
+           (fun a ->
+             Serper.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~key:(require_key "serper" a) ~net:a.net ()))
+      ();
     (* An API, not a scrape: normal timeout. The figure is the free-then-metered
        tier's rate, and depth stays pinned at [basic] because [advanced] is the
        cost cliff an operator may choose and a model may not. *)
@@ -356,6 +398,13 @@ let cost_of row ~cost_per_1k n =
   | Extra_results { first; per_extra_1k } ->
       let extra = float_of_int (max 0 (n - first)) in
       (cost_per_1k +. (extra *. per_extra_1k)) /. 1000.
+  (* The vendor's rate is per thousand {i credits}, and a request past [over]
+     results spends [multiplier] of them. Written as the vendor states it — the
+     per-thousand figure, then the credit count — so it matches the adapter's own
+     [cost_for] bit for bit rather than only to a tolerance. *)
+  | Credit_multiplier { over; multiplier } ->
+      let credits = if n > over then multiplier else 1 in
+      (cost_per_1k /. 1000.) *. float_of_int credits
 
 (* The credential decision, in one place: a keyless row answers [None] whatever the
    environment holds, so [exa:free] stays anonymous while [exa] spends the same

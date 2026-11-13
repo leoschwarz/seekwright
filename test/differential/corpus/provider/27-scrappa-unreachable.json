@@ -1,0 +1,7 @@
+{
+  "provider": "scrappa",
+  "query": {
+    "query": "dns failure"
+  },
+  "refuse": "unavailable"
+}

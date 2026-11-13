@@ -1,0 +1,15 @@
+area: provider
+case: 48-searxng-proxy-payment
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=1&q=402 is not quota here
+headers= 
+body= -
+verdict= error
+kind= failure
+retryable= true
+message= HTTP 402

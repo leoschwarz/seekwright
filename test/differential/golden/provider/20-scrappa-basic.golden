@@ -1,0 +1,27 @@
+area: provider
+case: 20-scrappa-basic
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://scrappa.co/api/search-light
+query= num=5&query=rust lifetimes
+headers= x-api-key=sentinel
+body= -
+verdict= ok
+name= scrappa
+result title=First
+result url=https://one.example/x
+result snippet=One.
+result uncapped=4
+result published_date=-
+result score=-
+result title=Second
+result url=https://two.example/y
+result snippet=Two.
+result uncapped=4
+result published_date=-
+result score=-
+cost_usd= 0.000300
+notice=-

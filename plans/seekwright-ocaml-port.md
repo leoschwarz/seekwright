@@ -1415,3 +1415,121 @@ reached. The skip paths were exercised gated but offline for `serper` (no key,
 and its build is deferred to F5.2), `exa` (F5.1), `fetch:jina` (F6.1) and
 `searxng` (F5.2): each exits 0 with its reason named, as a missing configuration
 must.
+=======
+## 24. F5.2 — the Serper, Scrappa and SearXNG adapters, and a differential area that dials them (2026-11-13)
+
+Landed on `f5-2-serp`. Spec: `plans/ocaml-finalisation.md` §F5.2 and the F5 common
+acceptance rows.
+
+**Three adapters, three wire shapes.** `Seekwright_providers.Serper`
+(`lib/providers/serper.ml{,i}`) is one `POST https://google.serper.dev/search`
+with the JSON body the vendor names (`q`, `num`, `gl`, `hl`, `tbs`) and the key in
+`X-API-KEY`; `Scrappa` is one `GET …/api/search-light` with `query`, `num`, `gl`,
+`hl`, `dateRestrict`, `safe` and the key in `x-api-key`; `Searxng` is one `GET`
+against `{instance}/search` with `format=json`, `pageno`, `time_range`,
+`language`, `safesearch`, and no credential at all — an instance URL is not a
+secret and never becomes a header. Domain filters ride `site:` in the query on all
+three; the `ignored_constraints` sentence each files is the oracle's, and the
+buckets differ by adapter rather than by house style: Serper drops safe-search,
+SearXNG drops `country`, Scrappa drops nothing.
+
+**The status classes are the adapter's, and each says what its own quota is.**
+Serper folds `402` in with `429` (a credit pack and a spent balance are the same
+failure to a caller, and both must reach the quota fallback); Scrappa folds in the
+`402` that is its x402 payment challenge; **SearXNG keeps `402` out** — a 402 in
+front of an instance URL is the reverse proxy sitting there, so it answers
+`HTTP 402` as an ordinary retryable failure and reserves the quota class for `429`
+("rate limited by the instance"). `401`/`403` are non-retryable everywhere; on
+SearXNG the sentence names the instance's own cause, `authentication rejected
+(enable \`format=json\` for this client)`. Transport failures go through
+`Provider.transport_error`, whose own comment is the redaction rule: the grant's
+message — which may name the peer, and in the oracle's tree echoed the request
+that carried the key — is never copied.
+
+**Pricing is arithmetic the row states.** `Registry.Cost_model` gains
+`Credit_multiplier { over; multiplier }`, and Serper's row carries `over =
+Serper.credit_over` (10) with `multiplier = 2`, so `Registry.cost_of` and
+`Serper.cost_for` compute the same figure the Python adapter does: `(cost_per_1k
+/. 1000.)` times 1 or 2 credits by `max_results`. `--check`'s expected spend for a
+name that prices this way is therefore right before the name is dialled. Scrappa
+is flat at 0.30 per thousand and its `num` is clamped to `max_num = 20` — the clamp
+is a cost ceiling as much as a vendor limit, since the caller picks `max_results`.
+SearXNG is 0.0, and its `cost_for` ignores the argument for the reason the freeserp
+adapter gives: callers treat it as duck-typed.
+
+**A row now carries the destination it was granted.** `Registry.args` gains
+`endpoint : Uri.t`, filled by `Factory.adapter_of_row` with the URI it built the
+grant from. That is SearXNG's whole requirement: the instance URL is config, the
+grant is confined to it, and the adapter must dial the same value rather than
+re-derive it — so `Searxng.search_uri` joins `search` onto the granted URI
+(`rstrip_slashes` first, one trailing slash however the operator wrote it) and
+never looks at a config key. `args.endpoint` is the same URI, not a re-parse, so
+the destination in the request and the destination in the confinement cannot drift.
+
+**A keyed row without its key refuses at build time.** `Registry.require_key`
+raises `Invalid_argument` naming the row rather than handing an adapter `""`; the
+oracle's `build_providers` refuses at the same point, and an adapter that dialled
+with an empty credential would turn a configuration mistake into a billed 401.
+
+**SearXNG's walk is the adapter's, and it is bounded.** `max_pages = 3`; the first
+page is required and a later page that fails is dropped rather than destroying a
+search that already returned hits; an empty page ends the walk; the accumulator is
+built reversed (each page's records reversed, prepended) and sliced once at the
+end, so its size comes from pages the instance chose, not from a count known up
+front. Page size is the instance's to choose, so `max_results` is a number of asks
+as much as a number of hits — which is why the timeout floor is 15s.
+`providers.tsv` names `policy.provider_timeout_seconds` because its vocabulary is
+closed; the floor itself is the row's `timeout_floor`, and `test_grant_timeouts.ml`
+already pins how floors merge.
+
+**Tests.** `test/test_serper.ml` (30 cases), `test/test_scrappa.ml` (28) and
+`test/test_searxng.ml` (39) drive each adapter over a scripted `Provider.Net.t`:
+the request is pinned as a method, a destination, a decoded query, header names,
+and a canonical body; the verdict is pinned as a kind, a retryability and a
+sentence. Every acceptance row in the spec has a case — request shape, credential
+location, paging, clamping, recency mapped onto each vendor's own date parameter,
+native vs folded filters, the ignored-constraint notice, zero results, malformed
+JSON, the provider-specific quota classes, snippet caps with the uncapped figure,
+and the cost arithmetic. `test/test_provider_contract.ml` now runs the shared table
+over all five on-disk adapters; the two places the adapters legitimately differ
+(the auth sentence, which statuses are quota) are fields on the record
+(`auth_message`, `quota_statuses`) rather than rows dropped from the shared
+table, so a deviation fails a case instead of quietly narrowing the sweep.
+`test/test_provider.ml`'s sandbox pin goes from four adapter sources to seven with
+an explicit per-file existence list. `test/test_provider_registry.ml` (21) moves
+with the rows: the built half is now `anysearch`, `freeserp`, `scrappa`,
+`searxng`, `serper` and the deferred half names twelve.
+
+**A differential area that dials an adapter.** `provider` is the tenth corpus area
+(`test/differential/projection.ml`, `ocaml-tools/oracle/projections.py`, 38 cases
+under `corpus/provider/`), and unlike every area before it the case is an
+adapter's whole answer: the projection hands the adapter a scripted peer, records
+every request it dialled, and renders the verdict. The two trees percent-encode
+differently, so the rendering keeps the claim and drops the spelling: the query is
+decoded and sorted, the destination is printed without it, a POST body is
+re-emitted through the canonical JSON rendering, header names are lowercased and
+the credential's value becomes `sentinel` — the area pins the credential's
+*location* and never the credential. Transport cases carry the probe key inside
+the failure's own message, because what is under test is that none of it reaches
+the caller. SearXNG's walk is cast with a `pages` table keyed by the `pageno` the
+adapter chose to send, which pins a paging adapter without pinning a clock. All
+38 goldens are `differential-golden`: no divergence had to be registered, so the
+port's wire shape and failure vocabulary match the oracle's case for case. The
+area is in the floor list (30), the stanza deps, and `behaviours.tsv`; the
+`+` byte is kept out of query values on purpose — the two URL writers disagree
+about whether it means a space, and the area is not about the renderer.
+
+**Generator drift, fixed rather than propagated.** `ocaml-tools/oracle/gen_matrix.py`
+had fallen behind the committed tables: regenerating it dropped the `text`
+behaviour row and rewrote three `config-fields` rows (`fetch.allow_private_addresses`,
+`logging.library_level`, `logging.access_log`) back to older wording. Those rows
+are restored in the generator so `gen_matrix.py` is faithful, and only the three
+`providers.tsv` rows and the adapter behaviour row change in the commit — the
+three names move to `ported` with `unit(test_<name> scripted transport);
+differential-golden(provider)`, and the adapter-parity row claims
+`corpus/provider`, which is the check that ties a corpus area to a row.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` and `dune build
+@doc` all exit 0, and the three new `.mli` files build doc-clean. Nothing in this
+change reached a provider endpoint: no live test ran, no key was read, and each
+new row keeps `ocaml_live_tested = false` until the F4.3 runner records a run.

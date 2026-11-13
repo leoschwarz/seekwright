@@ -1,0 +1,10 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "nothing here"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"organic\": []}"
+  }
+}

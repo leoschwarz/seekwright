@@ -1,0 +1,32 @@
+area: provider
+case: 49-searxng-later-page-fails
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=1&q=flaky continuation
+headers= 
+body= -
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=2&q=flaky continuation
+headers= 
+body= -
+verdict= ok
+name= searxng
+result title=P1R1
+result url=https://p1.example/1
+result snippet=page 1 hit 1
+result uncapped=12
+result published_date=-
+result score=-
+result title=P1R2
+result url=https://p1.example/2
+result snippet=page 1 hit 2
+result uncapped=12
+result published_date=-
+result score=-
+cost_usd= 0.000000
+notice=-

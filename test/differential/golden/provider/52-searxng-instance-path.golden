@@ -1,0 +1,27 @@
+area: provider
+case: 52-searxng-instance-path
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= http://searxng.test:8888/instance/search
+query= format=json&pageno=1&q=mounted instance
+headers= 
+body= -
+verdict= ok
+name= searxng
+result title=First
+result url=https://one.example/x
+result snippet=One.
+result uncapped=4
+result published_date=2026-02-01T00:00:00
+result score=8.500000
+result title=Second
+result url=https://two.example/y
+result snippet=Two.
+result uncapped=4
+result published_date=-
+result score=-
+cost_usd= 0.000000
+notice=-

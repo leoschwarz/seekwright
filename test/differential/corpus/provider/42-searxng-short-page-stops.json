@@ -1,0 +1,20 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "thin index",
+    "max_results": 10
+  },
+  "pages": [
+    {
+      "pageno": 1,
+      "status": 200,
+      "body": "{\"results\": [{\"title\": \"P1R1\", \"url\": \"https://p1.example/1\", \"content\": \"page 1 hit 1\"}, {\"title\": \"P1R2\", \"url\": \"https://p1.example/2\", \"content\": \"page 1 hit 2\"}, {\"title\": \"P1R3\", \"url\": \"https://p1.example/3\", \"content\": \"page 1 hit 3\"}, {\"title\": \"P1R4\", \"url\": \"https://p1.example/4\", \"content\": \"page 1 hit 4\"}]}"
+    },
+    {
+      "pageno": 2,
+      "status": 200,
+      "body": "{\"results\": []}"
+    }
+  ]
+}

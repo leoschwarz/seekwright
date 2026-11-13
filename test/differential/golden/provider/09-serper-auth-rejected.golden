@@ -1,0 +1,15 @@
+area: provider
+case: 09-serper-auth-rejected
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://google.serper.dev/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"num":5,"q":"bad key"}
+verdict= error
+kind= failure
+retryable= false
+message= authentication rejected (check API key)

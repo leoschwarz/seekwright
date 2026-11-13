@@ -18,6 +18,7 @@
       {!Seekwright_diff.Canon.escape_text}, so a projection line stays one line
       and a golden stays ASCII. *)
 
+module Caps = Mcp_caps
 module Config = Seekwright.Config
 module Engine = Seekwright.Engine
 module Fetcher = Seekwright_fetch.Fetcher
@@ -846,6 +847,230 @@ let engine spec_text =
   in
   lines
 
+(* {1 provider: the adapters over a scripted transport
+
+   The adapter suites pin each name's own behaviour in detail; this area pins the
+   narrower claim that the two trees put the {i same} request on the wire and
+   read the {i same} answer out of the same body. [Provider.Net.t] is the seam
+   [httpx.MockTransport] is in the Python half, and the case says what the peer
+   answers — a status line and body, a per-[pageno] table for the paging name, or
+   a transport refusal.
+
+   The request is rendered canonically rather than as a URL string, because the
+   two URL writers percent-encode differently: the query pairs are {i decoded}
+   and sorted, the path is taken as written, and the body is re-emitted through
+   the canonical JSON rendering. That leaves the facts under test — method,
+   destination, which parameter carries which constraint, where the credential
+   rides — and drops the ones no reader cares about. *)
+
+(* Never a real credential, and never echoed: the request line names the
+   {i location} of the credential, and the refusal cases embed this string in
+   the transport failure's message to show that none of it reaches the answer. *)
+let probe_key = "differential-probe-key-4f2a"
+
+let provider_query spec =
+  {
+    Model.query = want_string "query" spec;
+    max_results = (match maybe_int "max_results" spec with Some n -> n | None -> 5);
+    include_domains = (match maybe_strings "include_domains" spec with Some xs -> xs | None -> []);
+    exclude_domains = (match maybe_strings "exclude_domains" spec with Some xs -> xs | None -> []);
+    country = maybe_string "country" spec;
+    language = maybe_string "language" spec;
+    recency =
+      (match maybe_string "recency" spec with
+      | Some s -> (
+          match s with
+          | "day" -> Some Model.Day
+          | "week" -> Some Model.Week
+          | "month" -> Some Model.Month
+          | "year" -> Some Model.Year
+          | other -> failwith (Printf.sprintf "provider corpus recency %S" other))
+      | None -> None);
+    safe_search = maybe_bool "safe_search" spec;
+  }
+
+type peer_reply = {
+  status : int;
+  body : string;
+  refusal : (unit, Caps.Error.t) result;
+}
+
+let respond status body = { status; body; refusal = Ok () }
+
+(* The transport failure's own message carries the probe key on purpose: the
+   contract is that none of it reaches the caller. *)
+let refuse kind =
+  {
+    status = 0;
+    body = "";
+    refusal = Error (Caps.Error.make kind ~message:(Printf.sprintf "dial failed, key: %s" probe_key));
+  }
+
+let transport_refusal_of = function
+  | "denied" -> Some (refuse Caps.Error.Denied)
+  | "timeout" -> Some (refuse Caps.Error.Timeout)
+  | "invalid" -> Some (refuse Caps.Error.Invalid)
+  | "unavailable" -> Some (refuse Caps.Error.Unavailable)
+  | "failed" -> Some (refuse Caps.Error.Failed)
+  | other -> failwith (Printf.sprintf "provider corpus refusal %S" other)
+
+(* The scripted peer: one reply, or a table keyed by the [pageno] the adapter
+   sent, which is how SearXNG's paging walk is cast. *)
+let peer spec =
+  match maybe_string "refuse" spec with
+  | Some kind -> (
+      match transport_refusal_of kind with
+      | Some reply -> fun _ -> reply
+      | None -> failwith "unreachable")
+  | None ->
+      let pages =
+        match maybe_objects "pages" spec with
+        | None -> []
+        | Some items ->
+            List.map
+              (fun page -> (want_int "pageno" page, respond (want_int "status" page) (want_string "body" page)))
+              items
+      in
+      (* A paging adapter answers from the table; every other case carries one
+         reply in [response]. Reading [response] only when it is needed is what
+         lets a paging case leave it out rather than repeat a page. *)
+      let single () =
+        let response = "response" $ spec in
+        respond (want_int "status" response) (want_string "body" response)
+      in
+      if pages = [] then fun _ -> single ()
+      else
+        fun request ->
+          match Uri.get_query_param request.Caps.Authority.Net.uri "pageno" with
+          | Some pageno -> (
+              match int_of_string_opt pageno with
+              | Some number -> (
+                  match List.assoc_opt number pages with
+                  | Some reply -> reply
+                  | None -> failwith (Printf.sprintf "provider corpus has no page %s" pageno))
+              | None -> failwith (Printf.sprintf "provider corpus pageno %S is not a number" pageno))
+          | None -> failwith "provider corpus pages a request with no pageno"
+
+let net_of sent replies =
+  {
+    Provider.Net.request =
+      (fun request ->
+        sent := request :: !sent;
+        match replies request with
+        | { refusal = Error failure; _ } -> Error failure
+        | { status; body; _ } ->
+            Ok { Caps.Authority.Net.status; headers = []; body });
+  }
+
+let provider_adapter name ~endpoint =
+  match name with
+  | "serper" -> Seekwright_providers.Serper.make ~key:probe_key
+  | "scrappa" -> Seekwright_providers.Scrappa.make ~key:probe_key
+  | "searxng" -> Seekwright_providers.Searxng.make ~endpoint
+  | other -> failwith (Printf.sprintf "provider corpus has no adapter %S" other)
+
+(* The request as the wire shows it: a decoded, sorted query; the destination
+   without it; canonical JSON for a POST body; header names lowercased with only
+   the credential's {i location} recorded. *)
+(* [Uri.Meth] has no printer of its own, and the two trees spell the verbs this
+   area uses in exactly one way each. The type is closed, so the list is the
+   whole surface, not a guess at it. *)
+let render_method = function
+  | `GET -> "GET"
+  | `POST -> "POST"
+  | `PUT -> "PUT"
+  | `PATCH -> "PATCH"
+  | `DELETE -> "DELETE"
+
+let render_query uri =
+  let pairs =
+    List.concat_map
+      (fun (key, values) -> List.map (fun value -> (key, value)) values)
+      (Uri.query uri)
+  in
+  String.concat "&"
+    (List.map
+       (fun (key, value) -> Canon.escape_text key ^ "=" ^ Canon.escape_text value)
+       (List.sort compare pairs))
+
+let render_url uri = Uri.to_string (Uri.with_query uri [])
+
+let render_headers (request : Caps.Authority.Net.request) =
+  String.concat ","
+    (List.map
+       (fun (name, value) ->
+         let name = String.lowercase_ascii name in
+         if value = probe_key then name ^ "=sentinel" else name ^ "=" ^ Canon.escape_text value)
+       (List.sort
+          (fun (a, _) (b, _) -> String.compare a b)
+          request.Caps.Authority.Net.headers))
+
+(* The body is re-emitted through the canonical JSON rendering; a GET carries
+   none, and the projection says so with [-]. *)
+let render_body (request : Caps.Authority.Net.request) =
+  match Option.map read_json request.Caps.Authority.Net.body with
+  | None -> "-"
+  | Some json -> Canon.canon_json json
+
+(* The requests the adapter put on the wire, in the order it sent them. *)
+let dials requests =
+  List.map
+    (fun (request : Caps.Authority.Net.request) ->
+      [
+        "method= " ^ render_method request.meth;
+        "url= " ^ Canon.escape_text (render_url request.uri);
+        "query= " ^ render_query request.uri;
+        "headers= " ^ render_headers request;
+        "body= " ^ render_body request;
+      ])
+    requests
+  |> List.concat
+
+let hit_lines (hit : Provider.hit) =
+  let (result : Model.result) = hit.result in
+  [
+    "result title=" ^ Canon.escape_text result.title;
+    "result url=" ^ Canon.escape_text result.url;
+    "result snippet=" ^ opt_value result.snippet;
+    "result uncapped="
+    ^ (match hit.uncapped_chars with Some n -> string_of_int n | None -> "-");
+    "result published_date=" ^ opt_value result.published_date;
+    "result score="
+    ^ (match result.score with Some v -> pct v | None -> "-");
+  ]
+
+let result_lines (outcome : Provider.outcome) =
+  [ "name= " ^ outcome.provider ]
+  @ List.concat_map hit_lines outcome.results
+  @ [
+      "cost_usd= " ^ (match outcome.cost_usd with Some v -> pct v | None -> "-");
+      "notice=" ^ opt_value outcome.notice;
+    ]
+
+let verdict_lines outcome =
+  match outcome with
+  | Ok outcome -> "verdict= ok" :: result_lines outcome
+  | Error (failure : Provider.error) ->
+      [
+        "verdict= error";
+        "kind= " ^ (match failure.kind with Provider.Quota -> "quota" | Provider.Failure -> "failure");
+        "retryable= " ^ flag failure.retryable;
+        "message= " ^ Canon.escape_text failure.message;
+      ]
+
+let provider_case spec_text =
+  let spec = read_json spec_text in
+  let name = want_string "provider" spec in
+  let sent = ref [] in
+  let replies = peer spec in
+  let net = net_of sent replies in
+  let endpoint =
+    match maybe_string "endpoint" spec with Some uri -> Uri.of_string uri | None -> Uri.of_string "http://peer.invalid/"
+  in
+  let adapter = (provider_adapter name ~endpoint) ~net () in
+  let outcome = Provider.search adapter (provider_query ("query" $ spec)) in
+  dials (List.rev !sent) @ verdict_lines outcome
+
 (* {2 The area table}
 
    One entry per corpus directory, and the golden runner walks this list rather
@@ -861,4 +1086,5 @@ let areas =
     ("router", router);
     ("model", model);
     ("engine", engine);
+    ("provider", provider_case);
   ]

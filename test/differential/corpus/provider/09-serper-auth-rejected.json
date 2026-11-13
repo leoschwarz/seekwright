@@ -1,0 +1,10 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "bad key"
+  },
+  "response": {
+    "status": 401,
+    "body": "{\"error\": \"invalid API key\"}"
+  }
+}

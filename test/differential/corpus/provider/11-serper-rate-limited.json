@@ -1,0 +1,10 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "too fast"
+  },
+  "response": {
+    "status": 429,
+    "body": "Too Many Requests"
+  }
+}

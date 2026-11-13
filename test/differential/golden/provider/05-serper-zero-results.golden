@@ -1,0 +1,15 @@
+area: provider
+case: 05-serper-zero-results
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://google.serper.dev/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"num":5,"q":"nothing here"}
+verdict= ok
+name= serper
+cost_usd= 0.001000
+notice=-

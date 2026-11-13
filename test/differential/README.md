@@ -105,6 +105,20 @@ continuations, truncated and overlong sequences, a surrogate encoding and a
 five-byte lead. Its inputs are hex, so malformed UTF-8 reaches both projections
 as bytes rather than as a string some driver already replaced.
 
+The `provider` area is an adapter's whole answer to one query: the projection
+hands the adapter a scripted peer (one reply, or a `pages` table keyed by the
+`pageno` the adapter chose to send — which is how SearXNG's paging walk is cast
+without a clock), then renders every request it dialled and the verdict it
+returned. Two renderings make the request comparable across the two trees, which
+percent-encode differently: the query is rendered decoded and sorted, the
+destination without it, and the body through the canonical JSON rendering. The
+credential is never echoed — its value becomes `sentinel`, so the area pins its
+*location* (header or parameter) and nothing else. A transport case's failure
+message deliberately carries the probe key, because the claim under test is that
+none of it reaches the caller. A query value never holds a literal `+`: the two
+URL writers disagree about whether that byte means a space, and the area is not
+about the renderer.
+
 **Determinism is explicit, not environmental.** Each property gets its own
 `Random.State` built from the literal seed `20261113` and a per-property salt,
 and every test passes `~count:200` and `~long:false`. `QCHECK_SEED`,

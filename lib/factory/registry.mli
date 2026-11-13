@@ -86,11 +86,15 @@ type prerequisite =
 (** How the per-query figure the row's price implies is computed. [Flat] is one
     request, one charge. [Extra_results] is [exa]'s published shape: the row's
     rate covers the first [first] results and each result beyond them adds
-    [per_extra_1k] per thousand. A name fixed at zero answers zero whatever this
+    [per_extra_1k] per thousand. [Credit_multiplier] is [serper]'s: the vendor
+    bills [multiplier] credits for a request once the ask passes [over] results,
+    so the price per thousand is a per-{i credit} figure and a 20-result search
+    costs double a 5-result one. A name fixed at zero answers zero whatever this
     says. *)
 type cost_model =
   | Flat
   | Extra_results of { first : int; per_extra_1k : float }
+  | Credit_multiplier of { over : int; multiplier : int }
 
 (** The destination, and whether the config gets a say in it. [Fixed_uri] is a
     module constant — for a built name it {i is} that adapter's own [endpoint]
@@ -108,13 +112,17 @@ type endpoint_source =
 
 (** What a row's builder is handed, resolved once per config entry so no builder
     re-derives a price, a cap, or a timeout: [factory._BuildArgs] in the oracle.
-    [key] is already the row's own, see {!key_for}; [entry] rides along because
+    [key] is already the row's own, see {!key_for}; [endpoint] is that row's {!uri}
+    already resolved, which is what lets a config-derived destination
+    ([searxng]'s instance) be dialed from the same reading the grant was built
+    from rather than re-parsed from the config key. [entry] rides along because
     which of a name's keys its adapter reads is that adapter's business, and the
     row names them in its [settings]. *)
 type args = {
   net : Seekwright.Provider.Net.t;
   now : unit -> float;
   key : string option;
+  endpoint : Uri.t;
   entry : Seekwright.Config.provider_config;
   cost_per_1k : float;
   snippet_chars : int;

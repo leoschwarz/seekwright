@@ -1,0 +1,11 @@
+{
+  "provider": "scrappa",
+  "query": {
+    "query": "many results",
+    "max_results": 40
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"organic_results\": [{\"title\": \"First\", \"link\": \"https://one.example/x\", \"snippet\": \"One.\"}, {\"title\": \"Second\", \"link\": \"https://two.example/y\", \"snippet\": \"Two.\"}]}"
+  }
+}

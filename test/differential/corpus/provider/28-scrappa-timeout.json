@@ -1,0 +1,7 @@
+{
+  "provider": "scrappa",
+  "query": {
+    "query": "slow vendor"
+  },
+  "refuse": "timeout"
+}

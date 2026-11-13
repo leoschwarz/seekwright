@@ -1,0 +1,11 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "json off"
+  },
+  "response": {
+    "status": 403,
+    "body": "<html>format not enabled</html>"
+  }
+}

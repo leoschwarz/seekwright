@@ -1,0 +1,10 @@
+{
+  "provider": "scrappa",
+  "query": {
+    "query": "bad key"
+  },
+  "response": {
+    "status": 403,
+    "body": "Forbidden"
+  }
+}

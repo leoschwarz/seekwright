@@ -1,0 +1,10 @@
+{
+  "provider": "scrappa",
+  "query": {
+    "query": "x402"
+  },
+  "response": {
+    "status": 402,
+    "body": "{\"error\": \"payment required\"}"
+  }
+}

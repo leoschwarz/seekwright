@@ -1,0 +1,10 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "upstream down"
+  },
+  "response": {
+    "status": 503,
+    "body": "{\"error\": \"internal\"}"
+  }
+}

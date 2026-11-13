@@ -1,0 +1,15 @@
+area: provider
+case: 53-searxng-timeout
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=1&q=slow instance
+headers= 
+body= -
+verdict= error
+kind= failure
+retryable= true
+message= request timed out

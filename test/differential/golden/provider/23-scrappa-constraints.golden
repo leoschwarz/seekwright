@@ -1,0 +1,27 @@
+area: provider
+case: 23-scrappa-constraints
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://scrappa.co/api/search-light
+query= dateRestrict=m1&gl=FR&hl=fr&num=3&query=budget report site:example.org
+headers= x-api-key=sentinel
+body= -
+verdict= ok
+name= scrappa
+result title=First
+result url=https://one.example/x
+result snippet=One.
+result uncapped=4
+result published_date=-
+result score=-
+result title=Second
+result url=https://two.example/y
+result snippet=Two.
+result uncapped=4
+result published_date=-
+result score=-
+cost_usd= 0.000300
+notice=-

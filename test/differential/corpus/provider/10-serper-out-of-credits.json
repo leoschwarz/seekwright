@@ -1,0 +1,10 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "spent balance"
+  },
+  "response": {
+    "status": 402,
+    "body": "{\"message\": \"not enough credits\"}"
+  }
+}

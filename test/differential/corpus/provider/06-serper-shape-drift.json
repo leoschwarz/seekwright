@@ -1,0 +1,10 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "shape drift"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"organic\": [{\"title\": \"No link\", \"snippet\": \"dropped\"}, {\"link\": \"https://no-title.example/\", \"snippet\": \"dropped\"}, \"not an object\", {\"title\": \"Kept\", \"link\": \"https://kept.example/\", \"date\": 7}]}"
+  }
+}

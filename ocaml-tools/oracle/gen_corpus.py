@@ -948,6 +948,350 @@ ENGINE_CASES: dict[str, dict[str, Any]] = {
 }
 
 
+# {8 provider: the three SERP adapters against a scripted peer}
+#
+# One spec per adapter claim: the request the adapter puts on the wire (method,
+# destination, decoded query, credential location, canonical body) and the
+# verdict it returns for the body the peer hands back. The peer is a status and
+# a body, or ``refuse`` for a transport failure whose own message carries the
+# probe key — the redaction claim is that the key never reaches the caller.
+# SearXNG's paging walk is cast with ``pages``, a table keyed by the ``pageno``
+# the adapter chose to send, so the corpus pins the walk without pinning a clock.
+#
+# A query value never carries a literal ``+``: the two URL writers disagree about
+# whether that byte means a space, and the disagreement is about the renderer,
+# not about either adapter.
+
+
+def _body(payload: Any) -> str:
+    return json.dumps(payload)
+
+
+_SERPER_TWO = _body(
+    {
+        "organic": [
+            {"title": "First", "link": "https://one.example/x", "snippet": "One.", "date": "2026-01-05"},
+            {"title": "Second", "link": "https://two.example/y", "snippet": "Two."},
+        ],
+        "knowledgeGraph": {"title": "ignored"},
+    }
+)
+
+_SCRAPPA_TWO = _body(
+    {
+        "organic_results": [
+            {"title": "First", "link": "https://one.example/x", "snippet": "One."},
+            {"title": "Second", "link": "https://two.example/y", "snippet": "Two."},
+        ]
+    }
+)
+
+_SEARXNG_TWO = _body(
+    {
+        "results": [
+            {
+                "title": "First",
+                "url": "https://one.example/x",
+                "content": "One.",
+                "publishedDate": "2026-02-01T00:00:00",
+                "score": 8.5,
+            },
+            {"title": "Second", "url": "https://two.example/y", "content": "Two.", "score": "8"},
+        ]
+    }
+)
+
+
+def _searxng_pages(counts: list[int], statuses: list[int] | None = None) -> list[dict[str, Any]]:
+    """One page per entry: ``counts[i]`` records, answered with ``statuses[i]``."""
+    marks = statuses or [200] * len(counts)
+    return [
+        {
+            "pageno": index + 1,
+            "status": status,
+            "body": _body(
+                {
+                    "results": [
+                        {
+                            "title": f"P{index + 1}R{rank + 1}",
+                            "url": f"https://p{index + 1}.example/{rank + 1}",
+                            "content": f"page {index + 1} hit {rank + 1}",
+                        }
+                        for rank in range(count)
+                    ]
+                }
+            ),
+        }
+        for index, (count, status) in enumerate(zip(counts, marks))
+    ]
+
+
+PROVIDER_CASES: dict[str, dict[str, Any]] = {
+    # {2 Serper: POST JSON, the key in a header, credits by result count}
+    "01-serper-basic": {
+        "provider": "serper",
+        "query": {"query": "rust lifetimes"},
+        "response": {"status": 200, "body": _SERPER_TWO},
+    },
+    "02-serper-constraints": {
+        "provider": "serper",
+        "query": {
+            "query": "rust lifetimes",
+            "max_results": 8,
+            "include_domains": ["docs.rs", "doc.rust-lang.org"],
+            "exclude_domains": ["crates.io"],
+            "country": "DE",
+            "language": "de",
+            "recency": "week",
+            "safe_search": True,
+        },
+        "response": {"status": 200, "body": _SERPER_TWO},
+    },
+    "03-serper-credits-double": {
+        "provider": "serper",
+        "query": {"query": "quiet query", "max_results": 15},
+        "response": {"status": 200, "body": _SERPER_TWO},
+    },
+    "04-serper-snippet-cap": {
+        "provider": "serper",
+        "query": {"query": "long snippet", "max_results": 2},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "organic": [
+                        {"title": "Long", "link": "https://long.example/", "snippet": "word " * 200},
+                        {"title": "Tabs", "link": "https://tab.example/", "snippet": "a\tb\nc"},
+                    ]
+                }
+            ),
+        },
+    },
+    "05-serper-zero-results": {
+        "provider": "serper",
+        "query": {"query": "nothing here"},
+        "response": {"status": 200, "body": _body({"organic": []})},
+    },
+    "06-serper-shape-drift": {
+        "provider": "serper",
+        "query": {"query": "shape drift"},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "organic": [
+                        {"title": "No link", "snippet": "dropped"},
+                        {"link": "https://no-title.example/", "snippet": "dropped"},
+                        "not an object",
+                        {"title": "Kept", "link": "https://kept.example/", "date": 7},
+                    ]
+                }
+            ),
+        },
+    },
+    "07-serper-malformed-json": {
+        "provider": "serper",
+        "query": {"query": "html instead"},
+        "response": {"status": 200, "body": "<html><body>sorry</body></html>"},
+    },
+    "08-serper-json-array": {
+        "provider": "serper",
+        "query": {"query": "wrong shape"},
+        "response": {"status": 200, "body": "[1, 2, 3]"},
+    },
+    "09-serper-auth-rejected": {
+        "provider": "serper",
+        "query": {"query": "bad key"},
+        "response": {"status": 401, "body": _body({"error": "invalid API key"})},
+    },
+    "10-serper-out-of-credits": {
+        "provider": "serper",
+        "query": {"query": "spent balance"},
+        "response": {"status": 402, "body": _body({"message": "not enough credits"})},
+    },
+    "11-serper-rate-limited": {
+        "provider": "serper",
+        "query": {"query": "too fast"},
+        "response": {"status": 429, "body": "Too Many Requests"},
+    },
+    "12-serper-server-error": {
+        "provider": "serper",
+        "query": {"query": "upstream down"},
+        "response": {"status": 503, "body": _body({"error": "internal"})},
+    },
+    "13-serper-denied": {
+        "provider": "serper",
+        "query": {"query": "connection refused"},
+        "refuse": "denied",
+    },
+    "14-serper-timeout": {
+        "provider": "serper",
+        "query": {"query": "slow vendor"},
+        "refuse": "timeout",
+    },
+    "15-serper-unicode": {
+        "provider": "serper",
+        "query": {"query": "café emoji 😀"},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "organic": [
+                        {"title": "日本語", "link": "https://uni.example/", "snippet": "naïve 😀 <|endoftext|>"}
+                    ]
+                }
+            ),
+        },
+    },
+    # {3 Scrappa: GET with the key in a header, clamped num, one credit}
+    "20-scrappa-basic": {
+        "provider": "scrappa",
+        "query": {"query": "rust lifetimes"},
+        "response": {"status": 200, "body": _SCRAPPA_TWO},
+    },
+    "21-scrappa-num-clamped": {
+        "provider": "scrappa",
+        "query": {"query": "many results", "max_results": 40},
+        "response": {"status": 200, "body": _SCRAPPA_TWO},
+    },
+    "22-scrappa-safe-off": {
+        "provider": "scrappa",
+        "query": {"query": "no filter", "safe_search": False},
+        "response": {"status": 200, "body": _SCRAPPA_TWO},
+    },
+    "23-scrappa-constraints": {
+        "provider": "scrappa",
+        "query": {
+            "query": "budget report",
+            "max_results": 3,
+            "include_domains": ["example.org"],
+            "country": "FR",
+            "language": "fr",
+            "recency": "month",
+        },
+        "response": {"status": 200, "body": _SCRAPPA_TWO},
+    },
+    "24-scrappa-payment-required": {
+        "provider": "scrappa",
+        "query": {"query": "x402"},
+        "response": {"status": 402, "body": _body({"error": "payment required"})},
+    },
+    "25-scrappa-auth-rejected": {
+        "provider": "scrappa",
+        "query": {"query": "bad key"},
+        "response": {"status": 403, "body": "Forbidden"},
+    },
+    "26-scrappa-json-array": {
+        "provider": "scrappa",
+        "query": {"query": "wrong shape"},
+        "response": {"status": 200, "body": "[1, 2, 3]"},
+    },
+    "27-scrappa-unreachable": {
+        "provider": "scrappa",
+        "query": {"query": "dns failure"},
+        "refuse": "unavailable",
+    },
+    "28-scrappa-timeout": {
+        "provider": "scrappa",
+        "query": {"query": "slow vendor"},
+        "refuse": "timeout",
+    },
+    # {4 SearXNG: the instance's own JSON API, paged, never billed}
+    "40-searxng-basic": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "self hosted"},
+        "response": {"status": 200, "body": _SEARXNG_TWO},
+    },
+    "41-searxng-three-pages": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "deep results", "max_results": 12},
+        "pages": _searxng_pages([5, 5, 5]),
+    },
+    "42-searxng-short-page-stops": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "thin index", "max_results": 10},
+        "pages": _searxng_pages([4, 0]),
+    },
+    "43-searxng-page-cap": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "more than three pages", "max_results": 50},
+        "pages": _searxng_pages([5, 5, 5]),
+    },
+    "44-searxng-constraints": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {
+            "query": "filtered",
+            "max_results": 2,
+            "include_domains": ["example.org"],
+            "country": "DE",
+            "language": "de",
+            "recency": "month",
+            "safe_search": True,
+        },
+        "response": {"status": 200, "body": _SEARXNG_TWO},
+    },
+    "45-searxng-safe-off": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "unfiltered", "max_results": 2, "safe_search": False},
+        "response": {"status": 200, "body": _SEARXNG_TWO},
+    },
+    "46-searxng-format-locked": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "json off"},
+        "response": {"status": 403, "body": "<html>format not enabled</html>"},
+    },
+    "47-searxng-rate-limited": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "too fast"},
+        "response": {"status": 429, "body": _body({"error": "rate limit"})},
+    },
+    "48-searxng-proxy-payment": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "402 is not quota here"},
+        "response": {"status": 402, "body": "Payment Required"},
+    },
+    "49-searxng-later-page-fails": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "flaky continuation", "max_results": 5},
+        "pages": _searxng_pages([2, 5], [200, 500]),
+    },
+    "50-searxng-first-page-fails": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "instance down", "max_results": 5},
+        "pages": _searxng_pages([0], [500]),
+    },
+    "51-searxng-html-answer": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "not json", "max_results": 5},
+        "response": {"status": 200, "body": "<html><body>an HTML page</body></html>"},
+    },
+    "52-searxng-instance-path": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test:8888/instance/",
+        "query": {"query": "mounted instance", "max_results": 2},
+        "response": {"status": 200, "body": _SEARXNG_TWO},
+    },
+    "53-searxng-timeout": {
+        "provider": "searxng",
+        "endpoint": "http://searxng.test/",
+        "query": {"query": "slow instance"},
+        "refuse": "timeout",
+    },
+}
+
+
 def main() -> None:
     write_config("config")
     write_sanitize("sanitize")
@@ -958,6 +1302,7 @@ def main() -> None:
     write_specs("router", ROUTER_CASES)
     write_specs("model", MODEL_CASES)
     write_specs("engine", ENGINE_CASES)
+    write_specs("provider", PROVIDER_CASES)
     total = sum(1 for path in CORPUS.rglob("*") if path.is_file())
     print(f"corpus written: {total} inputs under {CORPUS}")
 

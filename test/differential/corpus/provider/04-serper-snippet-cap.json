@@ -1,0 +1,11 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "long snippet",
+    "max_results": 2
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"organic\": [{\"title\": \"Long\", \"link\": \"https://long.example/\", \"snippet\": \"word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \"}, {\"title\": \"Tabs\", \"link\": \"https://tab.example/\", \"snippet\": \"a\\tb\\nc\"}]}"
+  }
+}

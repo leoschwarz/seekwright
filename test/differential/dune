@@ -20,7 +20,7 @@
 (library
  (name seekwright_diff)
  (modules canon projection)
- (libraries seekwright seekwright.fetch seekwright.text unix yojson))
+ (libraries mcp-caps seekwright seekwright.fetch seekwright.providers seekwright.text unix uri yojson))
 
 ; The regeneration driver. Not a test: it is how a human re-pins a golden after
 ; changing the oracle or the corpus, and [dune runtest] never runs it.
@@ -62,6 +62,7 @@
   (glob_files golden/router/*.golden)
   (glob_files golden/model/*.golden)
   (glob_files golden/engine/*.golden)
+  (glob_files golden/provider/*.golden)
   (glob_files corpus/config/*)
   (glob_files corpus/sanitize/*)
   (glob_files corpus/fetch/*)
@@ -70,7 +71,8 @@
   (glob_files corpus/text/*)
   (glob_files corpus/router/*)
   (glob_files corpus/model/*)
-  (glob_files corpus/engine/*)))
+  (glob_files corpus/engine/*)
+  (glob_files corpus/provider/*)))
 
 ; The matrix validator. The source globs are the point of this stanza: a row
 ; that credits a consumer module or an oracle suite names a file, and the check

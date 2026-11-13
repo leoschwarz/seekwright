@@ -1,0 +1,11 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "self hosted"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"First\", \"url\": \"https://one.example/x\", \"content\": \"One.\", \"publishedDate\": \"2026-02-01T00:00:00\", \"score\": 8.5}, {\"title\": \"Second\", \"url\": \"https://two.example/y\", \"content\": \"Two.\", \"score\": \"8\"}]}"
+  }
+}

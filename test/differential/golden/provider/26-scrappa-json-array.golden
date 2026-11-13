@@ -1,0 +1,15 @@
+area: provider
+case: 26-scrappa-json-array
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://scrappa.co/api/search-light
+query= num=5&query=wrong shape
+headers= x-api-key=sentinel
+body= -
+verdict= error
+kind= failure
+retryable= true
+message= malformed JSON response

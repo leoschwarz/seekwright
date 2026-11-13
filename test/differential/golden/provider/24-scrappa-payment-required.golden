@@ -1,0 +1,15 @@
+area: provider
+case: 24-scrappa-payment-required
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://scrappa.co/api/search-light
+query= num=5&query=x402
+headers= x-api-key=sentinel
+body= -
+verdict= error
+kind= quota
+retryable= false
+message= rate limited or out of credits

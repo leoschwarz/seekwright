@@ -1,0 +1,20 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "flaky continuation",
+    "max_results": 5
+  },
+  "pages": [
+    {
+      "pageno": 1,
+      "status": 200,
+      "body": "{\"results\": [{\"title\": \"P1R1\", \"url\": \"https://p1.example/1\", \"content\": \"page 1 hit 1\"}, {\"title\": \"P1R2\", \"url\": \"https://p1.example/2\", \"content\": \"page 1 hit 2\"}]}"
+    },
+    {
+      "pageno": 2,
+      "status": 500,
+      "body": "{\"results\": [{\"title\": \"P2R1\", \"url\": \"https://p2.example/1\", \"content\": \"page 2 hit 1\"}, {\"title\": \"P2R2\", \"url\": \"https://p2.example/2\", \"content\": \"page 2 hit 2\"}, {\"title\": \"P2R3\", \"url\": \"https://p2.example/3\", \"content\": \"page 2 hit 3\"}, {\"title\": \"P2R4\", \"url\": \"https://p2.example/4\", \"content\": \"page 2 hit 4\"}, {\"title\": \"P2R5\", \"url\": \"https://p2.example/5\", \"content\": \"page 2 hit 5\"}]}"
+    }
+  ]
+}

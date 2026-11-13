@@ -1,0 +1,21 @@
+area: provider
+case: 15-serper-unicode
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://google.serper.dev/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"num":5,"q":"caf\u00e9 emoji \ud83d\ude00"}
+verdict= ok
+name= serper
+result title=\u65e5\u672c\u8a9e
+result url=https://uni.example/
+result snippet=na\u00efve \ud83d\ude00 <|endoftext|>
+result uncapped=21
+result published_date=-
+result score=-
+cost_usd= 0.001000
+notice=-

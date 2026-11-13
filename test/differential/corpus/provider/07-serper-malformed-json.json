@@ -1,0 +1,10 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "html instead"
+  },
+  "response": {
+    "status": 200,
+    "body": "<html><body>sorry</body></html>"
+  }
+}

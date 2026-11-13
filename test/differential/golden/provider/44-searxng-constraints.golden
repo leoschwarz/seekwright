@@ -1,0 +1,27 @@
+area: provider
+case: 44-searxng-constraints
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= http://searxng.test/search
+query= format=json&language=de&pageno=1&q=filtered site:example.org&safesearch=2&time_range=month
+headers= 
+body= -
+verdict= ok
+name= searxng
+result title=First
+result url=https://one.example/x
+result snippet=One.
+result uncapped=4
+result published_date=2026-02-01T00:00:00
+result score=8.500000
+result title=Second
+result url=https://two.example/y
+result snippet=Two.
+result uncapped=4
+result published_date=-
+result score=-
+cost_usd= 0.000000
+notice=cannot filter by country; that constraint was ignored

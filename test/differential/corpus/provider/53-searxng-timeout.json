@@ -1,0 +1,8 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "slow instance"
+  },
+  "refuse": "timeout"
+}

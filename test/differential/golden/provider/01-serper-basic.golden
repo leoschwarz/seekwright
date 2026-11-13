@@ -1,0 +1,27 @@
+area: provider
+case: 01-serper-basic
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://google.serper.dev/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"num":5,"q":"rust lifetimes"}
+verdict= ok
+name= serper
+result title=First
+result url=https://one.example/x
+result snippet=One.
+result uncapped=4
+result published_date=2026-01-05
+result score=-
+result title=Second
+result url=https://two.example/y
+result snippet=Two.
+result uncapped=4
+result published_date=-
+result score=-
+cost_usd= 0.001000
+notice=-

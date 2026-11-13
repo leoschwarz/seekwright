@@ -1,0 +1,10 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "wrong shape"
+  },
+  "response": {
+    "status": 200,
+    "body": "[1, 2, 3]"
+  }
+}

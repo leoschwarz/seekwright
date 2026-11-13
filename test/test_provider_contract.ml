@@ -1,4 +1,5 @@
-(* The failure rows every HTTP adapter owes, driven over both keyless adapters.
+(* The failure rows every HTTP adapter owes, driven over every adapter module
+   on disk.
 
    Port of the guarantee in tests/providers/test_provider_contract.py: the six
    rows docs/reference/provider-contract.md's Failures table fixes are one
@@ -14,9 +15,10 @@
 
    Driven: authentication, any other [>= 400], the operation bound, a transport
    failure, a body that does not decode, and a body that decodes to something
-   that is not an object. Deliberately not: the quota row's {i wording}, which
-   each backend words after its own billing model — only its kind is pinned
-   here, exactly as the Python suite leaves that split.
+   that is not an object. Deliberately not: the quota row, which is driven for
+   its kind alone — {i which} statuses a backend reads as "you have run out" and
+   what that failure is called are per-vendor facts, pinned in each adapter's
+   own suite, exactly as the Python suite leaves that split.
 
    The MCP-backed adapters ([exa], [parallel]) have no status line to map and do
    not exist in this tree yet (plans/seekwright-ocaml-port.md, open question 3),
@@ -45,23 +47,58 @@ let probe_query =
 
 let clock () = 1_700_000_000.
 
-(* One adapter: its name, and how to build it behind a given Net. The keyless
-   pair needs no credential, which is what lets one construction serve every
-   row; a keyed adapter will need a field beside [build] when it lands. *)
+(* One adapter: its name, how to build it behind a given Net, and the two places
+   the shared table lets a backend speak for itself. [auth_message] overrides the
+   auth row's wording where an adapter names what the operator has to fix;
+   [quota_statuses] narrows the statuses this backend reads as "you have run out"
+   — a self-hosted instance bills nobody, so a payment status is not its answer. *)
 type adapter = {
   name : string;
   build : Provider.Net.t -> Provider.t;
+  auth_message : string option;
+  quota_statuses : int list;
 }
+
+let shared_quota_statuses = [ 402; 429 ]
 
 let adapters =
   [
     {
-      name = "freeserp";
-      build = (fun net -> Seekwright_providers.Freeserp.make ~now:clock ~net ());
-    };
-    {
       name = "anysearch";
       build = (fun net -> Seekwright_providers.Anysearch.make ~net ());
+      auth_message = None;
+      quota_statuses = shared_quota_statuses;
+    };
+    {
+      name = "freeserp";
+      build = (fun net -> Seekwright_providers.Freeserp.make ~now:clock ~net ());
+      auth_message = None;
+      quota_statuses = shared_quota_statuses;
+    };
+    {
+      name = "scrappa";
+      build =
+        (fun net -> Seekwright_providers.Scrappa.make ~net ~key:probe_key ());
+      auth_message = None;
+      quota_statuses = shared_quota_statuses;
+    };
+    {
+      name = "searxng";
+      build =
+        (fun net ->
+          Seekwright_providers.Searxng.make ~net
+            ~endpoint:(Uri.of_string "http://searx.invalid/search") ());
+      (* A locked-down instance can refuse the JSON format specifically, so this
+         adapter names what to fix. *)
+      auth_message = Some "authentication rejected (enable `format=json` for this client)";
+      quota_statuses = [ 429 ];
+    };
+    {
+      name = "serper";
+      build =
+        (fun net -> Seekwright_providers.Serper.make ~net ~key:probe_key ());
+      auth_message = None;
+      quota_statuses = shared_quota_statuses;
     };
   ]
 
@@ -137,10 +174,11 @@ let rows =
       expected_kind = Provider.Quota;
       (* The table writes this row's message as [...]: which statuses mean "out
          of credits", and what that failure is called, are the per-adapter
-         quirks each adapter's own suite pins. *)
+         quirks each adapter's own suite pins. So the statuses driven here come
+         from the adapter's [quota_statuses], not from the row. *)
       message = (fun _status -> None);
       retryable = false;
-      probes = [ responding "status 402" ~status:402 (); responding "status 429" ~status:429 () ];
+      probes = [];
     };
     {
       key = "timeout";
@@ -200,6 +238,22 @@ let net_of probe =
 
 let where adapter row probe = Printf.sprintf "%s [%s: %s]" adapter.name row.key probe.label
 
+(* Every way one adapter departs from one row. The two rows with a per-adapter
+   reading — auth's wording and quota's statuses — are resolved through the
+   adapter, so a deviation is a field on its record rather than a row dropped
+   from the table. *)
+let probes_for adapter row =
+  match row.key with
+  | "quota-kind-only" ->
+      List.map (fun code -> responding (Printf.sprintf "status %d" code) ~status:code ())
+        adapter.quota_statuses
+  | _ -> row.probes
+
+let expected_message adapter row status =
+  match (row.key, adapter.auth_message) with
+  | "auth", Some wording -> Some wording
+  | _ -> row.message status
+
 (* Every way one adapter departs from one row. *)
 let problems adapter row probe =
   let provider = adapter.build (net_of probe) in
@@ -222,7 +276,7 @@ let problems adapter row probe =
          the reverse) benches the name in the health board or sends the fallback
          walk the wrong way, whatever the message says. *)
       let wording =
-        match row.message probe.status with
+        match expected_message adapter row probe.status with
         | None -> []
         | Some expected when expected = failure.message -> []
         | Some expected ->
@@ -259,7 +313,8 @@ let () =
                      let problems =
                        List.concat_map
                          (fun row ->
-                           List.concat_map (fun probe -> problems adapter row probe) row.probes)
+                           List.concat_map
+                             (fun probe -> problems adapter row probe) (probes_for adapter row))
                          rows
                      in
                      match problems with

@@ -1,0 +1,97 @@
+area: provider
+case: 41-searxng-three-pages
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=1&q=deep results
+headers= 
+body= -
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=2&q=deep results
+headers= 
+body= -
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=3&q=deep results
+headers= 
+body= -
+verdict= ok
+name= searxng
+result title=P1R1
+result url=https://p1.example/1
+result snippet=page 1 hit 1
+result uncapped=12
+result published_date=-
+result score=-
+result title=P1R2
+result url=https://p1.example/2
+result snippet=page 1 hit 2
+result uncapped=12
+result published_date=-
+result score=-
+result title=P1R3
+result url=https://p1.example/3
+result snippet=page 1 hit 3
+result uncapped=12
+result published_date=-
+result score=-
+result title=P1R4
+result url=https://p1.example/4
+result snippet=page 1 hit 4
+result uncapped=12
+result published_date=-
+result score=-
+result title=P1R5
+result url=https://p1.example/5
+result snippet=page 1 hit 5
+result uncapped=12
+result published_date=-
+result score=-
+result title=P2R1
+result url=https://p2.example/1
+result snippet=page 2 hit 1
+result uncapped=12
+result published_date=-
+result score=-
+result title=P2R2
+result url=https://p2.example/2
+result snippet=page 2 hit 2
+result uncapped=12
+result published_date=-
+result score=-
+result title=P2R3
+result url=https://p2.example/3
+result snippet=page 2 hit 3
+result uncapped=12
+result published_date=-
+result score=-
+result title=P2R4
+result url=https://p2.example/4
+result snippet=page 2 hit 4
+result uncapped=12
+result published_date=-
+result score=-
+result title=P2R5
+result url=https://p2.example/5
+result snippet=page 2 hit 5
+result uncapped=12
+result published_date=-
+result score=-
+result title=P3R1
+result url=https://p3.example/1
+result snippet=page 3 hit 1
+result uncapped=12
+result published_date=-
+result score=-
+result title=P3R2
+result url=https://p3.example/2
+result snippet=page 3 hit 2
+result uncapped=12
+result published_date=-
+result score=-
+cost_usd= 0.000000
+notice=-

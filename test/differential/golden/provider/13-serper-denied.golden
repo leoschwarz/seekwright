@@ -1,0 +1,15 @@
+area: provider
+case: 13-serper-denied
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://google.serper.dev/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"num":5,"q":"connection refused"}
+verdict= error
+kind= failure
+retryable= true
+message= network error

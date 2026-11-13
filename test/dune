@@ -244,6 +244,18 @@
  (name test_anysearch)
  (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
 
+(test
+ (name test_serper)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+
+(test
+ (name test_scrappa)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+
+(test
+ (name test_searxng)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+
 ; The shared failure rows, driven over every adapter module on disk. The
 ; (deps) line is what lets the suite count those modules rather than trust the
 ; list in its own source.

@@ -1,0 +1,21 @@
+area: provider
+case: 06-serper-shape-drift
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://google.serper.dev/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"num":5,"q":"shape drift"}
+verdict= ok
+name= serper
+result title=Kept
+result url=https://kept.example/
+result snippet=-
+result uncapped=-
+result published_date=-
+result score=-
+cost_usd= 0.001000
+notice=-

@@ -123,10 +123,11 @@ let every_name_has_a_row_built_or_deferred () =
   let unbuilt =
     List.sort String.compare
       [ "algolia"; "deepseek"; "exa"; "exa:free"; "linkup"; "parallel"; "parallel:free"; "querit";
-        "scrappa"; "search1api"; "searxng"; "serpapi"; "serper"; "tavily"; "tinyfish" ]
+        "search1api"; "serpapi"; "tavily"; "tinyfish" ]
   in
-  A.(check (list string) "the built rows" [ "anysearch"; "freeserp" ]
-       (List.sort String.compare built);
+  A.(check (list string) "the built rows"
+         [ "anysearch"; "freeserp"; "scrappa"; "searxng"; "serper" ]
+         (List.sort String.compare built);
     check (list string) "the deferred rows are the rest" unbuilt
        (List.sort String.compare deferred);
     check int "the two halves are the seventeen" 17 (List.length built + List.length deferred));
@@ -183,8 +184,9 @@ let the_rows_price_their_names () =
     check string "and it names the backend" "SEEKWRIGHT_EXA_API_KEY"
       (Config.api_key_env_var "exa:free"))
 
-(* Exa publishes a subscription plus a per-result rung above it; every other
-   name charges the same per query. *)
+(* Exa publishes a subscription plus a per-result rung above it; Serper publishes a
+   credit count that doubles past ten results; every other name charges the same per
+   query. *)
 let the_cost_models_are_the_published_shapes () =
   List.iter
     (fun r ->
@@ -200,15 +202,25 @@ let the_cost_models_are_the_published_shapes () =
             check (float 1e-9) (r.Registry.name ^ " charges nothing under the threshold") 0.007
               (Registry.cost_of r ~cost_per_1k:7.0 10);
             check (float 1e-9) (r.Registry.name ^ " adds the rung above it") 10.007
-              (Registry.cost_of r ~cost_per_1k:7.0 10_010)))
+              (Registry.cost_of r ~cost_per_1k:7.0 10_010))
+      | Registry.Credit_multiplier { over; multiplier } ->
+          A.(check int (r.Registry.name ^ " doubles past ten results") 10 over;
+            check int (r.Registry.name ^ " spends two credits there") 2 multiplier;
+            (* The threshold belongs to the ask, not to the answer: ten results is
+               one credit, eleven is two, and the figure a caller plans a budget by
+               has to say so. *)
+            check (float 1e-9) (r.Registry.name ^ " is one credit at the threshold") 0.004
+              (Registry.cost_of r ~cost_per_1k:4.0 10);
+            check (float 1e-9) (r.Registry.name ^ " doubles past it") 0.008
+              (Registry.cost_of r ~cost_per_1k:4.0 11)))
     Registry.rows;
   let rung =
     List.filter_map
       (fun r -> match r.Registry.cost_model with Registry.Flat -> None | _ -> Some r.Registry.name)
       Registry.rows
   in
-  A.(check (list string) "one name has an extra-result rung, and it is the billed half"
-       [ "exa" ] rung)
+  A.(check (list string) "two names bill differently per query, and they are the billed halves"
+         [ "exa"; "serper" ] (List.sort String.compare rung))
 
 (* {1 Timeout floor: config lengthens, never shortens} *)
 
@@ -668,29 +680,29 @@ let build_all () =
 
 let construction_answers_from_the_rows () =
   let providers = build_all () in
-  A.(check (list string) "this build dispatches two of the seventeen"
-       [ "anysearch"; "freeserp" ]
+  A.(check (list string) "this build dispatches five of the seventeen"
+       [ "anysearch"; "freeserp"; "scrappa"; "searxng"; "serper" ]
        (List.sort String.compare (List.map fst providers.Factory.built));
     (* a deferred row is an inventoried name with no dispatch, reported as such
        rather than dropped, and sorted because two sentences print this set *)
-    check (list string) "the other fifteen are unsupported"
+    check (list string) "the other twelve are unsupported"
       (List.sort String.compare
-         [ "algolia"; "deepseek"; "exa"; "exa:free"; "linkup"; "parallel"; "parallel:free"; "querit";
-           "scrappa"; "search1api"; "searxng"; "serpapi"; "serper"; "tavily"; "tinyfish" ])
+         [ "algolia"; "deepseek"; "exa"; "exa:free"; "linkup"; "parallel"; "parallel:free"; "querit"
+         ; "search1api"; "serpapi"; "tavily"; "tinyfish" ])
       providers.Factory.unsupported;
     check (list (pair string string)) "and no grant was refused along the way" []
       providers.Factory.grant_errors);
   (* the probe rows and the allowlist entries come from the built names' rows,
      so [--check] and the grant answer from the same table *)
   A.(check (list string) "one probe row per built name"
-       [ "anysearch"; "freeserp" ]
+       [ "anysearch"; "freeserp"; "scrappa"; "searxng"; "serper" ]
        (List.sort String.compare (List.map fst providers.Factory.probe_table)));
   List.iter
     (fun name ->
       let endpoint = ok (Registry.grant_endpoint (row_of name) (entry_of name)) in
       A.(check bool (name ^ "'s allowlist entry is its row's endpoint") true
            (List.mem (show_endpoint endpoint) (List.map show_endpoint providers.Factory.endpoints))))
-    [ "anysearch"; "freeserp" ];
+    [ "anysearch"; "freeserp"; "scrappa"; "searxng"; "serper" ];
   (* the row's probe is the one in the table, so [--check] asks what the row
      says rather than what a probe table somewhere else says *)
   List.iter
@@ -729,11 +741,12 @@ let an_adapter_is_built_at_its_rows_figures () =
             {
               Registry.net = unused_net;
               now = (fun () -> 1768478400.);
-              key = None;
-              entry = entry ();
+              key = Some sentinel;
+              entry = entry_of name;
               cost_per_1k = 1.25;
               snippet_chars = 400;
               text_chars = 2000;
+              endpoint = ok (Registry.uri row (entry_of name));
             }
           in
           let built = make args in

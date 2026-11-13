@@ -1,0 +1,25 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "more than three pages",
+    "max_results": 50
+  },
+  "pages": [
+    {
+      "pageno": 1,
+      "status": 200,
+      "body": "{\"results\": [{\"title\": \"P1R1\", \"url\": \"https://p1.example/1\", \"content\": \"page 1 hit 1\"}, {\"title\": \"P1R2\", \"url\": \"https://p1.example/2\", \"content\": \"page 1 hit 2\"}, {\"title\": \"P1R3\", \"url\": \"https://p1.example/3\", \"content\": \"page 1 hit 3\"}, {\"title\": \"P1R4\", \"url\": \"https://p1.example/4\", \"content\": \"page 1 hit 4\"}, {\"title\": \"P1R5\", \"url\": \"https://p1.example/5\", \"content\": \"page 1 hit 5\"}]}"
+    },
+    {
+      "pageno": 2,
+      "status": 200,
+      "body": "{\"results\": [{\"title\": \"P2R1\", \"url\": \"https://p2.example/1\", \"content\": \"page 2 hit 1\"}, {\"title\": \"P2R2\", \"url\": \"https://p2.example/2\", \"content\": \"page 2 hit 2\"}, {\"title\": \"P2R3\", \"url\": \"https://p2.example/3\", \"content\": \"page 2 hit 3\"}, {\"title\": \"P2R4\", \"url\": \"https://p2.example/4\", \"content\": \"page 2 hit 4\"}, {\"title\": \"P2R5\", \"url\": \"https://p2.example/5\", \"content\": \"page 2 hit 5\"}]}"
+    },
+    {
+      "pageno": 3,
+      "status": 200,
+      "body": "{\"results\": [{\"title\": \"P3R1\", \"url\": \"https://p3.example/1\", \"content\": \"page 3 hit 1\"}, {\"title\": \"P3R2\", \"url\": \"https://p3.example/2\", \"content\": \"page 3 hit 2\"}, {\"title\": \"P3R3\", \"url\": \"https://p3.example/3\", \"content\": \"page 3 hit 3\"}, {\"title\": \"P3R4\", \"url\": \"https://p3.example/4\", \"content\": \"page 3 hit 4\"}, {\"title\": \"P3R5\", \"url\": \"https://p3.example/5\", \"content\": \"page 3 hit 5\"}]}"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "rust lifetimes",
+    "max_results": 8,
+    "include_domains": [
+      "docs.rs",
+      "doc.rust-lang.org"
+    ],
+    "exclude_domains": [
+      "crates.io"
+    ],
+    "country": "DE",
+    "language": "de",
+    "recency": "week",
+    "safe_search": true
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"organic\": [{\"title\": \"First\", \"link\": \"https://one.example/x\", \"snippet\": \"One.\", \"date\": \"2026-01-05\"}, {\"title\": \"Second\", \"link\": \"https://two.example/y\", \"snippet\": \"Two.\"}], \"knowledgeGraph\": {\"title\": \"ignored\"}}"
+  }
+}

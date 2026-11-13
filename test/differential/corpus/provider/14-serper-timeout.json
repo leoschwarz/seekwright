@@ -1,0 +1,7 @@
+{
+  "provider": "serper",
+  "query": {
+    "query": "slow vendor"
+  },
+  "refuse": "timeout"
+}

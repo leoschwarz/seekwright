@@ -1093,3 +1093,45 @@ full evidence and Learning notes are in
 - The GMP env from `plans/infra-setup.md` is `CPATH` / `LIBRARY_PATH` /
   `PKG_CONFIG_PATH` under `/home/leo/.local/opt/gmp-dev` — not `GMP_H`/`GMP_L`;
   wrong names pass small builds and fail linking `zarith`-using targets.
+
+## Verified building F5.2 — three SERP adapters + the `provider` differential area (2026-11-13)
+
+- **The differential generators are shared state, so regenerate carefully.**
+  `ocaml-tools/oracle/gen_goldens.py [area]` rewrites the goldens of *every*
+  area, and `gen_matrix.py` rewrites all four tables — it had drifted behind the
+  committed `matrix/*.tsv` (the `text` behaviour row and three `config-fields`
+  rows exist only in the TSVs), so a naive regeneration reverts other workers'
+  rows. Verified fix: bring the generator up to the committed rows first, then
+  regenerate, then `git checkout` nothing and let the diff show only your area.
+  `test_differential_matrix.ml`'s corpus cross-check compares the areas under
+  `corpus/` with the `corpus/<area>` words in `behaviours.tsv`'s `port`/
+  `port_suite` cells — a new area without that row fails, and the failure names
+  the missing area, not the row.
+- **A new corpus area is five edits, not four:** projection registered in
+  `Projection.areas`, the Python twin registered in `AREAS`, the corpus/golden
+  directories, `(glob_files …)` in *both* directions in `test/differential/dune`,
+  and the `min_cases` floor. Forget a glob and the runner reports a missing input
+  rather than an unregistered area.
+- **Casting an adapter across the two trees.** The port's scripted peer is handed
+  `meth`/`uri`/`headers`/`body` exactly as the adapter wrote them; httpx's
+  `Request` adds `host`, `accept`, `accept-encoding`, `connection`, `user-agent`
+  and `content-length` of its own, so the Python half must drop those six before
+  rendering or every header line diverges. The credential's value is rendered as
+  `sentinel` (identity against the probe key), which is what lets a golden pin
+  the credential's *location* without pinning a secret. Query pairs are rendered
+  decoded and sorted — OCaml's tuple `compare` and Python's `sorted` agree on
+  UTF-8 (byte order and codepoint order coincide outside the surrogate range),
+  and `+` is the one byte they disagree on, so query values keep it out.
+- **`Registry.args` now carries `endpoint : Uri.t`** — the URI the grant was built
+  from — because a config-derived endpoint (searxng) must dial *that* value, not
+  re-derive it from the config key. `Cost_model` gained
+  `Credit_multiplier { over; multiplier }` for serper's "2 credits past 10
+  results"; a row's `timeout_floor` is per-name (scrappa/searxng 15s), serper has
+  none because the policy default is already its floor. Keyed builders read the
+  key through `require_key`, which raises `Invalid_argument` naming the row
+  rather than dialling with `""`.
+- **odoc parses `{a, b}` as markup.** A doc comment listing JSON fields with
+  braces produces `{li …}`/`{t …}` warnings under `dune build @doc` (not an
+  error, but new `.mli` files should land doc-clean — use parentheses).
+  `{!Module.value}` only resolves for names the `.mli` actually exposes;
+  referencing an undocumented sibling (`Freeserp.cost_for`) warns.

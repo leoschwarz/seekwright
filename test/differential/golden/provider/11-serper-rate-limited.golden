@@ -1,0 +1,15 @@
+area: provider
+case: 11-serper-rate-limited
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://google.serper.dev/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"num":5,"q":"too fast"}
+verdict= error
+kind= quota
+retryable= false
+message= rate limited or out of credits

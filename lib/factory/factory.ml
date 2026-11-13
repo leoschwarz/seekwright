@@ -115,14 +115,15 @@ let grant_of_endpoint ~sw ~net ~mono_clock ~timeout_seconds ?audit
    site naming one endpoint and one bound from one source. *)
 type adapter = {
   endpoint : Policy.endpoint;
+  uri : Uri.t;
   timeout_seconds : float;
 }
 
 let adapter_of_row ~policy_seconds (row : Registry.row) (pc : Config.provider_config) =
-  match Registry.grant_endpoint row pc with
-  | Error message -> Error message
-  | Ok endpoint ->
-      Ok { endpoint; timeout_seconds = Registry.timeout_seconds row ~policy_seconds }
+  match (Registry.grant_endpoint row pc, Registry.uri row pc) with
+  | Ok endpoint, Ok uri ->
+      Ok { endpoint; uri; timeout_seconds = Registry.timeout_seconds row ~policy_seconds }
+  | (Error message, _) | (_, Error message) -> Error message
 
 (* Building a name is the row's job: what it costs, what it needs, the least time
    it gets, the endpoint its grant may reach, and the probe that re-verifies it.
@@ -188,6 +189,12 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit config =
                                   Registry.net = Provider.Net.of_grant grant;
                                   now;
                                   key = Registry.key_for row config;
+                                  (* The destination the row resolved, which is the
+                                     same reading {!grant_endpoint} confined this
+                                     grant to: a config-derived name ([searxng])
+                                     dials what its grant allows because both came
+                                     from one call. *)
+                                  endpoint = adapter.uri;
                                   entry = pc;
                                   cost_per_1k = Registry.price row pc;
                                   snippet_chars;

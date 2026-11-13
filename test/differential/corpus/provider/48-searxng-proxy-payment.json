@@ -1,0 +1,11 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "402 is not quota here"
+  },
+  "response": {
+    "status": 402,
+    "body": "Payment Required"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "not json",
+    "max_results": 5
+  },
+  "response": {
+    "status": 200,
+    "body": "<html><body>an HTML page</body></html>"
+  }
+}

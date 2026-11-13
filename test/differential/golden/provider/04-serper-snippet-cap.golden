@@ -1,0 +1,27 @@
+area: provider
+case: 04-serper-snippet-cap
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://google.serper.dev/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"num":2,"q":"long snippet"}
+verdict= ok
+name= serper
+result title=Long
+result url=https://long.example/
+result snippet=word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\u2026
+result uncapped=999
+result published_date=-
+result score=-
+result title=Tabs
+result url=https://tab.example/
+result snippet=a b c
+result uncapped=5
+result published_date=-
+result score=-
+cost_usd= 0.001000
+notice=-

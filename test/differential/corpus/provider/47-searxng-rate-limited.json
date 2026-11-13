@@ -1,0 +1,11 @@
+{
+  "provider": "searxng",
+  "endpoint": "http://searxng.test/",
+  "query": {
+    "query": "too fast"
+  },
+  "response": {
+    "status": 429,
+    "body": "{\"error\": \"rate limit\"}"
+  }
+}

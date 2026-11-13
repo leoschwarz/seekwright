@@ -25,6 +25,9 @@ import json
 import pathlib
 import sys
 from typing import Any
+from urllib.parse import parse_qsl
+
+import httpx
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 if str(ROOT / "src") not in sys.path:
@@ -34,6 +37,7 @@ from pydantic import ValidationError
 
 from seekwright import engine as engine_module
 from seekwright import fetcher, jsondoc, models, router, sanitize, tabledoc
+from seekwright.providers import scrappa, searxng, serper
 from seekwright.config import Config, ProviderConfig, SearchConfig, load_config
 from seekwright.providers.base import ProviderError, QuotaExhausted, SearchProvider
 
@@ -733,9 +737,144 @@ def engine_case(spec_text: str) -> list[str]:
         logger.remove(sink_id)
 
 
+# {1 provider (mirror of Projection.provider_case)}
+
+# Never a real credential, and never echoed: the request lines record the
+# credential's *location*, and the transport failure's own message embeds this
+# string so the golden can show the adapter refused to copy it.
+PROBE_KEY = "differential-probe-key-4f2a"
+
+# httpx fills these in itself; cohttp never sees them because the port's
+# scripted peer is handed the adapter's own request. What is worth rendering is
+# what the adapter asked for: the verb, the destination, and where the
+# credential rides.
+_TRANSPORT_HEADERS = frozenset(
+    {"host", "accept", "accept-encoding", "connection", "user-agent", "content-length"}
+)
+
+
+def _provider_query(query: dict[str, Any]) -> models.SearchQuery:
+    return models.SearchQuery(
+        query=query["query"],
+        max_results=query.get("max_results", 5),
+        include_domains=query.get("include_domains", []),
+        exclude_domains=query.get("exclude_domains", []),
+        country=query.get("country"),
+        language=query.get("language"),
+        recency=query.get("recency"),
+        safe_search=query.get("safe_search"),
+    )
+
+
+def _peer_handler(spec: dict[str, Any], sent: list[Any]) -> Any:
+    """The scripted peer: one reply, or a table keyed by the ``pageno`` sent."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        refusal = spec.get("refuse")
+        if refusal is not None:
+            # The transport failure carries the probe key on purpose; the golden
+            # pins that the adapter's own sentence does not.
+            message = f"dial failed, key: {PROBE_KEY}"
+            raise httpx.ConnectTimeout(message) if refusal == "timeout" else httpx.ConnectError(message)
+        pages = spec.get("pages")
+        if pages:
+            pageno = request.url.params.get("pageno")
+            if pageno is None:
+                raise AssertionError("provider corpus pages a request with no pageno")
+            reply = next(page for page in pages if page["pageno"] == int(pageno))
+        else:
+            reply = spec["response"]
+        return httpx.Response(reply["status"], text=reply["body"])
+
+    return handle
+
+
+def _render_query(url: Any) -> str:
+    pairs = sorted(parse_qsl(url.query.decode("utf-8"), keep_blank_values=True))
+    return "&".join(f"{esc(key)}={esc(value)}" for key, value in pairs)
+
+
+def _render_headers(request: httpx.Request) -> str:
+    pairs = sorted(
+        (name, value)
+        for name, value in request.headers.multi_items()
+        if name.lower() not in _TRANSPORT_HEADERS
+    )
+    return ",".join(
+        f"{name}=sentinel" if value == PROBE_KEY else f"{name}={esc(value)}" for name, value in pairs
+    )
+
+
+def _provider_dials(requests: list[Any]) -> list[str]:
+    lines: list[str] = []
+    for request in requests:
+        body = request.content
+        lines += [
+            f"method= {request.method}",
+            "url= " + esc(str(request.url).split("?", 1)[0]),
+            "query= " + _render_query(request.url),
+            "headers= " + _render_headers(request),
+            "body= " + ("-" if not body else canon_json(json.loads(body))),
+        ]
+    return lines
+
+
+def _provider_result(result: Any) -> list[str]:
+    lines = [f"name= {result.provider}"]
+    for hit in result.results:
+        lines += [
+            "result title=" + esc(hit.title),
+            "result url=" + esc(hit.url),
+            "result snippet=" + opt_value(hit.snippet),
+            "result uncapped=" + ("-" if hit._uncapped_chars is None else str(hit._uncapped_chars)),
+            "result published_date=" + opt_value(hit.published_date),
+            "result score=" + opt_number(hit.score),
+        ]
+    lines += [
+        "cost_usd= " + opt_number(result.cost_usd),
+        "notice=" + opt_value(result.notice),
+    ]
+    return lines
+
+
+def provider_case(spec_text: str) -> list[str]:
+    spec = json.loads(spec_text)
+    name = want_string(spec, "provider")
+    sent: list[Any] = []
+    transport = httpx.MockTransport(_peer_handler(spec, sent))
+    client = httpx.AsyncClient(transport=transport)
+    if name == "serper":
+        adapter: Any = serper.SerperProvider(client, PROBE_KEY)
+    elif name == "scrappa":
+        adapter = scrappa.ScrappaProvider(client, PROBE_KEY)
+    elif name == "searxng":
+        adapter = searxng.SearxngProvider(client, url=spec["endpoint"])
+    else:
+        raise AssertionError(f"provider corpus has no adapter {name!r}")
+    try:
+        result = asyncio.run(adapter.search(_provider_query(spec["query"])))
+    except QuotaExhausted as failure:
+        return _provider_dials(sent) + [
+            "verdict= error",
+            "kind= quota",
+            "retryable= " + flag(failure.retryable),
+            "message= " + esc(failure.message),
+        ]
+    except ProviderError as failure:
+        return _provider_dials(sent) + [
+            "verdict= error",
+            "kind= failure",
+            "retryable= " + flag(failure.retryable),
+            "message= " + esc(failure.message),
+        ]
+    return _provider_dials(sent) + ["verdict= ok"] + _provider_result(result)
+
+
 # {1 The area table (mirror of Projection.areas)}
 
 AREAS: dict[str, Any] = {
+    "provider": provider_case,
     "config": config,
     "sanitize": sanitize_case,
     "fetch": lambda text: _op_lines(FETCH_OPS, "fetch", json.loads(text)),

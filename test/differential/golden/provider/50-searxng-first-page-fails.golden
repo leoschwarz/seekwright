@@ -1,0 +1,15 @@
+area: provider
+case: 50-searxng-first-page-fails
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= http://searxng.test/search
+query= format=json&pageno=1&q=instance down
+headers= 
+body= -
+verdict= error
+kind= failure
+retryable= true
+message= HTTP 500
