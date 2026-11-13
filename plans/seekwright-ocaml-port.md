@@ -1236,3 +1236,110 @@ dial anything; no case reaches a public provider.
 Gate at landing: `dune build @install`, `dune runtest --force` and
 `dune build @doc` all exit 0 under the opam+GMP environment. The new suites are
 hermetic — loopback and promises only.
+=======
+## 22. F4.1 — one declarative row per provider name (2026-11-13)
+
+Landed on `f4-1-registry`. Spec: `plans/ocaml-finalisation.md` §F4.1.
+
+**The table.** `seekwright.factory` gains `Registry` (`lib/factory/registry.ml{,i}`):
+one data row per name, for all seventeen, carrying the endpoint and how it is
+derived, the credential's wire shape, what the name needs before it can be built,
+the default price and the pricing model, the timeout floor, which policy cap
+bounds its results, its readiness probe, the `[[providers.<name>]]` keys its
+adapter reads, and whether this port has a recorded live run. `build_providers` is
+now one pass over those rows: the two-entry `adapters` table, the `keyless_headers`
+stub and the local `cost_of` are deleted, and the three decisions the function
+still makes are the three a row cannot make — is the name enabled, is it built on
+this port, did this deployment supply what its row requires. `build` is
+`Adapter of (args -> Provider.t) | Deferred wave`, so fifteen rows are the
+inventory of names F5 will carry rather than a promise of dispatch: an enabled
+name with a `Deferred` row is still `unsupported` and still startup-fatal, which
+is why every F1.1 pin (`test_routing_sets`, `test_cli_check`'s expected `--check`
+output) holds with its old wording.
+
+**One destination.** `Registry.uri` is the only place a destination is computed and
+`Registry.grant_endpoint` turns it into the `Policy` entry through
+`Seekwright.Provider.policy_of_uri`, the new seam in `lib/provider.ml{,i}`; the
+adapter dials that URI, the grant allows the entry derived from it, and there is
+no third spelling of the host. `freeserp` and `anysearch` now write
+`policy_endpoint = Provider.policy_of_uri endpoint` instead of a literal triple,
+and `Factory.agent_net` reads the same derivation — `[agent] base_url` is a second
+configured destination, not a second scheme/host/port spelling. The
+config-derived ones are `Url_required` (`searxng`), `Url_override` (`exa`,
+`exa:free`, `parallel:free`) and `Algolia_index` (`{app_id}-dsn.algolia.net`, with
+`index` escaped by `Provider.escape_path_segment`, the port of the oracle's
+`quote(value, safe="")` — `Uri.escape` keeps `&` and `?` literal, which splits a
+path segment). A config `url` that is not an absolute http(s) URL, or that carries
+userinfo, is a construction failure naming the **key** and never echoing the value;
+a `Fixed_uri` row ignores a config `url` as the oracle does, and the row's
+`settings` list is what discloses that.
+
+**One price, one rung.** `default_cost` is the figure a `[[providers]]`
+`cost_per_1k` may correct; `None` fixes it at zero, which is `exa:free` alone — a
+config correction cannot bill the name that cannot bill. `cost_model` is `Flat`
+everywhere except `exa`, whose published shape is a subscription covering the
+first 10 results plus `$1.00` per thousand beyond; `Registry.cost_of` applies it,
+and each built adapter's own `cost_for` is pinned against that figure.
+
+**A floor, not a ceiling.** `timeout_seconds row ~policy_seconds = max policy floor`,
+floors `exa`/`exa:free`/`parallel:free` 30s (the MCP handshake's headroom), `linkup`
+20s (the deep rung), `scrappa` and `searxng` 15s (a scrape and a metasearch
+fan-out); the grant's operation bound is that number, so a raised
+`policy.provider_timeout_seconds` still raises a name that had no floor.
+
+**No credential crossing.** `key_for` consults `requires` before it consults the
+environment, so a keyless row answers `None` with `SEEKWRIGHT_EXA_API_KEY` in hand
+and a `searxng` grant cannot acquire a header by accident. `credential` is the
+wire shape — `Header {header; prefix}`, `App_id_and_key` (Algolia's public
+identifier plus the secret), `Key_in_query "api_key"` (`serpapi`) — and
+`probe_spec` builds its headers from that same declaration, so `--check` cannot
+authenticate a name in a shape no search uses; `No_probe` is the three MCP-backed
+names, which the oracle proves with a session handshake this contract has no
+`warmup` member for, so they answer `Unsupported` like a name with no probe.
+`serpapi`'s query-string key is why `Provider.redact_url` (the oracle's
+`urlsplit(url).hostname or "?"`) is in the seam now, before the adapter lands in
+F5.5: a probe URL carrying it is pinned to reduce to `serpapi.com`.
+
+**Live-tested is one field.** `ocaml_live_tested` is not a labelled argument of
+`make_row` — it is written there, `false`, once, until the F4.3 runner records a
+run. `classify` reads the field, so `--check`'s OCaml-untested disclosure and the
+table are the same fact rather than two lists kept in step.
+
+**Rows stay out of routing.** `permitted_providers` filters no row: an enabled,
+built, unpermitted name is still built, so the refusal stays the router's sentence
+naming the permitted set and `Factory.classify`'s `effective` stays the one place
+the narrowing shows.
+
+**Tests.** `test/test_provider_registry.ml` (21 cases in eight groups) asks the
+rows themselves the questions, with sentinel keys in the environment and grants
+constructed but never dialled: the row names equal `Config.known_providers` and are
+stored sorted; the built half is `anysearch`/`freeserp` and the deferred half
+names its wave; the default-cost column is the oracle's seventeen figures, and a
+config `cost_per_1k` moves every one of them except `exa:free`'s; only `exa` has
+the extra-result rung, pinned at 10 results and $1.00 per thousand beyond; the six
+floors and the `max` merge are pinned both ways; every grant entry equals
+`policy_of_uri` of the row's own URI, an override that
+says `:8443` pins that port, `searxng` without a `url` and `algolia` without
+`app_id`/`index` refuse, and a userinfo-bearing `url` is refused without echoing
+it; each probe asks the host its grant allows and authenticates with its row's
+credential; the `Api_key` prerequisite is exactly `Config.providers_requiring_key`
+(the instance keys ride beside it) and a name that needs a key has a place on the
+wire to put it; `redact_url` kills the sentinel; the union of the rows' `settings`
+is the field list `provider_config` has (and no row claims `enabled` or
+`cost_per_1k`, the two the factory reads for every name); and construction builds
+two of seventeen with no grant error, prices each adapter at its row and pins its
+own `cost_for` against the row's `cost_of` at 1, 10 and 20 results, and carries a
+config `cost_per_1k` through to the adapter. A new case pins that a narrowed
+permission set changes no row's price or endpoint and builds both names.
+
+`test/differential/matrix/providers.tsv` is untouched: its column set is pinned by
+`test_differential_matrix.ml` and generated by `ocaml-tools/oracle/gen_matrix.py`,
+so widening it to carry a floor or a pricing rung is its own change with its own
+reasoning.
+
+Gate at landing: `dune build @install`, `dune runtest --force` (54 suites) and
+`dune build @doc` all exit 0. The `test_caps_audit` funnel pins survive the
+rewrite intact — `build_providers` names its endpoint/bound pair `adapter` and
+`agent_net` binds `endpoint`, so the source scan still reads one
+`Authority.with_log`, one `Authority.Net.of_confinement`, `?audit adapter.endpoint`
+and `?audit endpoint)`. No suite reached a provider endpoint; no key was needed.
