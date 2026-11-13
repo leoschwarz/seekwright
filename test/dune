@@ -209,6 +209,16 @@
    seekwright.providers seekwright.factory mcp-caps uri yojson eio eio_main
    mirage-crypto-rng.unix unix alcotest test_support))
 
+; F4.1: the provider registry. The suite reads the table itself for all
+; seventeen names — price, floor, endpoint, probe, credential, settings — so
+; the row is what is under test, not the adapter beside it. Grants are
+; constructed and never dialled, and [unix] is only the environment variable a
+; keyless row must prove it ignores.
+(test
+ (name test_provider_registry)
+ (libraries seekwright seekwright.factory seekwright.providers mcp-caps uri
+   yojson eio eio_main mirage-crypto-rng.unix unix alcotest test_support))
+
 ; P4: the provider contract's machinery — the constraint report, the caps, and
 ; the failure rows provider-contract.md's Failures table fixes. It reads the
 ; adapter sources from the sandbox as well, which is what the (deps) line is:
