@@ -28,6 +28,7 @@ module Config = Seekwright.Config
 module Factory = Seekwright_factory.Factory
 module Log = Seekwright.Log
 module Model = Seekwright.Model
+module Provider = Seekwright.Provider
 module Server = Seekwright.Server
 module Usage = Seekwright.Usage
 
@@ -176,6 +177,15 @@ let startup_log log config (built : Factory.providers) =
         | None -> `Null) );
     ]
 
+(* Every provider this build constructed, closed exactly once. The list is
+   [build_app]'s second value — the same adapter values the search engine
+   dispatches through — so closing it here closes what was served, not a second
+   copy. A provider whose [aclose] is a documented no-op still goes through the
+   same path, which is what keeps an MCP-backed adapter's session from being the
+   one close a future change forgets. *)
+let close_providers (built : Factory.providers) () =
+  List.iter (fun (_, provider) -> Provider.aclose provider) built.Factory.built
+
 let run_server ~env ~sw opts =
   Mirage_crypto_rng_unix.use_default ();
   match Config.load None with
@@ -212,9 +222,11 @@ let run_server ~env ~sw opts =
               [ ( "unsupported", `String (String.concat "," built.Factory.unsupported) ) ];
           (match Server.mcp_server app with
           | Error (Caps.Server.Duplicate_tool name) ->
+              close_providers built ();
               prerr_endline ("seekwright: duplicate tool: " ^ name);
               exit 1
           | Error (Caps.Server.Invalid_declaration message) ->
+              close_providers built ();
               prerr_endline ("seekwright: " ^ message);
               exit 1
           | Ok server ->
@@ -223,10 +235,18 @@ let run_server ~env ~sw opts =
                 let port = Option.value ~default:8000 opts.port in
                 log Config.Log_info "http.listening"
                   [ ("host", `String host); ("port", `Int port) ];
+                (* The signal-to-promise path, the bounded drain and the
+                   close order are [Cli_serve]'s; this file supplies the
+                   network seam, the built providers to close and the process
+                   exit status. A requested stop is a successful exit even when
+                   the grace forced the last connections out — [serve_http]
+                   already logged the forced drain at WARNING. *)
                 (match
-                   Server.serve_http ~env ~sw ~log app server ~host ~port
+                   Cli_serve.run_http ~env ~sw ~log ~app ~server ~host ~port
+                     ~close:(close_providers built) ()
                  with
-                | Ok () -> ()
+                | Ok Server.Drained -> ()
+                | Ok Server.Grace_expired -> ()
                 | Error Server.Bind_address_unresolved ->
                     prerr_endline
                       "seekwright: cannot resolve the HTTP bind address";

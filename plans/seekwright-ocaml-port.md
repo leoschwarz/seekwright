@@ -1153,3 +1153,86 @@ so the redaction rule applies to it. Neither guard's rule changed.
 Gate at landing: `dune build @install`, `dune runtest --force` (54 suites) and
 `dune build @doc` all exit 0; the new `.mli` adds no odoc warning. Live-endpoint
 evidence above is a report finding, not part of the default gate.
+=======
+## 21. F2.3 — stop, drain and close in one owner (2026-11-13)
+
+Landed on `f2-3-drain`. Spec: `plans/ocaml-finalisation.md` §F2.3.
+
+**The stop input and the lifecycle value.** `Server.serve_http` now takes
+`~stop:unit Eio.Promise.t` and `?grace_seconds` (default
+`Server.drain_grace_seconds = 10.0`, a constant because the oracle has no flag
+or config key for it) and answers
+`(lifecycle, serve_error) result`, where `lifecycle = Drained | Grace_expired`.
+The stop promise is no longer discarded: a requested stop is a success even
+when the grace had to force the last connections out, so `bin` exits 0 on
+either arm and `Error` is reserved for the listener's own startup failure.
+Cancellation arriving from an enclosing switch is re-raised as
+`Eio.Cancel.Cancelled`, never translated into a listener or provider failure.
+
+**Why the accept loop is ours.** `Eio.Net.run_server ~stop` stops accepting but
+leaves the listening socket open (the caller owns it), so a probe arriving
+during the drain would still complete its TCP handshake into the backlog and
+never be refused. `serve_http` therefore runs its own accept loop: the loop has
+its own `Cancel.sub` context, so a stop cancels just the loop and joins it, and
+then closes the listener — after which another connection attempt is refused
+while the accepted request is still being drained. The accepted connections
+live in one `Eio.Switch.run` scope, so the grace ceiling can fail that switch
+as a unit; `Eio.Condition` over an active-connection counter is the join point,
+so the drain waits for real work rather than sleeping out the grace. Connection
+exceptions still go to `on_error` (a rejected Origin stays INFO), not to the
+switch, so one bad connection never cancels its neighbours.
+
+**The stopping state.** An `Atomic.t` set before the accept loop is told to
+stop is threaded as `?stopping:(unit -> bool)` through `serve_connection`,
+`custom_handler` and `handle_custom` (default `false`, so route-level suites
+need no change). While it is true, `/healthz`, `/dashboard/data` and
+`/dashboard/metrics` answer 503 `{"status":"stopping"}`, the three REST
+projections answer 503 `{"error":"The server is stopping; retry shortly."}`
+before touching their engines, and `/dashboard` itself stays the static 200 it
+is — it accepts no work. Nothing new is read to say so.
+
+**Signals.** `lib/cli/cli_serve.ml{,i}` owns the process path: SIGINT and
+SIGTERM handlers write one byte to a `Unix.pipe` self-pipe and do nothing else
+(no promise, no allocation, no log, no protocol stream); one watcher fiber
+waits with `Eio_unix.await_readable` and fills the stop promise on the first
+byte, so a second signal is ignored. The handlers are installed only when the
+caller supplies no `?stop`, restore the previous behavior under
+`Eio.Cancel.protect`, and the descriptors close after the watcher is joined.
+`Cli_serve.run_http` also owns "close exactly once": `close` runs in a
+`Fun.protect` finally on every exit path — bind failure, cancellation and a
+completed drain — after the listener has joined its connections but before the
+caller's app switch ends. `bin/main.ml` supplies
+`close = List.iter (fun (_, p) -> Provider.aclose p) built.Factory.built` and
+the health fiber is cancelled through its own `Cancel.t`, so an in-flight probe
+is aborted rather than waited out. The usage journal needs no flush step:
+`Usage.append` opens, appends one record and closes before returning, so every
+completed call's line is already on disk when the drain starts.
+
+**Known gap.** The fetch stack's readers own an `Extract_pool` whose `aclose`
+drains worker domains, but the reader value is reachable only through
+`Server.app.fetch`, which is abstract, and `lib/factory/` is out of this task's
+scope. `bin` closes the built providers only; the pool's sockets are
+process-scoped and are reclaimed when the process exits, so no worker outlives
+the process, but the drain is not the thing that ends it. Making the app carry
+its construction graph would close this properly and is the follow-up.
+
+**Tests.** `test/test_drain.ml` drives the injected-stop path in-process: a
+stub `Provider.S` resolves a `started` promise and waits on a `release`
+promise, a real loopback client keeps the REST call in flight, and the suite
+asserts the 200 answer, `Ok Drained`, and that `close` ran once and only after
+the call. A second case hangs the provider, passes `~grace_seconds:0.2` and
+asserts `Ok Grace_expired` under a one-second wall bound, with `close` still
+exactly once. A third asserts the stopping surface: 503 + sentinel on the three
+operational GETs, 503 + retry sentence on all three projections, 200 on
+`/dashboard`, and 200 `{"status":"ok"}` when stopping is the default false.
+`test/test_binary_drain.ml` is the real process case: it starts
+`bin/main.exe` on a free loopback port under `test/drain.toml` (keyless
+defaults, stdlib extractor, health interval 0), opens a REST request with half
+its body, sends SIGTERM, waits until a second connect is refused, finishes the
+body, reads 503 with the retry sentence and asserts `WEXITED 0`. The search body
+names `serper`, which this build does not carry, so even a missed stop cannot
+dial anything; no case reaches a public provider.
+
+Gate at landing: `dune build @install`, `dune runtest --force` and
+`dune build @doc` all exit 0 under the opam+GMP environment. The new suites are
+hermetic — loopback and promises only.

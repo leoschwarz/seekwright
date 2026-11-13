@@ -276,7 +276,7 @@ let with_connection ~app ~clock f =
       Eio.Net.run_server ~stop ~on_error:(fun _ -> ()) socket
         (fun flow peer ->
           Server.serve_connection ~clock ~log:(fun _ _ _ -> ()) ~app ~server
-            ~flow ~peer));
+            ~flow ~peer ()));
   Fun.protect
     ~finally:(fun () -> Eio.Promise.resolve resolve_stop ())
     (fun () -> f sw env port)
@@ -409,7 +409,7 @@ let an_unterminated_head_meets_the_injected_timeout () =
       Eio.Net.run_server ~stop ~on_error:(fun _ -> ()) socket
         (fun flow peer ->
           Server.serve_connection ~clock:(fake_clock ()) ~log ~app ~server
-            ~flow ~peer));
+            ~flow ~peer ()));
   Fun.protect
     ~finally:(fun () -> Eio.Promise.resolve resolve_stop ())
     (fun () ->

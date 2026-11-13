@@ -473,7 +473,7 @@ let serve ~env ~sw ~log ~app ~server =
               ~finally:(fun () -> ignore (Atomic.fetch_and_add active (-1)))
               (fun () ->
                 Server.serve_connection ~clock:(Eio.Stdenv.mono_clock env) ~log ~app ~server
-                  ~flow ~peer))));
+                  ~flow ~peer ()))));
   { port; stop = fill_stop; stopped; active }
 
 let stop_served served =

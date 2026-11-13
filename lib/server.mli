@@ -82,8 +82,10 @@ val run_health_monitor :
     the caller's because the interval comes from config and the clock belongs
     to the transport; [serve_http] hands in the listener's monotonic clock.
     Python sleeps first, so a start does not spend a probe before the first
-    interval. The fiber is a child of the listener's switch, and cancelling
-    that switch — how the process ends — is the stop. *)
+    interval. {!serve_http} forks it as a child of the listener's switch and
+    gives it its own cancellation context, so a stop aborts a probe already in
+    flight rather than waiting for its timeout; cancelling the switch remains
+    the fallback for a caller that never stops the listener. *)
 
 (** The process-wide context: one per server, built once by the factory (P8's
     [seekwright.factory]) and shared by every tool call and custom route.
@@ -151,6 +153,7 @@ val origin_allowlist : string list -> string list
     loopback name and every operator host. *)
 
 val handle_custom :
+  ?stopping:(unit -> bool) ->
   app ->
   meth:string ->
   path:string ->
@@ -162,7 +165,15 @@ val handle_custom :
     allowlist (a kubelet probes with the pod IP in [Host]); every other path
     is guarded, and an [Origin] header that is present but not allowed is
     refused. Unknown paths answer 404; a known path with the wrong method
-    answers 405. *)
+    answers 405.
+
+    [stopping] defaults to "not stopping". When it answers [true], the
+    oracle's shutdown surface takes over: [/healthz], [/dashboard/data] and
+    [/dashboard/metrics] answer 503 [{"status": "stopping"}], and the three
+    [POST /api/v1/…] routes answer 503
+    [{"error": "The server is stopping; retry shortly."}]. No route reads a
+    secret to say so, and [/dashboard] itself stays a static 200 — it accepts
+    no work. *)
 
 (** {1 Serving} *)
 
@@ -177,12 +188,14 @@ val request_head_timeout_seconds : float
     timeout's and not a measurement of elapsed wall time. *)
 
 val serve_connection :
+  ?stopping:(unit -> bool) ->
   clock:_ Eio.Time.Mono.t ->
   log:Log.log ->
   app:app ->
   server:Mcp_kit.Server.t ->
   flow:_ Eio.Flow.two_way ->
   peer:Eio.Net.Sockaddr.stream ->
+  unit ->
   unit
 (** Drive one accepted connection: read the request head under
     {!Http_head.request_head_limit} and {!request_head_timeout_seconds}, answer
@@ -204,7 +217,9 @@ val serve_connection :
     the same bounded [431]. Each refusal logs [http.head_rejected] with a
     constant [kind] ([too_large], [malformed], [timeout]); a connect-and-close
     probe answers nothing. [peer] is only passed through to the transports,
-    which use it for logging. *)
+    which use it for logging. [stopping] reaches {!handle_custom}; the MCP
+    route ignores it, because a body already being dispatched is in-flight work
+    and the listener has stopped accepting new connections. *)
 
 type serve_error =
   | Bind_address_unresolved
@@ -216,6 +231,24 @@ type serve_error =
     a host, a path or an exception message can name operator infrastructure or a
     credential, and a classification is the redaction boundary. *)
 
+val drain_grace_seconds : float
+(** How long a stopped listener lets accepted connections finish before it
+    cancels them: {!serve_http}'s default [grace_seconds]. The frozen ten server
+    flags have no place for it and the oracle's config has no key, so it is a
+    constant that {!serve_http}'s caller may override for a test. *)
+
+type lifecycle =
+  | Drained
+  (** The stop was observed and every accepted connection finished inside the
+      grace; the listener returned cleanly. *)
+  | Grace_expired
+  (** The grace expired with work still in flight. The connection switch was
+      failed, the remaining connections were cancelled and joined, and the
+      caller may now close providers and leave the app switch. *)
+(** What {!serve_http} did with a requested stop. A cancellation that arrives
+    from an enclosing switch is not one of these: it keeps unwinding as
+    [Eio.Cancel.Cancelled] rather than being reported as a listener fault. *)
+
 val serve_http :
   env:< net : _ Eio.Net.t; fs : _ Eio.Path.t; mono_clock : _ Eio.Time.Mono.t; .. > ->
   sw:Eio.Switch.t ->
@@ -224,22 +257,34 @@ val serve_http :
   Mcp_kit.Server.t ->
   host:string ->
   port:int ->
-  (unit, serve_error) result
+  stop:unit Eio.Promise.t ->
+  ?grace_seconds:float ->
+  unit ->
+  (lifecycle, serve_error) result
 (** Serve Streamable HTTP on [host]:[port]: [/mcp] is delegated to the mcp-kit
     adapter's handler (which owns body bound, routing headers and Origin), and
     every other path goes through {!handle_custom} under the same Host
-    allowlist. [app.health] runs as a fiber on the same switch — so a cancelled
-    listener takes its monitor with it — when
-    [[search] health_interval_seconds] is positive. Runs until the enclosing
-    switch ends; the listener is registered on [sw], which owns the grants.
+    allowlist. [app.health] runs as a fiber on the same switch when
+    [[search] health_interval_seconds] is positive.
 
-    Startup and listener failures are returned, not raised: [Error error] after
-    logging [http.listen_failed] with the error's constant [kind], and
-    [Ok ()] only when the listener returns on its own. Per-connection failures
-    are logged as [http.connection_error] with a bounded
+    [stop] is the caller's stop input — the one promise a signal handler path
+    fills. Filling it stops accepting connections, marks the custom routes
+    stopping ({!handle_custom}), aborts the health fiber (a probe in flight is
+    cancelled, not awaited), and then waits up to [grace_seconds] (default
+    {!drain_grace_seconds}) for the accepted connections to finish. Past that
+    ceiling the connection switch is failed and every remaining connection is
+    cancelled and joined, so the function returns [Grace_expired] instead of
+    hanging on a stuck handler.
+
+    The listener and the health fiber are registered on [sw], which owns the
+    grants; their work is joined before this returns. Startup and listener
+    failures are returned, not raised: [Error error] after logging
+    [http.listen_failed] with the error's constant [kind]. Per-connection
+    failures are logged as [http.connection_error] with a bounded
     {!Log.classify_exn} [kind]; a rejected Origin is the expected
-    [http.origin_rejected] refusal at INFO, not a fault. Neither path ever
-    renders an exception. *)
+    [http.origin_rejected] refusal at INFO, not a fault. A cancellation from an
+    enclosing switch is re-raised as cancellation, never rendered as a
+    provider or listener failure. *)
 
 (** {1 The frozen surface, as data}
 

@@ -1,0 +1,9 @@
+# F2.3's real-binary drain case. The keyless default providers are what start,
+# so nothing needs a key and nothing dials at startup; the stdlib extractor is
+# the one this build carries. The periodic health probe is off so the only
+# traffic the suite creates is its own loopback request.
+[fetch]
+extractor = "stdlib"
+
+[search]
+health_interval_seconds = 0.0

@@ -23,6 +23,10 @@
   seekwright.factory
   mcp-caps
   eio
+  ; [Cli_serve] waits on a self-pipe fd, so it names the unix sublibrary and
+  ; stdlib Unix rather than relying on what [eio_main] happens to pull in.
+  eio.unix
+  unix
   eio_main
   uri
   yojson

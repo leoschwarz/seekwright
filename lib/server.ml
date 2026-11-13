@@ -416,28 +416,42 @@ let parse_json_body body =
   | `Assoc _ as json -> Ok json
   | _ -> Error "Body must be a JSON object."
 
-let healthz app =
-  let built = Engine.Search.providers app.search in
-  json_response 200
-    (`Assoc
-       [
-         ("status", `String "ok");
-         (* The dispatchable set — the engine's built registry, the one set
-            every route resolves against — not the configured one: a name
-            this build has no adapter for either refused startup
-            ([Seekwright_factory.startup_verdict]) or was skipped by name
-            under the implicit keyless default. [/healthz] answers what
-            serves searches, never what a file asked for. *)
-         ("providers", `List (List.map (fun name -> `String name) built));
-         ( "default_provider",
-           (match app.config.Config.default_provider with
-           | Some name when List.mem name built -> `String name
-           | _ -> `Null) );
-         ( "uptime_s",
-           `Int (int_of_float (app.mono_now () -. app.started_at)) );
-       ])
+(* The oracle's stopping sentences: [{"status": "stopping"}] for the three
+   operational GETs, and the REST surface's error shape for a projection call
+   that arrived while the listener was draining. Both are content-free. *)
+let stopping_message = "The server is stopping; retry shortly."
 
-let api_search app body =
+let stopping_response () =
+  json_response 503 (`Assoc [ ("status", `String "stopping") ])
+
+let stopping_error () = error_response 503 stopping_message
+
+let healthz app ~stopping =
+  if stopping then stopping_response ()
+  else
+    let built = Engine.Search.providers app.search in
+    json_response 200
+      (`Assoc
+         [
+           ("status", `String "ok");
+           (* The dispatchable set — the engine's built registry, the one set
+              every route resolves against — not the configured one: a name
+              this build has no adapter for either refused startup
+              ([Seekwright_factory.startup_verdict]) or was skipped by name
+              under the implicit keyless default. [/healthz] answers what
+              serves searches, never what a file asked for. *)
+           ("providers", `List (List.map (fun name -> `String name) built));
+           ( "default_provider",
+             (match app.config.Config.default_provider with
+             | Some name when List.mem name built -> `String name
+             | _ -> `Null) );
+           ( "uptime_s",
+             `Int (int_of_float (app.mono_now () -. app.started_at)) );
+         ])
+
+let api_search app ~stopping body =
+  if stopping then stopping_error ()
+  else
   match parse_json_body body with
   | Error message -> error_response 400 message
   | Ok json -> (
@@ -454,7 +468,9 @@ let api_search app body =
           | Error (Engine.Search.Refused message) -> error_response 400 message
           | Error (Engine.Search.Failed message) -> error_response 502 message))
 
-let api_fetch app body =
+let api_fetch app ~stopping body =
+  if stopping then stopping_error ()
+  else
   match app.fetch with
   | None -> error_response 404 fetch_disabled
   | Some engine -> (
@@ -478,7 +494,9 @@ let api_fetch app body =
               | Error (Engine.Fetch.Refused message) -> error_response 400 message
               | Error (Engine.Fetch.Failed message) -> error_response 502 message)))
 
-let api_answer app body =
+let api_answer app ~stopping body =
+  if stopping then stopping_error ()
+  else
   match app.agent with
   | None -> error_response 404 agent_disabled
   | Some agent -> (
@@ -541,7 +559,8 @@ let bounded_response response =
   | Error Http_head.Response_head_too_large ->
       { status = 500; headers = text_content; body = "" }
 
-let route_custom app ~meth ~path ~host ~origin ~body =
+let route_custom ?(stopping = fun () -> false) app ~meth ~path ~host ~origin
+    ~body =
   if String.length body > max_body_size then
     { status = 413; headers = text_content; body = "" }
   else
@@ -556,21 +575,24 @@ let route_custom app ~meth ~path ~host ~origin ~body =
     else if path <> "/healthz" && not origin_ok then
       text_response 403 "Invalid Origin header"
     else
+      let is_stopping = stopping () in
       match (meth, path) with
-      | "GET", "/healthz" -> healthz app
-      | "POST", "/api/v1/search" -> api_search app body
-      | "POST", "/api/v1/fetch" -> api_fetch app body
-      | "POST", "/api/v1/answer" -> api_answer app body
+      | "GET", "/healthz" -> healthz app ~stopping:is_stopping
+      | "POST", "/api/v1/search" -> api_search app ~stopping:is_stopping body
+      | "POST", "/api/v1/fetch" -> api_fetch app ~stopping:is_stopping body
+      | "POST", "/api/v1/answer" -> api_answer app ~stopping:is_stopping body
       | "GET", "/dashboard" when dashboard_enabled app ->
           { status = 200; headers = html_content; body = Dashboard_html.dashboard_html }
-      | "GET", "/dashboard/data" when dashboard_enabled app -> dashboard_data app
-      | "GET", "/dashboard/metrics" when dashboard_enabled app -> dashboard_metrics app
+      | "GET", "/dashboard/data" when dashboard_enabled app ->
+          if is_stopping then stopping_response () else dashboard_data app
+      | "GET", "/dashboard/metrics" when dashboard_enabled app ->
+          if is_stopping then stopping_response () else dashboard_metrics app
       | _, path when List.mem path (custom_paths app) ->
           text_response 405 "Method Not Allowed"
       | _ -> text_response 404 "Not Found"
 
-let handle_custom app ~meth ~path ~host ~origin ~body =
-  bounded_response (route_custom app ~meth ~path ~host ~origin ~body)
+let handle_custom ?stopping app ~meth ~path ~host ~origin ~body =
+  bounded_response (route_custom ?stopping app ~meth ~path ~host ~origin ~body)
 
 (* {1 Serving} *)
 
@@ -603,7 +625,7 @@ end
 (* The custom routes as a cohttp server of their own: its connection driver
    parses the request, so this callback gets the parsed head and the body
    flow, and answers through the response it returns. *)
-let custom_handler app =
+let custom_handler ?stopping app =
   Cohttp_eio.Server.make
     ~callback:(fun _conn req body ->
       let raw =
@@ -617,7 +639,9 @@ let custom_handler app =
         let headers = Http.Request.headers req in
         let host = Http.Header.get headers "host" in
         let origin = Http.Header.get headers "origin" in
-        let response = handle_custom app ~meth ~path ~host ~origin ~body:raw in
+        let response =
+          handle_custom ?stopping app ~meth ~path ~host ~origin ~body:raw
+        in
         Cohttp_eio.Server.respond_string
           ~headers:(Http.Header.of_list response.headers)
           ~status:(Http.Status.of_int response.status)
@@ -744,7 +768,7 @@ let refuse ~clock flow status sentence =
    Every refusal carries [connection: close] and the connection ends with this
    function, so a peer's next request arrives on a fresh connection — which is
    what makes an over-cap head cost one connection and not the listener. *)
-let serve_connection ~clock ~log ~app ~server ~flow ~peer =
+let serve_connection ?stopping ~clock ~log ~app ~server ~flow ~peer () =
   Eio.Switch.run @@ fun conn_sw ->
   let reader = Http_head.request_reader flow in
   match
@@ -781,7 +805,7 @@ let serve_connection ~clock ~log ~app ~server ~flow ~peer =
             Mcp_kit_cohttp_eio.handler ~max_body_size
               ~allowed_origins:(origin_allowlist app.allowed_hosts)
               server
-          else custom_handler app
+          else custom_handler ?stopping app
         in
         (match
            Eio.Buf_write.with_flow flow @@ fun oc ->
@@ -803,8 +827,9 @@ let run_health_monitor (health : health) ~(config : Config.t)
       ~net:health.net health.board
   in
   (* Sleep first, as [HealthMonitor.run] does: a start does not spend a probe
-     before the first interval. The fiber is a child of the listener's switch,
-     so cancelling that switch is the stop. *)
+     before the first interval. The fiber is a child of the listener's switch
+     and [serve_http] gives it its own cancellation context, so a stop aborts a
+     probe already in flight instead of waiting for its timeout. *)
   let rec loop () =
     sleep ();
     tick ();
@@ -812,7 +837,27 @@ let run_health_monitor (health : health) ~(config : Config.t)
   in
   loop ()
 
-let serve_http ~env ~sw ~log app server ~host ~port =
+(* The bounded drain. A stop is a request to stop accepting; the connection
+   fibers already accepted are allowed this many seconds to finish before they
+   are cancelled, which is what keeps a hung handler from holding the process
+   open forever. The number is a constant because the frozen ten server flags
+   have no place to carry it and the operator's config has no key for it in the
+   oracle either; a future key would move one binding. *)
+let drain_grace_seconds = 10.0
+
+type lifecycle =
+  | Drained
+  | Grace_expired
+
+(* Raised into the connection switch at the grace ceiling, and by the accept
+   loop when accepting itself fails. Both are caught inside [serve_http], so
+   they never reach a caller. *)
+exception Drain_forced
+
+exception Listener_failed of exn
+
+let serve_http ~env ~sw ~log app server ~host ~port ~stop
+    ?(grace_seconds = drain_grace_seconds) () =
   match addr_of_host ~net:(env#net) host with
   | Error error ->
       log Config.Log_warning "http.listen_failed"
@@ -827,16 +872,50 @@ let serve_http ~env ~sw ~log app server ~host ~port =
             [ ("kind", `String (serve_error_kind error)) ];
           Error error
       | socket ->
-          (match app.health with
-          | Some health when app.config.Config.search.Config.health_interval_seconds > 0.0 ->
-              let interval =
-                app.config.Config.search.Config.health_interval_seconds
-              in
-              Eio.Fiber.fork ~sw (fun () ->
-                run_health_monitor health ~config:app.config
-                  ~sleep:(fun () -> Eio.Time.Mono.sleep env#mono_clock interval))
-          | _ -> ());
-          let stop, _resolve = Eio.Promise.create () in
+          (* The one fact every custom route reads while draining. It is set
+             before the accept loop is told to stop, so a keep-alive request
+             that arrives during the drain sees "stopping" rather than a route
+             that would spend money. *)
+          let stopping = Atomic.make false in
+          (* The health fiber is a child of the app switch like the listener,
+             but it owns its own cancellation context: a probe in flight when
+             the stop arrives must be aborted, not waited for. Its context and
+             completion are captured now so the drain can cancel and join it. *)
+          let health =
+            match app.health with
+            | Some health
+              when app.config.Config.search.Config.health_interval_seconds > 0.0
+              ->
+                let interval =
+                  app.config.Config.search.Config.health_interval_seconds
+                in
+                let ready, resolve_ready = Eio.Promise.create () in
+                let done_ =
+                  Eio.Fiber.fork_promise ~sw (fun () ->
+                    Eio.Cancel.sub (fun health_ctx ->
+                      Eio.Promise.resolve resolve_ready health_ctx;
+                      run_health_monitor health ~config:app.config
+                        ~sleep:(fun () ->
+                          Eio.Time.Mono.sleep env#mono_clock interval)))
+                in
+                Some (ready, done_)
+            | _ -> None
+          in
+          let stop_health () =
+            match health with
+            | None -> ()
+            | Some (ready, done_) ->
+                let health_ctx = Eio.Promise.await ready in
+                Eio.Cancel.cancel health_ctx (Failure "shutdown");
+                (match Eio.Promise.await done_ with
+                | Ok () | Error (Eio.Cancel.Cancelled _) -> ()
+                | Error _ -> ())
+          in
+          let listener_error exn =
+            log Config.Log_warning "http.listener_error"
+              [ ("kind", `String (Log.classify_exn exn)) ];
+            Error Listener_unavailable
+          in
           (* Every connection failure is one fixed event with a bounded
              classification: a rejected Origin is an expected refusal at INFO,
              anything else is a WARNING. Neither arm renders the exception. *)
@@ -848,19 +927,115 @@ let serve_http ~env ~sw ~log app server ~host ~port =
                 log Config.Log_warning "http.connection_error"
                   [ ("kind", `String (Log.classify_exn exn)) ]
           in
-          let handle_connection sock peer =
-            serve_connection ~clock:env#mono_clock ~log ~app ~server
-              ~flow:(sock :> Eio.Flow.two_way_ty Eio.Resource.t)
-              ~peer
+          (* The accept loop is our own rather than [Eio.Net.run_server]'s
+             because a stop must also close the listening socket: leaving it
+             open would queue further connects through the drain, and "another
+             connection attempt is refused" is part of the contract. The loop
+             gets its own cancellation context, so ending it never touches the
+             connections already running; those live in one switch, which the
+             grace ceiling fails as a unit. *)
+          let outcome =
+            let connections = ref 0 in
+            let idle = Eio.Condition.create () in
+            let connection_finished () =
+              decr connections;
+              if !connections = 0 then Eio.Condition.broadcast idle
+            in
+            let wait_idle () =
+              Eio.Condition.loop_no_mutex idle (fun () ->
+                  if !connections = 0 then Some () else None)
+            in
+            let forced = ref false in
+            let serve () =
+              Eio.Switch.run @@ fun conn_sw ->
+                let accept_ctx, resolve_accept_ctx = Eio.Promise.create () in
+                let accept_done =
+                  Eio.Fiber.fork_promise ~sw (fun () ->
+                    Eio.Cancel.sub (fun ctx ->
+                      Eio.Promise.resolve resolve_accept_ctx ctx;
+                      let rec accept () =
+                        let flow, peer = Eio.Net.accept ~sw:conn_sw socket in
+                        incr connections;
+                        Eio.Fiber.fork ~sw:conn_sw (fun () ->
+                          Fun.protect ~finally:connection_finished (fun () ->
+                            try
+                              serve_connection
+                                ~stopping:(fun () -> Atomic.get stopping)
+                                ~clock:env#mono_clock ~log ~app ~server
+                                ~flow:
+                                  (flow
+                                    :> Eio.Flow.two_way_ty Eio.Resource.t)
+                                ~peer ()
+                            with
+                            | Eio.Cancel.Cancelled _ as exn -> raise exn
+                            | exn -> on_error exn));
+                        accept ()
+                      in
+                      accept ()))
+                in
+                match
+                  Eio.Fiber.first
+                    (fun () ->
+                      Eio.Promise.await stop;
+                      `Stopped)
+                    (fun () ->
+                      match Eio.Promise.await accept_done with
+                      | Ok () -> `Accept_ended
+                      | Error (Eio.Cancel.Cancelled _ as exn) -> raise exn
+                      | Error exn -> `Accept_failed exn)
+                with
+                | `Accept_failed exn ->
+                    Atomic.set stopping true;
+                    Eio.Net.close socket;
+                    stop_health ();
+                    raise (Listener_failed exn)
+                | `Stopped | `Accept_ended ->
+                    Atomic.set stopping true;
+                    log Config.Log_info "http.stopping"
+                      [ ("grace_seconds", `Float grace_seconds) ];
+                    (* Stop accepting, then close the socket: the accept fiber
+                       no longer sits in [accept], so the close cannot race the
+                       resource it is registered with. *)
+                    (try
+                       Eio.Cancel.cancel
+                         (Eio.Promise.await accept_ctx)
+                         (Failure "shutdown")
+                     with Invalid_argument _ -> ());
+                    (match Eio.Promise.await accept_done with
+                    | Ok () | Error (Eio.Cancel.Cancelled _) -> ()
+                    | Error exn -> raise (Listener_failed exn));
+                    Eio.Net.close socket;
+                    stop_health ();
+                    let drain =
+                      Eio.Time.Timeout.run
+                        (Eio.Time.Timeout.seconds env#mono_clock grace_seconds)
+                        (fun () ->
+                          wait_idle ();
+                          Ok ())
+                    in
+                    (match drain with
+                    | Ok () -> `Drained
+                    | Error `Timeout ->
+                        forced := true;
+                        Eio.Switch.fail conn_sw Drain_forced;
+                        (* The failure above cancels this body's context too
+                           (it is a fiber of the switch), so the join has to
+                           run protected: it is cleanup, not work the
+                           cancellation should pre-empt. *)
+                        Eio.Cancel.protect wait_idle;
+                        log Config.Log_warning "http.drain_forced"
+                          [ ("grace_seconds", `Float grace_seconds) ];
+                        `Forced)
+            in
+            match serve () with
+            | `Drained -> Ok Drained
+            | `Forced -> Ok Grace_expired
+            | exception (Eio.Cancel.Cancelled _ as exn) -> raise exn
+            | exception Drain_forced when !forced -> Ok Grace_expired
+            | exception Listener_failed exn -> listener_error exn
+            | exception exn -> listener_error exn
           in
-          match Eio.Net.run_server ~stop ~on_error socket handle_connection with
-          | () -> Ok ()
-          | exception (Eio.Cancel.Cancelled _ as exn) -> raise exn
-          | exception exn ->
-              let kind = Log.classify_exn exn in
-              log Config.Log_warning "http.listener_error"
-                [ ("kind", `String kind) ];
-              Error Listener_unavailable)
+          outcome)
 
 (* {1 The frozen surface data} *)
 
