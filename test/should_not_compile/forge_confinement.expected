@@ -1,4 +1,5 @@
-File "forge_confinement.ml", line 12, characters 4-27:
-12 |   { Mcp_caps.Policy_fs.root = (); max_read_bytes = 1; max_entries = 1 }
-         ^^^^^^^^^^^^^^^^^^^^^^^
-Error: Unbound record field "Mcp_caps.Policy_fs.root"
+File "forge_confinement.ml", line 18, characters 13-33:
+18 | let forged : Mcp_caps.Policy_fs.t =
+                  ^^^^^^^^^^^^^^^^^^^^
+Error: Unbound module "Mcp_caps.Policy_fs"
+Hint: Did you mean "Policy" or "Policy_net"?

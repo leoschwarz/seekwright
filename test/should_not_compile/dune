@@ -13,13 +13,34 @@
 ;
 ; The compile is a plain [ocamlfind ocamlc] over [lib/caps]'s interfaces rather
 ; than a dune stanza, because a stanza that does not compile fails the build
-; instead of reporting a diff. Two consequences show up below: the interfaces
-; are copied in first, since [ocamlc] writes a [.cmi] next to its input and dune
+; instead of reporting a diff. Two consequences show up below: the interfaces are
+; copied in first, since [ocamlc] writes a [.cmi] next to its input and dune
 ; needs every output declared as a target; and [mcp_caps.ml] mirrors the alias
-; module dune generates for the wrapped library, so the snippets read like the
-; client code they stand for. The interface list is in dependency order, because
-; [ocamlc] compiles its arguments left to right and does no dependency analysis
-; of its own; a module missing from it fails a snippet loudly, not silently.
+; module dune generates for the wrapped library — the {e package's} view, which
+; leaves out the two private modules because their interfaces are filed under
+; [.private/] and out of a consumer's search path. A consumer of the installed
+; package gets "an alias for module ..., which is missing" for those names, and
+; the mirror produces the shorter form of the same fact: no such name. The
+; snippets read like the client code they stand for, and a snippet that reaches
+; past the seal fails for the same reason a consumer of the package would. The
+; interface list is in dependency order, because [ocamlc] compiles its arguments
+; left to right and does no dependency analysis of its own; a module missing from
+; it fails a snippet loudly, not silently.
+;
+; The mirror is the one thing here that a dune field could not give us. Inside
+; this workspace the generated alias module does re-export the private modules,
+; so [Mcp_caps.Policy_fs] resolves for a neighbouring stanza and no dune setting
+; changes that ([root_module] aliases a library's {e dependencies}, not its own
+; modules). Within the checkout the seal is a rule kept by
+; [test/test_caps_audit.ml]; these snippets pin the package's boundary, which is
+; where a consumer would actually meet it.
+;
+; [controls_raw] has no interface of its own — that is what makes the bounds
+; record private to the library — so its signature is asked of the implementation
+; with [ocamlc -i], which is exactly what dune does for the library's own siblings
+; (see the second rule below). It is not aliased into [mcp_caps.ml], and the
+; negative programs that name [Mcp_caps.Controls] or [Mcp_caps.Policy_fs] fail
+; because the package has no such name.
 ;
 ; The [sed] in each compile drops this switch's packaging noise (the two [seq]
 ; definitions warning, and the [ptime.clock.os] deprecation the TLS stack pulls in)
@@ -32,20 +53,43 @@
 ; version has no user-defined variables to name it once.
 
 (rule
- (targets error.cmi event.cmi budget.cmi controls.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
- (deps (glob_files ../../lib/caps/*.mli) mcp_caps.ml)
+ (targets error.cmi event.cmi budget.cmi)
+ (deps ../../lib/caps/error.mli ../../lib/caps/event.mli
+  ../../lib/caps/budget.mli)
  (action
   (progn
-   (copy ../../lib/caps/error.mli error.mli) (copy ../../lib/caps/event.mli event.mli) (copy ../../lib/caps/budget.mli budget.mli) (copy ../../lib/caps/controls.mli controls.mli) (copy ../../lib/caps/tool.mli tool.mli) (copy ../../lib/caps/policy_fs.mli policy_fs.mli) (copy ../../lib/caps/policy_net.mli policy_net.mli) (copy ../../lib/caps/authority.mli authority.mli) (copy ../../lib/caps/policy.mli policy.mli) (copy ../../lib/caps/registry.mli registry.mli) (copy ../../lib/caps/server.mli server.mli)
+   (copy ../../lib/caps/error.mli error.mli) (copy ../../lib/caps/event.mli event.mli) (copy ../../lib/caps/budget.mli budget.mli)
    (run sh -c
-    "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c error.mli event.mli budget.mli controls.mli tool.mli policy_fs.mli policy_net.mli authority.mli policy.mli registry.mli server.mli mcp_caps.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'"))))
+    "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c error.mli event.mli budget.mli 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'"))))
+
+; The bounds record's module is private and has no [.mli]. Dune hands the library's
+; own siblings the implementation signature; so does this, by asking [ocamlc -i] for
+; it. [policy_fs.mli] and [policy_net.mli] are written against that type, so the
+; mirror needs it to type-check the public interfaces — and it stays out of
+; [mcp_caps.ml], because the package does not ship it.
+(rule
+ (targets controls_raw.mli)
+ (deps ../../lib/caps/controls_raw.ml error.cmi event.cmi budget.cmi)
+ (action
+  (with-outputs-to controls_raw.mli
+   (run sh -c
+    "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -i ../../lib/caps/controls_raw.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'"))))
+
+(rule
+ (targets controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (deps (glob_files ../../lib/caps/*.mli) mcp_caps.ml controls_raw.mli error.cmi event.cmi budget.cmi)
+ (action
+  (progn
+   (copy ../../lib/caps/tool.mli tool.mli) (copy ../../lib/caps/policy_fs.mli policy_fs.mli) (copy ../../lib/caps/policy_net.mli policy_net.mli) (copy ../../lib/caps/authority.mli authority.mli) (copy ../../lib/caps/policy.mli policy.mli) (copy ../../lib/caps/registry.mli registry.mli) (copy ../../lib/caps/server.mli server.mli)
+   (run sh -c
+    "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c controls_raw.mli tool.mli policy_fs.mli policy_net.mli authority.mli policy.mli registry.mli server.mli mcp_caps.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'"))))
 
 ; A tool registered with its grant named, and the same call with the label
 ; dropped: the second is the one that must not type-check.
 ; no_grant_label
 (rule
  (targets no_grant_label.out)
- (deps no_grant_label.ml error.cmi event.cmi budget.cmi controls.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (deps no_grant_label.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
  (action
   (with-accepted-exit-codes
    (not (or 0))
@@ -58,7 +102,7 @@
 ; mint_grant
 (rule
  (targets mint_grant.out)
- (deps mint_grant.ml error.cmi event.cmi budget.cmi controls.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (deps mint_grant.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
  (action
   (with-accepted-exit-codes
    (not (or 0))
@@ -71,7 +115,7 @@
 ; forge_confinement
 (rule
  (targets forge_confinement.out)
- (deps forge_confinement.ml error.cmi event.cmi budget.cmi controls.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (deps forge_confinement.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
  (action
   (with-accepted-exit-codes
    (not (or 0))
@@ -84,7 +128,7 @@
 ; grant_type_mismatch
 (rule
  (targets grant_type_mismatch.out)
- (deps grant_type_mismatch.ml error.cmi event.cmi budget.cmi controls.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (deps grant_type_mismatch.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
  (action
   (with-accepted-exit-codes
    (not (or 0))
@@ -98,7 +142,7 @@
 ; confinement_is_not_a_grant
 (rule
  (targets confinement_is_not_a_grant.out)
- (deps confinement_is_not_a_grant.ml error.cmi event.cmi budget.cmi controls.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (deps confinement_is_not_a_grant.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
  (action
   (with-accepted-exit-codes
    (not (or 0))
@@ -111,13 +155,102 @@
 ; mcp_kit_result
 (rule
  (targets mcp_kit_result.out)
- (deps mcp_kit_result.ml error.cmi event.cmi budget.cmi controls.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (deps mcp_kit_result.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
  (action
   (with-accepted-exit-codes
    (not (or 0))
    (with-outputs-to mcp_kit_result.out
     (run sh -c
      "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c mcp_kit_result.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
+
+; F1.2's seal, one program per way the raw operations used to be reachable. The
+; first two name the operations themselves; the next three name the bounds record
+; they take, which is the argument no consumer can fill.
+; direct_fs_operation
+(rule
+ (targets direct_fs_operation.out)
+ (deps direct_fs_operation.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to direct_fs_operation.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c direct_fs_operation.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
+
+; direct_net_operation
+(rule
+ (targets direct_net_operation.out)
+ (deps direct_net_operation.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to direct_net_operation.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c direct_net_operation.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
+
+; controls_none
+(rule
+ (targets controls_none.out)
+ (deps controls_none.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to controls_none.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c controls_none.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
+
+; controls_record_forge
+(rule
+ (targets controls_record_forge.out)
+ (deps controls_record_forge.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to controls_record_forge.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c controls_record_forge.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
+
+; controls_record_update
+(rule
+ (targets controls_record_update.out)
+ (deps controls_record_update.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to controls_record_update.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c controls_record_update.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
+
+; The seal holds a second way round, with the private module already in scope:
+; the call wants a bounds record nothing outside [lib/caps] can produce. This is
+; the half that survives inside the workspace, where dune's own build does resolve
+; a private module.
+; raw_fs_call_needs_bounds
+(rule
+ (targets raw_fs_call_needs_bounds.out)
+ (deps raw_fs_call_needs_bounds.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to raw_fs_call_needs_bounds.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c raw_fs_call_needs_bounds.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
+
+; The positive half: the intended grant path still type-checks for a consumer of
+; the package, so the seal above is a seal on the bypass and not on the seam. A
+; clean compile is the pass condition, so the compared output is empty, and
+; [with-accepted-exit-codes] is the other way round from the negative rules: here
+; a zero exit code is what is required.
+; grant_path
+(rule
+ (targets grant_path.out)
+ (deps grant_path.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (or 0)
+   (with-outputs-to grant_path.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c grant_path.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
 
 (rule
  (alias runtest)
@@ -128,4 +261,11 @@
    (diff forge_confinement.expected forge_confinement.out)
    (diff grant_type_mismatch.expected grant_type_mismatch.out)
    (diff confinement_is_not_a_grant.expected confinement_is_not_a_grant.out)
-   (diff mcp_kit_result.expected mcp_kit_result.out))))
+   (diff mcp_kit_result.expected mcp_kit_result.out)
+   (diff direct_fs_operation.expected direct_fs_operation.out)
+   (diff direct_net_operation.expected direct_net_operation.out)
+   (diff controls_none.expected controls_none.out)
+   (diff controls_record_forge.expected controls_record_forge.out)
+   (diff controls_record_update.expected controls_record_update.out)
+   (diff raw_fs_call_needs_bounds.expected raw_fs_call_needs_bounds.out)
+   (diff grant_path.expected grant_path.out))))

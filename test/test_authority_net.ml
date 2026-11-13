@@ -285,8 +285,12 @@ let eio_address address = Eio.Net.Ipaddr.of_raw (Ipaddr.to_octets (Ipaddr.of_str
 
 let endpoint ?(scheme = `Http) ?port host = { Policy.scheme; host; port }
 
-let grant_of ?controls ~env decision =
-  Authority.Net.of_confinement ?controls ~mono_clock:(Eio.Stdenv.mono_clock env) decision
+(* No [~controls]: the bounds record's module is private, so a grant's bounds are
+   whatever [of_confinement] installs plus what the [Authority] decorators change
+   afterwards — which is the point, and what the timeout and budget rows below
+   rely on. *)
+let grant_of ~env decision =
+  Authority.Net.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) decision
 
 let with_endpoints ~net ~sw ?(max_response_bytes = Policy.default_max_response_bytes) endpoints f =
   match Policy.with_endpoints ~sw ~net ~max_response_bytes endpoints with

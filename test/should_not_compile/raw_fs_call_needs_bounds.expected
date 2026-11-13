@@ -1,0 +1,5 @@
+File "raw_fs_call_needs_bounds.ml", line 17, characters 32-34:
+17 |   Policy_fs.read_file ~controls:() confinement path
+                                     ^^
+Error: This expression should not be a unit literal, the expected type is
+       "Controls_raw.t"

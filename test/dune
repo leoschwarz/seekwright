@@ -294,6 +294,49 @@
  (name test_p8_surface)
  (libraries seekwright alcotest test_support eio eio_main unix yojson))
 
+; F1.2: the audit trail and the sealing. The behavioural cases drive a loopback
+; listener and a temp directory (no billed endpoint), and the source pins read
+; the factory, the server and the capability layer's own dune file — those files
+; are deps, or the guard would be reading a tree the test did not declare.
+(test
+ (name test_caps_audit)
+ (libraries
+  seekwright
+  seekwright.factory
+  mcp-caps
+  cohttp-eio
+  http
+  uri
+  yojson
+  eio
+  eio_main
+  mirage-crypto-rng.unix
+  alcotest test_support
+  unix)
+ (deps
+  ../lib/factory/factory.ml
+  ../lib/factory/factory.mli
+  ../lib/server.ml
+  ../bin/main.ml
+  ../lib/caps/dune
+  ../lib/caps/policy_net.mli
+  ../test/should_not_compile/mcp_caps.ml))
+
+; F1.2: the operation budget. The atomicity case fans out over domains and over
+; fibers, and the scope cases need a real filesystem grant, so this suite owns an
+; Eio loop, a loopback listener and stdlib Unix for the fixture trees.
+(test
+ (name test_caps_budget)
+ (libraries
+  mcp-caps
+  cohttp-eio
+  http
+  uri
+  eio
+  eio_main
+  alcotest test_support
+  unix))
+
 ; Foundation wave A: the shared text basis (style review H1/H2). The walk and
 ; the repr pass live in [seekwright.text] and the fetch path re-exports the
 ; walk, so the suite names both libraries: pinning that the fetch path's [Utf8]
