@@ -1,0 +1,24 @@
+area: provider
+case: 149-parallel-recency-year
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.parallel.ai/v1/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"advanced_settings":{"max_results":5,"source_policy":{"after_date":"2025-10-21"}},"mode":"fast","search_queries":["mont blanc history"]}
+verdict= ok
+name= parallel
+result title=First ascent
+result url=https://one.example/first
+result snippet=-
+result uncapped=5
+result text=1786.
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.001000
+answer= -
+notice=-

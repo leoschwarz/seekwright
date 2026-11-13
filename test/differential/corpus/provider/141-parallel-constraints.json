@@ -1,0 +1,22 @@
+{
+  "provider": "parallel",
+  "query": {
+    "query": "mont blanc massif passes",
+    "max_results": 3,
+    "include_domains": [
+      "peakbagger.com"
+    ],
+    "exclude_domains": [
+      "wikipedia.org"
+    ],
+    "country": "FR",
+    "language": "DE",
+    "recency": "week",
+    "safe_search": true
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"url\": \"https://one.example/col\", \"title\": \"Col du Passon\", \"excerpts\": [\"A 2658 m saddle.\"], \"publish_date\": \"2026-01-05\"}], \"status\": \"completed\"}"
+  }
+}

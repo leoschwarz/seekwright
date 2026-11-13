@@ -863,6 +863,16 @@ let engine spec_text =
    the transport failure's message to show that none of it reaches the answer. *)
 let probe_key = "differential-probe-key-4f2a"
 
+(* The {i MCP} provider names — [exa], [exa:free], [parallel:free] — have no
+   corpus adapter here, and that is a scope decision, not an omission: the peer
+   this area scripts is one HTTP exchange (or a [pageno] table), while an
+   MCP-session adapter opens a JSON-RPC session — initialize, [tools/call], a
+   session id threaded through headers — that the oracle's [mcp] SDK client
+   will not drive over [httpx.MockTransport]. Those three names are pinned by
+   their unit suites instead, which script the session endpoint on the port
+   side and mock the SDK call on the oracle side. [parallel] rides this area
+   because its REST half is exactly the scripted exchange the peer answers. *)
+
 (* The instant a case's clock reads when it does not name one: [linkup] computes a
    [fromDate] from its own clock, and a golden must not depend on the machine's.
    The Python half freezes the oracle's [datetime] to the same instant. *)
@@ -1008,6 +1018,18 @@ let provider_adapter name ~endpoint spec =
           ~now:(fun () ->
             match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
           ~key:probe_key ~net ()
+  | "parallel" ->
+      (* The pricing preset rides the operator's [mode] table, exactly as it
+         does in the registry row, and [cost_per_1k] tracks it: a dearer mode
+         wants the matching config figure, which is what the case carries. *)
+      fun ~net () ->
+        Seekwright_providers.Parallel.make
+          ?cost_per_1k:(maybe_float "cost_per_1k" spec)
+          ?text_chars:(maybe_int "text_chars" spec)
+          ?mode:(maybe_string "mode" spec) ~key:probe_key
+          ~now:(fun () ->
+            match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
+          ~net ()
   | other -> failwith (Printf.sprintf "provider corpus has no adapter %S" other)
 
 (* The request as the wire shows it: a decoded, sorted query; the destination

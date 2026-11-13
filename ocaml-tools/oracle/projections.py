@@ -42,6 +42,7 @@ from seekwright.providers import (
     algolia,
     deepseek,
     linkup,
+    parallel,
     querit,
     scrappa,
     search1api,
@@ -927,6 +928,15 @@ def provider_case(spec_text: str) -> list[str]:
         adapter = querit.QueritProvider(client, PROBE_KEY)
     elif name == "deepseek":
         adapter = deepseek.DeepSeekProvider(client, PROBE_KEY)
+    elif name == "parallel":
+        adapter = parallel.ParallelProvider(
+            client,
+            PROBE_KEY,
+            cost_per_1k=spec.get("cost_per_1k", 1.00),
+            text_chars=spec.get("text_chars", 2000),
+            mode=spec.get("mode", "fast"),
+            timeout=30.0,
+        )
     else:
         raise AssertionError(f"provider corpus has no adapter {name!r}")
     # Linkup's [fromDate] and DeepSeek's [after:] are the dates the adapters
@@ -938,6 +948,7 @@ def provider_case(spec_text: str) -> list[str]:
     epoch = spec.get("now", 1_700_000_000.0)
     frozen_linkup = _freeze_clock(linkup, epoch)
     frozen_deepseek = _freeze_clock(deepseek, epoch)
+    frozen_parallel = _freeze_clock(parallel, epoch)
     try:
         result = asyncio.run(adapter.search(_provider_query(spec["query"])))
     except QuotaExhausted as failure:
@@ -959,6 +970,8 @@ def provider_case(spec_text: str) -> list[str]:
             linkup.datetime = frozen_linkup
         if frozen_deepseek is not None:
             deepseek.datetime = frozen_deepseek
+        if frozen_parallel is not None:
+            parallel.datetime = frozen_parallel
     return _provider_dials(sent) + ["verdict= ok"] + _provider_result(result)
 
 

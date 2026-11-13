@@ -1,0 +1,13 @@
+{
+  "provider": "parallel",
+  "mode": "advanced",
+  "cost_per_1k": 5.0,
+  "query": {
+    "query": "gravettian high altitude camps"
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"url\": \"https://one.example/camp\", \"title\": \"High camps\", \"excerpts\": [\"Altitude 3500 m.\"]}], \"status\": \"completed\"}"
+  }
+}

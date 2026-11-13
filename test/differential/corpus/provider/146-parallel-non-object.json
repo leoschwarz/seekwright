@@ -1,0 +1,11 @@
+{
+  "provider": "parallel",
+  "query": {
+    "query": "array on the wire"
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 200,
+    "body": "[\"not\", \"a\", \"result\", \"set\"]"
+  }
+}

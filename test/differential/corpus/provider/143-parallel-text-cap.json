@@ -1,0 +1,12 @@
+{
+  "provider": "parallel",
+  "text_chars": 20,
+  "query": {
+    "query": "long excerpts"
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"url\": \"https://one.example/long\", \"title\": \"Long\", \"excerpts\": [\"One long excerpt.\", \"Two long excerpt.\"]}], \"status\": \"completed\"}"
+  }
+}

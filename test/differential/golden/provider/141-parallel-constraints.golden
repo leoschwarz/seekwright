@@ -1,0 +1,24 @@
+area: provider
+case: 141-parallel-constraints
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.parallel.ai/v1/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"advanced_settings":{"location":"FR","max_results":3,"source_policy":{"after_date":"2026-10-14","exclude_domains":["wikipedia.org"],"include_domains":["peakbagger.com"]}},"mode":"fast","search_queries":["mont blanc massif passes"]}
+verdict= ok
+name= parallel
+result title=Col du Passon
+result url=https://one.example/col
+result snippet=-
+result uncapped=16
+result text=A 2658 m saddle.
+result text_truncated=-
+result published_date=2026-01-05
+result score=-
+cost_usd= 0.001000
+answer= -
+notice=parallel ignores exclude_domains while include_domains is set; that constraint was ignored; cannot filter by language; that constraint was ignored; cannot filter by safe-search; that constraint was ignored

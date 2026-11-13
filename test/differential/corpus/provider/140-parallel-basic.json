@@ -1,0 +1,11 @@
+{
+  "provider": "parallel",
+  "query": {
+    "query": "mont blanc massif passes"
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"url\": \"https://one.example/col\", \"title\": \"Col du Passon\", \"excerpts\": [\"A 2658 m saddle.\", \"Gravettian finds nearby.\"], \"publish_date\": \"2026-01-05\"}, {\"url\": \"https://two.example/dome\", \"title\": \"D\\u00f4me du Go\\u00fbter\", \"excerpts\": [\"Early ascent evidence.\"]}], \"total_tokens\": 3680, \"costUSD\": 0.0368, \"status\": \"completed\"}"
+  }
+}

@@ -126,7 +126,7 @@ let min_cases =
     ("router", 7);
     ("model", 7);
     ("engine", 10);
-    ("provider", 105);
+    ("provider", 115);
   ]
 
 let projection area =

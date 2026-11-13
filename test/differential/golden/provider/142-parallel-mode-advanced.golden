@@ -1,0 +1,24 @@
+area: provider
+case: 142-parallel-mode-advanced
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.parallel.ai/v1/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"advanced_settings":{"max_results":5},"mode":"advanced","search_queries":["gravettian high altitude camps"]}
+verdict= ok
+name= parallel
+result title=High camps
+result url=https://one.example/camp
+result snippet=-
+result uncapped=16
+result text=Altitude 3500 m.
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.005000
+answer= -
+notice=-

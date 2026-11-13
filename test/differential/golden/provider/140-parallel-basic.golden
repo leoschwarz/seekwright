@@ -1,0 +1,32 @@
+area: provider
+case: 140-parallel-basic
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.parallel.ai/v1/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"advanced_settings":{"max_results":5},"mode":"fast","search_queries":["mont blanc massif passes"]}
+verdict= ok
+name= parallel
+result title=Col du Passon
+result url=https://one.example/col
+result snippet=-
+result uncapped=41
+result text=A 2658 m saddle. Gravettian finds nearby.
+result text_truncated=-
+result published_date=2026-01-05
+result score=-
+result title=D\u00f4me du Go\u00fbter
+result url=https://two.example/dome
+result snippet=-
+result uncapped=22
+result text=Early ascent evidence.
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.001000
+answer= -
+notice=-

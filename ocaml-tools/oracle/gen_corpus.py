@@ -2171,6 +2171,189 @@ PROVIDER_CASES: dict[str, dict[str, Any]] = {
         "now": 1_792_540_800.0,
         "response": {"status": 200, "body": _body({"results": []})},
     },
+    # {7 Parallel (REST half): POST JSON, the key in an [x-api-key] header; a
+    # content backend whose excerpts join into [text], billed per request by
+    # [mode] rather than by result count. The MCP halves — [exa], [exa:free],
+    # [parallel:free] — have no case here: this area scripts one HTTP exchange,
+    # which the oracle's MCP SDK client will not drive over a mock transport,
+    # and those names are pinned by their unit suites instead.
+    "140-parallel-basic": {
+        # Excerpts join with a blank line into [text], [publish_date] passes
+        # through, and [costUSD] on the wire is ignored: the cost the record
+        # carries is the mode preset, flat per request.
+        "provider": "parallel",
+        "query": {"query": "mont blanc massif passes"},
+        "now": 1_792_540_800.0,
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {
+                            "url": "https://one.example/col",
+                            "title": "Col du Passon",
+                            "excerpts": ["A 2658 m saddle.", "Gravettian finds nearby."],
+                            "publish_date": "2026-01-05",
+                        },
+                        {
+                            "url": "https://two.example/dome",
+                            "title": "Dôme du Goûter",
+                            "excerpts": ["Early ascent evidence."],
+                        },
+                    ],
+                    "total_tokens": 3680,
+                    "costUSD": 0.0368,
+                    "status": "completed",
+                }
+            ),
+        },
+    },
+    "141-parallel-constraints": {
+        # Domains and [after_date] ride [source_policy], country [location];
+        # exclude-while-include is sent but ignored upstream, and the notice
+        # says so — the hand-composed sentence, not [ignored_constraints].
+        # [after_date] is the date this adapter computes, so the clock is pinned.
+        "provider": "parallel",
+        "query": {
+            "query": "mont blanc massif passes",
+            "max_results": 3,
+            "include_domains": ["peakbagger.com"],
+            "exclude_domains": ["wikipedia.org"],
+            "country": "FR",
+            "language": "DE",
+            "recency": "week",
+            "safe_search": True,
+        },
+        "now": 1_792_540_800.0,
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {
+                            "url": "https://one.example/col",
+                            "title": "Col du Passon",
+                            "excerpts": ["A 2658 m saddle."],
+                            "publish_date": "2026-01-05",
+                        }
+                    ],
+                    "status": "completed",
+                }
+            ),
+        },
+    },
+    "142-parallel-mode-advanced": {
+        # The pricing preset is operator config and lands verbatim in the body;
+        # a dearer mode wants the matching [cost_per_1k] in config, and the
+        # per-query figure follows it.
+        "provider": "parallel",
+        "mode": "advanced",
+        "cost_per_1k": 5.00,
+        "query": {"query": "gravettian high altitude camps"},
+        "now": 1_792_540_800.0,
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {"url": "https://one.example/camp", "title": "High camps", "excerpts": ["Altitude 3500 m."]}
+                    ],
+                    "status": "completed",
+                }
+            ),
+        },
+    },
+    "143-parallel-text-cap": {
+        # A content backend: the joined excerpts are capped at [text_chars], the
+        # dropped length rides [uncapped], and the joiner counts inside the cap.
+        "provider": "parallel",
+        "text_chars": 20,
+        "query": {"query": "long excerpts"},
+        "now": 1_792_540_800.0,
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {
+                            "url": "https://one.example/long",
+                            "title": "Long",
+                            "excerpts": ["One long excerpt.", "Two long excerpt."],
+                        }
+                    ],
+                    "status": "completed",
+                }
+            ),
+        },
+    },
+    "144-parallel-payment-required": {
+        # 402 is Parallel's "out of credits", spelled alongside 429 in one
+        # sentence, and the error body is never echoed.
+        "provider": "parallel",
+        "query": {"query": "out of credits"},
+        "now": 1_792_540_800.0,
+        "response": {"status": 402, "body": _body({"detail": "payment required"})},
+    },
+    "145-parallel-warnings": {
+        # The upstream [warnings] array is echoed into the notice beside the
+        # ignored language and safe-search sentences; entries with no readable
+        # [message] are dropped.
+        "provider": "parallel",
+        "query": {"query": "quiet query", "language": "DE", "safe_search": False},
+        "now": 1_792_540_800.0,
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [],
+                    "warnings": [
+                        {"code": "UNKNOWN_FIELD", "message": "advanced_settings.location ignored"},
+                        {"code": "NOOP"},
+                        {"message": " "},
+                    ],
+                    "status": "completed",
+                }
+            ),
+        },
+    },
+    "146-parallel-non-object": {
+        # A JSON array on the wire is not a result set: an empty answer, not a
+        # failure — the same reading the other content adapters give.
+        "provider": "parallel",
+        "query": {"query": "array on the wire"},
+        "now": 1_792_540_800.0,
+        "response": {"status": 200, "body": '["not", "a", "result", "set"]'},
+    },
+    "147-parallel-auth-rejected": {
+        "provider": "parallel",
+        "query": {"query": "bad key"},
+        "now": 1_792_540_800.0,
+        "response": {"status": 401, "body": _body({"detail": "unauthorized"})},
+    },
+    "148-parallel-rate-limited": {
+        "provider": "parallel",
+        "query": {"query": "too fast"},
+        "now": 1_792_540_800.0,
+        "response": {"status": 429, "body": _body({"detail": "rate limit exceeded"})},
+    },
+    "149-parallel-recency-year": {
+        # 365 days, fixed-length years: coarse freshness, not calendar
+        # arithmetic — the pinned clock answers 2022-11-14.
+        "provider": "parallel",
+        "query": {"query": "mont blanc history", "recency": "year"},
+        "now": 1_792_540_800.0,
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {"url": "https://one.example/first", "title": "First ascent", "excerpts": ["1786."]}
+                    ],
+                    "status": "completed",
+                }
+            ),
+        },
+    },
 }
 
 

@@ -1,0 +1,11 @@
+{
+  "provider": "parallel",
+  "query": {
+    "query": "too fast"
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 429,
+    "body": "{\"detail\": \"rate limit exceeded\"}"
+  }
+}

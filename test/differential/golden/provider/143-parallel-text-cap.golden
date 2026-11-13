@@ -1,0 +1,24 @@
+area: provider
+case: 143-parallel-text-cap
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.parallel.ai/v1/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"advanced_settings":{"max_results":5},"mode":"fast","search_queries":["long excerpts"]}
+verdict= ok
+name= parallel
+result title=Long
+result url=https://one.example/long
+result snippet=-
+result uncapped=35
+result text=One long excerpt.
+result text_truncated=true
+result published_date=-
+result score=-
+cost_usd= 0.001000
+answer= -
+notice=-

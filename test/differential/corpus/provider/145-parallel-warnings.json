@@ -1,0 +1,13 @@
+{
+  "provider": "parallel",
+  "query": {
+    "query": "quiet query",
+    "language": "DE",
+    "safe_search": false
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [], \"warnings\": [{\"code\": \"UNKNOWN_FIELD\", \"message\": \"advanced_settings.location ignored\"}, {\"code\": \"NOOP\"}, {\"message\": \" \"}], \"status\": \"completed\"}"
+  }
+}

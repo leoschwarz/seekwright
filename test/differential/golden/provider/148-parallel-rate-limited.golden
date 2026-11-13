@@ -1,0 +1,15 @@
+area: provider
+case: 148-parallel-rate-limited
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.parallel.ai/v1/search
+query= 
+headers= content-type=application/json,x-api-key=sentinel
+body= {"advanced_settings":{"max_results":5},"mode":"fast","search_queries":["too fast"]}
+verdict= error
+kind= quota
+retryable= false
+message= rate limited or out of credits

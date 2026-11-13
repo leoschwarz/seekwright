@@ -1,0 +1,12 @@
+{
+  "provider": "parallel",
+  "query": {
+    "query": "mont blanc history",
+    "recency": "year"
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"url\": \"https://one.example/first\", \"title\": \"First ascent\", \"excerpts\": [\"1786.\"]}], \"status\": \"completed\"}"
+  }
+}
