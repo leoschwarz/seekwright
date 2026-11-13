@@ -1,0 +1,10 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"application-baseline","version":"1"}}}
+{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}
+{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search","arguments":{}}}
+{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"search","arguments":{"query":"x"}}}
+{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"search","arguments":{"query":"valid query","provider":"no-such-provider"}}}
+{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"fetch","arguments":{"url":"not-a-url"}}}
+{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"fetch","arguments":{"url":"http://127.0.0.1/"}}}
+{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"answer","arguments":{"query":"what is the capital of France"}}}
+{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"unknown_tool","arguments":{}}}
+{"jsonrpc":"2.0","id":9,"method":"server/discover","params":{"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}}}

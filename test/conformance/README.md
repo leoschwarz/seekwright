@@ -1,10 +1,16 @@
-# Conformance: the official MCP runner against an mcp-caps server
+# Conformance: the official MCP runner against the fixture and the application
 
-This directory holds the live conformance fixture and its gates
-(`plans/capability-gated-mcp-server.md` §8, "Wire tests and official
-conformance"). Nothing here runs under plain `dune runtest` except the stdio
-transcript rule at the bottom: the live job needs Node and an npm fetch, so the
-Python suite's hermeticity rule holds on the OCaml side too.
+This directory holds two live baselines over the same pinned runner, plus the
+hermetic transcripts that run under plain `dune runtest`. The first
+(`run_live.sh`, below) scores the mcp-caps conformance fixture. The second
+(`run_live_application.sh`, "The application baseline") scores the real
+`bin/main.exe` by *applicability to seekwright's three-tool surface*, because
+counting how many of the runner's fixture-shaped scenarios an application
+passes measures resemblance, not conformance.
+
+Nothing here runs under plain `dune runtest` except the stdio transcript rules
+at the bottom: the live jobs need Node and an npm fetch, so the Python suite's
+hermeticity rule holds on the OCaml side too.
 
 ## What is pinned, and by which file
 
@@ -15,6 +21,8 @@ Python suite's hermeticity rule holds on the OCaml side too.
 | required scenario set | 37 IDs, verified equal to `conformance list --server --requirements 2026-07-28` | `requirements-2026-07-28-server.txt` |
 | unscored scenarios the same command also runs | 13 (ten `tasks-*` extension, `json-schema-2020-12`, `http-header-validation`, `http-custom-header-server-validation`) | parsed out of `runner-list.stdout` by the comparator |
 | failure baseline | 18 scenarios, each naming its failing check IDs with a cause and a reason | `expected-failures-2026-07-28-server.json` |
+| application classification | every scored and unscored check, classed `applicable` or excluded and carrying its recorded status | `application-classification-2026-07-28-server.json` |
+| application comparator | fail-closed applicability gate; no expected-failures list | `compare_application.py` |
 
 `run_live.sh` fails closed: exact required-ID equality (no missing, extra or
 duplicate), then a required gate and a pending gate that treat an unexpected
@@ -102,6 +110,103 @@ capability state that the layer declares neither (§0 non-goals, §3); and the
 that file means "this layer's declared v1 surface has no constructor for it",
 never "mcp-kit fails it" — the control row shows mcp-kit passing all 37.
 
+## The application baseline
+
+`run_live_application.sh` points the same 50-scenario runner at
+`bin/main.exe --http`, then scores it through
+`application-classification-2026-07-28-server.json` and `compare_application.py`
+instead of an expected-failures list. The question is not "how much of the
+fixture's surface does seekwright resemble" — it deliberately has none of it —
+but "is the surface it *does* declare MCP-conformant".
+
+Every check carries one class:
+
+| Class | Meaning | Gate |
+|---|---|---|
+| `applicable` | An obligation of the three-tool surface or the transport | must pass |
+| `fixture-declaration` | Needs a tool, resource, prompt or annotation only the official fixture declares | recorded status must not change |
+| `absent-feature` | Needs a capability outside the frozen surface (resources, prompts, rich content, progress, MRTR, completion, tasks) | recorded status must not change |
+| `oracle-parity` | Fails identically in the Python implementation, so it distinguishes nothing | recorded status must not change |
+| `port-divergence` | Fails where the Python implementation behaves differently; excluded here, reported in the plan | recorded status must not change, under protest |
+
+A scenario is `applicable` (all its checks are obligations), `mixed` (some
+applicable checks among exclusions), `fixture-declaration` or `absent-feature`.
+The gate is fail-closed in both directions: every applicable check must pass,
+and every excluded check must still have exactly the status the baseline
+recorded. The runner's scored 37 and unscored 13 must also still be exactly the
+classified sets, with exactly the classified check IDs per scenario — a runner
+upgrade or a renamed check fails rather than shrinking the baseline.
+
+### Measured 2026-11-13
+
+Same machine (`vps-01`), same switch, same pinned runner as the fixture rows.
+
+| Measure | Result |
+|---|---|
+| scored by the runner (`--requirements 2026-07-28`) | 8 pass / 29 fail of 37 — **not the gate, see below** |
+| applicable checks | **90 / 90** (89 `SUCCESS` + 1 `INFO` from the optional-SSE check), 0 failures |
+| scenario classes | 4 `applicable`, 3 `mixed`, 4 `fixture-declaration`, 39 `absent-feature` |
+| check classes | 90 `applicable`, 73 `absent-feature`, 12 `fixture-declaration`, 1 `oracle-parity`, 1 `port-divergence` |
+| gate | pass |
+
+The four `applicable` scenarios all pass: `tools-list` (three tools, valid
+names, valid wire schema), `server-sse-multiple-streams` (three concurrent POST
+streams), `sep-2164-resource-not-found` (no empty contents, `-32602`, the URI in
+`error.data`) and `http-header-validation` (14 checks: malformed method/name
+headers rejected with the right code, whitespace values accepted, header names
+case-insensitive). The runner leaves the last one unscored for 2026-07-28; it is
+still an obligation here. The three `mixed` scenarios — `server-stateless`,
+`caching` and `dns-rebinding-protection` — contribute their applicable checks to
+the 90, and their exclusions are in the classification.
+
+The raw 8/37 is written into `application-report.json` as a footnote, not a
+score. Four scenarios the runner itself calls passing are **excluded**:
+`resources-list` and `prompts-list` pass because mcp-kit answers an empty list,
+and `input-required-result-unsupported-methods` and
+`input-required-result-validate-input` pass because the unknown tool is refused
+with `-32602` before any input-required path exists. An empty list and an error
+path are not features. Reporting 8/37, or 12/37 by adding those four, would
+misdescribe both the application and the runner.
+
+### The two recorded differences
+
+- **`oracle-parity`, `localhost-host-valid-accepted`.** The runner sends
+  `Origin: http://127.0.0.1:8811`; both implementations allowlist bare loopback
+  origins (`http://127.0.0.1`) and answer 403. The Python oracle fails this
+  check identically, so it says nothing about the port. (The check also hardcodes
+  port 8811 rather than the server's URL; a real client on a non-8811 port would
+  hit the same 403 in both trees.)
+- **`port-divergence`, `sep-2575-server-declares-prompts-in-discover`.** The
+  OCaml server answers `prompts/list` and `resources/list` with empty arrays but
+  its `server/discover` result declares only `tools`; the Python server's
+  `MCPServer` declares `prompts` and `resources` as well. mcp-kit 0.2.0's
+  `Server.of_registry` answers the list methods without adding the capability,
+  so declaration and behaviour disagree on this port. Neither the mcp-kit
+  dependency nor `lib/server.ml` is in F3.3's ownership; the difference is
+  recorded here and in `plans/seekwright-ocaml-port.md` §F3.3.
+
+### Running it
+
+```sh
+export PATH="$HOME/.local/opt/node22/bin:$PATH"
+dune build bin/main.exe
+test/conformance/run_live_application.sh /tmp/seekwright-application-conformance
+```
+
+The script starts the application on a free loopback port with a config that
+builds only `freeserp`, uses the `stdlib` extractor and sets
+`search.health_interval_seconds = 0`, so **no provider endpoint is contacted**
+during the run. It records the commit, the working-tree status, the runner
+version, the announced URL, the server's stderr, the raw runner stdout and one
+`checks.json` per scenario, then writes `application-report.json`. The hermetic
+half of the same evidence is `application_transcript.jsonl`: the runner-shaped
+tool calls (missing argument, too-short string, out-of-enum provider, non-URL,
+private address, agent disabled, unknown tool) and a modern `server/discover`
+replayed through the real binary over stdio, with the answers pinned as
+`application_transcript.expected` and an empty stderr as
+`application_transcript_notes.expected`. `dune runtest` runs it; nothing in it
+opens a socket.
+
 ## The stdio half
 
 `conformance server` takes `--url` and nothing else: the pinned official runner
@@ -159,3 +264,9 @@ switch installs is
 (the `mcp-kit.0.2.0` opam entry). The control fixture is that archive's own
 `test/conformance/{server,multiple_inputs_fixture,multi_round_fixture}.ml`
 built unmodified in a scratch dune project; it is not committed here.
+
+`compare_application.py`, `application-classification-2026-07-28-server.json`,
+`run_live_application.sh`, `application.toml` and `application_transcript.*`
+are this branch's own (F3.3); they reuse the pinned runner and, through
+`compare_results.py`, its list parsing and `checks.json` reader, but no upstream
+file was modified.

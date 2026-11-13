@@ -1,0 +1,1133 @@
+{
+  "_comment": [
+    "Applicability baseline for the pinned MCP conformance runner against bin/main.exe.",
+    "Read by compare_application.py; every check names its class, the status this run",
+    "observed, and why it is or is not an obligation of seekwright's three-tool surface.",
+    "An applicable check must pass; an excluded check must keep its recorded status.",
+    "oracle-parity means the Python implementation fails identically; port-divergence",
+    "means it behaves differently and the difference is recorded, not silently excluded.",
+    "Recorded 2026-11-13 from the run described in README.md, 'The application baseline'."
+  ],
+  "runner": {
+    "package": "@modelcontextprotocol/conformance",
+    "version": "0.2.0-alpha.11",
+    "requirements": "2026-07-28"
+  },
+  "classes": {
+    "applicable": "An obligation of the three-tool surface or the transport; must pass.",
+    "mixed": "A scenario whose checks are split between applicable obligations and exclusions.",
+    "fixture-declaration": "Needs a tool, resource, prompt or annotation only the official fixture declares.",
+    "absent-feature": "Needs a capability outside the frozen surface (resources, prompts, rich content, progress, MRTR, completion, tasks).",
+    "oracle-parity": "A failing check the Python implementation fails identically, so it cannot distinguish the port.",
+    "port-divergence": "A failing check where the Python implementation behaves differently; excluded from the three-tool contract but recorded as a known difference."
+  },
+  "scenarios": {
+    "caching": {
+      "class": "mixed",
+      "reason": "Caching hints on tools/list are applicable; the sibling checks exercise prompts/resources list methods that are outside the three-tool surface, even though the adapter answers them.",
+      "checks": {
+        "sep-2549-tools-list-caching-hints": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "tools/list is the server's own surface and it carries ttlMs and cacheScope."
+        },
+        "sep-2549-prompts-list-caching-hints": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "prompts/list is outside the surface; its empty response still carries valid hints."
+        },
+        "sep-2549-resources-list-caching-hints": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "resources/list is outside the surface; its empty response still carries valid hints."
+        },
+        "sep-2549-resources-templates-list-caching-hints": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "resources/templates/list is outside the surface; its empty response still carries valid hints."
+        },
+        "sep-2549-resources-read-caching-hints": {
+          "class": "absent-feature",
+          "expect": "SKIPPED",
+          "reason": "resources/read was not exercised because no resource exists."
+        },
+        "sep-2549-ttl-non-negative": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "Every advertised ttlMs, including tools/list, is a non-negative integer."
+        },
+        "sep-2549-cache-scope-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "Every advertised cacheScope, including tools/list, is public or private."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "completion-complete": {
+      "class": "absent-feature",
+      "reason": "completion/complete is a server utility outside the three-tool surface; seekwright declares no completions capability and correctly answers method-not-found.",
+      "checks": {
+        "completion-complete": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "completion/complete is a server utility outside the three-tool surface; seekwright declares no completions capability and correctly answers method-not-found."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "dns-rebinding-protection": {
+      "class": "mixed",
+      "reason": "Rejecting a non-local Host/Origin is an applicable transport obligation; accepting a loopback Host with a port-bearing Origin fails identically in the Python implementation, so that check is oracle parity.",
+      "checks": {
+        "localhost-host-rebinding-rejected": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "A non-local Host/Origin is refused with 403 before the request reaches the MCP handler; this is the transport's DNS-rebinding obligation."
+        },
+        "localhost-host-valid-accepted": {
+          "class": "oracle-parity",
+          "expect": "FAILURE",
+          "reason": "The runner sends Origin http://127.0.0.1:8811; both implementations seed their Origin allowlist with bare loopback origins (http://127.0.0.1) and refuse the port-bearing Origin with 403. Measured against the Python oracle with the same runner: identical failure, so it does not distinguish the port."
+        }
+      }
+    },
+    "input-required-result-basic-elicitation": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 input-required results (MRTR) are outside the frozen surface; the server has no input-required tool and never emits the result type.",
+      "checks": {
+        "sep-2322-elicitation-incomplete": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 input-required results (MRTR) are outside the frozen surface; the server has no input-required tool and never emits the result type."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-basic-list-roots": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 roots during a tool call are outside the frozen surface.",
+      "checks": {
+        "sep-2322-list-roots-incomplete": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 roots during a tool call are outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-basic-sampling": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 sampling during a tool call is outside the frozen surface.",
+      "checks": {
+        "sep-2322-sampling-incomplete": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 sampling during a tool call is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-capability-check": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 capability checks around input-required results are outside the frozen surface.",
+      "checks": {
+        "sep-2322-respect-client-capabilities": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 capability checks around input-required results are outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-ignore-extra-params": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 tolerance of extra params is outside the frozen surface.",
+      "checks": {
+        "sep-2322-ignore-unexpected-params": {
+          "class": "absent-feature",
+          "expect": "WARNING",
+          "reason": "SEP-2322 tolerance of extra params is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-missing-input-response": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 re-requesting on a missing input response is outside the frozen surface.",
+      "checks": {
+        "sep-2322-missing-response-rerequests": {
+          "class": "absent-feature",
+          "expect": "WARNING",
+          "reason": "SEP-2322 re-requesting on a missing input response is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-multi-round": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 multi-round input is outside the frozen surface.",
+      "checks": {
+        "sep-2322-multi-round-r1": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 multi-round input is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-multiple-input-requests": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 multiple input requests are outside the frozen surface.",
+      "checks": {
+        "sep-2322-multiple-inputs-incomplete": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 multiple input requests are outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-non-tool-request": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 input-required results on non-tool requests are outside the frozen surface.",
+      "checks": {
+        "sep-2322-non-tool-incomplete": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 input-required results on non-tool requests are outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-request-state": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 request state is outside the frozen surface.",
+      "checks": {
+        "sep-2322-request-state-incomplete": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 request state is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-result-type": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 result-type extension is outside the frozen surface.",
+      "checks": {
+        "sep-2322-result-type-included": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 result-type extension is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-tampered-state": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 tampered request state is outside the frozen surface.",
+      "checks": {
+        "sep-2322-reject-tampered-state": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "SEP-2322 tampered request state is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-unsupported-methods": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 input-required results are outside the frozen surface; the negative check passes because no such result is ever produced.",
+      "checks": {
+        "sep-2322-not-on-unsupported-requests": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "Passes because the server never emits an input-required result on any method; the property holds without implementing SEP-2322."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "input-required-result-validate-input": {
+      "class": "absent-feature",
+      "reason": "SEP-2322 input-response validation is outside the frozen surface; the two checks pass on the error path before any input-required result exists.",
+      "checks": {
+        "sep-2322-validate-input-responses": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "The runner's malformed tool call is rejected with -32602 before any input-required path exists; passing is error-path evidence, not MRTR support."
+        },
+        "sep-2322-error-on-protocol-error": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "The same -32602 rejection satisfies the protocol-error check; passing is error-path evidence, not MRTR support."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "prompts-get-embedded-resource": {
+      "class": "absent-feature",
+      "reason": "Prompt content with embedded resources is outside the three-tool surface.",
+      "checks": {
+        "prompts-get-embedded-resource": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Prompt content with embedded resources is outside the three-tool surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "prompts-get-simple": {
+      "class": "absent-feature",
+      "reason": "prompts/get is outside the three-tool surface and no prompt is declared.",
+      "checks": {
+        "prompts-get-simple": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "prompts/get is outside the three-tool surface and no prompt is declared."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "prompts-get-with-args": {
+      "class": "absent-feature",
+      "reason": "prompts/get with arguments is outside the three-tool surface.",
+      "checks": {
+        "prompts-get-with-args": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "prompts/get with arguments is outside the three-tool surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "prompts-get-with-image": {
+      "class": "absent-feature",
+      "reason": "Prompt content with images is outside the three-tool surface.",
+      "checks": {
+        "prompts-get-with-image": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Prompt content with images is outside the three-tool surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "prompts-list": {
+      "class": "absent-feature",
+      "reason": "Prompts are outside the three-tool surface; the empty list is mcp-kit's answer.",
+      "checks": {
+        "prompts-list": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "Passes because mcp-kit answers prompts/list with an empty array; an empty list is not evidence of a prompt surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "resources-list": {
+      "class": "absent-feature",
+      "reason": "No resources capability is declared; the empty list is mcp-kit's answer, not a resource surface.",
+      "checks": {
+        "resources-list": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "Passes because mcp-kit answers resources/list with an empty array; an empty list is not evidence of a resource surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "resources-read-binary": {
+      "class": "absent-feature",
+      "reason": "Binary resources are outside the three-tool surface.",
+      "checks": {
+        "resources-read-binary": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Binary resources are outside the three-tool surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "resources-read-text": {
+      "class": "absent-feature",
+      "reason": "resources/read is outside the three-tool surface and no resource is declared.",
+      "checks": {
+        "resources-read-text": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "resources/read is outside the three-tool surface and no resource is declared."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "resources-templates-read": {
+      "class": "absent-feature",
+      "reason": "Resource templates are outside the three-tool surface.",
+      "checks": {
+        "resources-templates-read": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Resource templates are outside the three-tool surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "sep-2164-resource-not-found": {
+      "class": "applicable",
+      "reason": "The error shape for a resource that does not exist (no empty contents, -32602, the URI in error data) is a protocol obligation, and the server answers it correctly without declaring any resources.",
+      "checks": {
+        "sep-2164-no-empty-contents": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2164-error-code": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2164-data-uri": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "server-sse-multiple-streams": {
+      "class": "applicable",
+      "reason": "Transport obligation: the listener accepts concurrent POST streams and answers valid JSON; SSE is optional, so the stream-shape check is INFO.",
+      "checks": {
+        "server-accepts-multiple-post-streams": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "server-sse-streams-functional": {
+          "class": "applicable",
+          "expect": "INFO"
+        }
+      }
+    },
+    "server-stateless": {
+      "class": "mixed",
+      "reason": "Generic stateless-transport obligations (request _meta, discover, version and header errors, 404 for removed methods) apply; the scenario also drives fixture-named diagnostics and subscription checks for a stream this server does not declare, so each check is classified on its own.",
+      "checks": {
+        "sep-2575-request-meta-invalid-missing-meta": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-meta-invalid-400": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "count": 3
+        },
+        "sep-2575-request-meta-invalid-missing-protocol-version": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-request-meta-invalid-missing-client-capabilities": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-request-meta-client-info-optional": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-server-implements-discover": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-server-identifies-in-result-meta": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-server-declares-prompts-in-discover": {
+          "class": "port-divergence",
+          "expect": "FAILURE",
+          "reason": "The OCaml server answers prompts/list and resources/list with empty lists but its discover result declares only tools; the Python server's MCPServer declares prompts and resources (also empty). mcp-kit 0.2.0's Server.of_registry answers the list methods without adding the capability, so the discover declaration and the answered methods disagree on this port. Outside lib/ ownership; recorded as a port divergence."
+        },
+        "sep-2575-discover-capabilities-match-handlers": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-server-unsupported-version-error": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-unsupported-version-400": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-header-mismatch-400": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-server-rejects-undeclared-capability": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Requires the runner's diagnostic tool test_missing_capability, which no seekwright deployment declares."
+        },
+        "sep-2575-missing-capability-http-400": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Same prerequisite tool as sep-2575-server-rejects-undeclared-capability: the runner cannot drive the -32021 status without test_missing_capability."
+        },
+        "sep-2575-http-server-method-not-found-404-initialize": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-method-not-found-404-ping": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-method-not-found-404-logging-setlevel": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-method-not-found-404-resources-subscribe": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-method-not-found-404-resources-unsubscribe": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-method-not-found-404": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2575-http-server-no-independent-requests-on-stream": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Requires test_streaming_elicitation, which answers an input-required result mid-call; the tool is absent, and MRTR is outside the frozen surface."
+        },
+        "sep-2575-server-no-log-without-loglevel": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Requires the runner's diagnostic tool test_logging_tool."
+        },
+        "sep-2575-server-sends-subscription-ack": {
+          "class": "absent-feature",
+          "expect": "SKIPPED",
+          "reason": "SEP-2575 subscriptions/listen is not declared; the scenario skips the whole subscription group."
+        },
+        "sep-2575-server-tags-subscription-id": {
+          "class": "absent-feature",
+          "expect": "SKIPPED",
+          "reason": "Same absent subscriptions/listen stream as sep-2575-server-sends-subscription-ack."
+        },
+        "sep-2575-server-honors-notification-filter": {
+          "class": "absent-feature",
+          "expect": "SKIPPED",
+          "reason": "Same absent subscriptions/listen stream as sep-2575-server-sends-subscription-ack."
+        },
+        "sep-2575-server-sends-prompts-list-changed-on-subscription": {
+          "class": "absent-feature",
+          "expect": "SKIPPED",
+          "reason": "Prompts are outside the three-tool surface, and no subscriptions/listen stream is declared."
+        },
+        "sep-2575-server-sends-tools-list-changed-on-subscription": {
+          "class": "absent-feature",
+          "expect": "SKIPPED",
+          "reason": "No subscriptions/listen stream is declared, so list-change notifications are not exercised."
+        },
+        "sep-2575-http-server-error-jsonrpc-id": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        }
+      }
+    },
+    "tools-call-audio": {
+      "class": "absent-feature",
+      "reason": "Audio content is outside the port's declared tool-output surface.",
+      "checks": {
+        "tools-call-audio": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Audio content is outside the port's declared tool-output surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tools-call-embedded-resource": {
+      "class": "absent-feature",
+      "reason": "Embedded resource content is outside the port's declared tool-output surface.",
+      "checks": {
+        "tools-call-embedded-resource": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Embedded resource content is outside the port's declared tool-output surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tools-call-error": {
+      "class": "fixture-declaration",
+      "reason": "Calls test_error_handling; a failing tool is within the surface, only the fixture name is missing.",
+      "checks": {
+        "tools-call-error": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Calls test_error_handling; a failing tool is within the surface, only the fixture name is missing."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tools-call-image": {
+      "class": "absent-feature",
+      "reason": "The scenario's tool returns image content; rich content is outside this port's declared output surface (the runner's fixture tool is also absent).",
+      "checks": {
+        "tools-call-image": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The scenario's tool returns image content; rich content is outside this port's declared output surface (the runner's fixture tool is also absent)."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tools-call-mixed-content": {
+      "class": "absent-feature",
+      "reason": "Mixed content types are outside the port's declared tool-output surface.",
+      "checks": {
+        "tools-call-mixed-content": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Mixed content types are outside the port's declared tool-output surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tools-call-simple-text": {
+      "class": "fixture-declaration",
+      "reason": "Calls test_simple_text, a tool only the official fixture declares.",
+      "checks": {
+        "tools-call-simple-text": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Calls test_simple_text, a tool only the official fixture declares."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tools-call-with-progress": {
+      "class": "absent-feature",
+      "reason": "Progress notifications during a tool call are outside the frozen surface.",
+      "checks": {
+        "tools-call-with-progress": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Progress notifications during a tool call are outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tools-list": {
+      "class": "applicable",
+      "reason": "The server's own tool surface: three tools with valid names and valid wire schemas.",
+      "checks": {
+        "tools-list": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "tools-name-format": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    }
+  },
+  "unscored": {
+    "http-custom-header-server-validation": {
+      "class": "fixture-declaration",
+      "reason": "Requires a tool with x-mcp-header annotations; the runner's own fixture tool test_custom_header is absent.",
+      "checks": {
+        "sep-2243-server-no-xmcp-tool": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Requires a tool with x-mcp-header annotations; the runner's own fixture tool test_custom_header is absent."
+        },
+        "sep-2243-server-decode-base64": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Requires a tool with x-mcp-header annotations; the runner's own fixture tool test_custom_header is absent."
+        },
+        "sep-2243-server-validate-param-match": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Requires a tool with x-mcp-header annotations; the runner's own fixture tool test_custom_header is absent."
+        },
+        "sep-2243-server-reject-invalid-param-chars": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Requires a tool with x-mcp-header annotations; the runner's own fixture tool test_custom_header is absent."
+        },
+        "sep-2243-server-reject-param-mismatch": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Requires a tool with x-mcp-header annotations; the runner's own fixture tool test_custom_header is absent."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "http-header-validation": {
+      "class": "applicable",
+      "reason": "Transport obligation: malformed method/name headers are rejected with the right code, whitespace header values are accepted, and header names are case-insensitive. The runner leaves this scenario unscored for 2026-07-28, but it is a real obligation here.",
+      "checks": {
+        "sep-2243-server-reject-invalid-headers": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "count": 5
+        },
+        "sep-2243-server-reject-error-code": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "count": 5
+        },
+        "sep-2243-server-accepts-whitespace-header-value": {
+          "class": "applicable",
+          "expect": "SUCCESS"
+        },
+        "sep-2243-header-name-case-insensitive": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "count": 2
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "json-schema-2020-12": {
+      "class": "fixture-declaration",
+      "reason": "Calls json_schema_2020_12_tool; the server supports arbitrary input schemas but does not declare the runner's fixture tool.",
+      "checks": {
+        "json-schema-2020-12-tool-found": {
+          "class": "fixture-declaration",
+          "expect": "FAILURE",
+          "reason": "Calls json_schema_2020_12_tool; the server supports arbitrary input schemas but does not declare the runner's fixture tool."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-capability-negotiation": {
+      "class": "absent-feature",
+      "reason": "The tasks extension (SEP-2663) is outside the frozen surface; seekwright declares no extension and answers tasks/* as method-not-found.",
+      "checks": {
+        "tasks-extension-advertised": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension (SEP-2663) is outside the frozen surface; seekwright declares no extension and answers tasks/* as method-not-found."
+        },
+        "sep-2663-tasks-methods-non-declaring": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension (SEP-2663) is outside the frozen surface; seekwright declares no extension and answers tasks/* as method-not-found."
+        },
+        "sep-2663-server-rejects-undeclared-client": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension (SEP-2663) is outside the frozen surface; seekwright declares no extension and answers tasks/* as method-not-found."
+        },
+        "tasks-per-request-meta-opt-in": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension (SEP-2663) is outside the frozen surface; seekwright declares no extension and answers tasks/* as method-not-found."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-dispatch-and-envelope": {
+      "class": "absent-feature",
+      "reason": "The tasks extension is outside the frozen surface; the checks that pass do so because the methods are absent, not because tasks work.",
+      "checks": {
+        "sep-2663-tasks-result-removed-method-not-found": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "Passes because tasks/result is not a method on this server; the removed-method property holds without the extension."
+        },
+        "tasks-removed-tasks-list": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "Passes because tasks/list is not a method on this server; the removed-method property holds without the extension."
+        },
+        "tasks-server-directed-creation-no-hint": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the checks that pass do so because the methods are absent, not because tasks work."
+        },
+        "sep-2663-legacy-task-param-ignored": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the checks that pass do so because the methods are absent, not because tasks work."
+        },
+        "tasks-immediate-result-shortcut": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the checks that pass do so because the methods are absent, not because tasks work."
+        },
+        "tasks-result-type-complete-on-non-task-responses": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the checks that pass do so because the methods are absent, not because tasks work."
+        },
+        "sep-2663-durable-create-strong-consistency": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the checks that pass do so because the methods are absent, not because tasks work."
+        },
+        "sep-2663-tasks-get-invalid-task-id-32602": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the checks that pass do so because the methods are absent, not because tasks work."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-lifecycle": {
+      "class": "absent-feature",
+      "reason": "The tasks extension is outside the frozen surface; no task can be created.",
+      "checks": {
+        "tasks-sync-tool-call": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; no task can be created."
+        },
+        "sep-2663-result-type-task-on-create": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; no task can be created."
+        },
+        "sep-2663-tasks-get-status-working": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; no task can be created."
+        },
+        "sep-2663-tasks-get-status-completed": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; no task can be created."
+        },
+        "sep-2663-tool-error-uses-completed-status": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; no task can be created."
+        },
+        "sep-2663-tasks-get-status-failed": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; no task can be created."
+        },
+        "sep-2663-cancel-ack-empty-result": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; no task can be created."
+        },
+        "tasks-cancel-terminal-idempotent-ack": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; no task can be created."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-mrtr-composition": {
+      "class": "absent-feature",
+      "reason": "Tasks composed with MRTR are outside the frozen surface.",
+      "checks": {
+        "sep-2663-mrtr-synchronous-before-task-creation": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Tasks composed with MRTR are outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-mrtr-input": {
+      "class": "absent-feature",
+      "reason": "Tasks composed with MRTR input are outside the frozen surface.",
+      "checks": {
+        "sep-2663-tasks-get-status-input-required": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Tasks composed with MRTR input are outside the frozen surface."
+        },
+        "tasks-mrtr-tasks-update-resumes": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Tasks composed with MRTR input are outside the frozen surface."
+        },
+        "tasks-mrtr-partial-fulfillment": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "Tasks composed with MRTR input are outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-request-headers": {
+      "class": "absent-feature",
+      "reason": "The tasks extension is outside the frozen surface; the one passing check holds because mismatched routing headers are rejected before any task exists.",
+      "checks": {
+        "tasks-headers-tolerate-mcp-method-on-tools-call": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the one passing check holds because mismatched routing headers are rejected before any task exists."
+        },
+        "sep-2663-routing-headers-accepted-on-tasks-get": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the one passing check holds because mismatched routing headers are rejected before any task exists."
+        },
+        "tasks-headers-reject-mismatched-method": {
+          "class": "absent-feature",
+          "expect": "SUCCESS",
+          "reason": "Mismatched Mcp-Method routing headers are rejected before any task exists; passing is header-validation evidence, not tasks support."
+        },
+        "sep-2663-server-rejects-mismatched-mcp-name-on-tasks-get": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface; the one passing check holds because mismatched routing headers are rejected before any task exists."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-request-state-removal": {
+      "class": "absent-feature",
+      "reason": "The tasks extension is outside the frozen surface.",
+      "checks": {
+        "tasks-request-state-removal-setup": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-required-task-error": {
+      "class": "absent-feature",
+      "reason": "The tasks extension is outside the frozen surface.",
+      "checks": {
+        "sep-2663-server-returns-missing-capability-when-required": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    },
+    "tasks-status-notifications": {
+      "class": "absent-feature",
+      "reason": "SEP-2663 task notifications ride the subscriptions/listen stream, which this server does not declare; the runner skips the scenario.",
+      "checks": {
+        "tasks-status-notifications": {
+          "class": "absent-feature",
+          "expect": "SKIPPED",
+          "reason": "SEP-2663 task notifications ride the subscriptions/listen stream, which this server does not declare; the runner skips the scenario."
+        }
+      }
+    },
+    "tasks-wire-fields": {
+      "class": "absent-feature",
+      "reason": "The tasks extension is outside the frozen surface.",
+      "checks": {
+        "tasks-wire-field-renames": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface."
+        },
+        "tasks-no-early-ttl-expiry": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface."
+        },
+        "tasks-no-related-task-meta-on-inlined-result": {
+          "class": "absent-feature",
+          "expect": "FAILURE",
+          "reason": "The tasks extension is outside the frozen surface."
+        },
+        "wire-schema-valid": {
+          "class": "applicable",
+          "expect": "SUCCESS",
+          "reason": "The runner validates every JSON-RPC message the server sent against the negotiated spec schema; that is an obligation in every scenario, whatever the scenario's own subject."
+        }
+      }
+    }
+  }
+}

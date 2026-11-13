@@ -48,3 +48,37 @@
 (rule
  (alias runtest)
  (action (diff stdio_transcript_notes.expected stdio_transcript_notes.out)))
+
+; The application half of the same idea, and the hermetic "schema/tool calls"
+; evidence beside the live runner baseline. The bodies are the shapes the
+; official runner's scored tool-call scenarios send — a missing required
+; argument, a too-short string, an out-of-enum provider, a non-URL, a private
+; address, agent mode disabled, an unknown tool, and a modern server/discover
+; — replayed through the real `bin/main.exe` over stdio. Nothing here reaches a
+; provider: every call is refused by validation or by the SSRF guard before a
+; socket opens, and [application.toml] disables provider health probing.
+; `tools/list` is deliberately not in this transcript; its full body is
+; already pinned by `bin/smoke.expected`, descriptions and all.
+(rule
+ (deps
+  ../../bin/main.exe
+  application.toml
+  application_transcript.jsonl)
+ (targets application_transcript.out application_transcript_notes.out)
+ (action
+  (with-accepted-exit-codes
+   0
+   (with-stderr-to application_transcript_notes.out
+    (with-stdout-to application_transcript.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=application.toml sh -c 'cat application_transcript.jsonl | ../../bin/main.exe --log-level CRITICAL'"))))))
+
+(rule
+ (alias runtest)
+ (action (diff application_transcript.expected application_transcript.out)))
+
+(rule
+ (alias runtest)
+ (action (diff application_transcript_notes.expected application_transcript_notes.out)))

@@ -1,0 +1,9 @@
+{"jsonrpc":"2.0","id":1,"result":{"serverInfo":{"version":"0.1.0","name":"seekwright"},"capabilities":{"tools":{"listChanged":false}},"protocolVersion":"2025-11-25","resultType":"complete"}}
+{"jsonrpc":"2.0","id":2,"result":{"resultType":"complete","content":[{"type":"text","text":"arguments.query: missing required property"}],"isError":true}}
+{"jsonrpc":"2.0","id":3,"result":{"resultType":"complete","content":[{"type":"text","text":"arguments.query: expected length >= 2"}],"isError":true}}
+{"jsonrpc":"2.0","id":4,"result":{"resultType":"complete","content":[{"type":"text","text":"arguments.provider: expected one of \"algolia\", \"anysearch\", \"deepseek\", \"exa\", \"exa:free\", \"freeserp\", \"linkup\", \"parallel\", \"parallel:free\", \"querit\", \"scrappa\", \"search1api\", \"searxng\", \"serpapi\", \"serper\", \"tavily\", \"tinyfish\""}],"isError":true}}
+{"jsonrpc":"2.0","id":5,"result":{"resultType":"complete","content":[{"type":"text","text":"invalid: Fetch failed - fetch: scheme '(none)' is not fetchable; only http and https are allowed."}],"isError":true}}
+{"jsonrpc":"2.0","id":6,"result":{"resultType":"complete","content":[{"type":"text","text":"invalid: Fetch failed - fetch: 127.0.0.1 resolved to 1 address(es), none of which this grant may connect to (the public-web policy allows only globally routable unicast addresses)."}],"isError":true}}
+{"jsonrpc":"2.0","id":7,"result":{"resultType":"complete","content":[{"type":"text","text":"invalid: This server has agent mode disabled; use `search` or `fetch` instead."}],"isError":true}}
+{"jsonrpc":"2.0","error":{"code":-32602,"message":"unknown tool: unknown_tool"},"id":8}
+{"jsonrpc":"2.0","id":9,"result":{"_meta":{"io.modelcontextprotocol/serverInfo":{"version":"0.1.0","name":"seekwright"}},"resultType":"complete","ttlMs":0,"cacheScope":"private","supportedVersions":["2026-07-28","2025-11-25"],"capabilities":{"tools":{"listChanged":false}}}}

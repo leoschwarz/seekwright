@@ -734,3 +734,124 @@ task's ownership and remains a follow-up.
 Gate at landing: `dune build @install`, `dune runtest --force` and
 `dune build @doc` all exit 0. The new suite opens only loopback sockets; no
 suite reached a provider endpoint.
+=======
+## 16. F3.3 — corpus breadth, property runs and the application conformance baseline (2026-11-13)
+
+Landed on `f3-3-diff`. F0.1's corpus was broad enough to prove the harness, not
+broad enough to trust a port module against hostile input. This wave extends it
+over every OCaml module the port already has, adds the deterministic property
+half of the same claim, and gives the real binary an MCP-conformance baseline
+that scores applicability to its own surface rather than resemblance to the
+runner's fixture.
+
+**Corpus: 294 inputs, 294 goldens, 304 runner cases.** The per-area counts are
+config 85, sanitize 23, fetch 44, jsondoc 51, tabledoc 18, text 47, router 8,
+model 7, engine 11; the `min_cases` floors are config 80, sanitize 20, fetch 40,
+jsondoc 45, tabledoc 16, text 42, router 7, model 7, engine 10. The additions
+target the shapes a fuzz report would name: malformed and truncated UTF-8,
+printable and non-printable Unicode (NBSP, ZWSP, C0 controls, combining marks,
+emoji), empty/deep (50 levels)/wide (40 members) documents, duplicate JSON keys
+in both a JSON document and a tool request, 63-bit integers and past-their
+range integers and floats, whitespace and BOM variants, JSONL and trailing
+garbage, path grammar edge cases, differential window offsets (one, at end,
+past end, on a paragraph break, mid-codepoint, cap of one, negative offset and
+cap), five-rung ladders, and unicode query/result names.
+
+A new area, `text`, covers `lib/text/utf8.ml` and `lib/text/repr.ml`:
+`count`, `take`, `strip`/`lstrip`/`rstrip`, `words`, `lines`, `slices`, `repr`
+and `roundtrip`. Its inputs carry a `hex` field so ill-formed bytes reach both
+projections as bytes; the Python side decodes with `errors="replace"`, which is
+why the four registrations below are called out rather than hidden. The `model`
+area grew a `body_text` field for the same reason: duplicate keys must reach
+both decoders uncollapsed.
+
+**Properties: 14, 200 cases each.** `test_differential_properties.ml` runs
+`sanitize` idempotence and reversal (modulo a U+200B the caller wrote), `utf8`
+slice partition, valid round-trip, `take` prefix/count and `strip` fixed point,
+`fetch window` prefix/marker/flag agreement, past-end emptiness, uncapped
+identity, `jsondoc` render/schema path parsing and name/ordinal path round
+trips, and `tabledoc` cell-path selection. Determinism is explicit: each
+property has its own `Random.State` from the literal seed `20261113` and a salt,
+with `~count:200 ~long:false`, so `QCHECK_SEED`, `QCHECK_COUNT` and
+`QCHECK_LONG` cannot change what the gate ran (verified: `QCHECK_SEED=1
+QCHECK_COUNT=2` still runs 14 × 200).
+
+**Dependency decision: QCheck.** `qcheck-core` + `qcheck-alcotest` are
+`:with-test` in `dune-project`. Measured in the `default` switch: two packages,
+about 5 MB installed, BSD-2-Clause, no transitive dependency this tree does not
+already carry (`dune`, `alcotest`, `base-unix`). A hand-rolled generator plus
+shrinker was the alternative; shrinking is the part that makes a failure
+readable, and writing it is how the suite grows a second, worse one.
+
+**Divergences found, and why they are recorded rather than fixed.** F3.3 owns
+`test/differential/**`, `ocaml-tools/oracle/**` and `test/conformance/**`;
+`lib/**` is read-only on this branch. Each of these is an `explicit-divergence`
+golden with a named reason in `gen_goldens.py`, and each is a candidate for the
+module owner:
+
+1. `Utf8.next_index` clamps by bytes present, not by the valid continuation run
+   → `count`/`roundtrip` differ on `\xe2abc`, overlong `\xc0\xaf` and surrogate
+   `\xed\xa0\x80`; `of_string` → `to_string` is not the identity on ill-formed
+   input.
+2. `Utf8.splitlines` appends a trailing empty line after a final break; Python
+   drops it. `utf8.mli`'s doc-comment claims Python parity and is wrong.
+3. `Utf8.is_line_boundary` omits lone CR (deliberate and documented, because the
+   CSV reader depends on CRLF keeping its CR) → CRLF keeps its CR and a lone CR
+   does not break.
+4. `Repr.py_repr` passes non-printable non-ASCII (NBSP, ZWSP) through where
+   Python escapes it; also visible in a router refusal sentence.
+5. `Tabledoc.read_records` drops a field that is empty and last in a record
+   (`a,b,` reads as two columns, not three with an empty `column3`).
+6. `Config`'s TOML reader reports `PARSE-ERR` for valid TOML above OCaml's
+   63-bit int (2^62, 2^70), and does not support hex ints or `nan`/`inf`
+   floats, all of which `tomllib` accepts.
+7. `Model`'s decoder refuses `Intlit` (2^70 in `fetch_request.offset`) with
+   "expected an integer, got an integer" where pydantic accepts; duplicate keys
+   resolve first (Yojson) vs last (Python `json.loads`).
+8. `Fetcher.window_text` raises `Invalid_argument("Array.sub")` on a negative
+   offset and returns an empty window on a negative cap. Unreachable through
+   the tool surface (it checks `offset ≥ 0` and uses config-constant caps), so
+   the corpus pins the function-level behaviour only.
+
+**Application conformance baseline.** `test/conformance/run_live_application.sh`
+drives `bin/main.exe --http` with the same pinned runner and the same 37 scored
++ 13 unscored scenarios, but scores through
+`application-classification-2026-07-28-server.json` and
+`compare_application.py`. Every check is classed `applicable`, `fixture-declaration`,
+`absent-feature`, `oracle-parity` or `port-divergence`; every applicable check
+must pass, every excluded check must keep its recorded status, and the runner's
+scenario/check sets must still equal the classification. Measured 2026-11-13:
+**90/90 applicable checks pass** (89 `SUCCESS`, 1 `INFO`), 4 applicable + 3
+mixed + 43 excluded scenarios, gate pass. The raw runner tally is 8/37, written
+down as a footnote: `resources-list` and `prompts-list` pass on an empty list,
+and two SEP-2322 scenarios pass on the unknown-tool error path, so counting
+them would measure the runner's fixture shape, not the three-tool surface.
+
+Two failures are recorded rather than silenced:
+
+- `localhost-host-valid-accepted` is `oracle-parity`: the runner sends
+  `Origin: http://127.0.0.1:8811`, both implementations allowlist bare loopback
+  origins and answer 403, so the check distinguishes nothing. (Its hardcoded
+  8811 is also not the server's URL.) A future widening of the Origin allowlist
+  must change both trees and reclassify this check.
+- `sep-2575-server-declares-prompts-in-discover` is a `port-divergence` and a
+  real wire inconsistency: the OCaml server answers `prompts/list` and
+  `resources/list` with empty arrays but declares only `tools` in
+  `server/discover`, while the Python `MCPServer` declares both. mcp-kit 0.2.0's
+  `Server.of_registry` answers the list methods without adding the capability;
+  neither mcp-kit nor `lib/server.ml` is in this wave's ownership. Fixing it
+  means either declaring the capability or returning method-not-found, and
+  landing the same choice in both trees.
+
+The hermetic half is `application_transcript.jsonl`: the runner-shaped tool
+calls (missing argument, too-short string, out-of-enum provider, non-URL,
+private address, agent disabled, unknown tool) and a modern `server/discover`
+replayed through the real binary over stdio, pinned as
+`application_transcript.expected` with an empty stderr. `dune runtest` runs it;
+no socket opens, no provider is contacted, and `application.toml` sets
+`search.health_interval_seconds = 0` besides.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` and
+`dune build @doc` exit 0 under the opam+GMP environment. No gate step reaches a
+provider; the live application script is not part of `runtest`, and its only
+network traffic is loopback to the binary it started.

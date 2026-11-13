@@ -1,0 +1,9 @@
+# The application conformance transcript's config: the keyless defaults, the
+# stdlib extraction backend this build carries, and no health probing, so the
+# replays below reach no provider endpoint. Pointed at by SEEKWRIGHT_CONFIG in
+# the rule in [dune].
+[search]
+health_interval_seconds = 0
+
+[fetch]
+extractor = "stdlib"
