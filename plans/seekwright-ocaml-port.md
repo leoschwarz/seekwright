@@ -328,3 +328,90 @@ now states that its own scan is whole-text too.
 `server.mli` names `Log.log` and `usage.ml` calls `Log.classify_exn`; the pin is
 regenerated from ocamldep, not hand-edited. Gate at this commit:
 `dune build @install`, `dune runtest --force` and `dune build @doc` all exit 0.
+=======
+
+## 11. F1.2 — the capability bypass closed, and the audit trail made real (2026-11-13)
+
+Landed on `f1-2-audit`. Spec: `plans/ocaml-finalisation.md` §F1.2; it is A2 and
+A3 of §5 closed together.
+
+**The seal.** `lib/caps/dune` puts `policy_fs` and `controls_raw` in
+`private_modules`, and `controls_raw.ml` has no interface file, so the bounds
+record every raw operation takes has no name and no producer outside the library.
+`Authority` and `Policy` stay the seam: `?controls` is gone from both
+`Authority.{Fs,Net}.of_confinement`, so a call site can no longer ask for an
+unbounded operation at all — the controls a grant runs under are decided where
+the grant is built. An abstract public `Controls.t` facade was tried first and
+rejected: `policy_net.mli`'s `request` would then take a type the library's own
+raw operations cannot be handed (`Type "Controls_raw.t" is not compatible with
+type "Controls.t"`), which is the plan's predicted failure mode for that shape.
+
+**What dune's privacy is and is not,** established by probe rather than assumed,
+because the two readings of "inaccessible" differ and only one of them is a
+compiler error:
+
+- A consumer of the *installed* `mcp-caps` is stopped. `dune build @install`
+  files both interfaces under `.private/` (`dune-package` records
+  `(visibility private)`), out of a consumer's search path, so
+  `Mcp_caps.Policy_fs` and `Mcp_caps.Controls_raw` resolve to nothing there.
+- A stanza *inside this workspace* is not stopped: dune generates an alias module
+  for a wrapped library that re-exports private modules, and a probe in a
+  neighbouring library type-checked the full bypass. `(root_module …)` is the
+  wrong lever — it aliases a library's *dependencies*, not its own modules, and
+  naming it on `mcp_caps` broke `Mcp_caps.Authority` for every consumer. So
+  inside the checkout the rule is kept by `test/test_caps_audit.ml`, which reads
+  the production sources and fails the build when anything outside `lib/caps`
+  names `Policy_fs` or the bounds record.
+- `policy_net` stays public on purpose. Its `request`, `response`, `method_` and
+  `endpoint` records are the vocabulary a `Net` grant is *called* with, and a
+  private module's records are unusable by an installed consumer — hiding the
+  module failed the intended grant path in the first probe of that shape. What
+  seals its `request` is the `controls:Controls_raw.t` argument instead.
+
+**Negative compilation.** `test/should_not_compile/` grows from six programs to
+thirteen: `direct_fs_operation`, `direct_net_operation`, `controls_none`,
+`controls_record_forge`, `controls_record_update` and `raw_fs_call_needs_bounds`
+(each with its diagnostic pinned in `<name>.expected`), plus `grant_path.ml` as
+the positive half — the intended grant path still type-checks for a consumer, so
+the seal closes the bypass and not the seam. `raw_fs_call_needs_bounds` is the
+half that holds in *both* readings: with `Policy_fs` already in scope, the call
+still fails because nothing outside `lib/caps` can produce the bounds record. The
+directory's hand-written `mcp_caps.ml` mirror is what makes the package view
+type-checkable with a plain `ocamlc`, and the audit suite asserts the mirror
+agrees with `private_modules`.
+
+**The audit trail.** One funnel in `lib/factory/factory.ml`:
+`grant_of_decision` is the only place a serving grant is built, so
+`Authority.Net.of_confinement` and `Authority.with_log` each appear exactly once
+in the module and a second grant path would show up as a red line in
+`test_caps_audit.ml`'s source pins. `?audit` is threaded through the public
+builders (`grant_of_endpoint`, `build_providers`, `probe_net`,
+`build_fetch_stack`, `agent_net`) as the *last*, optional argument, and
+`build_app` always supplies it; a grant built without a sink is therefore a
+diagnostic grant (`--check`), never a serving one, which is what kept
+`bin/main.ml` and the boot fixtures untouched. `Factory.audit_sink` renders one
+`Mcp_caps.Event.t` as the `caps.operation` line through the application's `Log`:
+`operation`, `outcome` (`ok` / `failed:<kind>`), `bytes` when the operation
+measured a payload, and one field per bounded note (`status`, `entries`). A note
+whose key would collide with a fixed field is written as `note_<key>`, so the
+line's shape never depends on what an operation happened to report.
+`Authority.with_operation_budget` is deliberately absent from `Factory`: a budget
+is a caller's counter and server construction has no caller scope (the name
+appears there only inside brackets in a comment, which the suite's pin relies on).
+
+**Suites.** `test/test_caps_audit.ml` — 19 cases: exactly one event per granted,
+refused, filesystem and readiness-probe operation; what the line carries and what
+it must not (no field name may spell request data; `Event.t` has no URL, header,
+body or query field to fill); a grant without a sink records nothing; the field
+dictionary including note-collision prefixing; the wiring counts; and that
+descriptor 1 stays empty when the real `Log` sink is driven (an audit line on
+stdout would corrupt the protocol under stdio). `test/test_caps_budget.ml` — 10
+cases: limit arithmetic, non-positive limits, snapshot vs reservation, atomic
+exhaustion under 32 domains and 16 fibers, one budget spanning several grants,
+independent budgets not sharing a counter, a spent budget refusing without doing
+the I/O, a decorated grant keeping its counter, and counting operations rather
+than bytes. Neither suite touches a billed endpoint: loopback fixtures and a temp
+directory only.
+
+Gate at landing: `dune build @install`, `dune runtest --force`, `dune build @doc`
+and `dune runtest test/should_not_compile` all exit 0.
