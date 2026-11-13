@@ -556,10 +556,22 @@ let test_the_flag_table_is_the_scanners_only_vocabulary () =
           A.(check bool (flag.name ^ " repeats only for allowed-host") true
                (flag.repeats = (flag.key = "allowed_host"))))
     Server.server_flag_table;
+  (* The scanner lives in the CLI library now — [bin/main.ml] only prints
+     what [Cli_flags.parse] refused — so the guard reads the library source
+     and requires the binary to hold no flag spelling of its own. *)
   let scanner =
-    slice_between (read_file "../bin/main.ml") "let parse_server_flags"
-      "(* {1 The check} *)"
+    slice_between (read_file "../lib/cli/cli_flags.ml") "let parse argv ="
+      "(** The startup refusals"
   in
+  A.(check bool "the scanner lives out of the binary" true
+       (not (contains ~haystack:(read_file "../bin/main.ml") ~needle:"flag_spec")));
+  A.(check bool "the binary parses through the library" true
+       (contains ~haystack:(read_file "../bin/main.ml") ~needle:"Cli_flags.parse"));
+  List.iter
+    (fun name ->
+      A.(check bool ("the binary does not spell out " ^ name) false
+           (contains ~haystack:(read_file "../bin/main.ml") ~needle:( "\"" ^ name ^ "\""))))
+    names;
   A.(check bool "the scanner reads the table" true
        (contains ~haystack:scanner ~needle:"Server.flag_spec"));
   A.(check bool "the scanner reads the row's arity" true

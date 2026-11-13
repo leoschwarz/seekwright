@@ -9,6 +9,7 @@
  (package seekwright)
  (libraries
   seekwright
+  seekwright.cli
   seekwright.factory
   seekwright.providers
   seekwright.fetch

@@ -1,0 +1,34 @@
+; The CLI's own half of the executable (F3.2): every part of [bin/main.ml] that
+; was a decision rather than an effect, in one library the suites can drive.
+;
+; [bin/main.ml] keeps three things only — which verb or flag set this invocation
+; is, the [Eio_main] loop and [Eio.Stdenv.t] the grants are opened on, and the
+; process's exit status. Everything the old 1000-line file also did (the server
+; flag scanner, the client's argument scan and request bodies, the human
+; rendering, the [--check] and [--metrics] reports, the startup validation) is
+; here, takes its input and its network as arguments, and hands a value back
+; instead of calling [exit]. That is what makes each of them testable, and it is
+; why no module in this directory names a stream at all: [test/log_guard] keeps
+; stderr behind [lib/log.ml] and [bin/main.ml].
+;
+; The direction is the one [lib/dune] states: this library links [seekwright] and
+; [seekwright.factory] (the diagnosis builds providers and probes them), and
+; nothing links it except [bin/] and the suites.
+(library
+ (name seekwright_cli)
+ (public_name seekwright.cli)
+ (wrapped false)
+ (libraries
+  seekwright
+  seekwright.factory
+  mcp-caps
+  eio
+  eio_main
+  uri
+  yojson
+  cohttp-eio
+  http
+  tls
+  tls-eio
+  ca-certs
+  domain-name))

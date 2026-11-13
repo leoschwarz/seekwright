@@ -268,9 +268,9 @@ let widening_is_constructed_once () =
   Test_support.includes "endpoint grants still exist" "Policy.with_endpoints" factory_src
   ;
   (* the disclosure the switch has to make in --check output *)
-  let main_src = Test_support.read_file "../bin/main.ml" in
+  let check_src = Test_support.read_file "../lib/cli/cli_check.ml" in
   Test_support.includes "--check says when the local reader is built with the private-web grant"
-    "private-web grant" main_src
+    "private-web grant" check_src
 
 let () =
   Mirage_crypto_rng_unix.use_default ();
