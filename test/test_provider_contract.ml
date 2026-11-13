@@ -76,6 +76,16 @@ let adapters =
       quota_statuses = shared_quota_statuses;
     };
     {
+      name = "linkup";
+      build =
+        (fun net ->
+          Seekwright_providers.Linkup.make ~net ~key:probe_key ~now:clock ());
+      auth_message = None;
+      (* Linkup's 402 belongs to the keyless x402 lane this adapter never enters,
+         so a payment status on a bearer-keyed request is the [HTTP 402] row. *)
+      quota_statuses = [ 429 ];
+    };
+    {
       name = "scrappa";
       build =
         (fun net -> Seekwright_providers.Scrappa.make ~net ~key:probe_key ());
@@ -98,6 +108,26 @@ let adapters =
       build =
         (fun net -> Seekwright_providers.Serper.make ~net ~key:probe_key ());
       auth_message = None;
+      quota_statuses = shared_quota_statuses;
+    };
+    {
+      name = "tavily";
+      build =
+        (fun net -> Seekwright_providers.Tavily.make ~net ~key:probe_key ());
+      auth_message = None;
+      (* Tavily's quota pair is 429 and its own 432 (monthly credits exhausted);
+         402 is not a status this vendor answers with, so it stays on the plain
+         [HTTP 402] row rather than being read as a spent quota. *)
+      quota_statuses = [ 429; 432 ];
+    };
+    {
+      name = "tinyfish";
+      build =
+        (fun net -> Seekwright_providers.Tinyfish.make ~net ~key:probe_key ());
+      auth_message = None;
+      (* 402 here reads "Search API access is required for your account", which is
+         the account question the quota row is for — the same status is the plain
+         HTTP row for [linkup], which prices it as x402 instead. *)
       quota_statuses = shared_quota_statuses;
     };
   ]

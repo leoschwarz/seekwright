@@ -113,11 +113,21 @@ returned. Two renderings make the request comparable across the two trees, which
 percent-encode differently: the query is rendered decoded and sorted, the
 destination without it, and the body through the canonical JSON rendering. The
 credential is never echoed — its value becomes `sentinel`, so the area pins its
-*location* (header or parameter) and nothing else. A transport case's failure
+*location* (header or parameter) and nothing else; a bearer header renders as
+`Bearer sentinel` rather than echoing the key behind a scheme prefix. A transport case's failure
 message deliberately carries the probe key, because the claim under test is that
 none of it reaches the caller. A query value never holds a literal `+`: the two
 URL writers disagree about whether that byte means a space, and the area is not
 about the renderer.
+
+A content adapter's answer is not a snippet, so the result rendering carries the
+other two halves — `result text=` and `result text_truncated=` — and the answer
+block carries `answer=`. Serper, Scrappa and SearXNG answer those as `-`; without
+them Tavily's page text and Linkup's sourced answer would be the parts of the
+pair no golden compared. And because Linkup's `fromDate` is the one date an
+adapter *computes*, a recency case names the instant its clock reads as `now`
+and both projections freeze their clock to it, so the golden pins the arithmetic
+rather than the day it was generated.
 
 **Determinism is explicit, not environmental.** Each property gets its own
 `Random.State` built from the literal seed `20261113` and a per-property salt,

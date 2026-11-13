@@ -1,0 +1,24 @@
+area: provider
+case: 88-linkup-snippet-cap
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.linkup.so/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"depth":"standard","maxResults":1,"outputType":"sourcedAnswer","q":"long citation"}
+verdict= ok
+name= linkup
+result title=Long
+result url=https://long.example/
+result snippet=word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\u2026
+result uncapped=999
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.006000
+answer= One long citation.
+notice=-

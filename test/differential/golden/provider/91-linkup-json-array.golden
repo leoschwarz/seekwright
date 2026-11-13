@@ -1,0 +1,15 @@
+area: provider
+case: 91-linkup-json-array
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.linkup.so/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"depth":"standard","maxResults":5,"outputType":"sourcedAnswer","q":"wrong shape"}
+verdict= error
+kind= failure
+retryable= true
+message= malformed JSON response

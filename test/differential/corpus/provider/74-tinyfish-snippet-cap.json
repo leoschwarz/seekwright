@@ -1,0 +1,11 @@
+{
+  "provider": "tinyfish",
+  "query": {
+    "query": "long snippet",
+    "max_results": 2
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"Long\", \"url\": \"https://long.example/\", \"snippet\": \"word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \"}, {\"title\": \"Tabs\", \"url\": \"https://tab.example/\", \"snippet\": \"a\\tb\\nc\"}]}"
+  }
+}

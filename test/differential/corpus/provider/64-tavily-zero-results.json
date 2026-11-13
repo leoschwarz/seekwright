@@ -1,0 +1,10 @@
+{
+  "provider": "tavily",
+  "query": {
+    "query": "nothing here"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"answer\": null, \"results\": []}"
+  }
+}

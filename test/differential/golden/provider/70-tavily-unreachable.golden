@@ -1,0 +1,15 @@
+area: provider
+case: 70-tavily-unreachable
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.tavily.com/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"include_answer":"basic","include_raw_content":false,"include_usage":true,"max_results":5,"query":"dns failure","search_depth":"basic"}
+verdict= error
+kind= failure
+retryable= true
+message= network error

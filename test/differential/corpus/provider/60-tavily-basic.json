@@ -1,0 +1,10 @@
+{
+  "provider": "tavily",
+  "query": {
+    "query": "alpine passes"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"answer\": \"Two passes, both on the Mont Blanc massif.\", \"results\": [{\"title\": \"First\", \"url\": \"https://one.example/x\", \"content\": \"One. A short inline extract.\", \"score\": 0.98, \"published_date\": \"2026-01-05\"}, {\"title\": \"Second\", \"url\": \"https://two.example/y\", \"content\": \"Two.\"}], \"response_time\": 1.31, \"usage\": {\"credits\": 2}}"
+  }
+}

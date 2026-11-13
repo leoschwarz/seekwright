@@ -1,0 +1,32 @@
+area: provider
+case: 85-linkup-recency-year
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.linkup.so/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"depth":"standard","fromDate":"2022-11-14T22:13:20Z","maxResults":2,"outputType":"sourcedAnswer","q":"older ascents"}
+verdict= ok
+name= linkup
+result title=First
+result url=https://one.example/x
+result snippet=One.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+result title=Second
+result url=https://two.example/y
+result snippet=Two.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.006000
+answer= Two passes, both on the Mont Blanc massif.
+notice=-

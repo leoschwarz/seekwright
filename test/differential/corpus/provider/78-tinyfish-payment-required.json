@@ -1,0 +1,10 @@
+{
+  "provider": "tinyfish",
+  "query": {
+    "query": "no search access"
+  },
+  "response": {
+    "status": 402,
+    "body": "{\"error\": \"payment required\"}"
+  }
+}

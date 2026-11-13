@@ -1,0 +1,32 @@
+area: provider
+case: 61-tavily-constraints
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.tavily.com/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"country":"france","exclude_domains":["wikipedia.org"],"include_answer":"basic","include_domains":["peakbagger.com"],"include_raw_content":false,"include_usage":true,"language":"de","max_results":3,"query":"alpine passes","safe_search":true,"search_depth":"basic","time_range":"month"}
+verdict= ok
+name= tavily
+result title=First
+result url=https://one.example/x
+result snippet=-
+result uncapped=28
+result text=One. A short inline extract.
+result text_truncated=-
+result published_date=2026-01-05
+result score=0.980000
+result title=Second
+result url=https://two.example/y
+result snippet=-
+result uncapped=4
+result text=Two.
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.008000
+answer= Two passes, both on the Mont Blanc massif.
+notice=-

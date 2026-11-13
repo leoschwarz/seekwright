@@ -1,0 +1,32 @@
+area: provider
+case: 72-tinyfish-constraints
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://api.search.tinyfish.ai
+query= exclude_domains=facebook.com&include_domains=peakbagger.com,summitpost.org&language=de&location=FR&query=alpine passes&recency_minutes=10080
+headers= x-api-key=sentinel
+body= -
+verdict= ok
+name= tinyfish
+result title=First
+result url=https://one.example/x
+result snippet=One.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=2026-01-05
+result score=-
+result title=Second
+result url=https://two.example/y
+result snippet=Two.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.000000
+answer= -
+notice=cannot filter by safe-search; that constraint was ignored

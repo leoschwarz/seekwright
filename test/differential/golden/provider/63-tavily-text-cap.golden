@@ -1,0 +1,32 @@
+area: provider
+case: 63-tavily-text-cap
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.tavily.com/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"include_answer":"basic","include_raw_content":false,"include_usage":true,"max_results":2,"query":"long extract","search_depth":"basic"}
+verdict= ok
+name= tavily
+result title=Long
+result url=https://long.example/
+result snippet=-
+result uncapped=1999
+result text=word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word
+result text_truncated=-
+result published_date=-
+result score=-
+result title=Newlines
+result url=https://nl.example/
+result snippet=-
+result uncapped=5
+result text=a b c
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.008000
+answer= -
+notice=-

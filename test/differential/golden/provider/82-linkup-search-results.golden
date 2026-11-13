@@ -1,0 +1,32 @@
+area: provider
+case: 82-linkup-search-results
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.linkup.so/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"depth":"standard","maxResults":2,"outputType":"searchResults","q":"alpine passes"}
+verdict= ok
+name= linkup
+result title=First
+result url=https://one.example/x
+result snippet=One.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+result title=https://no-name.example/z
+result url=https://no-name.example/z
+result snippet=Three.
+result uncapped=6
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.006000
+answer= -
+notice=-

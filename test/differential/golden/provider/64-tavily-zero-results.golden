@@ -1,0 +1,16 @@
+area: provider
+case: 64-tavily-zero-results
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.tavily.com/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"include_answer":"basic","include_raw_content":false,"include_usage":true,"max_results":5,"query":"nothing here","search_depth":"basic"}
+verdict= ok
+name= tavily
+cost_usd= 0.008000
+answer= -
+notice=-

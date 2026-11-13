@@ -1,0 +1,16 @@
+area: provider
+case: 75-tinyfish-zero-results
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://api.search.tinyfish.ai
+query= query=nothing here
+headers= x-api-key=sentinel
+body= -
+verdict= ok
+name= tinyfish
+cost_usd= 0.000000
+answer= -
+notice=-

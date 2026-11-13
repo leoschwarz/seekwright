@@ -1,0 +1,10 @@
+{
+  "provider": "tavily",
+  "query": {
+    "query": "bad key"
+  },
+  "response": {
+    "status": 401,
+    "body": "<html>unauthorized</html>"
+  }
+}

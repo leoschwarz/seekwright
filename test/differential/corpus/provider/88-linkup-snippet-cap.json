@@ -1,0 +1,11 @@
+{
+  "provider": "linkup",
+  "query": {
+    "query": "long citation",
+    "max_results": 1
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"answer\": \"One long citation.\", \"sources\": [{\"name\": \"Long\", \"url\": \"https://long.example/\", \"snippet\": \"word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \"}]}"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "provider": "linkup",
+  "query": {
+    "query": "out of credit"
+  },
+  "response": {
+    "status": 429,
+    "body": "{\"detail\": \"Too Many Requests\"}"
+  }
+}

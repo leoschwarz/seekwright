@@ -1,0 +1,15 @@
+area: provider
+case: 79-tinyfish-rate-limited
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://api.search.tinyfish.ai
+query= query=too fast
+headers= x-api-key=sentinel
+body= -
+verdict= error
+kind= quota
+retryable= false
+message= rate limited or no Search API access on this account

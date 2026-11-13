@@ -1,0 +1,10 @@
+{
+  "provider": "tinyfish",
+  "query": {
+    "query": "shape drift"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"No url\", \"snippet\": \"dropped\"}, {\"url\": \"https://no-title.example/\"}, 7, {\"title\": \"Kept\", \"url\": \"https://kept.example/\", \"snippet\": [\"a\", \"b\"]}]}"
+  }
+}

@@ -16,6 +16,9 @@ module Anysearch = Seekwright_providers.Anysearch
 module Scrappa = Seekwright_providers.Scrappa
 module Searxng = Seekwright_providers.Searxng
 module Serper = Seekwright_providers.Serper
+module Tavily = Seekwright_providers.Tavily
+module Tinyfish = Seekwright_providers.Tinyfish
+module Linkup = Seekwright_providers.Linkup
 
 let ( let* ) = Result.bind
 
@@ -136,6 +139,14 @@ let serpapi_probe (uri : Uri.t) = Probe (Health.serpapi_endpoint ~base:(Uri.to_s
 let key_header header = Header { header; prefix = "" }
 let bearer = Header { header = "Authorization"; prefix = "Bearer " }
 
+(* Linkup's [output_type] config key and the adapter's payload choice are the same
+   closed pair, spelled differently: [Config.show_output_kind] is what the endpoint
+   sees, the sum type is what decides which parse runs. A total match here is what
+   keeps a widened config enum from reaching the adapter as an unclassified string. *)
+let linkup_output = function
+  | Config.Sourced_answer -> Linkup.Sourced_answer
+  | Config.Search_results -> Linkup.Search_results
+
 (* A row that declares [Api_key] reaches its builder only after two guards have
    passed: [Config] makes an enabled name with no key startup-fatal, and
    {!missing_prerequisite} declines the name before the builder is asked. So [None]
@@ -216,12 +227,20 @@ let rows =
                ~now:a.now ~net:a.net ()))
       ();
     (* An answer-or-results API whose [depth] is a ~10x cost cliff, so the rung is
-       operator-configured and never model-chosen; [20s] is the deep-rung budget. *)
-    make_row ~name:"linkup"
-      ~endpoint:(Fixed_uri (Uri.of_string "https://api.linkup.so/v1/search"))
-      ~credential:bearer ~default_cost:(Some 6.00) ~timeout_floor:20.0
-      ~probe:(probe_at (Uri.of_string "https://api.linkup.so/v1/search"))
-      ~settings:[ "depth"; "output_type" ] ~build:(Deferred "F5.3") ();
+       operator-configured and never model-chosen; [20s] is the deep-rung budget.
+       Both settings decide the payload shape as much as the price, so the row maps
+       the config pair onto the adapter's own sum type rather than passing the
+       vendor's words through a string comparison. *)
+    make_row ~name:"linkup" ~endpoint:(Fixed_uri Linkup.endpoint) ~credential:bearer
+      ~default_cost:(Some 6.00) ~timeout_floor:20.0 ~probe:(probe_at Linkup.endpoint)
+      ~settings:[ "depth"; "output_type" ]
+      ~build:
+        (Adapter
+           (fun a ->
+             Linkup.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~depth:a.entry.depth ~output:(linkup_output a.entry.output_type)
+               ~key:(require_key "linkup" a) ~now:a.now ~net:a.net ()))
+      ();
     (* Keyed despite the free tier — it is an account quota, and the key names
        whose quota a search spends. REST, not the authenticated MCP, is the surface
        that carries the filter fields, and [mode] is the preset that decides price. *)
@@ -305,20 +324,28 @@ let rows =
                ~key:(require_key "serper" a) ~net:a.net ()))
       ();
     (* An API, not a scrape: normal timeout. The figure is the free-then-metered
-       tier's rate, and depth stays pinned at [basic] because [advanced] is the
-       cost cliff an operator may choose and a model may not. *)
-    make_row ~name:"tavily"
-      ~endpoint:(Fixed_uri (Uri.of_string "https://api.tavily.com/search"))
-      ~credential:bearer ~default_cost:(Some 8.00) ~context:Text
-      ~probe:(probe_at (Uri.of_string "https://api.tavily.com/search"))
-      ~build:(Deferred "F5.3") ();
+       tier's rate. [search_depth] is pinned at [basic] inside the adapter rather
+       than exposed as a setting on this row: [advanced] is a different price per
+       search, and unlike [linkup]'s [depth] the vendor does not price it as a rung
+       an operator turns. *)
+    make_row ~name:"tavily" ~endpoint:(Fixed_uri Tavily.endpoint) ~credential:bearer
+      ~default_cost:(Some 8.00) ~context:Text ~probe:(probe_at Tavily.endpoint)
+      ~build:
+        (Adapter
+           (fun a ->
+             Tavily.make ~cost_per_1k:a.cost_per_1k ~text_chars:a.text_chars
+               ~key:(require_key "tavily" a) ~net:a.net ()))
+      ();
     (* An API, not a scrape, and free but keyed: a metered allowance, so the key is
        what names whose allowance a search spends. *)
-    make_row ~name:"tinyfish"
-      ~endpoint:(Fixed_uri (Uri.of_string "https://api.search.tinyfish.ai"))
-      ~credential:(key_header "X-API-Key")
-      ~probe:(probe_at (Uri.of_string "https://api.search.tinyfish.ai"))
-      ~build:(Deferred "F5.3") ()
+    make_row ~name:"tinyfish" ~endpoint:(Fixed_uri Tinyfish.endpoint)
+      ~credential:(key_header "X-API-Key") ~probe:(probe_at Tinyfish.endpoint)
+      ~build:
+        (Adapter
+           (fun a ->
+             Tinyfish.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~key:(require_key "tinyfish" a) ~net:a.net ()))
+      ()
   ]
 
 let row name = List.find_opt (fun r -> r.name = name) rows

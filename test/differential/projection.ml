@@ -868,6 +868,11 @@ let engine spec_text =
    the transport failure's message to show that none of it reaches the answer. *)
 let probe_key = "differential-probe-key-4f2a"
 
+(* The instant a case's clock reads when it does not name one: [linkup] computes a
+   [fromDate] from its own clock, and a golden must not depend on the machine's.
+   The Python half freezes the oracle's [datetime] to the same instant. *)
+let fixed_clock = 1_700_000_000.
+
 let provider_query spec =
   {
     Model.query = want_string "query" spec;
@@ -962,11 +967,29 @@ let net_of sent replies =
             Ok { Caps.Authority.Net.status; headers = []; body });
   }
 
-let provider_adapter name ~endpoint =
+let provider_adapter name ~endpoint spec =
   match name with
-  | "serper" -> Seekwright_providers.Serper.make ~key:probe_key
-  | "scrappa" -> Seekwright_providers.Scrappa.make ~key:probe_key
-  | "searxng" -> Seekwright_providers.Searxng.make ~endpoint
+  | "serper" -> fun ~net () -> Seekwright_providers.Serper.make ~key:probe_key ~net ()
+  | "scrappa" -> fun ~net () -> Seekwright_providers.Scrappa.make ~key:probe_key ~net ()
+  | "searxng" -> fun ~net () -> Seekwright_providers.Searxng.make ~endpoint ~net ()
+  | "tavily" -> fun ~net () -> Seekwright_providers.Tavily.make ~key:probe_key ~net ()
+  | "tinyfish" -> fun ~net () -> Seekwright_providers.Tinyfish.make ~key:probe_key ~net ()
+  | "linkup" ->
+      (* The two operator settings decide the payload shape, and [fromDate] is the
+         one date an adapter computes: the case names the instant its clock reads,
+         which is what keeps the golden free of the machine's clock. *)
+      fun ~net () ->
+        Seekwright_providers.Linkup.make
+          ~depth:(match maybe_string "depth" spec with Some d -> d | None -> "standard")
+          ~output:
+            (match maybe_string "output_type" spec with
+            | Some "searchResults" -> Seekwright_providers.Linkup.Search_results
+            | Some "sourcedAnswer" -> Seekwright_providers.Linkup.Sourced_answer
+            | Some other -> failwith (Printf.sprintf "provider corpus output_type %S" other)
+            | None -> Seekwright_providers.Linkup.Sourced_answer)
+          ~now:(fun () ->
+            match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
+          ~key:probe_key ~net ()
   | other -> failwith (Printf.sprintf "provider corpus has no adapter %S" other)
 
 (* The request as the wire shows it: a decoded, sorted query; the destination
@@ -995,12 +1018,27 @@ let render_query uri =
 
 let render_url uri = Uri.to_string (Uri.with_query uri [])
 
+(* The credential's value is replaced wherever it appears in a header value, not
+   only when a header holds it alone: a bearer header is [Bearer <key>], and a
+   scheme prefix is not a licence to echo the key. *)
+let redact_key value =
+  let len = String.length value in
+  let klen = String.length probe_key in
+  let out = Buffer.create len in
+  let rec walk i =
+    if i >= len then Buffer.contents out
+    else if i + klen <= len && String.sub value i klen = probe_key then
+      (Buffer.add_string out "sentinel"; walk (i + klen))
+    else (Buffer.add_char out value.[i]; walk (i + 1))
+  in
+  walk 0
+
 let render_headers (request : Caps.Authority.Net.request) =
   String.concat ","
     (List.map
        (fun (name, value) ->
          let name = String.lowercase_ascii name in
-         if value = probe_key then name ^ "=sentinel" else name ^ "=" ^ Canon.escape_text value)
+         name ^ "=" ^ Canon.escape_text (redact_key value))
        (List.sort
           (fun (a, _) (b, _) -> String.compare a b)
           request.Caps.Authority.Net.headers))
@@ -1034,6 +1072,11 @@ let hit_lines (hit : Provider.hit) =
     "result snippet=" ^ opt_value result.snippet;
     "result uncapped="
     ^ (match hit.uncapped_chars with Some n -> string_of_int n | None -> "-");
+    (* The text half is what a content adapter fills: leaving it out of the
+       rendering would leave Tavily's answer surface unpinned. *)
+    "result text=" ^ opt_value result.text;
+    "result text_truncated="
+    ^ (match result.text_truncated with Some b -> flag b | None -> "-");
     "result published_date=" ^ opt_value result.published_date;
     "result score="
     ^ (match result.score with Some v -> pct v | None -> "-");
@@ -1044,6 +1087,9 @@ let result_lines (outcome : Provider.outcome) =
   @ List.concat_map hit_lines outcome.results
   @ [
       "cost_usd= " ^ (match outcome.cost_usd with Some v -> pct v | None -> "-");
+      (* The prose half of [tavily] and [linkup]: what the adapter read out of
+         the payload, and the dash for the names that have no answer to give. *)
+      "answer= " ^ opt_value outcome.answer;
       "notice=" ^ opt_value outcome.notice;
     ]
 
@@ -1067,7 +1113,7 @@ let provider_case spec_text =
   let endpoint =
     match maybe_string "endpoint" spec with Some uri -> Uri.of_string uri | None -> Uri.of_string "http://peer.invalid/"
   in
-  let adapter = (provider_adapter name ~endpoint) ~net () in
+  let adapter = provider_adapter name ~endpoint spec ~net () in
   let outcome = Provider.search adapter (provider_query ("query" $ spec)) in
   dials (List.rev !sent) @ verdict_lines outcome
 

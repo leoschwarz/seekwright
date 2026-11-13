@@ -24,6 +24,7 @@ import asyncio
 import json
 import pathlib
 import sys
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qsl
 
@@ -37,7 +38,7 @@ from pydantic import ValidationError
 
 from seekwright import engine as engine_module
 from seekwright import fetcher, jsondoc, models, router, sanitize, tabledoc
-from seekwright.providers import scrappa, searxng, serper
+from seekwright.providers import linkup, scrappa, searxng, serper, tavily, tinyfish
 from seekwright.config import Config, ProviderConfig, SearchConfig, load_config
 from seekwright.providers.base import ProviderError, QuotaExhausted, SearchProvider
 
@@ -91,6 +92,12 @@ def flag(value: bool) -> str:
 
 def opt_value(value: str | None) -> str:
     return "-" if value is None else esc(value)
+
+
+def opt_flag(value: bool | None) -> str:
+    """The tri-state the wire model's ``text_truncated`` rule leaves behind: a
+    page that was not cut serialises no flag at all, so the projection says so."""
+    return "-" if value is None else flag(value)
 
 
 def list_value(value: list[str] | None) -> str:
@@ -801,9 +808,28 @@ def _render_headers(request: httpx.Request) -> str:
         for name, value in request.headers.multi_items()
         if name.lower() not in _TRANSPORT_HEADERS
     )
-    return ",".join(
-        f"{name}=sentinel" if value == PROBE_KEY else f"{name}={esc(value)}" for name, value in pairs
-    )
+    # The whole value is replaced, not only an exact match: a bearer header is
+    # ``Bearer <key>``, and a scheme prefix is not a licence to echo the key.
+    return ",".join(f"{name}={esc(value.replace(PROBE_KEY, 'sentinel'))}" for name, value in pairs)
+
+
+def _freeze_clock(module: Any, epoch: float) -> Any:
+    """Pin ``module``'s ``datetime.now`` to one instant, and answer with what to restore.
+
+    Linkup is the one adapter that computes a date — its ``fromDate`` is
+    ``datetime.now`` minus a day count — and it reads the clock from its own
+    module namespace. Rebinding that name here keeps the golden off the machine's
+    clock without touching the read-only oracle tree.
+    """
+
+    class FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz: timezone | None = None) -> datetime:
+            return datetime.fromtimestamp(epoch, tz or timezone.utc)
+
+    previous = module.datetime
+    module.datetime = FrozenDatetime
+    return previous
 
 
 def _provider_dials(requests: list[Any]) -> list[str]:
@@ -828,11 +854,18 @@ def _provider_result(result: Any) -> list[str]:
             "result url=" + esc(hit.url),
             "result snippet=" + opt_value(hit.snippet),
             "result uncapped=" + ("-" if hit._uncapped_chars is None else str(hit._uncapped_chars)),
+            # The text half is what a content adapter fills: dropping it from the
+            # rendering would leave [tavily]'s answer surface unpinnted.
+            "result text=" + opt_value(hit.text),
+            "result text_truncated=" + opt_flag(hit.text_truncated),
             "result published_date=" + opt_value(hit.published_date),
             "result score=" + opt_number(hit.score),
         ]
     lines += [
         "cost_usd= " + opt_number(result.cost_usd),
+        # The prose half of [tavily] and [linkup]: what the adapter read out of
+        # the payload, and nothing for the names that have no answer to give.
+        "answer= " + opt_value(result.answer),
         "notice=" + opt_value(result.notice),
     ]
     return lines
@@ -850,8 +883,25 @@ def provider_case(spec_text: str) -> list[str]:
         adapter = scrappa.ScrappaProvider(client, PROBE_KEY)
     elif name == "searxng":
         adapter = searxng.SearxngProvider(client, url=spec["endpoint"])
+    elif name == "tavily":
+        adapter = tavily.TavilyProvider(client, PROBE_KEY)
+    elif name == "tinyfish":
+        adapter = tinyfish.TinyfishProvider(client, PROBE_KEY)
+    elif name == "linkup":
+        adapter = linkup.LinkupProvider(
+            client,
+            PROBE_KEY,
+            depth=spec.get("depth", "standard"),
+            output_type=spec.get("output_type", "sourcedAnswer"),
+        )
     else:
         raise AssertionError(f"provider corpus has no adapter {name!r}")
+    # Linkup's [fromDate] is the one date an adapter computes, so a case that
+    # asks for a recency window names the instant its clock reads. The oracle
+    # adapter reads [datetime.now] from its own module namespace; rebinding that
+    # name here — and only here — is what keeps the golden free of the machine's
+    # clock without touching the read-only oracle tree.
+    frozen = _freeze_clock(linkup, spec.get("now", 1_700_000_000.0))
     try:
         result = asyncio.run(adapter.search(_provider_query(spec["query"])))
     except QuotaExhausted as failure:
@@ -868,6 +918,9 @@ def provider_case(spec_text: str) -> list[str]:
             "retryable= " + flag(failure.retryable),
             "message= " + esc(failure.message),
         ]
+    finally:
+        if frozen is not None:
+            linkup.datetime = frozen
     return _provider_dials(sent) + ["verdict= ok"] + _provider_result(result)
 
 

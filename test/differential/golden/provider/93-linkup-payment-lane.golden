@@ -1,0 +1,15 @@
+area: provider
+case: 93-linkup-payment-lane
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.linkup.so/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"depth":"standard","maxResults":5,"outputType":"sourcedAnswer","q":"x402"}
+verdict= error
+kind= failure
+retryable= true
+message= HTTP 402

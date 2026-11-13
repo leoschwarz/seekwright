@@ -1,0 +1,22 @@
+{
+  "provider": "tinyfish",
+  "query": {
+    "query": "alpine passes",
+    "max_results": 12,
+    "include_domains": [
+      "peakbagger.com",
+      "summitpost.org"
+    ],
+    "exclude_domains": [
+      "facebook.com"
+    ],
+    "country": "FR",
+    "language": "DE",
+    "recency": "week",
+    "safe_search": true
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"First\", \"url\": \"https://one.example/x\", \"snippet\": \"One.\", \"date\": \"2026-01-05\"}, {\"title\": \"Second\", \"url\": \"https://two.example/y\", \"snippet\": \"Two.\"}]}"
+  }
+}

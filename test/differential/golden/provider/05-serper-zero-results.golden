@@ -12,4 +12,5 @@ body= {"num":5,"q":"nothing here"}
 verdict= ok
 name= serper
 cost_usd= 0.001000
+answer= -
 notice=-

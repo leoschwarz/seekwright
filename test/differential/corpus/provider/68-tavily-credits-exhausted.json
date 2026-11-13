@@ -1,0 +1,10 @@
+{
+  "provider": "tavily",
+  "query": {
+    "query": "out of credits"
+  },
+  "response": {
+    "status": 432,
+    "body": "Credits exhausted"
+  }
+}

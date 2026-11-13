@@ -1,0 +1,7 @@
+{
+  "provider": "tavily",
+  "query": {
+    "query": "dns failure"
+  },
+  "refuse": "unavailable"
+}

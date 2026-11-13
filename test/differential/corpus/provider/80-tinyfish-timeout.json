@@ -1,0 +1,7 @@
+{
+  "provider": "tinyfish",
+  "query": {
+    "query": "slow vendor"
+  },
+  "refuse": "timeout"
+}

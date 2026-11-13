@@ -1,0 +1,12 @@
+{
+  "provider": "linkup",
+  "output_type": "searchResults",
+  "query": {
+    "query": "alpine passes",
+    "max_results": 2
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"name\": \"First\", \"url\": \"https://one.example/x\", \"content\": \"One.\", \"type\": \"text\", \"favicon\": \"https://one.example/favicon.ico\"}, {\"url\": \"https://image.example/p.png\", \"content\": \"a picture\", \"type\": \"image\"}, {\"url\": \"https://no-name.example/z\", \"content\": \"Three.\"}]}"
+  }
+}

@@ -1,0 +1,32 @@
+area: provider
+case: 74-tinyfish-snippet-cap
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://api.search.tinyfish.ai
+query= query=long snippet
+headers= x-api-key=sentinel
+body= -
+verdict= ok
+name= tinyfish
+result title=Long
+result url=https://long.example/
+result snippet=word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\u2026
+result uncapped=999
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+result title=Tabs
+result url=https://tab.example/
+result snippet=a b c
+result uncapped=5
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.000000
+answer= -
+notice=-

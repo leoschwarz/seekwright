@@ -1,0 +1,10 @@
+{
+  "provider": "tinyfish",
+  "query": {
+    "query": "nothing here"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": []}"
+  }
+}

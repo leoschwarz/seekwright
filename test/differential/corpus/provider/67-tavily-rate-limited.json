@@ -1,0 +1,10 @@
+{
+  "provider": "tavily",
+  "query": {
+    "query": "too fast"
+  },
+  "response": {
+    "status": 429,
+    "body": "{\"detail\": \"rate limit exceeded\"}"
+  }
+}

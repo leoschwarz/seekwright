@@ -1001,6 +1001,69 @@ _SEARXNG_TWO = _body(
     }
 )
 
+_TAVILY_TWO = _body(
+    {
+        "answer": "Two passes, both on the Mont Blanc massif.",
+        "results": [
+            {
+                "title": "First",
+                "url": "https://one.example/x",
+                "content": "One. A short inline extract.",
+                "score": 0.98,
+                "published_date": "2026-01-05",
+            },
+            {"title": "Second", "url": "https://two.example/y", "content": "Two."},
+        ],
+        "response_time": 1.31,
+        "usage": {"credits": 2},
+    }
+)
+
+_TINYFISH_TWO = _body(
+    {
+        "results": [
+            {"title": "First", "url": "https://one.example/x", "snippet": "One.", "date": "2026-01-05"},
+            {"title": "Second", "url": "https://two.example/y", "snippet": "Two."},
+        ]
+    }
+)
+
+# The instant every Linkup [fromDate] below is computed from: 2023-11-14T22:13:20Z.
+# The oracle reads its wall clock, so the case names the clock instead, and both
+# halves set it before the adapter runs.
+_LINKUP_NOW = 1_700_000_000.0
+
+_LINKUP_ANSWER = _body(
+    {
+        "answer": "Two passes, both on the Mont Blanc massif.",
+        "sources": [
+            {
+                "name": "First",
+                "url": "https://one.example/x",
+                "favicon": "https://one.example/favicon.ico",
+                "snippet": "One.",
+            },
+            {"name": "Second", "url": "https://two.example/y", "snippet": "Two."},
+        ],
+    }
+)
+
+_LINKUP_RESULTS = _body(
+    {
+        "results": [
+            {
+                "name": "First",
+                "url": "https://one.example/x",
+                "content": "One.",
+                "type": "text",
+                "favicon": "https://one.example/favicon.ico",
+            },
+            {"url": "https://image.example/p.png", "content": "a picture", "type": "image"},
+            {"url": "https://no-name.example/z", "content": "Three."},
+        ]
+    }
+)
+
 
 def _searxng_pages(counts: list[int], statuses: list[int] | None = None) -> list[dict[str, Any]]:
     """One page per entry: ``counts[i]`` records, answered with ``statuses[i]``."""
@@ -1287,6 +1350,304 @@ PROVIDER_CASES: dict[str, dict[str, Any]] = {
         "provider": "searxng",
         "endpoint": "http://searxng.test/",
         "query": {"query": "slow instance"},
+        "refuse": "timeout",
+    },
+    # {5 Tavily: content in [text], the closed country enum, the flat price}
+    "60-tavily-basic": {
+        "provider": "tavily",
+        "query": {"query": "alpine passes"},
+        "response": {"status": 200, "body": _TAVILY_TWO},
+    },
+    "61-tavily-constraints": {
+        "provider": "tavily",
+        "query": {
+            "query": "alpine passes",
+            "max_results": 3,
+            "include_domains": ["peakbagger.com"],
+            "exclude_domains": ["wikipedia.org"],
+            "country": "FR",
+            "language": "DE",
+            "recency": "month",
+            "safe_search": True,
+        },
+        "response": {"status": 200, "body": _TAVILY_TWO},
+    },
+    "62-tavily-unmapped-country": {
+        # A country the closed enum has no name for is dropped from the body and
+        # named in the notice; sending it upstream would be an ignored filter.
+        "provider": "tavily",
+        "query": {"query": "alpine passes", "country": "qq"},
+        "response": {"status": 200, "body": _TAVILY_TWO},
+    },
+    "63-tavily-text-cap": {
+        "provider": "tavily",
+        "query": {"query": "long extract", "max_results": 2},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {
+                            "title": "Long",
+                            "url": "https://long.example/",
+                            "content": "word " * 450,
+                            # Past the 2000-character text cap, so the golden pins
+                            # the clipped text and the flag beside it.
+                        },
+                        {
+                            "title": "Newlines",
+                            "url": "https://nl.example/",
+                            "content": "a\tb\nc",
+                        },
+                    ]
+                }
+            ),
+        },
+    },
+    "64-tavily-zero-results": {
+        "provider": "tavily",
+        "query": {"query": "nothing here"},
+        "response": {"status": 200, "body": _body({"answer": None, "results": []})},
+    },
+    "65-tavily-shape-drift": {
+        "provider": "tavily",
+        "query": {"query": "shape drift"},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "answer": {"nested": "object"},
+                    "results": [
+                        {"title": "No url", "content": "dropped"},
+                        {"url": "https://no-title.example/"},
+                        "not an object",
+                        {"title": "Kept", "url": "https://kept.example/", "content": 7},
+                    ],
+                    "usage": {"credits": "many"},
+                }
+            ),
+        },
+    },
+    "66-tavily-json-array": {
+        "provider": "tavily",
+        "query": {"query": "wrong shape"},
+        "response": {"status": 200, "body": "[1, 2, 3]"},
+    },
+    "67-tavily-rate-limited": {
+        "provider": "tavily",
+        "query": {"query": "too fast"},
+        "response": {"status": 429, "body": _body({"detail": "rate limit exceeded"})},
+    },
+    "68-tavily-credits-exhausted": {
+        # Tavily's own spent-credit status, beside 429 and apart from 432, which
+        # is the plan-limit row this adapter does not read as quota.
+        "provider": "tavily",
+        "query": {"query": "out of credits"},
+        "response": {"status": 432, "body": "Credits exhausted"},
+    },
+    "69-tavily-auth-rejected": {
+        "provider": "tavily",
+        "query": {"query": "bad key"},
+        "response": {"status": 401, "body": "<html>unauthorized</html>"},
+    },
+    "70-tavily-unreachable": {
+        "provider": "tavily",
+        "query": {"query": "dns failure"},
+        "refuse": "unavailable",
+    },
+    # {6 TinyFish: a GET whose credential is a header, and no safety filter}
+    "71-tinyfish-basic": {
+        "provider": "tinyfish",
+        "query": {"query": "alpine passes"},
+        "response": {"status": 200, "body": _TINYFISH_TWO},
+    },
+    "72-tinyfish-constraints": {
+        "provider": "tinyfish",
+        "query": {
+            "query": "alpine passes",
+            "max_results": 12,
+            "include_domains": ["peakbagger.com", "summitpost.org"],
+            "exclude_domains": ["facebook.com"],
+            "country": "FR",
+            "language": "DE",
+            "recency": "week",
+            "safe_search": True,
+        },
+        "response": {"status": 200, "body": _TINYFISH_TWO},
+    },
+    "73-tinyfish-safe-off": {
+        "provider": "tinyfish",
+        "query": {"query": "unfiltered", "safe_search": False},
+        "response": {"status": 200, "body": _TINYFISH_TWO},
+    },
+    "74-tinyfish-snippet-cap": {
+        "provider": "tinyfish",
+        "query": {"query": "long snippet", "max_results": 2},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {"title": "Long", "url": "https://long.example/", "snippet": "word " * 200},
+                        {"title": "Tabs", "url": "https://tab.example/", "snippet": "a\tb\nc"},
+                    ]
+                }
+            ),
+        },
+    },
+    "75-tinyfish-zero-results": {
+        "provider": "tinyfish",
+        "query": {"query": "nothing here"},
+        "response": {"status": 200, "body": _body({"results": []})},
+    },
+    "76-tinyfish-shape-drift": {
+        "provider": "tinyfish",
+        "query": {"query": "shape drift"},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {"title": "No url", "snippet": "dropped"},
+                        {"url": "https://no-title.example/"},
+                        7,
+                        {"title": "Kept", "url": "https://kept.example/", "snippet": ["a", "b"]},
+                    ]
+                }
+            ),
+        },
+    },
+    "77-tinyfish-json-array": {
+        "provider": "tinyfish",
+        "query": {"query": "wrong shape"},
+        "response": {"status": 200, "body": "[1, 2, 3]"},
+    },
+    "78-tinyfish-payment-required": {
+        # TinyFish's spent-account row is the payment status, not the rate limit.
+        "provider": "tinyfish",
+        "query": {"query": "no search access"},
+        "response": {"status": 402, "body": _body({"error": "payment required"})},
+    },
+    "79-tinyfish-rate-limited": {
+        "provider": "tinyfish",
+        "query": {"query": "too fast"},
+        "response": {"status": 429, "body": "Too Many Requests"},
+    },
+    "80-tinyfish-timeout": {
+        "provider": "tinyfish",
+        "query": {"query": "slow vendor"},
+        "refuse": "timeout",
+    },
+    # {7 Linkup: two payload shapes, and the one date an adapter computes}
+    "81-linkup-sourced-answer": {
+        "provider": "linkup",
+        "query": {"query": "alpine passes"},
+        "response": {"status": 200, "body": _LINKUP_ANSWER},
+    },
+    "82-linkup-search-results": {
+        "provider": "linkup",
+        "output_type": "searchResults",
+        "query": {"query": "alpine passes", "max_results": 2},
+        "response": {"status": 200, "body": _LINKUP_RESULTS},
+    },
+    "83-linkup-deep-standard": {
+        # [depth] is an operator setting and the ~10x cost cliff; the case pins
+        # the word on the wire, never a price.
+        "provider": "linkup",
+        "depth": "deep",
+        "query": {"query": "alpine passes", "max_results": 2},
+        "response": {"status": 200, "body": _LINKUP_ANSWER},
+    },
+    "84-linkup-recency-month": {
+        "provider": "linkup",
+        "now": _LINKUP_NOW,
+        "query": {"query": "recent ascents", "recency": "month", "max_results": 2},
+        "response": {"status": 200, "body": _LINKUP_ANSWER},
+    },
+    "85-linkup-recency-year": {
+        "provider": "linkup",
+        "now": _LINKUP_NOW,
+        "query": {"query": "older ascents", "recency": "year", "max_results": 2},
+        "response": {"status": 200, "body": _LINKUP_ANSWER},
+    },
+    "86-linkup-geo-and-safety": {
+        # Linkup has no geo, language or safety parameter, so the geo bucket
+        # stays one joined token.
+        "provider": "linkup",
+        "query": {"query": "alpine passes", "country": "FR", "language": "fr", "safe_search": True},
+        "response": {"status": 200, "body": _LINKUP_ANSWER},
+    },
+    "87-linkup-domains": {
+        "provider": "linkup",
+        "query": {
+            "query": "alpine passes",
+            "max_results": 2,
+            "include_domains": ["peakbagger.com"],
+            "exclude_domains": ["facebook.com"],
+        },
+        "response": {"status": 200, "body": _LINKUP_ANSWER},
+    },
+    "88-linkup-snippet-cap": {
+        "provider": "linkup",
+        "query": {"query": "long citation", "max_results": 1},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "answer": "One long citation.",
+                    "sources": [
+                        {
+                            "name": "Long",
+                            "url": "https://long.example/",
+                            "snippet": "word " * 200,
+                        }
+                    ],
+                }
+            ),
+        },
+    },
+    "89-linkup-zero-results": {
+        "provider": "linkup",
+        "query": {"query": "nothing here"},
+        "response": {"status": 200, "body": _body({"sources": [], "answer": None})},
+    },
+    "90-linkup-shape-drift": {
+        "provider": "linkup",
+        "query": {"query": "shape drift"},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "answer": ["a", "b"],
+                    "sources": [
+                        {"name": "no url"},
+                        "not an object",
+                        {"name": "Kept", "url": "https://kept.example/", "snippet": 7},
+                    ],
+                }
+            ),
+        },
+    },
+    "91-linkup-json-array": {
+        "provider": "linkup",
+        "query": {"query": "wrong shape"},
+        "response": {"status": 200, "body": "[1, 2, 3]"},
+    },
+    "92-linkup-rate-limited": {
+        "provider": "linkup",
+        "query": {"query": "out of credit"},
+        "response": {"status": 429, "body": _body({"detail": "Too Many Requests"})},
+    },
+    "93-linkup-payment-lane": {
+        # The x402 lane this adapter never enters: the same status is quota for
+        # [scrappa], [serper] and [tinyfish], and an ordinary failure here.
+        "provider": "linkup",
+        "query": {"query": "x402"},
+        "response": {"status": 402, "body": "Payment Required"},
+    },
+    "94-linkup-timeout": {
+        "provider": "linkup",
+        "query": {"query": "slow vendor"},
         "refuse": "timeout",
     },
 }

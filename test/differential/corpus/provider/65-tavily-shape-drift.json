@@ -1,0 +1,10 @@
+{
+  "provider": "tavily",
+  "query": {
+    "query": "shape drift"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"answer\": {\"nested\": \"object\"}, \"results\": [{\"title\": \"No url\", \"content\": \"dropped\"}, {\"url\": \"https://no-title.example/\"}, \"not an object\", {\"title\": \"Kept\", \"url\": \"https://kept.example/\", \"content\": 7}], \"usage\": {\"credits\": \"many\"}}"
+  }
+}

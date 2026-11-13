@@ -1,0 +1,10 @@
+{
+  "provider": "tinyfish",
+  "query": {
+    "query": "alpine passes"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"First\", \"url\": \"https://one.example/x\", \"snippet\": \"One.\", \"date\": \"2026-01-05\"}, {\"title\": \"Second\", \"url\": \"https://two.example/y\", \"snippet\": \"Two.\"}]}"
+  }
+}

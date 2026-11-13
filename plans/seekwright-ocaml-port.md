@@ -1557,3 +1557,113 @@ integer that Yojson hands over as `Intlit`) and a source guard over `jsondoc.ml`
 them from the dune sandbox. No differential golden changed. Gate at landing:
 `dune build @install`, `dune runtest --force` (61 suites) and `dune build @doc`
 all exit 0; nothing reached a provider endpoint.
+
+## 26. F5.3 — the Tavily, TinyFish and Linkup adapters (2026-11-13)
+
+Landed on `f5-3-content`. Spec: `plans/ocaml-finalisation.md` §F5.3 and the F5 common
+acceptance rows.
+
+**Three adapters, three wire shapes, two result fields.** `Seekwright_providers.Tavily`
+(`lib/providers/tavily.ml{,i}`) is one `POST https://api.tavily.com/search` with the
+body the vendor names (`query`, `max_results`, `include_answer: "basic"`,
+`include_raw_content: false`, `search_depth: "basic"`, `time_range`,
+`include_domains`/`exclude_domains` as JSON lists, `country`, `language`,
+`safe_search`) and the key as `Authorization: Bearer`; it is a **content** backend, so
+`content` lands in `Result.text` with `text_truncated`, `snippet` stays empty, and the
+vendor's prose lands in `Provider.outcome.answer`. `Tinyfish` is one
+`GET https://api.search.tinyfish.ai` with the key in the vendor's own `X-API-Key` and
+every constraint on a native parameter — the two domain lists comma-joined into one
+parameter each, `recency_minutes`, `location` upper-cased, `language` lower-cased — so
+a fully constrained query draws no notice at all; there is no result-count parameter
+upstream, which makes the slice in `parse` the only place `max_results` takes effect.
+`Linkup` is one `POST https://api.linkup.so/v1/search`, and it is the only adapter in
+the tree with **two payload shapes**: `sourcedAnswer` parses `sources[]` with its
+`snippet` field and answers with prose, `searchResults` parses `results[]` with its
+`content` field and answers with nothing. The two parses also differ in how they
+spend the limit — the citation list slices the upstream list first, so a record that
+fails to parse still costs a slot, while the results walk keeps going until `limit`
+*usable* items arrive because image rows carry no text a response could use. That
+asymmetry is the vendor's payload, and it is pinned rather than reconciled.
+
+**The expensive knobs stay operator-configured.** Linkup's `depth` is a ~10× cost
+cliff and `outputType` is the shape that buys the prose, so both are constructor
+arguments the row reads from config (`~settings:["depth"; "output_type"]`) and neither
+is ever a tool parameter. `Registry.linkup_output` maps `Config.output_kind` onto
+`Linkup.output`, a total match: a widened config enum fails the build at that
+function rather than reaching the adapter as an unclassified string. Tavily's
+`search_depth` stays pinned at `basic` for the same reason.
+
+**One reported figure has no counterpart, and it is recorded rather than invented.**
+The oracle asks Tavily with `include_usage: true` and reads `usage.credits` back into
+`Result._reported_cost_usd` so `--check --live` can diff the billed figure against the
+estimate. `Provider.outcome` has no private channel to carry an actual-usage number —
+`lib/engine.ml`'s note is the on-record statement of that gap — so the port keeps the
+**ask** on the wire (the request body is byte-for-byte what the oracle sends, and the
+differential area pins it) and does not invent a reader for the reply. Tavily's
+`cost_for` therefore answers the flat estimate alone. Closing the gap means a channel
+at the provider boundary, which is a surface decision for a plan, not an adapter
+decision; it is the one behaviour in these three names that a golden does not equalise.
+
+**A closed vendor enum, not a code.** Tavily's `country` is a closed set of lowercase
+English names valid on the `general` topic, so `Tavily.country_param` carries the
+vendor's own table (the two Congo codes share one entry, `uk` and `usa` are aliases
+callers write and the enum does not list) and lets an already-valid name through
+untouched. An unmappable code is not guessed at: the parameter is dropped and
+`~geo:(country <> None)` makes the notice name `country` alone — the geo bucket answered
+per call rather than per adapter, which is what a filter that works *only sometimes*
+owes the caller.
+
+**Each adapter owns its quota class.** Tavily folds `432` (monthly credits exhausted)
+in with `429`; TinyFish folds `402` — "Search API access is required for your account"
+is an account question, not a malformed request, so it moves the fallback walk like a
+spent quota does; **Linkup keeps `402` out**, because its 402 belongs to a keyless x402
+lane this adapter never enters — every request it makes is bearer-keyed — so a 402 that
+reaches it is an unexpected status and stays on the `HTTP 402` row. Those three
+differences are fields on the shared-contract record (`quota_statuses`), not rows
+dropped from the sweep.
+
+**A date is computed once, and the clock comes from outside.** Linkup's `fromDate` is
+the only date an adapter in this tree derives (`now − {1,7,30,365}` days, rendered
+`%Y-%m-%dT%H:%M:%SZ` by Hinnant's `civil_from_days`, no timezone library), so
+`Linkup.make` takes `~now:(unit -> float)` and the registry hands it the same
+`args.now` the row's grant was built with. TinyFish's `recency_minutes` and Tavily's
+`time_range` are windows the endpoint measures, so they need no clock at all.
+
+**Tests.** `test/test_tavily.ml` (42 cases), `test/test_tinyfish.ml` (30) and
+`test/test_linkup.ml` (41) drive each adapter over a scripted `Provider.Net.t`, one
+case per acceptance row in the spec: request shape, credential location, clamping,
+recency (with the injected clock pinned), native versus folded filters, the
+ignored-constraint notice, zero results, the adapter's own quota statuses, malformed
+and non-object JSON, the text cap with `text_truncated`, the snippet cap with the
+uncapped figure, and the cost arithmetic. `test/test_provider_contract.ml` runs the
+shared table over all eight on-disk adapters. `test/test_provider_registry.ml` (21)
+moves with the rows: the built half is now `anysearch`, `freeserp`, `linkup`,
+`scrappa`, `searxng`, `serper`, `tavily` and `tinyfish`; the deferred half names nine.
+`test/test_provider.ml`'s sandbox pin goes from seven adapter sources to ten.
+
+**The provider area grows where content adapters need it.** 35 cases (60–70 tavily,
+71–80 tinyfish, 81–94 linkup) join the 38 Serper/Scrappa/SearXNG ones, and the
+projection gains three lines on both sides — `result text=`, `result text_truncated=`
+and `answer=` — because without them a content adapter's whole answer was the part no
+golden compared. Serper, Scrappa and SearXNG answer all three with `-`, so the change
+costs nothing there and pins everything here. The same area also had a hole the bearer
+adapters fell through: the header rendering replaced the probe key only when a header
+held it alone, so `Authorization: Bearer <key>` echoed it. The rendering now replaces
+the key wherever it appears in a value, and a bearer header lands as `Bearer sentinel` —
+the location pinned, the credential not. Recency for Linkup is the one case where a
+golden would otherwise record the day it was generated: a case that asks for a window
+names the instant its clock reads as `now` (the fixed `1_700_000_000`), the OCaml
+projection freezes its injected clock to it, and the oracle side rebinds
+`linkup.datetime` inside `ocaml-tools/oracle/projections.py` — the read-only oracle tree
+is not edited to become deterministic. All 73 goldens are `differential-golden`; no
+divergence had to be registered, so the port's wire shape, both parse shapes and failure
+vocabulary match the oracle case for case. `min_cases` for the area moves from 30 to 70,
+and the `providers.tsv` rows for the three names move to `ported` with `unit(test_<name>
+scripted transport); differential-golden(provider)`.
+
+**Gate at landing.** Rebased onto `ocaml-port@ a382e7d`, which carries the
+`live/cases.ml` `Credit_multiplier` arm and the live pin that reads the three new rows
+as runnable — neither was edited here, both are `live/**` and outside this task's
+ownership. `dune build @install`, `dune runtest --force` (64 suites) and
+`dune build @doc` all exit 0. Nothing in this change reached a provider endpoint: no
+live test ran, no key was read, and each new row keeps `ocaml_live_tested = false`.

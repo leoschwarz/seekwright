@@ -1,0 +1,7 @@
+{
+  "provider": "linkup",
+  "query": {
+    "query": "slow vendor"
+  },
+  "refuse": "timeout"
+}

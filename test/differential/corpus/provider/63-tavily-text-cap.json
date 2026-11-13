@@ -1,0 +1,11 @@
+{
+  "provider": "tavily",
+  "query": {
+    "query": "long extract",
+    "max_results": 2
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"Long\", \"url\": \"https://long.example/\", \"content\": \"word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \"}, {\"title\": \"Newlines\", \"url\": \"https://nl.example/\", \"content\": \"a\\tb\\nc\"}]}"
+  }
+}

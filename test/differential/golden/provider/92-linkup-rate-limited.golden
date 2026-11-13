@@ -1,0 +1,15 @@
+area: provider
+case: 92-linkup-rate-limited
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.linkup.so/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"depth":"standard","maxResults":5,"outputType":"sourcedAnswer","q":"out of credit"}
+verdict= error
+kind= quota
+retryable= false
+message= rate limited (10 QPS org-wide)

@@ -1,0 +1,32 @@
+area: provider
+case: 62-tavily-unmapped-country
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.tavily.com/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"include_answer":"basic","include_raw_content":false,"include_usage":true,"max_results":5,"query":"alpine passes","search_depth":"basic"}
+verdict= ok
+name= tavily
+result title=First
+result url=https://one.example/x
+result snippet=-
+result uncapped=28
+result text=One. A short inline extract.
+result text_truncated=-
+result published_date=2026-01-05
+result score=0.980000
+result title=Second
+result url=https://two.example/y
+result snippet=-
+result uncapped=4
+result text=Two.
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.008000
+answer= Two passes, both on the Mont Blanc massif.
+notice=cannot filter by country; that constraint was ignored

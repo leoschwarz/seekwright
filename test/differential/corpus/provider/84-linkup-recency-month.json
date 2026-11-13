@@ -1,0 +1,13 @@
+{
+  "provider": "linkup",
+  "now": 1700000000.0,
+  "query": {
+    "query": "recent ascents",
+    "recency": "month",
+    "max_results": 2
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"answer\": \"Two passes, both on the Mont Blanc massif.\", \"sources\": [{\"name\": \"First\", \"url\": \"https://one.example/x\", \"favicon\": \"https://one.example/favicon.ico\", \"snippet\": \"One.\"}, {\"name\": \"Second\", \"url\": \"https://two.example/y\", \"snippet\": \"Two.\"}]}"
+  }
+}

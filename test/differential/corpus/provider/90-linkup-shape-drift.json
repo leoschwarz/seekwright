@@ -1,0 +1,10 @@
+{
+  "provider": "linkup",
+  "query": {
+    "query": "shape drift"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"answer\": [\"a\", \"b\"], \"sources\": [{\"name\": \"no url\"}, \"not an object\", {\"name\": \"Kept\", \"url\": \"https://kept.example/\", \"snippet\": 7}]}"
+  }
+}
