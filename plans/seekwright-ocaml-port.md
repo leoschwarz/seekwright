@@ -2089,3 +2089,81 @@ hand-edited. `dune build @install`, `dune build @doc` (one benign odoc warning o
 docstrings still say there is "no [warmup] member for yet" — stale since this wave's
 seam landed. The prose move is the health area's, not this wave's; recorded here so
 it is not lost.
+
+## 31. The factory split — one facade over six construction modules (2026-11-13)
+
+Landed on `factory-split` as nine commits, one per move, gate green after each. The
+design and the pin edits are `plans/factory-split-proposal.md`, which lands with this
+section so the sequence is reviewable against the diff.
+
+**The module map.** `lib/factory` now holds eight implementation modules where it
+held two. `factory.ml` is a 73-line facade — ten `let` re-exports and the two record
+aliases, nothing else. `provider_set.ml{,i}` carries the two records a build
+reports in — `providers` and `set_report` — and is the only new module left public,
+because `factory.mli` re-exports them with their field labels and a private module
+named from a public signature leaves a dangling path (§11). `verdict.ml{,i}` carries
+`classify`, `built_phrase` and `startup_verdict`; `grants.ml{,i}` carries the audit
+field set, `audit_sink`, `grant_of_decision`, `grant_of_endpoint` and `probe_net`;
+`providers_build.ml{,i}` carries `adapter`, `adapter_of_row` and `build_providers`;
+`fetch_stack.ml{,i}` carries `build_extractor`, `readers`, `cap_of`, `error_of` and
+`build_fetch_stack`; `app.ml{,i}` carries `agent_net` and `build_app`. Every moved
+body is byte-identical — the only edits inside a span are the header `let` aliases
+that let one module call another's moved value, so the diff is a move and reviewable
+as one. `registry.ml` and `registry.mli` are untouched: the registry is data, and the
+split deliberately left it where it was. `factory.mli` is unchanged apart from the two
+equated aliases, so it remains the public contract; the ten values a caller names are
+the same ten, and `lib/server.ml`, `lib/cli/`, `bin/` and the test suites needed no
+call-site edit.
+
+**The funnel pin is now a library total.** The audit guarantee was pinned per file
+while there was one file, and a per-file count over seven would let the funnel
+multiply quietly. `Test_support.factory_sources` reads `lib/factory` with
+`Sys.readdir` as a `unit -> (string * string) list` — a function, not a top-level
+value, so the suites that link `test_support` but have no factory do not read a
+directory that may not be in their sandbox — and the three `test/dune` stanzas that
+read the factory now declare `(glob_files ../lib/factory/*.ml)` and `*.mli` rather
+than naming `factory.ml`. `test_caps_audit` counts `Authority.with_log` and
+`Authority.Net.of_confinement` as totals over every implementation in the library,
+and separately names `lib/factory/grants.ml` as the file that must hold each of them,
+so the check is a total and a location. Its negative half — no other factory module,
+and neither `lib/server.ml` nor `bin/main.ml`, constructs or wraps a grant — is the
+same scan. The per-call-site `includes` needles name the file that owns the code they
+describe, which is what turned each of steps 4–7 into a gate failure rather than a
+silent re-pointing; `test_grant_timeouts` and `test_fetch_grant` moved their config-key
+and web-variant needles to the new module in the same commit as the move. Two of these
+pins were checked for non-vacuity by hand: a decoy naming the audit wrapper in
+`verdict.ml` turns the funnel totals red (both halves), and a decoy naming
+`Engine.Search.create` above the verdict call turns the source-order pin red.
+
+**The seal, and what it does not do.** `(private_modules app fetch_stack grants
+providers_build verdict)` keeps those five away from installed consumers and out of
+odoc. It does not stop a stanza inside this workspace naming them through dune's
+generated alias module, so the boundary that matters on the serving path is pinned by
+source instead, and step 8 adds those two pins: `app.ml`'s verdict call sits before its
+`Engine.Search.create` (the ordering every type still checks without), and
+`lib/cli/cli_check.ml` and `lib/cli/cli_flags.ml` name neither `App.` nor `build_app`
+while `bin/main.ml` names `Factory.build_app` — the diagnosis never reaches the module
+that can build an engine, and the transport entry is the only door. The proposal's
+draft of the second pin said `bin/main.ml` contains no `build_app`; it does, and it is
+supposed to, so the pin asserts the call site exists rather than its absence.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` (71 suites, all
+green) and `dune build @doc` all exit 0, with the one pre-existing odoc warning in
+`factory.mli`'s empty reference unchanged. Nothing reached a provider endpoint and no
+key was read.
+
+**Follow-ups, deliberately not folded in.** The eight
+`test/differential/matrix/config-fields.tsv` rows that credit `factory/factory.ml`
+still credit the facade for code that now lives in `grants.ml`, `fetch_stack.ml` and
+`app.ml`; the matrix sandbox already globs `lib/factory/*.ml`, so the re-credit is a
+data edit in the differential area, not a factory one, and the split left it alone.
+Behaviour-preserving cleanups are separate commits for the same reason:
+`grants.ml`'s `probe_net` writes the identical `Unavailable` net record twice, and
+`fetch_stack.ml`'s `build_fetch_stack` is a nested `match … Some (Ok …)` ladder that
+would flatten with an option-result bind. The stale `Factory.page_of` prose in
+`lib/wire/page.mli` and `test/test_wire.ml` names a value this library has never
+exported — a doc sweep for whoever owns `lib/wire`. A compiler-enforced funnel
+(sealing `of_confinement` and `with_log` behind one audited constructor) is an
+`mcp-caps` public-API decision with its own review; this split is the step toward it.
+Relocating `readers` out of the factory stays blocked by dependency direction: it
+would need both `seekwright` and `seekwright.fetch`.
