@@ -268,6 +268,34 @@
   yojson
   alcotest test_support))
 
+; F2.2: the extraction runner — a fixed pool of worker domains behind
+; AF_UNIX sockets, so a parse costs its own core and not the loop's. The
+; oracle's [_GrindingExtractor] cases from tests/fetch/test_fetch_guardrails.py
+; at the pool seam, and the same backend through the fetcher's parse deadline.
+(test
+ (name test_extract_pool)
+ (libraries
+  seekwright.fetch
+  seekwright.fetch.stdlib
+  eio
+  eio_main
+  unix
+  alcotest test_support))
+
+(test
+ (name test_fetch_workers)
+ (libraries
+  seekwright.fetch
+  seekwright.fetch.stdlib
+  mcp-caps
+  cohttp-eio
+  http
+  eio
+  eio_main
+  unix
+  uri
+  alcotest test_support))
+
 ; P6: the JSON and table halves of the fetch path — the renderers' cases from
 ; tests/fetch/test_jsondoc.py and test_tabledoc.py.
 (test
