@@ -147,7 +147,9 @@ let test_build_status_follows_the_registry () =
   expect (Cases.Provider "serper") "runnable";
   expect (Cases.Provider "scrappa") "runnable";
   expect (Cases.Provider "searxng") "runnable";
-  expect (Cases.Provider "tavily") "F5.3";
+  expect (Cases.Provider "tavily") "runnable";
+  expect (Cases.Provider "tinyfish") "runnable";
+  expect (Cases.Provider "linkup") "runnable";
   expect (Cases.Provider "algolia") "F5.4";
   expect (Cases.Provider "deepseek") "F5.5";
   expect (Cases.Fetch Cases.Local) "runnable";
