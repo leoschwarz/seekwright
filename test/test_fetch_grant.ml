@@ -271,7 +271,7 @@ let count_in_impls needle =
 (* [stack_source] is the module that owns [build_fetch_stack]; [endpoint_source]
    is the one that owns [grant_of_endpoint] and [probe_net]. *)
 let stack_source = "lib/factory/factory.ml"
-let endpoint_source = "lib/factory/factory.ml"
+let endpoint_source = "lib/factory/grants.ml"
 
 let widening_is_constructed_once () =
   (* the private-web variant appears exactly once in the library, and only in

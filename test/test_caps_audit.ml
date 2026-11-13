@@ -528,7 +528,7 @@ let factory_source name =
    location as well as a total: as the library splits, this name moves with the
    funnel, and the totals below are what stop a split from quietly turning the
    count into one-per-file. *)
-let funnel_source = "lib/factory/factory.ml"
+let funnel_source = "lib/factory/grants.ml"
 
 let count_in sources needle =
   List.fold_left
@@ -556,13 +556,14 @@ let test_the_factory_builds_grants_through_one_funnel () =
     (fun (file, call) -> includes (file ^ " calls " ^ call) call (factory_source file))
     [
       (funnel_source, "grant_of_decision ~mono_clock ~timeout_seconds ?audit decision");
-      (funnel_source, "let audit = audit_sink log in");
+      ("lib/factory/factory.ml", "let audit = audit_sink log in");
       (* every public builder that can hand back a grant takes the sink and threads
          it to the funnel, so none of them can drop it on the way *)
-      (funnel_source, "~audit config");
-      (funnel_source, "?audit adapter.endpoint");
+      ("lib/factory/factory.ml", "~audit config");
+      ("lib/factory/factory.ml", "?audit adapter.endpoint");
       (funnel_source, "?audit decision");
-      (funnel_source, "?audit endpoint)");
+      ("lib/factory/factory.ml", "?audit decision");
+      ("lib/factory/factory.ml", "?audit endpoint)");
     ]
 
 (* The layer's per-operation counter is a caller's ceiling. Server construction
