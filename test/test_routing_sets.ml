@@ -181,12 +181,14 @@ let permission_narrowing_narrows_the_sets_not_the_startup () =
 
 let the_five_sets_are_reported_apart () =
   (* One config that touches all five categories at once: [exa] is enabled,
-     unsupported and startup-fatal; [search1api] is enabled, permitted,
-     unsupported and one of Python's untested four; [freeserp] is enabled,
-     permitted and built, and now OCaml live-tested by F4.3's keyless run, so
-     it is no longer in the untested set. No category collapses into another,
-     and none of them says "ready": the ready count is the probe's, printed
-     elsewhere. *)
+     unsupported and startup-fatal; [search1api] is enabled, permitted and
+     built — its key stands in the environment so the build pass constructs it —
+     and remains in the untested set because this port has never run its OCaml
+     live test; [freeserp] is enabled, permitted, built and OCaml live-tested by
+     F4.3's keyless run, so it is no longer in the untested set. No category
+     collapses into another, and none of them says "ready": the ready count is
+     the probe's, printed elsewhere. *)
+  Unix.putenv (Config.api_key_env_var "search1api") "fixture-key";
   with_env (fun ~env ~sw ->
     let cfg =
       config ~permitted:[ "freeserp"; "search1api" ] [ "freeserp"; "exa"; "search1api" ]
@@ -195,12 +197,15 @@ let the_five_sets_are_reported_apart () =
     A.(check (list string) "enabled" [ "exa"; "freeserp"; "search1api" ]
          sets.Factory.enabled);
     A.(check (list string) "effective" [ "freeserp"; "search1api" ] sets.Factory.effective);
-    A.(check (list string) "built" [ "freeserp" ] sets.Factory.built);
-    A.(check (list string) "unsupported" [ "exa"; "search1api" ] sets.Factory.unsupported);
+    A.(check (list string) "built" [ "freeserp"; "search1api" ] sets.Factory.built);
+    A.(check (list string) "unsupported" [ "exa" ] sets.Factory.unsupported);
     A.(check (list string) "OCaml-untested, built names included"
          [ "search1api" ] sets.Factory.untested);
     A.(check bool "and the verdict is the startup-fatal reading" false
-         (Result.is_ok (Factory.startup_verdict cfg (build ~env ~sw cfg)))))
+         (Result.is_ok (Factory.startup_verdict cfg (build ~env ~sw cfg)))));
+  (* [Unix] has no unsetenv, and [Config.api_key] reads an empty value as
+     absent, so restoring means writing the empty form. *)
+  Unix.putenv (Config.api_key_env_var "search1api") ""
 
 (* {1 [/healthz] reports the built set} *)
 

@@ -1,0 +1,11 @@
+{
+  "provider": "serpapi",
+  "query": {
+    "query": "long snippet",
+    "max_results": 1
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"organic_results\": [{\"title\": \"Long\", \"link\": \"https://long.example/\", \"snippet\": \"word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \"}]}"
+  }
+}

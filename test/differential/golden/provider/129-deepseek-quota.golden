@@ -1,0 +1,15 @@
+area: provider
+case: 129-deepseek-quota
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.deepseek.com/v1/tools/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"count":5,"query":"spent"}
+verdict= error
+kind= quota
+retryable= false
+message= rate limited or out of account balance

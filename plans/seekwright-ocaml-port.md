@@ -1876,3 +1876,112 @@ was edited except the one live pin line named above. `dune build @install`, `dun
 runtest --force` (65 suites) and `dune build @doc` all exit 0. Nothing in this change
 reached a provider endpoint: no live test ran, no key was read, and the row keeps
 `ocaml_live_tested = false`.
+
+## 29. F5.5 — the last four adapters: Search1API, SerpAPI, Querit, DeepSeek (2026-11-13)
+
+Landed on `f5-5-final4`. Spec: `plans/ocaml-finalisation.md` §F5.5 and the F5 common
+acceptance rows. With this wave every one of the seventeen names has an adapter on
+the port; the four still `Deferred "F5.1"` are the Exa/Parallel MCP pair and their
+anonymous halves, not a gap in the REST adapters.
+
+**Four adapters, three shapes already in the tree and one that is new.**
+`Seekwright_providers.Search1api`, `Querit` and `Deepseek` (`lib/providers/*.ml{,i}`)
+POST JSON with the key in a bearer header, the pattern F5.3 set with `tavily`;
+`Seekwright_providers.Serpapi` is a GET SERP like `serper`, with one difference that
+dominates its whole failure story.
+
+- **SerpAPI: the URL itself is the secret.** Its documented shape rides the key in
+  the query string (`api_key=…`), not a header — the only adapter in the tree that
+  does, which is why its row's credential is `Key_in_query "api_key"` and its probe
+  (`serpapi_probe`) carries the key as a parameter. Every failure sentence is a
+  redaction case: the oracle's suite asserts no message can echo the request URL,
+  and the port's `ProviderError.message` vocabulary ("request timed out", "network
+  error", "authentication rejected (check API key)", "HTTP <n>") never interpolates
+  it. All five constraint buckets have a documented parameter — `site:` operators
+  folded into `q`, `gl`, `hl`, `tbs`, `safe` — so the notice stays `None` whatever
+  the caller asked.
+- **Querit: the container is the wire's, not a slip.** `results` is an *object* and
+  the hits live under its `result` key; a `results` that drifts to a list — the
+  intuitive reading of the name — is a missing container and answers empty, which
+  the corpus now pins (`125-querit-shape-drift`). `count` is clamped to the free
+  plan's 10 whatever `max_results` asks, and the country and language enums are
+  crossed by *name*: `de` becomes `germany` for the geo include and `german` for
+  the language include — an enum value the backend cannot express is noticed, not
+  silently sent.
+- **DeepSeek: the constraints ride the query itself.** No filter fields exist on
+  this wire, so domains, language and the recency rung *fold* into the query text —
+  `site:`/`-site:` terms, `lang:xx`, and `after:YYYY-MM-DD` as the computed date —
+  and the fold is bounded by the backend's 128-**codepoint** ceiling, counted with
+  `Text.Utf8.count`, not bytes and not OCaml's `String.length`. When the folded
+  query fits, the filters are on and the notice names only `country` and safe
+  search; when it does not, filters come off, the bare query goes out, and the
+  notice names every dropped bucket — the adapter never sends a filter the backend
+  would silently ignore. A 200 with an empty `results` array is documented as not
+  billable, so `cost_usd` is a pinned zero there rather than the per-query figure,
+  and `408` — its request-body read timeout — is a retryable failure with its own
+  sentence, not a quota.
+- **Search1API: native parameters, and two buckets it simply has no field for.**
+  Domains, language (lowercased, not split) and `time_range` ride the POST body;
+  `country` and safe-search have no wire form at all, so `ignored_constraints`
+  names exactly those two — silence there would be a dropped filter.
+
+**The rows were already wired; flipping them is the whole factory change.** The four
+`make_row`s carried endpoints, credentials, prices and probes from F4.1, so `build`
+moves from `Deferred "F5.5"` to `Adapter` builders reading the config entry —
+`require_key` for all four (the free tiers are account quotas, and the key names
+whose quota a search spends), and `deepseek` additionally takes `~text_chars` from
+the policy and `~now` from the grant's clock, because its `after:` date moves with
+every call. The serpapi probe keys the same GET the adapter sends. All four rows
+keep `ocaml_live_tested = false`: these are four of Python's `UNTESTED_PROVIDERS`,
+and a name leaves that status only through a live run recorded in the tree.
+
+**Tests.** `test/test_search1api.ml` (29 cases), `test/test_serpapi.ml` (34),
+`test/test_querit.ml` (36) and `test/test_deepseek.ml` (39) drive the adapters over
+a scripted `Provider.Net.t` — parse and shape drift, the request bodies and query
+parameters as documents, the credential's location (header *or* parameter), the
+constraint notices, the failure vocabularies including the serpapi URL-redaction
+cases and deepseek's 408, the caps with their `uncapped_chars` counts, and the
+costs. The deepseek suite pins its clock to 2026-10-21 so the `after:` arithmetic
+is asserted against constants. `test/test_provider_contract.ml` runs the shared
+table over thirteen adapters now, all four with the `[402; 429]` quota pair;
+`test/test_provider_registry.ml` moves the built half to thirteen and the deferred
+half to the four F5.1 names; `test/test_provider.ml`'s sandbox pin goes from eleven
+adapter sources to fifteen; `test/test_routing_sets.ml`'s five-way fixture now
+builds `search1api` from a sentinel key in the environment and rests its
+unsupported category on the still-unported `exa`.
+
+**The provider area gains its second computed date, and its first query-string
+credential.** 21 cases (110–130) join the 88: five per adapter plus
+`120-serpapi-refused-dial`, whose transport message carries the probe key and the
+caller sees only "network error". DeepSeek's `after:` is the second date an adapter
+computes, so the oracle freezes `deepseek.datetime` the way it already freezes
+`linkup`'s, and the corpus cases name the instant (`now: 1792540800`) — the golden
+pins the arithmetic, not the day it was generated. `127-deepseek-recency` shows
+`after:2026-10-14` in the request body; `128-deepseek-constraints` shows the full
+fold with `site:` and `lang:en`. SerpAPI's cases are the first where the credential
+rides the query line of the dial rendering. All 109 goldens are
+`differential-golden`: nothing had to be registered in `DIVERGENCES`, so request,
+parse, notice and failure vocabulary match the oracle case for case, and
+`min_cases` for the area moves from 85 to 105. One pre-existing drift surfaced on
+regeneration: `63-tavily-text-cap`'s corpus file was written before the generator
+raised its fixture to 450 words, so the case had never actually crossed the text
+cap; regenerating pins `text_truncated=true` and the 2249-character measurement it
+was always meant to test.
+
+**The matrix says what the adapters now consume.** `providers.tsv` puts the four at
+`ported` with `unit(test_<name> scripted transport); differential-golden(provider)`,
+and their `live_status` stays `untested-in-repo` — porting the adapter is not
+evidence a live run passed. No `config-fields.tsv` row moves: none of the four
+reads a provider key beyond the shared `cost_per_1k`. The live harness pins the
+four names `runnable` beside their existing steps, in its own commit.
+
+**Gate at landing.** Base `c354c9d` (the F5.4 live-pin commit); nothing outside
+this task's ownership was edited except two blessed artefacts: the live pin line
+named above, and `bin/check_unbuilt.expected`, whose `--check` golden the registry
+flip moves — `search1api` leaves the `unsupported` line of that report (the name
+is built now; the fixture has no key, so the build pass still dispatches nothing,
+and the untested sentence beside it is unchanged), re-blessed with `dune promote`
+rather than hand-edited. `dune build @install`, `dune runtest --force` (69 suites
+plus the blessed diff rules) and `dune build @doc` all exit 0. Nothing in this
+change reached a provider endpoint: no live test ran, no key was read, and the
+rows keep `ocaml_live_tested = false`.

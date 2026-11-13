@@ -1,0 +1,16 @@
+area: provider
+case: 125-querit-shape-drift
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.querit.ai/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"count":5,"query":"wrong shape"}
+verdict= ok
+name= querit
+cost_usd= 0.000000
+answer= -
+notice=-

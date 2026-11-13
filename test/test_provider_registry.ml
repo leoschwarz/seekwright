@@ -122,12 +122,11 @@ let every_name_has_a_row_built_or_deferred () =
   in
   let unbuilt =
     List.sort String.compare
-      [ "deepseek"; "exa"; "exa:free"; "parallel"; "parallel:free"; "querit";
-        "search1api"; "serpapi" ]
+      [ "exa"; "exa:free"; "parallel"; "parallel:free" ]
   in
   A.(check (list string) "the built rows"
-         [ "algolia"; "anysearch"; "freeserp"; "linkup"; "scrappa"; "searxng"; "serper";
-           "tavily"; "tinyfish" ]
+         [ "algolia"; "anysearch"; "deepseek"; "freeserp"; "linkup"; "querit"; "scrappa";
+           "search1api"; "searxng"; "serpapi"; "serper"; "tavily"; "tinyfish" ]
          (List.sort String.compare built);
     check (list string) "the deferred rows are the rest" unbuilt
        (List.sort String.compare deferred);
@@ -682,24 +681,22 @@ let build_all () =
 let construction_answers_from_the_rows () =
   let providers = build_all () in
   A.
-    (check (list string) "this build dispatches nine of the seventeen"
-       [ "algolia"; "anysearch"; "freeserp"; "linkup"; "scrappa"; "searxng"; "serper";
-         "tavily"; "tinyfish" ]
+    (check (list string) "this build dispatches thirteen of the seventeen"
+       [ "algolia"; "anysearch"; "deepseek"; "freeserp"; "linkup"; "querit"; "scrappa";
+         "search1api"; "searxng"; "serpapi"; "serper"; "tavily"; "tinyfish" ]
        (List.sort String.compare (List.map fst providers.Factory.built));
      (* a deferred row is an inventoried name with no dispatch, reported as such
         rather than dropped, and sorted because two sentences print this set *)
-     check (list string) "the other eight are unsupported"
-       (List.sort String.compare
-          [ "deepseek"; "exa"; "exa:free"; "parallel"; "parallel:free"; "querit"
-          ; "search1api"; "serpapi" ])
+     check (list string) "the other four are unsupported"
+       [ "exa"; "exa:free"; "parallel"; "parallel:free" ]
        providers.Factory.unsupported;
      check (list (pair string string)) "and no grant was refused along the way" []
        providers.Factory.grant_errors);
   (* the probe rows and the allowlist entries come from the built names' rows,
      so [--check] and the grant answer from the same table *)
   A.(check (list string) "one probe row per built name"
-       [ "algolia"; "anysearch"; "freeserp"; "linkup"; "scrappa"; "searxng"; "serper";
-         "tavily"; "tinyfish" ]
+       [ "algolia"; "anysearch"; "deepseek"; "freeserp"; "linkup"; "querit"; "scrappa";
+         "search1api"; "searxng"; "serpapi"; "serper"; "tavily"; "tinyfish" ]
        (List.sort String.compare (List.map fst providers.Factory.probe_table)));
   List.iter
     (fun name ->
@@ -707,7 +704,7 @@ let construction_answers_from_the_rows () =
       A.(check bool (name ^ "'s allowlist entry is its row's endpoint") true
            (List.mem (show_endpoint endpoint) (List.map show_endpoint providers.Factory.endpoints))))
     [ "anysearch"; "freeserp"; "linkup"; "scrappa"; "searxng"; "serper"; "tavily";
-      "tinyfish" ];
+      "tinyfish"; "search1api"; "serpapi"; "querit"; "deepseek" ];
   (* the row's probe is the one in the table, so [--check] asks what the row
      says rather than what a probe table somewhere else says *)
   List.iter

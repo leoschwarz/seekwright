@@ -1,0 +1,11 @@
+{
+  "provider": "search1api",
+  "query": {
+    "query": "long snippet",
+    "max_results": 1
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"Long\", \"link\": \"https://long.example/\", \"snippet\": \"word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \"}]}"
+  }
+}

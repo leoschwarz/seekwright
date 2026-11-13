@@ -1,0 +1,20 @@
+{
+  "provider": "search1api",
+  "query": {
+    "query": "python packaging",
+    "include_domains": [
+      "docs.python.org"
+    ],
+    "exclude_domains": [
+      "pypi.org"
+    ],
+    "country": "US",
+    "language": "DE",
+    "recency": "week",
+    "safe_search": true
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"Pinning the packaging stack\", \"link\": \"https://one.example/pinning\", \"snippet\": \"Lockfiles keep a build reproducible.\", \"published_date\": \"2026-07-14T09:00:00Z\"}, {\"title\": \"Wheels and sdist\", \"link\": \"https://two.example/wheels\", \"snippet\": \"Two.\"}]}"
+  }
+}

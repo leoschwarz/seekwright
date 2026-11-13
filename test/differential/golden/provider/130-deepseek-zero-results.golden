@@ -1,0 +1,16 @@
+area: provider
+case: 130-deepseek-zero-results
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.deepseek.com/v1/tools/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"count":5,"query":"nothing retrieved"}
+verdict= ok
+name= deepseek
+cost_usd= 0.000000
+answer= -
+notice=-

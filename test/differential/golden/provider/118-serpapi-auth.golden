@@ -1,0 +1,15 @@
+area: provider
+case: 118-serpapi-auth
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://serpapi.com/search
+query= api_key=differential-probe-key-4f2a&engine=google&q=rejected
+headers= 
+body= -
+verdict= error
+kind= failure
+retryable= false
+message= authentication rejected (check API key)

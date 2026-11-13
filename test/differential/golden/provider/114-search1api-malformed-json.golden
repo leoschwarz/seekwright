@@ -1,0 +1,15 @@
+area: provider
+case: 114-search1api-malformed-json
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.search1api.com/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"max_results":5,"query":"broken body"}
+verdict= error
+kind= failure
+retryable= true
+message= malformed JSON response

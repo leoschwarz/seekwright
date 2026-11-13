@@ -1,0 +1,32 @@
+area: provider
+case: 110-search1api-basic
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.search1api.com/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"max_results":5,"query":"python packaging"}
+verdict= ok
+name= search1api
+result title=Pinning the packaging stack
+result url=https://one.example/pinning
+result snippet=Lockfiles keep a build reproducible.
+result uncapped=36
+result text=-
+result text_truncated=-
+result published_date=2026-07-14T09:00:00Z
+result score=-
+result title=Wheels and sdist
+result url=https://two.example/wheels
+result snippet=Two.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.000760
+answer= -
+notice=-

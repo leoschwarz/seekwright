@@ -1,0 +1,15 @@
+area: provider
+case: 124-querit-quota
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.querit.ai/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"count":5,"query":"spent"}
+verdict= error
+kind= quota
+retryable= false
+message= rate limited or out of monthly calls

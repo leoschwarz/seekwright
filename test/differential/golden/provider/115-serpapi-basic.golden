@@ -1,0 +1,32 @@
+area: provider
+case: 115-serpapi-basic
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://serpapi.com/search
+query= api_key=differential-probe-key-4f2a&engine=google&q=coffee
+headers= 
+body= -
+verdict= ok
+name= serpapi
+result title=Coffee - Wikipedia
+result url=https://en.wikipedia.org/wiki/Coffee
+result snippet=Coffee is a brewed drink.
+result uncapped=25
+result text=-
+result text_truncated=-
+result published_date=Sep 20, 2018
+result score=-
+result title=Is Coffee Good for You?
+result url=https://time.example/is-coffee-good-for-you
+result snippet=Two.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.000000
+answer= -
+notice=-

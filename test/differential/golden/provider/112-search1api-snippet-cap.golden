@@ -1,0 +1,24 @@
+area: provider
+case: 112-search1api-snippet-cap
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.search1api.com/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"max_results":1,"query":"long snippet"}
+verdict= ok
+name= search1api
+result title=Long
+result url=https://long.example/
+result snippet=word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\u2026
+result uncapped=999
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.000760
+answer= -
+notice=-

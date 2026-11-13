@@ -7,7 +7,7 @@ providers
   enabled   exa:free, parallel:free, search1api
   effective exa:free, parallel:free, search1api
   built     (none)
-  unsupported exa:free, parallel:free, search1api  (not built on this port; the server refuses to start on this config)
+  unsupported exa:free, parallel:free  (not built on this port; the server refuses to start on this config)
   untested  search1api is untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
   exa:free  not built on this port
   parallel:free not built on this port

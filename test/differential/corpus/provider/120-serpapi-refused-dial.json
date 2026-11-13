@@ -1,0 +1,7 @@
+{
+  "provider": "serpapi",
+  "query": {
+    "query": "no route"
+  },
+  "refuse": "denied"
+}

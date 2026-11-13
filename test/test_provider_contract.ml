@@ -85,6 +85,19 @@ let adapters =
       quota_statuses = shared_quota_statuses;
     };
     {
+      name = "deepseek";
+      build =
+        (fun net ->
+          Seekwright_providers.Deepseek.make ~net ~key:probe_key ~now:clock ());
+      auth_message = None;
+      (* 402 is DeepSeek's own "insufficient balance" answer, so the payment
+         status belongs to the quota row here. Its 408 row is narrower than the
+         table's [>= 400] row — documented as the request-body read timing out,
+         retryable like the table says, with a wording of its own — and is pinned
+         in the adapter's own suite. *)
+      quota_statuses = shared_quota_statuses;
+    };
+    {
       name = "freeserp";
       build = (fun net -> Seekwright_providers.Freeserp.make ~now:clock ~net ());
       auth_message = None;
@@ -101,10 +114,28 @@ let adapters =
       quota_statuses = [ 429 ];
     };
     {
+      name = "querit";
+      build =
+        (fun net -> Seekwright_providers.Querit.make ~net ~key:probe_key ());
+      auth_message = None;
+      (* 429 is the documented 1 QPS free limit and the exhausted monthly
+         allowance answers the same code; 402 says the same about the account. *)
+      quota_statuses = shared_quota_statuses;
+    };
+    {
       name = "scrappa";
       build =
         (fun net -> Seekwright_providers.Scrappa.make ~net ~key:probe_key ());
       auth_message = None;
+      quota_statuses = shared_quota_statuses;
+    };
+    {
+      name = "search1api";
+      build =
+        (fun net -> Seekwright_providers.Search1api.make ~net ~key:probe_key ());
+      auth_message = None;
+      (* 402 is documented ([application/problem+json]) for a bearer-keyed
+         client: the credits are gone, the same failure as the rate limit. *)
       quota_statuses = shared_quota_statuses;
     };
     {
@@ -117,6 +148,18 @@ let adapters =
          adapter names what to fix. *)
       auth_message = Some "authentication rejected (enable `format=json` for this client)";
       quota_statuses = [ 429 ];
+    };
+    {
+      name = "serpapi";
+      build =
+        (fun net -> Seekwright_providers.Serpapi.make ~net ~key:probe_key ());
+      auth_message = None;
+      (* 429 is documented as the hourly throughput limit, or an exhausted
+         account; 402 for this vendor says the same about the account. The key
+         rides the query string, so the leak probe matters doubly here: the
+         grant's refusal message carries [probe_key], and the URL it was built
+         from carries the real credential. *)
+      quota_statuses = shared_quota_statuses;
     };
     {
       name = "serper";

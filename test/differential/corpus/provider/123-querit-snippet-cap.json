@@ -1,0 +1,11 @@
+{
+  "provider": "querit",
+  "query": {
+    "query": "long snippet",
+    "max_results": 1
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": {\"result\": [{\"title\": \"Long\", \"url\": \"https://long.example/\", \"snippet\": \"word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word \"}]}}"
+  }
+}

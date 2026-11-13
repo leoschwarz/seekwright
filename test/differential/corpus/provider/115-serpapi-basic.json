@@ -1,0 +1,10 @@
+{
+  "provider": "serpapi",
+  "query": {
+    "query": "coffee"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"search_metadata\": {\"status\": \"OK\", \"id\": \"a1b2c3\"}, \"organic_results\": [{\"position\": 1, \"title\": \"Coffee - Wikipedia\", \"link\": \"https://en.wikipedia.org/wiki/Coffee\", \"snippet\": \"Coffee is a brewed drink.\", \"date\": \"Sep 20, 2018\"}, {\"position\": 2, \"title\": \"Is Coffee Good for You?\", \"link\": \"https://time.example/is-coffee-good-for-you\", \"snippet\": \"Two.\"}], \"related_questions\": [{\"question\": \"unmodelled\"}]}"
+  }
+}

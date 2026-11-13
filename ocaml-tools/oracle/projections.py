@@ -38,7 +38,19 @@ from pydantic import ValidationError
 
 from seekwright import engine as engine_module
 from seekwright import fetcher, jsondoc, models, router, sanitize, tabledoc
-from seekwright.providers import algolia, linkup, scrappa, searxng, serper, tavily, tinyfish
+from seekwright.providers import (
+    algolia,
+    deepseek,
+    linkup,
+    querit,
+    scrappa,
+    search1api,
+    serpapi,
+    searxng,
+    serper,
+    tavily,
+    tinyfish,
+)
 from seekwright.config import Config, ProviderConfig, SearchConfig, load_config
 from seekwright.providers.base import ProviderError, QuotaExhausted, SearchProvider
 
@@ -907,14 +919,25 @@ def provider_case(spec_text: str) -> list[str]:
             depth=spec.get("depth", "standard"),
             output_type=spec.get("output_type", "sourcedAnswer"),
         )
+    elif name == "search1api":
+        adapter = search1api.Search1ApiProvider(client, PROBE_KEY)
+    elif name == "serpapi":
+        adapter = serpapi.SerpApiProvider(client, PROBE_KEY)
+    elif name == "querit":
+        adapter = querit.QueritProvider(client, PROBE_KEY)
+    elif name == "deepseek":
+        adapter = deepseek.DeepSeekProvider(client, PROBE_KEY)
     else:
         raise AssertionError(f"provider corpus has no adapter {name!r}")
-    # Linkup's [fromDate] is the one date an adapter computes, so a case that
-    # asks for a recency window names the instant its clock reads. The oracle
-    # adapter reads [datetime.now] from its own module namespace; rebinding that
-    # name here — and only here — is what keeps the golden free of the machine's
-    # clock without touching the read-only oracle tree.
-    frozen = _freeze_clock(linkup, spec.get("now", 1_700_000_000.0))
+    # Linkup's [fromDate] and DeepSeek's [after:] are the dates the adapters
+    # compute, so a case that asks for a recency window names the instant its
+    # clock reads. The oracle adapters read [datetime.now] from their own module
+    # namespaces; rebinding those names here — and only here — is what keeps the
+    # golden free of the machine's clock without touching the read-only oracle
+    # tree.
+    epoch = spec.get("now", 1_700_000_000.0)
+    frozen_linkup = _freeze_clock(linkup, epoch)
+    frozen_deepseek = _freeze_clock(deepseek, epoch)
     try:
         result = asyncio.run(adapter.search(_provider_query(spec["query"])))
     except QuotaExhausted as failure:
@@ -932,8 +955,10 @@ def provider_case(spec_text: str) -> list[str]:
             "message= " + esc(failure.message),
         ]
     finally:
-        if frozen is not None:
-            linkup.datetime = frozen
+        if frozen_linkup is not None:
+            linkup.datetime = frozen_linkup
+        if frozen_deepseek is not None:
+            deepseek.datetime = frozen_deepseek
     return _provider_dials(sent) + ["verdict= ok"] + _provider_result(result)
 
 

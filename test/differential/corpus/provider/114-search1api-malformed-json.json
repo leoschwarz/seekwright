@@ -1,0 +1,10 @@
+{
+  "provider": "search1api",
+  "query": {
+    "query": "broken body"
+  },
+  "response": {
+    "status": 200,
+    "body": "{"
+  }
+}

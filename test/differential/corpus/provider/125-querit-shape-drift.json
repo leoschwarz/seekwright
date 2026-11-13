@@ -1,0 +1,10 @@
+{
+  "provider": "querit",
+  "query": {
+    "query": "wrong shape"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [\"not\", \"a\", \"container\"]}"
+  }
+}

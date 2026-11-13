@@ -20,6 +20,10 @@ module Serper = Seekwright_providers.Serper
 module Tavily = Seekwright_providers.Tavily
 module Tinyfish = Seekwright_providers.Tinyfish
 module Linkup = Seekwright_providers.Linkup
+module Search1api = Seekwright_providers.Search1api
+module Serpapi = Seekwright_providers.Serpapi
+module Querit = Seekwright_providers.Querit
+module Deepseek = Seekwright_providers.Deepseek
 
 let ( let* ) = Result.bind
 
@@ -219,7 +223,12 @@ let rows =
       ~endpoint:(Fixed_uri (Uri.of_string "https://api.deepseek.com/v1/tools/search"))
       ~credential:bearer ~default_cost:(Some 0.75) ~context:Snippets_and_text
       ~probe:(probe_at (Uri.of_string "https://api.deepseek.com/v1/tools/search"))
-      ~build:(Deferred "F5.5") ();
+      ~build:
+        (Adapter
+           (fun a ->
+             Deepseek.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~text_chars:a.text_chars ~key:(require_key "deepseek" a) ~now:a.now ~net:a.net ()))
+      ();
     (* Billed Exa, which still spends the free tier first ([TieredExaProvider]):
        without a key there is no billed fallback, and without a free tier the key
        is what spends. The floor is the MCP handshake's headroom; the [url]
@@ -285,7 +294,12 @@ let rows =
     make_row ~name:"querit"
       ~endpoint:(Fixed_uri (Uri.of_string "https://api.querit.ai/v1/search"))
       ~credential:bearer ~probe:(probe_at (Uri.of_string "https://api.querit.ai/v1/search"))
-      ~build:(Deferred "F5.5") ();
+      ~build:
+        (Adapter
+           (fun a ->
+             Querit.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~key:(require_key "querit" a) ~net:a.net ()))
+      ();
     (* A scraping backend, not a cached SERP index: slower than [serper] on the same
        query, which is what the 15-second floor buys. One credit per request on
        every endpoint, so the row is [Flat] where [serper] above is not, and the
@@ -306,7 +320,12 @@ let rows =
       ~endpoint:(Fixed_uri (Uri.of_string "https://api.search1api.com/search"))
       ~credential:bearer ~default_cost:(Some 0.76)
       ~probe:(probe_at (Uri.of_string "https://api.search1api.com/search"))
-      ~build:(Deferred "F5.5") ();
+      ~build:
+        (Adapter
+           (fun a ->
+             Search1api.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~key:(require_key "search1api" a) ~net:a.net ()))
+      ();
     (* A metasearch instance queries its upstream engines live, so it answers at
        scraper speed, not SERP-API speed: the 15-second floor. The instance is
        config, with no default and no key — and the key stays absent whatever the
@@ -330,7 +349,12 @@ let rows =
       ~endpoint:(Fixed_uri (Uri.of_string "https://serpapi.com/search"))
       ~credential:(Key_in_query "api_key")
       ~probe:(serpapi_probe (Uri.of_string "https://serpapi.com/search"))
-      ~build:(Deferred "F5.5") ();
+      ~build:
+        (Adapter
+           (fun a ->
+             Serpapi.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+               ~key:(require_key "serpapi" a) ~net:a.net ()))
+      ();
     (* An API with its own SERP cache, not a scrape: the policy timeout is enough,
        and its header spelling is the vendor's own. The one name whose per-query
        figure doubles past {!Seekwright_providers.Serper.credit_over} results —

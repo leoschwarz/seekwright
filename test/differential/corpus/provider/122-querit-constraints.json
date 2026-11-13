@@ -1,0 +1,20 @@
+{
+  "provider": "querit",
+  "query": {
+    "query": "quantum error correction",
+    "include_domains": [
+      "arxiv.org"
+    ],
+    "exclude_domains": [
+      "medium.com"
+    ],
+    "country": "DE",
+    "language": "DE",
+    "recency": "day",
+    "safe_search": true
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": {\"result\": [{\"title\": \"First\", \"url\": \"https://one.example/a\", \"snippet\": \"One.\", \"page_age\": \"2026-07-14T09:00:00Z\"}, {\"title\": \"Second\", \"url\": \"https://two.example/b\", \"snippet\": \"Two.\"}]}}"
+  }
+}

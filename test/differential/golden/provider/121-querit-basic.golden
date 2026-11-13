@@ -1,0 +1,32 @@
+area: provider
+case: 121-querit-basic
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.querit.ai/v1/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"count":5,"query":"quantum error correction"}
+verdict= ok
+name= querit
+result title=First
+result url=https://one.example/a
+result snippet=One.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=2026-07-14T09:00:00Z
+result score=-
+result title=Second
+result url=https://two.example/b
+result snippet=Two.
+result uncapped=4
+result text=-
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.000000
+answer= -
+notice=-

@@ -1,0 +1,10 @@
+{
+  "provider": "serpapi",
+  "query": {
+    "query": "nothing ranked"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"organic_results\": []}"
+  }
+}

@@ -1,0 +1,15 @@
+area: provider
+case: 120-serpapi-refused-dial
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://serpapi.com/search
+query= api_key=differential-probe-key-4f2a&engine=google&q=no route
+headers= 
+body= -
+verdict= error
+kind= failure
+retryable= true
+message= network error

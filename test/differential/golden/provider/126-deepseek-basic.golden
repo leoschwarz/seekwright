@@ -1,0 +1,32 @@
+area: provider
+case: 126-deepseek-basic
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= POST
+url= https://api.deepseek.com/v1/tools/search
+query= 
+headers= authorization=Bearer sentinel,content-type=application/json
+body= {"count":5,"query":"deepseek v4 release"}
+verdict= ok
+name= deepseek
+result title=First
+result url=https://one.example/a
+result snippet=One.
+result uncapped=35
+result text=A longer summary for the first hit.
+result text_truncated=-
+result published_date=2026-07-14T09:00:00Z
+result score=2.500000
+result title=Second
+result url=https://two.example/b
+result snippet=Two.
+result uncapped=15
+result text=Second summary.
+result text_truncated=-
+result published_date=-
+result score=-
+cost_usd= 0.000750
+answer= -
+notice=-

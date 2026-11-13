@@ -1,0 +1,11 @@
+{
+  "provider": "deepseek",
+  "query": {
+    "query": "deepseek v4 release"
+  },
+  "now": 1792540800.0,
+  "response": {
+    "status": 200,
+    "body": "{\"results\": [{\"title\": \"First\", \"url\": \"https://one.example/a\", \"snippet\": \"One.\", \"summary\": \"A longer summary for the first hit.\", \"date\": \"2026-07-14T09:00:00Z\", \"rerank_score\": 2.5, \"site_name\": \"unmodelled\"}, {\"title\": \"Second\", \"url\": \"https://two.example/b\", \"snippet\": \"Two.\", \"summary\": \"Second summary.\"}]}"
+  }
+}

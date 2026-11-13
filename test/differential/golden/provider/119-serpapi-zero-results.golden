@@ -1,0 +1,16 @@
+area: provider
+case: 119-serpapi-zero-results
+verification: differential-golden
+oracle: python
+projection: provider
+--- oracle
+method= GET
+url= https://serpapi.com/search
+query= api_key=differential-probe-key-4f2a&engine=google&q=nothing ranked
+headers= 
+body= -
+verdict= ok
+name= serpapi
+cost_usd= 0.000000
+answer= -
+notice=-

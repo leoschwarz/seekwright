@@ -1121,6 +1121,96 @@ def _searxng_pages(counts: list[int], statuses: list[int] | None = None) -> list
     ]
 
 
+# Search1API's contract: [results[]] with [title/link/snippet] and an optional
+# ISO [published_date]; a SERP backend, so [snippet] only, never [text].
+_SEARCH1API_TWO = _body(
+    {
+        "results": [
+            {
+                "title": "Pinning the packaging stack",
+                "link": "https://one.example/pinning",
+                "snippet": "Lockfiles keep a build reproducible.",
+                "published_date": "2026-07-14T09:00:00Z",
+            },
+            {
+                "title": "Wheels and sdist",
+                "link": "https://two.example/wheels",
+                "snippet": "Two.",
+            },
+        ]
+    }
+)
+
+# SerpAPI's Google SERP: [organic_results[]] with [position], [title], [link],
+# [snippet] and a display [date] kept verbatim when it is a string; the other
+# element families are dropped rather than modelled.
+_SERPAPI_TWO = _body(
+    {
+        "search_metadata": {"status": "OK", "id": "a1b2c3"},
+        "organic_results": [
+            {
+                "position": 1,
+                "title": "Coffee - Wikipedia",
+                "link": "https://en.wikipedia.org/wiki/Coffee",
+                "snippet": "Coffee is a brewed drink.",
+                "date": "Sep 20, 2018",
+            },
+            {
+                "position": 2,
+                "title": "Is Coffee Good for You?",
+                "link": "https://time.example/is-coffee-good-for-you",
+                "snippet": "Two.",
+            },
+        ],
+        "related_questions": [{"question": "unmodelled"}],
+    }
+)
+
+# Querit's wire shape, which the projection pins as the wire's own: [results]
+# is an object and the hits live under its [result] key. [page_age] is kept
+# verbatim as [published_date].
+_QUERIT_TWO = _body(
+    {
+        "results": {
+            "result": [
+                {
+                    "title": "First",
+                    "url": "https://one.example/a",
+                    "snippet": "One.",
+                    "page_age": "2026-07-14T09:00:00Z",
+                },
+                {"title": "Second", "url": "https://two.example/b", "snippet": "Two."},
+            ]
+        }
+    }
+)
+
+# DeepSeek's hits: [snippet] beside a [summary] that fills [text] under the
+# policy cap, a verbatim [date], and a [rerank_score] on the backend's own
+# 0-3 scale. [site_name] and [authority] have no [Result] field and are dropped.
+_DEEPSEEK_TWO = _body(
+    {
+        "results": [
+            {
+                "title": "First",
+                "url": "https://one.example/a",
+                "snippet": "One.",
+                "summary": "A longer summary for the first hit.",
+                "date": "2026-07-14T09:00:00Z",
+                "rerank_score": 2.5,
+                "site_name": "unmodelled",
+            },
+            {
+                "title": "Second",
+                "url": "https://two.example/b",
+                "snippet": "Two.",
+                "summary": "Second summary.",
+            },
+        ]
+    }
+)
+
+
 PROVIDER_CASES: dict[str, dict[str, Any]] = {
     # {2 Serper: POST JSON, the key in a header, credits by result count}
     "01-serper-basic": {
@@ -1875,6 +1965,211 @@ PROVIDER_CASES: dict[str, dict[str, Any]] = {
         "index": "products",
         "query": {"query": "broken body"},
         "response": {"status": 200, "body": "{"},
+    },
+    # {3 Search1API: POST JSON, the key in a bearer header, flat per-query price}
+    "110-search1api-basic": {
+        "provider": "search1api",
+        "query": {"query": "python packaging"},
+        "response": {"status": 200, "body": _SEARCH1API_TWO},
+    },
+    "111-search1api-constraints": {
+        # Domains and the recency rung ride native parameters; [language] is
+        # lowercased on its way. With no wire form for country or safe-search,
+        # the notice names exactly those two.
+        "provider": "search1api",
+        "query": {
+            "query": "python packaging",
+            "include_domains": ["docs.python.org"],
+            "exclude_domains": ["pypi.org"],
+            "country": "US",
+            "language": "DE",
+            "recency": "week",
+            "safe_search": True,
+        },
+        "response": {"status": 200, "body": _SEARCH1API_TWO},
+    },
+    "112-search1api-snippet-cap": {
+        "provider": "search1api",
+        "query": {"query": "long snippet", "max_results": 1},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": [
+                        {"title": "Long", "link": "https://long.example/", "snippet": "word " * 200}
+                    ]
+                }
+            ),
+        },
+    },
+    "113-search1api-quota": {
+        # 402 and 429 share one sentence, and both are retryable: one call spent,
+        # the next may work.
+        "provider": "search1api",
+        "query": {"query": "spent"},
+        "response": {"status": 429, "body": "{}"},
+    },
+    "114-search1api-malformed-json": {
+        "provider": "search1api",
+        "query": {"query": "broken body"},
+        "response": {"status": 200, "body": "{"},
+    },
+    # {4 SerpAPI: GET, the key in the query string — the URL itself is the secret}
+    "115-serpapi-basic": {
+        "provider": "serpapi",
+        "query": {"query": "coffee"},
+        "response": {"status": 200, "body": _SERPAPI_TWO},
+    },
+    "116-serpapi-constraints": {
+        # Every bucket has a documented parameter — [site:] operators in [q],
+        # [gl], [hl], [tbs], [safe] — so nothing is dropped and the notice stays
+        # absent.
+        "provider": "serpapi",
+        "query": {
+            "query": "coffee",
+            "max_results": 8,
+            "include_domains": ["wikipedia.org"],
+            "exclude_domains": ["pinterest.com"],
+            "country": "DE",
+            "language": "DE",
+            "recency": "month",
+            "safe_search": False,
+        },
+        "response": {"status": 200, "body": _SERPAPI_TWO},
+    },
+    "117-serpapi-snippet-cap": {
+        "provider": "serpapi",
+        "query": {"query": "long snippet", "max_results": 1},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "organic_results": [
+                        {"title": "Long", "link": "https://long.example/", "snippet": "word " * 200}
+                    ]
+                }
+            ),
+        },
+    },
+    "118-serpapi-auth": {
+        # The redaction rule's sharpest case here: the key rides in the request
+        # URL, and no failure sentence may echo it back.
+        "provider": "serpapi",
+        "query": {"query": "rejected"},
+        "response": {"status": 401, "body": '{"error": "invalid api_key"}'},
+    },
+    "119-serpapi-zero-results": {
+        "provider": "serpapi",
+        "query": {"query": "nothing ranked"},
+        "response": {"status": 200, "body": _body({"organic_results": []})},
+    },
+    "120-serpapi-refused-dial": {
+        # A dial the grant refused: the transport message carries the probe key,
+        # and the caller sees only the adapter's own two words.
+        "provider": "serpapi",
+        "query": {"query": "no route"},
+        "refuse": "denied",
+    },
+    # {5 Querit: POST JSON, bearer key, the nested [results.result[]] container}
+    "121-querit-basic": {
+        "provider": "querit",
+        "query": {"query": "quantum error correction"},
+        "response": {"status": 200, "body": _QUERIT_TWO},
+    },
+    "122-querit-constraints": {
+        # Domains and the date rung ride native filters; the country and language
+        # enums are crossed by name ([de] to [germany], [de] to [germany]). No
+        # safe-search on this wire, so the notice names that one bucket.
+        "provider": "querit",
+        "query": {
+            "query": "quantum error correction",
+            "include_domains": ["arxiv.org"],
+            "exclude_domains": ["medium.com"],
+            "country": "DE",
+            "language": "DE",
+            "recency": "day",
+            "safe_search": True,
+        },
+        "response": {"status": 200, "body": _QUERIT_TWO},
+    },
+    "123-querit-snippet-cap": {
+        "provider": "querit",
+        "query": {"query": "long snippet", "max_results": 1},
+        "response": {
+            "status": 200,
+            "body": _body(
+                {
+                    "results": {
+                        "result": [
+                            {"title": "Long", "url": "https://long.example/", "snippet": "word " * 200}
+                        ]
+                    }
+                }
+            ),
+        },
+    },
+    "124-querit-quota": {
+        # 402 is undocumented for this vendor but reads as spend anyway — the
+        # adapter's failure table pins it beside the documented 429.
+        "provider": "querit",
+        "query": {"query": "spent"},
+        "response": {"status": 402, "body": "{}"},
+    },
+    "125-querit-shape-drift": {
+        # [results] drifting to a list — the intuitive reading of the name — is a
+        # missing container: an empty answer, not a failure.
+        "provider": "querit",
+        "query": {"query": "wrong shape"},
+        "response": {"status": 200, "body": _body({"results": ["not", "a", "container"]})},
+    },
+    # {6 DeepSeek: POST JSON, bearer key; constraints fold into the query itself}
+    "126-deepseek-basic": {
+        "provider": "deepseek",
+        "query": {"query": "deepseek v4 release"},
+        "now": 1_792_540_800.0,
+        "response": {"status": 200, "body": _DEEPSEEK_TWO},
+    },
+    "127-deepseek-recency": {
+        # The other date an adapter computes: [after:] is the clock minus the
+        # day count, so the case names the instant and both trees freeze to it —
+        # the golden pins the arithmetic, not the day it was generated.
+        "provider": "deepseek",
+        "query": {"query": "deepseek v4 release", "recency": "week"},
+        "now": 1_792_540_800.0,
+        "response": {"status": 200, "body": _DEEPSEEK_TWO},
+    },
+    "128-deepseek-constraints": {
+        # Domains, dates and language ride query operators while the folded
+        # query fits the backend's 128-codepoint ceiling; [country] and safe
+        # search have no wire form at all, so the notice names those two.
+        "provider": "deepseek",
+        "query": {
+            "query": "v4 search",
+            "include_domains": ["python.org"],
+            "exclude_domains": ["pypi.org"],
+            "country": "US",
+            "language": "EN",
+            "recency": "month",
+            "safe_search": True,
+        },
+        "now": 1_792_540_800.0,
+        "response": {"status": 200, "body": _DEEPSEEK_TWO},
+    },
+    "129-deepseek-quota": {
+        # 402 is its "insufficient balance", 429 its account-level QPS breach;
+        # one sentence covers both, and the error body is never echoed.
+        "provider": "deepseek",
+        "query": {"query": "spent"},
+        "now": 1_792_540_800.0,
+        "response": {"status": 402, "body": '{"error": "insufficient balance"}'},
+    },
+    "130-deepseek-zero-results": {
+        # A 200 with an empty [results] array is documented as not billable, so
+        # the cost is a pinned zero rather than the per-query figure.
+        "provider": "deepseek",
+        "query": {"query": "nothing retrieved"},
+        "now": 1_792_540_800.0,
+        "response": {"status": 200, "body": _body({"results": []})},
     },
 }
 

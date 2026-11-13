@@ -253,6 +253,22 @@
  (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
 
 (test
+ (name test_search1api)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+
+(test
+ (name test_serpapi)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+
+(test
+ (name test_querit)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+
+(test
+ (name test_deepseek)
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+
+(test
  (name test_searxng)
  (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
 

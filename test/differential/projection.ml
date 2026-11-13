@@ -997,6 +997,17 @@ let provider_adapter name ~endpoint spec =
           ~now:(fun () ->
             match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
           ~key:probe_key ~net ()
+  | "search1api" -> fun ~net () -> Seekwright_providers.Search1api.make ~key:probe_key ~net ()
+  | "serpapi" -> fun ~net () -> Seekwright_providers.Serpapi.make ~key:probe_key ~net ()
+  | "querit" -> fun ~net () -> Seekwright_providers.Querit.make ~key:probe_key ~net ()
+  | "deepseek" ->
+      (* [after:] is the other date an adapter computes — the same clock pin
+         [linkup]'s [fromDate] case needs, read from the spec the same way. *)
+      fun ~net () ->
+        Seekwright_providers.Deepseek.make
+          ~now:(fun () ->
+            match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
+          ~key:probe_key ~net ()
   | other -> failwith (Printf.sprintf "provider corpus has no adapter %S" other)
 
 (* The request as the wire shows it: a decoded, sorted query; the destination

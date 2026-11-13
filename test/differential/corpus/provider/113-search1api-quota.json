@@ -1,0 +1,10 @@
+{
+  "provider": "search1api",
+  "query": {
+    "query": "spent"
+  },
+  "response": {
+    "status": 429,
+    "body": "{}"
+  }
+}

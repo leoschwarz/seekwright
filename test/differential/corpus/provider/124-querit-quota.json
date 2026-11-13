@@ -1,0 +1,10 @@
+{
+  "provider": "querit",
+  "query": {
+    "query": "spent"
+  },
+  "response": {
+    "status": 402,
+    "body": "{}"
+  }
+}

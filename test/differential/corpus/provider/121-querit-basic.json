@@ -1,0 +1,10 @@
+{
+  "provider": "querit",
+  "query": {
+    "query": "quantum error correction"
+  },
+  "response": {
+    "status": 200,
+    "body": "{\"results\": {\"result\": [{\"title\": \"First\", \"url\": \"https://one.example/a\", \"snippet\": \"One.\", \"page_age\": \"2026-07-14T09:00:00Z\"}, {\"title\": \"Second\", \"url\": \"https://two.example/b\", \"snippet\": \"Two.\"}]}}"
+  }
+}
