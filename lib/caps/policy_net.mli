@@ -156,6 +156,27 @@ val with_private_web :
     fallback routes keep [with_endpoints] (a pinned vendor name) and the URL they
     are handed stays public-only. *)
 
+val vet_public_host : net:_ Eio.Net.t -> host:string -> (unit, Error.t) result
+(** The target check a fetch fallback runs on a URL it is about to hand to a
+    remote fetch service, unconditionally: {b DNS only}, no socket is opened and
+    no grant is involved — the caller supplies the application's own network.
+
+    A fallback's endpoint grant decides the vendor it dials; the target URL
+    rides inside that request as data, so the grant's destination decision never
+    sees it, and a vendor told to fetch an internal host leaks rather than
+    fetches. So this checks the target against the public-web address rule
+    ({!val:with_public_web}'s, exactly) by name: an IP literal is vetted
+    directly, a hostname is looked up and {b every} answer must be public — a
+    hostile name can answer with one public and one private record.
+
+    This is deliberately not grant policy and cannot be widened:
+    [fetch.allow_private_addresses] says {i this server} may reach the operator's
+    intranet, not that internal hostnames may be posted to someone else's API,
+    so the oracle's remote fallbacks run this check with the private-web variant
+    switched on as well. It narrows DNS rebinding rather than closing it, on the
+    same terms as the oracle's [resolve_public]: the vendor resolves again on
+    its own, and that is the vendor's lookup, not this server's promise. *)
+
 val request :
   controls:Controls_raw.t ->
   ?max_response_bytes:int ->

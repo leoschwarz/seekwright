@@ -688,6 +688,65 @@ let every_answer_of_a_listed_name_is_connectable () =
     [ `Tcp (eio_address "169.254.169.254", 80) ]
     (Atomic.get state.connects)
 
+(* {1 The fetch fallback target vet} *)
+
+(* [vet_public_host] is the oracle's [resolve_public]: the sentences are the
+   oracle's because the caller wrote the URL and has to tell a typo from an
+   attack, and no socket is ever opened — the scripted network's [connects]
+   staying empty is part of every case. *)
+let vet_public_host_cases () =
+  let vet answers host =
+    Eio_main.run @@ fun _env ->
+    let state, net = scripted_net ~answers () in
+    (* The result is bound before the atomics are read: a tuple would evaluate
+       right-to-left and read the counters before the lookup ran. *)
+    let outcome = Policy_net.vet_public_host ~net ~host in
+    (outcome, Atomic.get state.connects, Atomic.get state.queries)
+  in
+  (match vet [ ("public.test", [ "93.184.216.34"; "2606:2800:220:1::" ]) ] "public.test" with
+  | Ok (), connects, queries ->
+      Alcotest.(check (list address_testable)) "no connection" [] connects;
+      Alcotest.(check (list (pair string string))) "one lookup" [ ("public.test", "0") ] queries
+  | Error error, _, _ -> failf "a public name was refused: %s" (Error.render error));
+  (* The rebinding shape: one public and one private record is a private name.
+     The refused address named is the sorted first, as in the oracle. *)
+  (match vet [ ("split.test", [ "93.184.216.34"; "10.0.0.7"; "127.0.0.1" ]) ] "split.test" with
+  | Error error, connects, _ ->
+      check_kind Error.Denied error;
+      Alcotest.(check string) "the oracle's sentence, naming the sorted blocked address"
+        "split.test resolves to a non-public address (10.0.0.7); fetching private, loopback \
+         and link-local addresses is disabled"
+        (Error.message error);
+      Alcotest.(check (list address_testable)) "a refusal connects to nothing" [] connects
+  | Ok (), _, _ -> failf "a mixed A/AAAA answer passed the vet");
+  (* A name that resolves to nothing is the same fact as one that does not
+     resolve: the oracle's one sentence for both. *)
+  List.iter
+    (fun (name, answers) ->
+      match vet answers name with
+      | Error error, _, _ ->
+          check_kind Error.Unavailable error;
+          Alcotest.(check string) "could not resolve" ("could not resolve " ^ name)
+            (Error.message error)
+      | Ok (), _, _ -> failf "%s passed the vet" name)
+    [ ("gone.test", []); ("missing.test", [ ("other.test", [ "93.184.216.34" ]) ]) ];
+  (* IP literals meet the same table, with no lookup at all — getaddrinfo would
+     only echo them back. *)
+  List.iter
+    (fun (literal, expected) ->
+      let outcome, connects, queries = vet [] literal in
+      Alcotest.(check (list (pair string string))) "an IP literal queries nothing" [] queries;
+      Alcotest.(check (list address_testable)) "and connects to nothing" [] connects;
+      match outcome with
+      | Ok () ->
+          if expected <> "" then failf "%s passed the vet" literal
+      | Error error ->
+          check_kind Error.Denied error;
+          Alcotest.(check string) "the oracle's literal sentence"
+            (Printf.sprintf "%s is not a public address" literal) (Error.message error))
+    [ ("93.184.216.34", ""); ("127.0.0.1", "refused"); ("169.254.169.254", "refused");
+      ("100.64.0.1", "refused") ]
+
 (* {1 The response ceiling} *)
 
 let response_ceiling () =
@@ -1015,6 +1074,7 @@ let () =
               listed_names_may_reach_private_addresses;
             Alcotest.test_case "every answer of a listed name is connectable" `Quick
               every_answer_of_a_listed_name_is_connectable;
+            Alcotest.test_case "the fetch fallback target vet" `Quick vet_public_host_cases;
           ] );
       ( "response bounds",
           [

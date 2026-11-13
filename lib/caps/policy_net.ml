@@ -509,6 +509,79 @@ let resolve (t : 'tag confinement) destination =
             point of resolving here rather than letting the HTTP client do it. *)
       Ok (List.hd vetted)
 
+(* The target check a fetch fallback runs on a URL it is about to hand to a
+   third party. A fallback's grant decides the {i vendor} it dials; the target
+   rides inside that request as data, so the grant's own destination decision
+   never sees it, and a vendor posting to an internal host is a leak rather than
+   a fetch. The oracle's [resolve_public] runs this check unconditionally —
+   [fetch.allow_private_addresses] does not lift it — so it reads the public-web
+   address rule directly, over the application's own network, and never needs a
+   grant.
+
+   *Every* answer must be public, not merely the first: a hostile name can
+   answer with one public and one private record. Like the oracle this narrows
+   DNS rebinding rather than closing it — the vendor resolves again on its own —
+   which is why the sentence is the oracle's, naming the refused address: a
+   caller that wrote the URL has to be able to tell a typo from an attack. *)
+let vet_public_host ~net ~host =
+  let public_web = Public_web Any_port in
+  match Ipaddr.of_string host with
+  | Ok address ->
+      (* An IP literal needs no lookup, and getaddrinfo would happily echo it
+         back; the address policy is the whole check it meets. *)
+      if satisfies_address public_web address then Ok ()
+      else
+        Error
+          (Error.make Error.Denied
+             ~message:(Printf.sprintf "%s is not a public address" (Error.sanitize host)))
+  | Error _ ->
+      let answers =
+        try Ok (Eio.Net.getaddrinfo_stream ~service:"0" net host)
+        with ex -> classify ex
+      in
+      let addresses =
+        match answers with
+        | Error _ -> []
+        | Ok answers ->
+            (* [service "0"] asks for no port in particular, and every stream
+               answer counts. An answer this conversion cannot classify is left
+               out: it is an answer only some other family's client would use,
+               and the family-free table has nothing to say about it. *)
+            List.filter_map
+              (function
+                | `Tcp (ip, _) ->
+                    let (ip : Eio.Net.Ipaddr.v4v6) = ip in
+                    Option.map Ipaddr.to_string
+                      (Result.to_option (Ipaddr.of_octets (ip :> string)))
+                | _ -> None)
+              answers
+      in
+      if addresses = [] then
+        (* The lookup failed or answered nothing: the oracle's one sentence for
+           both, because a caller acts the same way on either. *)
+        Error
+          (Error.make Error.Unavailable
+             ~message:(Printf.sprintf "could not resolve %s" (Error.sanitize host)))
+      else
+        match
+          List.sort String.compare
+            (List.filter
+               (fun address ->
+                 match Ipaddr.of_string address with
+                 | Ok value -> not (satisfies_address public_web value)
+                 | Error _ -> true)
+               addresses)
+        with
+        | [] -> Ok ()
+        | first :: _ ->
+            Error
+              (Error.make Error.Denied
+                 ~message:
+                   (Printf.sprintf
+                      "%s resolves to a non-public address (%s); fetching private, loopback and \
+                       link-local addresses is disabled"
+                      (Error.sanitize host) (Error.sanitize first)))
+
 (** {1 Request validation} *)
 
 (* Header names the authority owns. A caller-set [host] would send one virtual
