@@ -15,7 +15,9 @@
     One listener serves [/mcp] plus the custom routes, routed by path in
     {!serve_http}: [GET /healthz] (outside the Host allowlist, secret-free:
     the providers this build can dispatch and uptime only — a configured name
-    with no adapter is not listed, and the startup warning names it), the
+    with no adapter either refused startup
+    ([Seekwright_factory.startup_verdict]) or was skipped by name at startup
+    under the implicit keyless default, and is never listed here), the
     dashboard routes ([GET /dashboard],
     [GET /dashboard/data], [GET /dashboard/metrics], registered only when
     [[dashboard] enabled = true]) and the REST projection

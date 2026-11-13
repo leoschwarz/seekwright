@@ -422,9 +422,12 @@ let healthz app =
     (`Assoc
        [
          ("status", `String "ok");
-         (* The dispatchable set, not the configured one: a name this build has
-            no adapter for is not a provider it has, and the startup warning
-            is where the operator reads that. *)
+         (* The dispatchable set — the engine's built registry, the one set
+            every route resolves against — not the configured one: a name
+            this build has no adapter for either refused startup
+            ([Seekwright_factory.startup_verdict]) or was skipped by name
+            under the implicit keyless default. [/healthz] answers what
+            serves searches, never what a file asked for. *)
          ("providers", `List (List.map (fun name -> `String name) built));
          ( "default_provider",
            (match app.config.Config.default_provider with
