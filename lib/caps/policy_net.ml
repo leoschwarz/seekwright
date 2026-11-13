@@ -663,7 +663,7 @@ let send (t : 'tag confinement) ~destination ?max_response_bytes request vetted 
                 limit)))
 
 let request ~controls ?max_response_bytes (T t) request =
-  Controls.run controls ~operation:"net.request"
+  Controls_raw.run controls ~operation:"net.request"
     ~measure:(fun response -> Some (String.length response.body))
     ~notes:(fun response -> [("status", string_of_int response.status)])
     (fun () ->

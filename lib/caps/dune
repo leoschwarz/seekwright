@@ -1,4 +1,32 @@
 (library
+ ; The two modules the layer's claim does not want an ordinary consumer to see.
+ ;
+ ; [policy_fs] is the filesystem confinement record {e and} its raw operations,
+  ; and its interface is filed under [.private/] by [dune build @install], so a
+  ; consumer of the installed [mcp-caps] has no name for it: the only way to read
+  ; a file through this library is a grant, so the file that answers "where may
+  ; this tool reach" is one [Policy.with_root] call. [controls_raw] is the bounds
+  ; record and the [run] wrapper that applies it; it has no interface file either,
+  ; so its type is not nameable and the [~controls] argument the raw operations
+  ; take cannot be filled.
+  ;
+  ; That is the package's boundary. Inside this workspace dune still resolves a
+  ; private module through the alias module it generates for a wrapped library,
+  ; and no dune field changes that ([root_module] aliases a library's {e
+  ; dependencies}, not its own modules) — so within the checkout the rule is kept
+  ; by [test/test_caps_audit.ml], which fails the build when a production module
+  ; outside [lib/caps] names either one.
+ ;
+ ; [policy_net] is deliberately NOT here. Its [request], [response], [method_] and
+ ; [endpoint] records are the vocabulary a [Net] grant is called with, and a
+ ; private module's records cannot be built or read by a consumer of the package:
+ ; the first probe of that shape failed with "The module ... is an alias for
+ ; module ..., which is missing" on the {e intended} grant path, so hiding the
+ ; module would break the seam rather than the bypass. Its [request] is sealed on
+ ; its [~controls] argument instead, and [test/should_not_compile] pins the
+ ; sealed call, the unbuildable bounds record, and the grant path that still
+ ; compiles.
+ (private_modules policy_fs controls_raw)
  ; The wrapped module is Mcp_caps: dune derives it from the library name, so the
  ; name carries the underscore spelling of the hyphenated public name.
  (name mcp_caps)

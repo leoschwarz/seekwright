@@ -25,6 +25,17 @@
     enforced by making every other path need a value that only [Policy] can
     make. [test/should_not_compile] pins exactly that.
 
+    The two kinds are sealed by different mechanisms, because their records are
+    not equally shareable. [Policy_fs] is one of the library's
+    [private_modules]: its name is not installed with the package, so the raw
+    filesystem operations are not reachable from outside at all. [Policy_net]
+    cannot be private — [request], [response] and [endpoint] are the records a
+    [Net] call is written in, and a private module's records cannot be built or
+    read by an installed consumer — so its [request] is sealed on its
+    [~controls] argument, whose type [Controls_raw.t] is private in turn. Both
+    seals, and the grant path they leave open, are pinned in
+    [test/should_not_compile].
+
     {1 Running the operations: the Eio contract}
 
     Every operation is Eio direct style (§6), so it must run inside the Eio
@@ -46,15 +57,20 @@
 
     {1 Bounds that apply to every kind}
 
-    A grant also carries a [Controls.t]: the audit sink, the per-operation time
-    bound and the operation budget
-    ({!val:with_operation_budget}). [with_log],
+    A grant also carries a bounds record — [Controls_raw.t], a module with no
+    name outside this library: the audit sink, the per-operation time bound and
+    the operation budget ({!val:with_operation_budget}). [with_log],
     [with_operation_timeout] and [with_operation_budget] below are generic over
     ['kind] — they change that part of the grant and nothing else, so they apply
-    to a filesystem grant and a network grant alike (§3, §6). Each grant is
-    built with a bound already in it: [of_confinement] installs its kind's
-    default operation timeout unless the application supplies its own
-    [~controls]. *)
+    to a filesystem grant and a network grant alike (§3, §6). Each grant is built
+    with a bound already in it: [of_confinement] installs its kind's default
+    operation timeout, and the three decorators are the only way to change it.
+    There is no [~controls] to pass and no record to write: the type of that
+    record belongs to a private module, so nothing outside [lib/caps] can hand a
+    grant a bounds set chosen somewhere else, and the raw operations in
+    [Policy_fs] and [Policy_net] — which take one — have no argument to be called
+    with. An operation that does not go through a decorated grant is an operation
+    this layer does not offer. *)
 
 type fs
 type net
@@ -64,19 +80,22 @@ type _ t
 module Fs : sig
   type nonrec t = fs t
 
-  val of_confinement :
-    mono_clock:_ Eio.Time.Mono.t -> ?controls:Controls.t -> Policy_fs.t -> t
+  val of_confinement : mono_clock:_ Eio.Time.Mono.t -> Policy_fs.t -> t
   (** [of_confinement ~mono_clock decision] turns a confinement decision — the
       opened subtree and its ceilings — into a grant. This is not a way to build
-      a grant: [Policy_fs.t] is abstract and [Policy.with_root] is the only thing
-      that returns one, so the audit answer to "who gave this tool the
-      filesystem" is one grep, and [test/should_not_compile] holds the line.
+      a grant: [Policy_fs.t] is abstract, [Policy_fs] is a private module, and
+      [Policy.with_root] is the only thing that returns one, so the audit answer
+      to "who gave this tool the filesystem" is one grep, and
+      [test/should_not_compile] holds the line.
 
       [mono_clock] is what the operation bound is measured on: a wall clock that
       steps (an NTP correction, a VM resume) would otherwise lengthen or shorten
-      every deadline at once. With [~controls] absent the grant carries
-      [Policy_fs]'s default operation bound and no audit sink; passing
-      [~controls:Controls.none] is how an operator asks for an unbounded grant. *)
+      every deadline at once. The grant carries [Policy_fs]'s default operation
+      bound and no audit sink; there is no [~controls] to pass, because no value
+      of that type exists outside a grant. Bounds are changed only by the three
+      decorators below — [with_operation_timeout Eio.Time.Timeout.none] is how an
+      operator asks for an unbounded grant, and [with_log] is how it asks for an
+      audited one. *)
 
   val read_file : ?max_bytes:int -> t -> string -> (string, Error.t) result
   (** [read_file ~max_bytes t path] reads a root-relative path. [path] must be
@@ -121,18 +140,18 @@ module Net : sig
     body : string;
   }
 
-  val of_confinement :
-    mono_clock:_ Eio.Time.Mono.t -> ?controls:Controls.t -> Policy_net.t -> t
+  val of_confinement : mono_clock:_ Eio.Time.Mono.t -> Policy_net.t -> t
   (** [of_confinement ~mono_clock decision] wraps the endpoint decision — the
       allowlisted destinations, the byte ceiling and the TLS configuration — in a
       grant. Not a way to build a grant: [Policy.with_endpoints] and
       [Policy.with_public_web] are the only producers of [Policy_net.t].
 
-      With [~controls] absent the grant carries [Policy_net]'s default
-      whole-operation bound (DNS, connect, TLS, headers and body together) and no
-      audit sink. The TLS configuration is not added here: it lives inside
-      [decision], because reading the trust anchors is part of deciding whether
-      this grant can speak https at all (§5). *)
+      The grant carries [Policy_net]'s default whole-operation bound (DNS,
+      connect, TLS, headers and body together) and no audit sink, and no
+      [~controls] can be passed to change that: see {!val:Fs.of_confinement}. The
+      TLS configuration is not added here: it lives inside [decision], because
+      reading the trust anchors is part of deciding whether this grant can speak
+      https at all (§5). *)
 
   val request :
     ?max_response_bytes:int -> t -> request -> (response, Error.t) result

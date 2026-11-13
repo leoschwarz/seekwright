@@ -28,6 +28,12 @@ val operation : t -> string
 (** a constant name from the authority API, never a path or URL *)
 
 val outcome : t -> outcome
+
+val outcome_to_string : outcome -> string
+(** [ok], or [failed:] followed by [Error.kind_to_string]: the one spelling of an
+    outcome, which [render] uses and an application writes as a field when it
+    keeps its own log rather than a rendered line. *)
+
 val bytes : t -> int option
 (** size of what moved, not what moved *)
 

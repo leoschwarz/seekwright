@@ -30,7 +30,7 @@ let outcome t = t.outcome
 let bytes t = t.bytes
 let notes t = t.notes
 
-let render_outcome = function
+let outcome_to_string = function
   | Ok -> "ok"
   | Failed kind -> "failed:" ^ Error.kind_to_string kind
 
@@ -46,4 +46,4 @@ let render t =
       ""
       (List.rev t.notes)
   in
-  "caps." ^ t.operation ^ " " ^ render_outcome t.outcome ^ bytes ^ notes
+  "caps." ^ t.operation ^ " " ^ outcome_to_string t.outcome ^ bytes ^ notes

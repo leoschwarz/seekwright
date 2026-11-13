@@ -1,8 +1,20 @@
-(* The shared controls record and the one wrapper that applies it. See
-   controls.mli for why the bounds live beside the confinement decision rather
-   than inside each kind's own operations: it is what lets a decorator apply to
-   every grant kind, and what stops one operation from being bounded differently
-   from its siblings by a forgotten line. *)
+(* The raw controls record, and the one wrapper that applies it.
+
+   This module is in [private_modules]: its name is not installed with the
+   package, and nothing outside [lib/caps] can name the record, write one, or
+   call [run]. That is the point. [Controls.t] — the type an application can
+   name — is this [t], seen through an interface that produces no value of it,
+   so the operations in [Policy_fs] and [Policy_net] that take [~controls] have
+   no argument an ordinary consumer can supply: the only way to hold a controls
+   value is to have been handed a grant and to have decorated it, which is
+   [Authority]'s job (plans/capability-gated-mcp-server.md §3, §6).
+
+   [run] is that "goes through": it is the one place the budget is spent, the
+   timeout is applied and the audit event is written, so no operation can be
+   bounded differently from its siblings by forgetting a line of its own. It
+   stays here rather than in [Controls]'s interface because a call site that
+   could name it could pick its own bounds — or none — around any operation it
+   liked. *)
 
 type t = {
   log : (Event.t -> unit) option;
@@ -35,7 +47,8 @@ let run t ~operation ?measure ?notes body =
     match t.budget with
     | None -> Ok ()
     | Some budget ->
-        if Budget.take budget then Ok () else Error (Error.make Error.Denied ~message:(spent_message operation budget))
+        if Budget.take budget then Ok ()
+        else Error (Error.make Error.Denied ~message:(spent_message operation budget))
   in
   let result =
     match guarded with
@@ -72,7 +85,8 @@ let run t ~operation ?measure ?notes body =
   in
   let event =
     match (result, notes) with
-    | Ok value, Some notes -> List.fold_left (fun acc (key, value) -> Event.add_note key value acc) event (notes value)
+    | Ok value, Some notes ->
+        List.fold_left (fun acc (key, value) -> Event.add_note key value acc) event (notes value)
     | _ -> event
   in
   emit t event;

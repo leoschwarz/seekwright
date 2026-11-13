@@ -19,20 +19,20 @@ type net = |
   every kind rather than one per kind: a new kind inherits them by carrying a
   [Controls.t], and a kind cannot quietly opt out of being audited or bounded. *)
 type _ t =
-  | Fs : Policy_fs.t * Controls.t -> fs t
-  | Net : Policy_net.t * Controls.t -> net t
+  | Fs : Policy_fs.t * Controls_raw.t -> fs t
+  | Net : Policy_net.t * Controls_raw.t -> net t
 
 (* The two accessors are the only GADT-sensitive code here: a plain [function]
    would refine the parameter's kind in the first branch and then reject the
    second, so both are written with a locally abstract [kind] and the equation
    [kind t = fs t] is solved per branch. *)
-let controls : type kind. kind t -> Controls.t = function
+let controls : type kind. kind t -> Controls_raw.t = function
   | Fs (_, controls) -> controls
   | Net (_, controls) -> controls
 
 (* Both branches return the parameter they were given, so this generalises over
    [kind] and the grant's kind is preserved by every decorator. *)
-let with_controls : type kind. kind t -> Controls.t -> kind t =
+let with_controls : type kind. kind t -> Controls_raw.t -> kind t =
  fun grant controls ->
   match grant with
   | Fs (policy, _) -> Fs (policy, controls)
@@ -41,20 +41,20 @@ let with_controls : type kind. kind t -> Controls.t -> kind t =
 module Fs = struct
   type nonrec t = fs t
 
-  (* A grant with no controls would be silent and unbounded, so an omitted
-     [~controls] installs this kind's default bound instead: every grant carries
-     a time bound unless an operator explicitly removes one with
-     [~controls:Controls.none]. *)
-  let of_confinement ~mono_clock ?controls decision =
-    let controls =
-      match controls with
-      | Some controls -> controls
-      | None ->
-          Controls.with_operation_timeout
-            (Eio.Time.Timeout.seconds mono_clock Policy_fs.default_operation_timeout_seconds)
-            Controls.none
-    in
-    Fs (decision, controls)
+  (* A grant with no controls would be silent and unbounded, so construction
+     installs this kind's default bound and nothing else. Every way of changing
+     that bound — [with_log], [with_operation_timeout], a different budget — is
+     one of the three decorators at the bottom of this module, and each one
+     starts from a grant, which is why the controls record has no producer here
+     either: the raw record and the [run] that applies it are in the private
+     [Controls_raw], and an application has no way to hand a grant a bounds set
+     of its own at construction. *)
+  let of_confinement ~mono_clock decision =
+    Fs
+      (decision,
+        Controls_raw.with_operation_timeout
+          (Eio.Time.Timeout.seconds mono_clock Policy_fs.default_operation_timeout_seconds)
+          Controls_raw.none)
 
   let read_file ?max_bytes grant path =
     match grant with Fs (policy, controls) -> Policy_fs.read_file ?max_bytes ~controls policy path
@@ -84,26 +84,23 @@ module Net = struct
   (* The https path of a grant that can speak it is already configured inside
      [decision] ([Policy_net.with_endpoints] fails construction when it is not),
      so the only thing to add here is the time bound. *)
-  let of_confinement ~mono_clock ?controls decision =
-    let controls =
-      match controls with
-      | Some controls -> controls
-      | None ->
-          Controls.with_operation_timeout
-            (Eio.Time.Timeout.seconds mono_clock Policy_net.default_operation_timeout_seconds)
-            Controls.none
-    in
-    Net (decision, controls)
+  let of_confinement ~mono_clock decision =
+    Net
+      (decision,
+        Controls_raw.with_operation_timeout
+          (Eio.Time.Timeout.seconds mono_clock Policy_net.default_operation_timeout_seconds)
+          Controls_raw.none)
 
   let request ?max_response_bytes grant request =
     match grant with
     | Net (policy, controls) -> Policy_net.request ?max_response_bytes ~controls policy request
 end
 
-let with_log ~sink grant = with_controls grant (Controls.with_log ~sink (controls grant))
+let with_log ~sink grant =
+  with_controls grant (Controls_raw.with_log ~sink (controls grant))
 
 let with_operation_timeout timeout grant =
-  with_controls grant (Controls.with_operation_timeout timeout (controls grant))
+  with_controls grant (Controls_raw.with_operation_timeout timeout (controls grant))
 
 let with_operation_budget budget grant =
-  with_controls grant (Controls.with_operation_budget budget (controls grant))
+  with_controls grant (Controls_raw.with_operation_budget budget (controls grant))

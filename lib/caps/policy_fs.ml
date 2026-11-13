@@ -156,9 +156,12 @@ let read_capped flow limit =
   Eio.Buf_read.take_all reader
 
 (* The two bodies below are the operation logic; the public [read_file] and
-   [list_dir] wrap one in [Controls.run], which is where the time bound, the
+   [list_dir] wrap one in [Controls_raw.run], which is where the time bound, the
    budget and the audit line come from (§3, §6). Keeping them apart is what stops
-   the bounds from being re-implemented per operation. *)
+   the bounds from being re-implemented per operation — and keeping [run] in the
+   private module is what stops a consumer from calling a body with bounds of its
+   own, because the [~controls] argument these signatures take has no producer
+   outside a grant. *)
 let read_file_body t ~max_bytes path =
   let ( let* ) = Result.bind in
   let limit = ceiling ~grant_max:t.max_read_bytes max_bytes in
@@ -222,14 +225,14 @@ let list_dir_body t ~max_entries path =
       with ex -> classify ex ~path)
 
 let read_file ~controls ?max_bytes t path =
-  Controls.run controls ~operation:"fs.read_file"
+  Controls_raw.run controls ~operation:"fs.read_file"
     ~measure:(fun content -> Some (String.length content))
     (fun () -> read_file_body t ~max_bytes path)
 
 (* [entries=] is a count, so the audit line stays content-free whatever the
    directory holds; a listing of names would be content, and it is not logged. *)
 let list_dir ~controls ?max_entries t path =
-  Controls.run controls ~operation:"fs.list_dir"
+  Controls_raw.run controls ~operation:"fs.list_dir"
     ~notes:(fun entries -> [("entries", string_of_int (List.length entries))])
     (fun () -> list_dir_body t ~max_entries path)
 

@@ -5,9 +5,14 @@
     precisely because "a counter stored in a server-lifetime grant is a
     server-lifetime budget, not a per-request one"): a [t] is a mutable cell the
     *caller* creates — per request, per tool call, per plan — and hands to
-    [Policy.with_operation_budget]. The grant stays a server-lifetime value; the
+    [Authority.with_operation_budget]. The grant stays a server-lifetime value; the
     thing that runs out is the caller's, which is the only scope this layer can
-    actually name without an mcp-kit request hook (§7).
+    actually name without an mcp-kit request hook (§7). Seekwright's server
+    construction therefore attaches no budget at all: a counter reached at startup
+    would be a server-lifetime budget wearing a request's name. What bounds a
+    served request is its own operation timeout, and a caller that wants a ceiling
+    on the operations it causes wraps the grant it holds — the two cases
+    [test/test_caps_budget.ml] pins.
 
     [take] is atomic, because a grant may be shared by concurrent fibers (§1) and
     an unsynchronised counter would let N fibers all pass the same check. What the

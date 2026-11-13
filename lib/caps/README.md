@@ -29,12 +29,39 @@ and widening those operations is visible at registration.** `Authority._ t` is
 abstract with no exposed constructor, its phantom kind (`fs`, `net`) is what
 `Registry.add ~grant` matches a tool's `'caps` against, and each kind has one
 public producer of the confinement decision behind it: `Policy.with_root` for
-`Fs`, `Policy.with_endpoints` / `Policy.with_public_web` for `Net`. `test/
-should_not_compile/` holds six fixtures whose compiler diagnostics are pinned, so
-"register without a grant", "register with the wrong kind", "pattern-match a
-grant open", "build the confinement record yourself", "register the decision
-instead of the grant" and "return an `Mcp_kit.Tool.result`" are type errors on
-this compiler, not conventions.
+`Fs`, `Policy.with_endpoints` / `Policy.with_public_web` for `Net`. `test/should_not_compile/` holds thirteen fixtures whose compiler diagnostics are
+pinned, so "register without a grant", "register with the wrong kind",
+"pattern-match a grant open", "build the confinement record yourself", "register
+the decision instead of the grant", "return an `Mcp_kit.Tool.result`", "call the
+raw filesystem or network operation" and "write the bounds record an operation
+takes" are type errors on this compiler, not conventions. One of them,
+`grant_path.ml`, is the positive half: the intended grant path still type-checks
+for a consumer of the installed package, so those twelve refusals close the
+bypass without breaking the seam.
+
+The low-level layer is sealed two ways, because its records are not equally
+shareable:
+
+- `policy_fs` and `controls_raw` are dune `private_modules`, so `dune build
+  @install` files their interfaces under `.private/` and out of a consumer's
+  search path: `Mcp_caps.Policy_fs.read_file` — a file read with no grant, no
+  bound and no audit line — fails to resolve for anyone using the installed
+  `mcp-caps`. That boundary is what `should_not_compile/` mirrors. Inside this
+  checkout it is a rule rather than a compiler error, because dune's own build
+  does resolve a private module and no dune field stops it (`root_module` aliases
+  a library's *dependencies*, not its own modules); `test_caps_audit.ml`'s
+  "nothing outside caps names the sealed layer" is the guard that keeps the rule.
+- The operations are sealed on their argument as well, which holds in both views:
+  each takes `controls:Controls_raw.t`, a record with no interface file and no
+  producer outside `Authority`, so `raw_fs_call_needs_bounds.ml` fails even with
+  `Policy_fs` in scope. In a running program the only bounds record is the one
+  inside a grant.
+- `policy_net` stays public: its `request`, `response`, `method_` and `endpoint`
+  records are the vocabulary a `Net` call is written in, and a private module's
+  records cannot be built or read by an installed consumer — hiding the module
+  broke the *intended* grant path in the first probe of that shape. What seals
+  its `request` is the `controls:Controls_raw.t` argument, whose type cannot be
+  named.
 
 **This is not a sandbox for arbitrary OCaml.** Nothing here stops tool code from
 calling `Unix`, `Sys`, `Eio`, a C binding, `Obj.magic` or an HTTP library
@@ -89,13 +116,22 @@ choice: they were never the layer's.
 | `Tool` | `make ?title ?description ?output_schema ~input_schema ~decode ~run name`; `Output.text ?structured_content` | `test_tool.ml`, `test_server.ml` |
 | `Registry` | `empty`, `add ~grant` (`Duplicate_tool`), `entries`, `find`, `entry_*` accessors | `test_registry.ml`, `test_grant_wiring.ml` |
 | `Server` | `of_registry ~name ~version` → `(Mcp_kit.Server.t, build_error)`; validates every declaration before returning | `test_server.ml`, conformance run |
-| `Authority.Fs` | `of_confinement ~mono_clock ?controls`, `read_file ?max_bytes`, `list_dir ?max_entries` | `test_authority_fs.ml` (both Eio runners), `test_grant_wiring.ml` |
-| `Authority.Net` | `of_confinement ~mono_clock ?controls`, `request ?max_response_bytes` with `request`/`response` records | `test_authority_net.ml` (21 cases) |
-| `Authority` decorators | `with_log ~sink`, `with_operation_timeout`, `with_operation_budget` — generic over `'kind` | `test_authority_net.ml`, `test_authority_fs.ml` |
+| `Authority.Fs` | `of_confinement ~mono_clock`, `read_file ?max_bytes`, `list_dir ?max_entries` | `test_authority_fs.ml` (both Eio runners), `test_grant_wiring.ml` |
+| `Authority.Net` | `of_confinement ~mono_clock`, `request ?max_response_bytes` with `request`/`response` records | `test_authority_net.ml` (21 cases) |
+| `Authority` decorators | `with_log ~sink`, `with_operation_timeout`, `with_operation_budget` — generic over `'kind` | `test_authority_net.ml`, `test_authority_fs.ml`, `test_caps_budget.ml` |
 | `Policy` | `with_root`, `with_endpoints`, `with_public_web`, the `endpoint` record, the three default ceilings | the two authority suites |
 | `Error` | `kind` (`Denied`/`Invalid`/`Unavailable`/`Timeout`/`Failed`), sanitized `message`, `render` | `test_error.ml` |
-| `Event` | one bounded, content-free audit record: operation, outcome, optional byte count, ≤`max_notes` notes | `test_event.ml` |
-| `Budget`, `Controls` | the caller-owned counter, and the sink/timeout/budget triple every operation runs inside | `test_authority_net.ml` |
+| `Event` | one bounded, content-free audit record: operation, outcome, optional byte count, ≤`max_notes` notes | `test_event.ml`, `test_caps_audit.ml` |
+| `Budget` | the caller-owned counter: `make`, `limit`, `remaining`, atomic `take` | `test_caps_budget.ml` |
+
+`Policy_fs` and `Controls_raw` are in the table's last column for a reason: they
+are the layer's inside, not its surface. The bounds record is applied by
+`Controls_raw.run`, the one place the budget is spent, the timeout is applied and
+the audit event is written, so no operation can be bounded differently from its
+siblings by forgetting a line of its own — and no consumer can choose its own
+bounds, because there is no value of that type to pass. An application that wants
+audited grants takes the decorators: `Authority.with_log ~sink grant` (one
+`Event.t` per operation), and the application owns where the line goes.
 
 The core modules import no `mcp-kit` at all — `test_core_no_mcp_kit.ml` walks the
 library's sources to keep that true — so the layer stays separable from the

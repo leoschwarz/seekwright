@@ -94,4 +94,5 @@ val with_public_web :
 (* [with_operation_timeout] and [with_log] (§6) live in [Authority], beside the
    grant type they change: an endo-function on an abstract grant that returns its
    argument unchanged would compile and silently promise a bound it never
-   applies, so they are declared where the [Controls.t] they rewrite is real. *)
+   applies, so they are declared where the bounds record they rewrite is real —
+   and that record's module is private, which is what keeps it out of reach here. *)

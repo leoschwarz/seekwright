@@ -37,7 +37,7 @@
       redirect is a refusal, not a hint. Because nothing is ever followed, there
       is no hop to leak credentials along and no hop count to bound.
     - {b Bounds.} One [Eio.Time.Timeout] over the whole operation (DNS, connect,
-      TLS, headers, body) via [Controls.run]; the response body is streamed
+      TLS, headers, body) via [Controls_raw.run]; the response body is streamed
       through [Eio.Buf_read] with a hard ceiling of min(grant, caller) bytes and
       is refused rather than truncated, with no [Content-Length] trust involved.
       Request bodies and headers are bounded and validated before they are sent,
@@ -115,10 +115,20 @@ val with_public_web :
     documentation blocks, 6to4 and Teredo. *)
 
 val request :
-  controls:Controls.t ->
+  controls:Controls_raw.t ->
   ?max_response_bytes:int ->
   t ->
   request ->
   (response, Error.t) result
 (** The operation behind [Authority.Net.request]. [max_response_bytes] lowers
-    the grant's ceiling, never raises it. *)
+    the grant's ceiling, never raises it.
+
+    [controls] is what makes this call unreachable from outside [Authority]:
+    its type is [Controls_raw.t], and [Controls_raw] is one of the library's
+    private modules, so no consumer of the package can name an argument for it.
+    This module itself stays public, unlike [Policy_fs], because [request],
+    [response], [method_] and [endpoint] are the records a [Net] call is written
+    in: a private module's records are unreadable by an installed consumer, which
+    would break the intended grant path rather than the bypass.
+    [test/should_not_compile] pins both halves — the sealed call here, and the
+    grant path that still compiles. *)

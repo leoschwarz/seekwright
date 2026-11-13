@@ -10,7 +10,21 @@
 
     [t] is abstract: no module outside this one can build one or change what it
     points at, so the answer to "where may this tool's reads go" is always "at a
-    [with_root] call". *)
+    [with_root] call".
+
+    {b This module is in dune's [private_modules].} Its interface is filed under
+    [.private/] by [dune build @install], so a consumer of the installed package
+    cannot call [read_file] or [list_dir] here at all: the filesystem operations
+    are reachable only through [Authority.Fs]. (Inside this checkout the two
+    names still resolve, because dune's alias module for a wrapped library re-exports
+    private modules; [test/test_caps_audit.ml] is what keeps production modules
+    from using that.) Keeping it separate rather than folding it into [Policy] is
+    what lets [Authority.Fs.of_confinement] name its witness type without a
+    module cycle. [Policy_net] cannot take the same shape — its request, response
+    and endpoint records are the vocabulary a [Net] grant is called with, and a
+    private module's records are unusable by an installed consumer — so its
+    operations are sealed on their [~controls] argument instead, whose type is
+    [Controls_raw.t]: also private, so equally unnameable. *)
 
 (** An opened subtree and the ceilings that ride on it. *)
 type t
@@ -42,11 +56,15 @@ val with_root :
     is not itself confined — it defines the confinement. [sw] must outlive every
     server that can serve a tool holding the grant. *)
 
-val read_file : controls:Controls.t -> ?max_bytes:int -> t -> string -> (string, Error.t) result
+val read_file : controls:Controls_raw.t -> ?max_bytes:int -> t -> string -> (string, Error.t) result
 (** The operation behind [Authority.Fs.read_file]; see that interface for the
     contract. [controls] is not optional on purpose: it is where the operation's
     time bound, budget and audit event come from, and a call site that can name
-    no controls is a call site that has not decided them (§3, §6). *)
+    no controls is a call site that has not decided them (§3, §6). Its type
+    belongs to a private module, so outside [lib/caps] there is no argument that
+    fills it: the only controls value in a running program is the one inside a
+    grant. This module is private too, so a consumer of the package does not reach
+    the operation in the first place. *)
 
-val list_dir : controls:Controls.t -> ?max_entries:int -> t -> string -> (string list, Error.t) result
+val list_dir : controls:Controls_raw.t -> ?max_entries:int -> t -> string -> (string list, Error.t) result
 (** The operation behind [Authority.Fs.list_dir]. *)
