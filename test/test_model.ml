@@ -363,6 +363,44 @@ let test_a_too_short_query_is_refused () =
   | Ok _ -> Alcotest.fail "a one-character query was accepted"
   | Error _ -> ()
 
+let test_a_duplicate_key_keeps_the_last_value () =
+  (* Python's [json.loads] replaces the value under the key's first position, so
+     pydantic validates the last spelling. A first-member lookup would let a
+     caller show the validator one value and the response another. *)
+  let decode fields =
+    match M.search_query_of_yojson (`Assoc fields) with
+    | Ok value -> value
+    | Error e -> Alcotest.fail ("decode failed: " ^ e)
+  in
+  let query = decode [ ("query", `String "first"); ("query", `String "second") ] in
+  Alcotest.(check string) "the last query wins" "second" query.M.query;
+  let results =
+    decode
+      [ ("query", `String "q"); ("max_results", `Int 2); ("max_results", `Int 9) ]
+  in
+  Alcotest.(check int) "the last max_results wins" 9 results.M.max_results
+
+let test_an_integer_literal_is_read_when_it_fits () =
+  (* Yojson keeps an integer it cannot hold as [Intlit]. The literal still spells
+     an integer, so a padded or non-decimal spelling that fits OCaml's int has to
+     decode; a value wider than the int cannot be represented and is refused with
+     the range fault rather than as a type error. *)
+  let decode field =
+    M.search_query_of_yojson
+      (`Assoc [ ("query", `String "q"); ("max_results", field) ])
+  in
+  (match decode (`Intlit "5") with
+  | Ok value -> Alcotest.(check int) "5" 5 value.M.max_results
+  | Error e -> Alcotest.fail ("decode failed: " ^ e));
+  (match decode (`Intlit "0x10") with
+  | Ok value -> Alcotest.(check int) "hex" 16 value.M.max_results
+  | Error e -> Alcotest.fail ("decode failed: " ^ e));
+  match decode (`Intlit "99999999999999999999") with
+  | Ok _ -> Alcotest.fail "an unrepresentable literal was accepted"
+  | Error message ->
+      Alcotest.(check string) "the range fault is named"
+        "field \"max_results\" is outside the integer range" message
+
 let test_an_explicit_null_is_not_a_default () =
   (* pydantic's non-optional defaults: absent means the default, null is an
      error. Treating null as absent would silently accept a body pydantic
@@ -442,6 +480,10 @@ let () =
             test_a_minimal_body_drops_unset_fields;
           Alcotest.test_case "a too-short query is refused" `Quick
             test_a_too_short_query_is_refused;
+          Alcotest.test_case "a duplicate key keeps the last value" `Quick
+            test_a_duplicate_key_keeps_the_last_value;
+          Alcotest.test_case "an integer literal is read when it fits" `Quick
+            test_an_integer_literal_is_read_when_it_fits;
           Alcotest.test_case "an explicit null is not a default" `Quick
             test_an_explicit_null_is_not_a_default;
         ] );

@@ -1667,3 +1667,100 @@ as runnable — neither was edited here, both are `live/**` and outside this tas
 ownership. `dune build @install`, `dune runtest --force` (64 suites) and
 `dune build @doc` all exit 0. Nothing in this change reached a provider endpoint: no
 live test ran, no key was read, and each new row keeps `ocaml_live_tested = false`.
+## 27. F3.3 follow-up — the divergence list closed (2026-11-13)
+
+Landed on `f8-divergences`, rebased onto `ocaml-port@1cda755`. §16 recorded eight
+divergences for the module owners; this wave takes them in order, verifies each
+against the Python oracle before touching the port, and closes everything the
+ownership allows. Six of the eight are gone, one is closed down to a platform
+limit, and one is recorded as unclosable under its own rule.
+
+**What closed, and how the port now agrees.**
+
+1. `Utf8` walks maximal subparts. `lead_width`/`next_index` claim the bytes one
+   ill-formed subpart owns (Python's `utf-8`/`errors="replace"` rule), so
+   `count`, `take` and `slices` agree on `\xe2abc`, overlong `\xc0\xaf` and the
+   surrogate `\xed\xa0\x80`, and `of_string` emits exactly one U+FFFD per
+   maximal subpart. `take`/`slices` keep returning raw-byte substrings — that is
+   what the QCheck partition property pins — while `of_string` is the replacing
+   decode.
+2. `Utf8.splitlines` follows Python: a trailing break ends the last non-empty
+   line, so `"a\n"` is one line, `"\n\n"` is two empties and `""` is none.
+   `is_line_boundary` now includes lone CR, which is a Python boundary; the CSV
+   reader takes its line structure from the same split, so a CRLF file keeps its
+   CR only where the record's own terminator consumes it.
+3. `Repr.py_repr` escapes the codepoints `str.isprintable()` calls false: a
+   generated 28-range table over the `Cc Cf Cs Co Zl Zp Zs` categories of
+   Unicode 16.0 (the oracle's `unicodedata`), minus U+0020. `\xNN`/`\uNNNN`/
+   `\UNNNNNNNN` are chosen by codepoint width and printable non-ASCII is still
+   left as bytes. Unassigned (`Cn`) codepoints are the one residual: escaping
+   them needs the whole assignment map, so they pass through and the module
+   comment says so.
+4. `Tabledoc.read_records` saves the pending empty field at a record terminator,
+   so `a,b,` is three columns with an empty third — Python's `csv`.
+5. `Fetcher.window_text` implements Python's slice bounds: a negative index
+   counts from the end and clamps at zero, a past-the-end one at the length, and
+   the cut point uses floor division for `max_chars // 2` (OCaml's `/`
+   truncates toward zero, which only differs for the negative cap the corpus
+   reaches and the tool surface cannot).
+6. `Config`'s TOML reader takes the three non-decimal integer bases and the
+   `inf`/`nan` spellings. A lexical pass rewrites only those literals, tracking
+   comments, the four string forms, headers and bracket/brace depth so a
+   literal-looking run inside a string or key is never touched, and only where a
+   value can begin; signed non-decimal and uppercase base markers are left for
+   the parser to refuse, as TOML does. **The pass found a real bug while being
+   pinned:** `int_of_string` wraps a hexadecimal/octal/binary literal modulo the
+   int width instead of failing, so the documented "leave a too-wide value for
+   the parser" rule was silently rewriting it — possibly to a negative number.
+   `digits_value` now accumulates in `Int64` with an explicit `max_int` ceiling,
+   so the widest literal this build holds decodes and one past it is left alone.
+7. `Model` resolves a duplicate key last, which is what Python's `json.loads`
+   keeps (it replaces the value under the key's first position), and its
+   `req_int`/`opt_int`/`default_int` accept an `Intlit` that fits OCaml's int
+   instead of reporting "expected an integer, got an integer"; one that does not
+   fit reports `field %S is outside the integer range`.
+8. `Fetcher.window_text` no longer raises on a negative offset or returns an
+   empty window on a negative cap, so the corpus's function-level cases pin the
+   same answers as `text[offset:offset+cap]`.
+
+**What remains, and why.** Twelve named cases stay `explicit-divergence`, plus
+the two systematic classes (38 wording cases and 41 extractor-default cases):
+
+- `sanitize` 09/22/23: the oracle projection must decode bytes to `str` before
+  its sanitizer runs, so an ill-formed byte reaches the escape pass as U+FFFD;
+  the port is byte-faithful. The pass agrees wherever the walk does not touch.
+- `fetch` 08/09: both trees refuse a bad port; the sentence quotes each
+  implementation's own parser. The verdict is the contract.
+- `config` 49: the documented example names `fetch.extractor = "trafilatura"`,
+  which the port has not wrapped (the P6 backend gap).
+- `config` 86/87 (2^62, 2^70) and `model` 06 (offset 2^70): platform limits. An
+  OCaml `int` is 63 bits; `policy.max_snippet_chars` and `FetchRequest.offset`
+  are read as `int` by the engine, the factory, the server and the projections,
+  so closing these needs a big-integer representation across those modules.
+- `model` 01/03: pydantic's lax mode coerces `"0.5"`/`"200"` to a number; the
+  decoder refuses string-to-number coercion. Both verdicts pinned.
+- `router` 08: `lib/router.ml` is stdlib-only and quotes a requested name with
+  its own single-quote pass, so a non-printable codepoint reaches the
+  projection's escape unescaped — one backslash where Python's `repr` plus
+  `json.dumps` gives two. Same verdict, same sentence otherwise; closing it
+  means giving the router a `repr`, which its stdlib-only rule forbids.
+
+**Goldens.** 367 pinned: 276 `differential-golden` and 91 `explicit-divergence`
+(41 extractor default, 38 wording, 12 named). The 16 cases that were pinned in
+§16 as explicit divergences are now `differential-golden`: text 10/11/12/30/31/
+32/33/43/44/47, fetch 43/44, tabledoc 17 and model 07. Config 89/93/94 now differ
+only by the accepted extractor-default gap.
+
+**Tests.** `test/test_text.ml` moves the splitlines/CR expectations and gains a
+maximal-subpart count and round-trip case plus the repr escapes (`\xa0`,
+`\u200b`, `\u3000`, an astral codepoint). `test/test_config.ml` gains a "toml
+literals" group: the three bases, separators, the widest literal that fits, one
+past it, the signed/uppercase/underscore refusals, bare `inf`/`nan`, and a
+quoted/comment lookalike that must stay untouched. `test/test_model.ml` gains
+duplicate-key last-wins and the fitting `Intlit` (including its range fault).
+`test/differential/projection.ml`'s `window_case` drops the `Invalid_argument`
+arm the old implementation needed; the function it projects no longer raises.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` (64 suites)
+and `dune build @doc` exit 0 under the opam+GMP environment. Nothing in the wave
+reached a provider endpoint: no live test ran and no key was read.

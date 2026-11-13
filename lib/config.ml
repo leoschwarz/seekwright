@@ -1291,6 +1291,240 @@ let keyless_hint table =
       "\n\nA config that needs no API key:\n\n" ^ example_config
   | _ -> ""
 
+(* The [toml] library's lexer reads TOML 1.0's decimal integers and floats, but
+   not the three non-decimal integer bases and not the [inf]/[nan] spellings:
+   every one of those is valid TOML that Python's [tomllib] accepts, so the port
+   rewrites just those literals before the parser sees the document. A
+   hexadecimal, octal or binary integer becomes the same value in decimal; an
+   infinity or NaN becomes the quoted spelling {!float_from_string} already
+   reads. Every other byte is left alone.
+
+   This is a lexical pass, not a parser: it tracks comments, the four string
+   forms, table headers and bracket/brace depth so a literal-looking run inside a
+   string or a key is never touched, and it rewrites only where a value can
+   begin. A signed non-decimal integer ([+0x10]) is left as it is because TOML
+   forbids it and the library's refusal is the right answer. *)
+
+let value_terminator ch =
+  ch = ' ' || ch = '\t' || ch = '\n' || ch = '\r' || ch = ',' || ch = ']' || ch = '}'
+  || ch = '#'
+
+let hex_digit ch = is_digit ch || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
+
+(* The digits' value as an OCaml int, or [None] once the accumulation would pass
+   {!max_int}. [int_of_string] cannot be the reader here: for a hexadecimal,
+   octal or binary literal it wraps modulo the int width rather than failing, so
+   a literal one bit too wide would be rewritten to a wrong — possibly negative —
+   decimal instead of being left for the parser to refuse. *)
+let digits_value base digits =
+  let digit_value ch =
+    if ch >= '0' && ch <= '9'
+    then Char.code ch - Char.code '0'
+    else if ch >= 'a' && ch <= 'f'
+    then Char.code ch - Char.code 'a' + 10
+    else Char.code ch - Char.code 'A' + 10
+  in
+  let base = Int64.of_int base in
+  let limit = Int64.of_int max_int in
+  let value = ref 0L in
+  let fits = ref true in
+  String.iter
+    (fun ch ->
+      if !fits
+      then
+        let d = Int64.of_int (digit_value ch) in
+        if Int64.compare !value (Int64.div (Int64.sub limit d) base) > 0
+        then fits := false
+        else value := Int64.add (Int64.mul !value base) d)
+    digits;
+  if !fits then Some (Int64.to_int !value) else None
+
+(* [i] is at a [0]; the non-decimal literal that starts there, if any, as
+   (decimal spelling, end index). A run of digits and single underscores is
+   required, and the token has to end at a value boundary. A value wider than an
+   OCaml int is left alone so the parser reports it rather than the pass
+   truncating it. *)
+let non_decimal_literal text i =
+  let n = String.length text in
+  let digit, base =
+    if i + 1 >= n || text.[i] <> '0'
+    then (fun _ -> false), 0
+    else
+      match text.[i + 1] with
+      | 'x' -> hex_digit, 16
+      | 'o' -> (fun ch -> ch >= '0' && ch <= '7'), 8
+      | 'b' -> (fun ch -> ch = '0' || ch = '1'), 2
+      | _ -> (fun _ -> false), 0
+  in
+  if base = 0
+  then None
+  else begin
+    let j = ref (i + 2) in
+    let digits = Buffer.create 8 in
+    let prev_digit = ref false in
+    let valid = ref true in
+    while !j < n && (digit text.[!j] || text.[!j] = '_') do
+      if text.[!j] = '_'
+      then begin
+        if not !prev_digit then valid := false;
+        prev_digit := false
+      end
+      else begin
+        Buffer.add_char digits text.[!j];
+        prev_digit := true
+      end;
+      incr j
+    done;
+    if (not !valid) || Buffer.length digits = 0 || not !prev_digit
+    then None
+    else if !j < n && not (value_terminator text.[!j])
+    then None
+    else
+      match digits_value base (Buffer.contents digits) with
+      | Some value -> Some (string_of_int value, !j)
+      | None -> None
+  end
+
+(* [i] is at the start of an infinity or NaN value, with an optional sign, as
+   (quoted spelling, end index). The quoted spelling is what the loader's number
+   reader takes, so the parser never has to know the word. *)
+let inf_nan_literal text i =
+  let n = String.length text in
+  let signed = i < n && (text.[i] = '+' || text.[i] = '-') in
+  let body = if signed then i + 1 else i in
+  let word =
+    if body + 3 <= n && String.sub text body 3 = "inf"
+    then Some "inf"
+    else if body + 3 <= n && String.sub text body 3 = "nan"
+    then Some "nan"
+    else None
+  in
+  match word with
+  | None -> None
+  | Some _ ->
+      let stop = body + 3 in
+      if stop < n && not (value_terminator text.[stop])
+      then None
+      else Some ("\"" ^ String.sub text i (stop - i) ^ "\"", stop)
+
+let translate_toml_literals text =
+  let n = String.length text in
+  let out = Buffer.create (n + 16) in
+  let i = ref 0 in
+  let expect_value = ref false in
+  let squares = ref 0 in
+  let braces = ref 0 in
+  let line_start = ref true in
+  let in_header = ref false in
+  let copy () =
+    Buffer.add_char out text.[!i];
+    incr i
+  in
+  let copy_string quote triple =
+    let width = if triple then 3 else 1 in
+    Buffer.add_substring out text !i width;
+    i := !i + width;
+    let closed = ref false in
+    while (not !closed) && !i < n do
+      if quote = '"' && text.[!i] = '\\' && !i + 1 < n
+      then begin
+        copy ();
+        copy ()
+      end
+      else if triple && !i + 2 < n && text.[!i] = quote && text.[!i + 1] = quote
+              && text.[!i + 2] = quote
+      then begin
+        Buffer.add_substring out text !i 3;
+        i := !i + 3;
+        closed := true
+      end
+      else if (not triple) && text.[!i] = quote
+      then begin
+        copy ();
+        closed := true
+      end
+      else copy ()
+    done
+  in
+  while !i < n do
+    let ch = text.[!i] in
+    if !in_header
+    then begin
+      if ch = ']' then in_header := false;
+      if ch = '\n' then line_start := true
+      else if ch <> ' ' && ch <> '\t' && ch <> '\r' then line_start := false;
+      copy ()
+    end
+    else if ch = '#'
+    then while !i < n && text.[!i] <> '\n' do
+      copy ()
+    done
+    else if ch = '\n'
+    then begin
+      if !squares = 0 && !braces = 0 then expect_value := false;
+      line_start := true;
+      copy ()
+    end
+    else if ch = ' ' || ch = '\t' || ch = '\r'
+    then copy ()
+    else begin
+      let was_line_start = !line_start in
+      line_start := false;
+      match ch with
+      | '"' ->
+          let triple = !i + 2 < n && text.[!i + 1] = '"' && text.[!i + 2] = '"' in
+          copy_string '"' triple;
+          expect_value := false
+      | '\'' ->
+          let triple = !i + 2 < n && text.[!i + 1] = '\'' && text.[!i + 2] = '\'' in
+          copy_string '\'' triple;
+          expect_value := false
+      | '=' ->
+          copy ();
+          expect_value := true
+      | '[' ->
+          copy ();
+          if was_line_start && !squares = 0 && !braces = 0
+          then in_header := true
+          else begin
+            incr squares;
+            expect_value := true
+          end
+      | ']' ->
+          copy ();
+          if !squares > 0 then decr squares;
+          expect_value := false
+      | '{' ->
+          copy ();
+          incr braces;
+          expect_value := false
+      | '}' ->
+          copy ();
+          if !braces > 0 then decr braces;
+          expect_value := false
+      | ',' ->
+          copy ();
+          expect_value := !squares > 0 && !braces = 0
+      | _ ->
+          if !expect_value
+          then (
+            match
+              match non_decimal_literal text !i with
+              | Some literal -> Some literal
+              | None -> inf_nan_literal text !i
+            with
+            | Some (replacement, stop) ->
+                Buffer.add_string out replacement;
+                i := stop;
+                expect_value := false
+            | None ->
+                copy ();
+                expect_value := false)
+          else copy ()
+    end
+  done;
+  Buffer.contents out
+
 (* A stdio server that dies silently is miserable to debug, so a bad config
    names the file and the fault rather than falling back to defaults. A config
    that enables *nothing* is not bad: it resolves to the keyless set, and
@@ -1308,7 +1542,7 @@ let load path =
   match text with
   | None -> resolve ()
   | Some text ->
-      (match Toml.Parser.from_string text with
+      (match Toml.Parser.from_string (translate_toml_literals text) with
       | `Error (message, _) ->
           Error (Printf.sprintf "seekwright: invalid TOML in %s: %s" candidate message)
       | `Ok table ->

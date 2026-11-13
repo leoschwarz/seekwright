@@ -332,17 +332,12 @@ let window_case spec =
   let text = want_string "text" spec in
   let offset = want_int "offset" spec in
   let max_chars = want_int "max_chars" spec in
-  (* A negative offset is out of contract for the tool surface ([Model] checks
-     offset ≥ 0) but in contract for this function, whose docs say only that an
-     offset past the end yields an empty window and a truthful flag. [window_text]
-     reaches [Array.sub] with a negative index there, so the projection states
-     the raise instead of aborting the area: a robustness case whose fact is a
-     crash has to be pinnable. Only [Invalid_argument] is caught, so a malformed
-     corpus spec — which fails with [Failure] — still stops the run. *)
-  match Fetcher.window_text text ~offset ~max_chars with
-  | window, more -> [ "window= " ^ Canon.escape_text window; "more=" ^ flag more ]
-  | exception Invalid_argument name ->
-      [ "raised= Invalid_argument(" ^ Canon.escape_text name ^ ")" ]
+  (* A negative offset and a negative cap are out of contract for the tool
+     surface ([Model] checks offset ≥ 0 and the caps are config constants) but in
+     contract for this function, whose docs define the slice on any bound the way
+     Python's [text[a:b]] does. *)
+  let window, more = Fetcher.window_text text ~offset ~max_chars in
+  [ "window= " ^ Canon.escape_text window; "more=" ^ flag more ]
 
 let sniff_case spec =
   let body = Canon.of_hex (want_string "hex" spec) in

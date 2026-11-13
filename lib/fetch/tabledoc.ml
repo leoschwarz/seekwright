@@ -164,12 +164,15 @@ let read_records text delim =
               let in_field = state = `In_field in
               if c = '\r' then
                 if i + 1 < n && text.[i + 1] = '\n' then begin
-                  if in_field then save_field ();
+                  (* A field ends here even when it is the empty one after a
+                     trailing delimiter: Python's csv yields it, and dropping it
+                     would silently lose the last column of every such line. *)
+                  save_field ();
                   save_record ();
                   go `Start_record (i + 2)
                 end
                 else if i + 1 >= n then begin
-                  if in_field then save_field ();
+                  save_field ();
                   save_record ();
                   go `Start_record (i + 1)
                 end
@@ -178,7 +181,7 @@ let read_records text delim =
                   finish ()
                 end
               else if c = '\n' then begin
-                if in_field then save_field ();
+                save_field ();
                 save_record ();
                 go `Start_record (i + 1)
               end

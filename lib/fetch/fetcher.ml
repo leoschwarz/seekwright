@@ -292,17 +292,19 @@ let rstrip_py = Utf8.rstrip
 let window_text (text : string) ~offset ~max_chars : string * bool =
   (* Slice the window [[offset, offset + max_chars)] out of an extraction, in
      codepoints — Python indexes strings by character, and so does every offset
-     this module carries. *)
+     this module carries. Python's slice bounds are what they are on the tool
+     surface's [offset ≥ 0] and positive caps, and this function is also reached
+     directly by the differential corpus, so a negative bound counts from the end
+     and clamps exactly as [text[a:b]] does. *)
 
   let t = Utf8.of_string text in
   let n = Array.length t in
+  let index i = if i < 0 then max (n + i) 0 else if i > n then n else i in
   let slice a b =
-    (* [text[a:b]] with Python's clamping: past-the-end reads are empty. *)
-
-    if a >= n || b <= a then ""
-    else Utf8.to_string (Array.sub t a (min n b - a))
+    let a = index a and b = index b in
+    if b <= a then "" else Utf8.to_string (Array.sub t a (b - a))
   in
-  let remainder = if offset <= n then slice offset n else "" in
+  let remainder = slice offset n in
   if Utf8.count remainder <= max_chars && offset <= n then (remainder, false)
   else
     let window = slice offset (offset + max_chars + 1) in
@@ -316,7 +318,14 @@ let window_text (text : string) ~offset ~max_chars : string * bool =
       if w.(!i) = 0x0A && w.(!i + 1) = 0x0A then found := !i;
       incr i
     done;
-    let cut = if !found <= max_chars / 2 then max_chars else !found in
+    (* [max_chars // 2] is floor division in Python. OCaml's [/] truncates
+       toward zero, which differs for a negative cap — the one case the corpus
+       reaches and the tool surface does not. *)
+    let half =
+      let q = max_chars / 2 in
+      if max_chars mod 2 <> 0 && max_chars < 0 then q - 1 else q
+    in
+    let cut = if !found <= half then max_chars else !found in
     let more_remains = offset + cut < n || offset > n in
     let sliced = rstrip_py (slice offset (offset + cut)) in
     let sliced =

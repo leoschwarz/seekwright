@@ -1449,6 +1449,75 @@ let test_a_boolean_refuses_everything_else () =
     check (option bool) "another number" None (flag "2");
     check (option bool) "a fractional number" None (flag "2.5"))
 
+(* TOML 1.0 writes integers in three non-decimal bases and spells its two float
+   limits as bare words; the [toml] library's lexer reads neither, so the loader
+   rewrites just those literals before parsing. These cases go through
+   [Config.load] and assert the decoded value, so a pass that rewrote the wrong
+   byte would surface as a wrong number rather than as a successful parse. *)
+
+let test_a_bare_non_decimal_integer () =
+  A.(
+    check (option int) "hex" (Some 16) (snippet "0x10");
+    check (option int) "octal" (Some 8) (snippet "0o10");
+    check (option int) "binary" (Some 5) (snippet "0b101");
+    check (option int) "hex with separators" (Some 255) (snippet "0x0f_f");
+    check (option int) "octal with separators" (Some 511) (snippet "0o7_7_7"))
+
+let test_a_bare_non_decimal_integer_refuses_the_wrong_shape () =
+  (* TOML forbids a sign on a non-decimal integer and an uppercase base marker,
+     and requires a digit run of single underscores; the loader leaves each of
+     these to the parser's own refusal. *)
+  A.(
+    check (option int) "a signed hex" None (snippet "-0x10");
+    check (option int) "an uppercase base marker" None (snippet "0X10");
+    check (option int) "no digits" None (snippet "0x");
+    check (option int) "a leading separator" None (snippet "0x_1");
+    check (option int) "a doubled separator" None (snippet "0x1__0");
+    check (option int) "a trailing separator" None (snippet "0x1_");
+    check (option int) "a digit out of base" None (snippet "0b102");
+    check (option int) "one past this build's int" None
+      (snippet "0x4000_0000_0000_0000");
+    (* OCaml's [int_of_string] wraps a hexadecimal this wide modulo the int
+       width, so a truncated rewrite would show up here as a negative value. *)
+    check (option int) "the widest literal this build holds" (Some max_int)
+      (snippet "0x3fff_ffff_ffff_ffff"))
+
+let test_a_bare_infinity_and_nan () =
+  let positive value =
+    match seconds value with Some v -> Float.equal v Float.infinity | None -> false
+  in
+  let negative value =
+    match seconds value with
+    | Some v -> Float.equal v Float.neg_infinity
+    | None -> false
+  in
+  let nan value =
+    match seconds value with Some v -> Float.is_nan v | None -> false
+  in
+  A.(
+    check bool "inf" true (positive "inf");
+    check bool "+inf" true (positive "+inf");
+    check bool "-inf" true (negative "-inf");
+    check bool "nan" true (nan "nan");
+    check bool "+nan" true (nan "+nan");
+    check bool "a mixed-case spelling is not TOML" true (seconds "NaN" = None))
+
+let test_literal_lookalikes_are_left_alone () =
+  (* A quoted [0x10] stays the string [0x10], which the int reader refuses; had
+     the pass rewritten inside strings it would have become accepted as 16. The
+     comment is the other side: a literal spelled there must not reach a value. *)
+  A.(
+    check (option int) "a hex inside a string is not a number" None
+      (snippet "\"0x10\"");
+    check (option int) "a nan inside a string is not a number" None
+      (snippet "\"nan\""));
+  match
+    load "# 0x10 and nan are only words here\n[policy]\nmax_snippet_chars = 3\n"
+  with
+  | Ok cfg ->
+      A.(check int) "the value after the comment" 3 cfg.Config.policy.max_snippet_chars
+  | Error message -> A.fail message
+
 (* {1 The vocabularies} *)
 
 (* The frozen names, written out rather than recomputed: these are the rows of
@@ -1646,6 +1715,16 @@ let () =
               test_a_boolean_takes_its_twelve_spellings
           ; A.test_case "a boolean refuses everything else" `Quick
               test_a_boolean_refuses_everything_else
+          ] )
+      ; ( "toml literals"
+        , [ A.test_case "a bare non-decimal integer" `Quick
+              test_a_bare_non_decimal_integer
+          ; A.test_case "a bare non-decimal integer refuses the wrong shape" `Quick
+              test_a_bare_non_decimal_integer_refuses_the_wrong_shape
+          ; A.test_case "a bare infinity and nan" `Quick
+              test_a_bare_infinity_and_nan
+          ; A.test_case "literal lookalikes are left alone" `Quick
+              test_literal_lookalikes_are_left_alone
           ] )
       ; ( "the frozen vocabularies"
         , [ A.test_case "the names this build ships" `Quick test_the_frozen_vocabularies ] )

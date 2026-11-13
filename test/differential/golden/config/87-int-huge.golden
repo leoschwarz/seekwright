@@ -3,7 +3,7 @@ case: 87-int-huge
 verification: explicit-divergence
 oracle: python
 projection: config
-reason: the port's TOML reader holds an integer in an OCaml int, 63 bits, and reports a value it cannot represent as invalid TOML; Python's tomllib keeps arbitrary precision and the loader accepts the document because policy.max_snippet_chars has no upper bound. The port refuses rather than truncates, so this is a capability limit stated in the wrong sentence ('invalid TOML' for a valid file) — lib/config.ml is outside this corpus's ownership, so it is pinned and raised.
+reason: an OCaml int is 63 bits and the port's config holds every integer in one; Python's tomllib keeps arbitrary precision, and policy.max_snippet_chars has no upper bound, so tomllib accepts 2**62 and 2**70. The port refuses a value it cannot represent rather than truncating it. Closing the gap needs arbitrary-precision integers across the config surface — policy.max_snippet_chars is read as an int by the engine, the factory and the projection — so it is pinned as a platform limit and raised in the plan.
 --- oracle
 default=-
 permitted=-

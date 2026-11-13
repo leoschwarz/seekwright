@@ -8,21 +8,44 @@ type codepoint = { idx : int; width : int }
 (* {2 The step} *)
 
 let lead_width s i =
-  (* A five-byte lead ([0xF8..0xFF]) is no UTF-8 sequence at all, so it advances
-     one byte rather than four. That is not a detail: the sanitize pass walks the
-     content of a [<|…|>] literal with this step looking for the closing bar, and
-     a step of four would jump over that bar and leave the token unescaped. It is
-     also what Python's decoder costs a bad byte — one replacement character.
+  (* The bytes one {e maximal subpart} of an ill-formed sequence claims, which is
+     also the width of a well-formed sequence: Python's [utf-8] decoder with
+     [errors="replace"] spends exactly one U+FFFD per maximal subpart, so this
+     step is what makes [count] agree with [len] of the decoded str.
 
-     The port had two spellings of this test (a range test in the fetch path, the
-     provider caps, the engine and the agent; a mask test in [Model] and
-     [Sanitize]) and they disagreed exactly here — style review H2. *)
-  let c = Char.code s.[i] in
+     The ranges are the ones a UTF-8 encoder would emit, not merely the byte
+     shapes: [0xC0..0xC1] are overlong leads and cost one byte, [0xED] may only
+     be followed by [0x80..0x9F] (so a surrogate encoding costs three
+     replacements, not one), and [0xF0]/[0xF4] bound the first continuation so
+     the decoded value stays inside Unicode. A truncated sequence claims only the
+     bytes present.
+
+     A five-byte lead ([0xF8..0xFF]) is no UTF-8 sequence at all, so it advances
+     one byte. That is not a detail: the sanitize pass walks the content of a
+     [<|…|>] literal with this step looking for the closing bar, and a step of
+     four would jump over that bar and leave the token unescaped. Every step here
+     is at most the lead plus its continuations, and a byte the class excludes
+     (a bar is [0x7C]) is never consumed, so the scan still reaches it. *)
+  let len = String.length s in
+  let byte at = Char.code s.[at] in
+  let cont at lo hi = at < len && byte at >= lo && byte at <= hi in
+  let c = byte i in
   if c < 0x80 then 1
-  else if c < 0xC0 then 1 (* a continuation byte: counted, never skipped *)
-  else if c < 0xE0 then 2
-  else if c < 0xF0 then 3
-  else if c < 0xF8 then 4
+  else if c < 0xC2 then 1 (* a continuation byte or an overlong lead *)
+  else if c <= 0xDF then if cont (i + 1) 0x80 0xBF then 2 else 1
+  else if c <= 0xEF then begin
+    let lo, hi = if c = 0xE0 then (0xA0, 0xBF) else if c = 0xED then (0x80, 0x9F) else (0x80, 0xBF) in
+    if not (cont (i + 1) lo hi) then 1
+    else if cont (i + 2) 0x80 0xBF then 3
+    else 2
+  end
+  else if c <= 0xF4 then begin
+    let lo, hi = if c = 0xF0 then (0x90, 0xBF) else if c = 0xF4 then (0x80, 0x8F) else (0x80, 0xBF) in
+    if not (cont (i + 1) lo hi) then 1
+    else if not (cont (i + 2) 0x80 0xBF) then 2
+    else if cont (i + 3) 0x80 0xBF then 4
+    else 3
+  end
   else 1
 
 let next_index s i =
@@ -30,10 +53,11 @@ let next_index s i =
      the clamping is what keeps a truncated trailing sequence from running off
      the end — [String.sub] counts bytes and raises past the end, which is how
      [Engine.take] reached [Invalid_argument] on a three-byte payload (style
-     review H1). *)
+     review H1). [lead_width] already stops at the bytes present, so the clamp is
+     belt and braces. *)
   let len = String.length s in
-  let width = lead_width s i in
-  if i + width > len then len else i + width
+  let at = i + lead_width s i in
+  if at > len then len else at
 
 let codepoints s =
   let acc = ref [] in
@@ -75,13 +99,15 @@ let of_string s =
   let cps = ref [] in
   let i = ref 0 in
   while !i < len do
-    (* The clamped step, not [lead_width]: the decoder reads the continuation
-       bytes the step claims, so a truncated sequence must be shortened to the
-       bytes present. *)
     let next = next_index s !i in
     let cp =
       match next - !i with
-      | 1 -> Char.code s.[!i]
+      | 1 ->
+          (* An ASCII byte is itself; anything else in a one-byte subpart is
+             ill-formed and decodes to one U+FFFD, which is Python's
+             [errors="replace"] rule and what makes a decode/re-encode round trip
+             stable without being byte-identical. *)
+          if Char.code s.[!i] < 0x80 then Char.code s.[!i] else 0xFFFD
       | 2 ->
           ((Char.code s.[!i] land 0x1f) lsl 6)
           lor (Char.code s.[!i + 1] land 0x3f)
@@ -208,16 +234,20 @@ let split_whitespace s =
   List.rev !words
 
 let is_line_boundary cp =
-  (* The set the port had, kept exactly: [splitlines]'s pairing rule is what
-     turns [CRLF] into one break. A lone [CR] is {i not} in this set, so it rides
-     inside the line that precedes the [LF] — where Python would break. Changing
-     that moves what {!Tabledoc} puts in a cell of a [CRLF]-terminated file, so
-     it is raised as a question rather than settled with the walk. *)
+  (* Python's [str.splitlines()] boundary set: LF, CR, VT, FF, the four
+     file/group/record separators, NEL, and the two Unicode line/paragraph
+     separators. CR is here even though {!splitlines} pairs it with a following
+     LF: a lone CR breaks a line in Python, and the CSV reader that used to refuse
+     one now sets the page's line structure from this same split. *)
   match cp with
-  | 0x0a | 0x0b | 0x0c | 0x1c | 0x1d | 0x1e | 0x85 | 0x2028 | 0x2029 -> true
+  | 0x0a | 0x0d | 0x0b | 0x0c | 0x1c | 0x1d | 0x1e | 0x85 | 0x2028 | 0x2029 -> true
   | _ -> false
 
 let splitlines cps =
+  (* Python's [splitlines()]: a trailing break ends the last {e non-empty}
+     line, so [\\"a\\n\\"] is one line and [\\"a\\n\\n\\"] is [\\"a\\"] and [\\"\\"] — no
+     final empty entry is invented after the last break. An empty input has no
+     lines at all. *)
   let n = Array.length cps in
   let lines = ref [] in
   let start = ref 0 in
@@ -235,7 +265,7 @@ let splitlines cps =
     end
     else incr i
   done;
-  lines := Array.sub cps !start (n - !start) :: !lines;
+  if !start < n then lines := Array.sub cps !start (n - !start) :: !lines;
   List.rev !lines
 
 let ascii_lower cps =

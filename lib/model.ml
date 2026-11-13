@@ -154,7 +154,14 @@ let as_assoc (json : Yojson.Safe.t) = match json with
   | `Assoc kvs -> Ok kvs
   | json -> Error (type_error "an object" json)
 
-let find name kvs = List.assoc_opt name kvs
+let find name kvs =
+  (* The last value for a duplicate key, which is what Python's [json.loads]
+     keeps: it replaces the value under the key's first position. Yojson does
+     not collapse the pair, so a lookup that took the first member would let a
+     caller show a validator one value and the response another. *)
+  match List.find_opt (fun (k, _) -> k = name) (List.rev kvs) with
+  | Some (_, value) -> Some value
+  | None -> None
 
 let reject_extra ~allowed kvs =
   match List.find_opt (fun (k, _) -> not (List.mem k allowed)) kvs with
@@ -177,6 +184,14 @@ let opt_string name kvs =
 let req_int name kvs =
   match find name kvs with
   | Some (`Int i) -> Ok i
+  | Some (`Intlit s) -> (
+      (* Yojson spells an integer it cannot hold as [Intlit]. Accepting one that
+         does fit keeps a document whose literal is padded or written in another
+         base from being a type error; a value wider than OCaml's int still
+         cannot be represented, and says so. *)
+      match int_of_string_opt s with
+      | Some i -> Ok i
+      | None -> Error (Printf.sprintf "field %S is outside the integer range" name))
   | Some (`Float f) when Float.is_integer f -> Ok (int_of_float f)
   | None -> Error (Printf.sprintf "missing required field %S" name)
   | Some `Null -> Error (Printf.sprintf "field %S is not nullable" name)
@@ -186,6 +201,10 @@ let opt_int name kvs =
   match find name kvs with
   | None | Some `Null -> Ok None
   | Some (`Int i) -> Ok (Some i)
+  | Some (`Intlit s) -> (
+      match int_of_string_opt s with
+      | Some i -> Ok (Some i)
+      | None -> Error (Printf.sprintf "field %S is outside the integer range" name))
   | Some (`Float f) when Float.is_integer f -> Ok (Some (int_of_float f))
   | Some json -> Error (type_error "an integer" json)
 
@@ -232,6 +251,10 @@ let default_int name kvs default =
   match find name kvs with
   | None -> Ok default
   | Some (`Int i) -> Ok i
+  | Some (`Intlit s) -> (
+      match int_of_string_opt s with
+      | Some i -> Ok i
+      | None -> Error (Printf.sprintf "field %S is outside the integer range" name))
   | Some (`Float f) when Float.is_integer f -> Ok (int_of_float f)
   | Some `Null -> Error (Printf.sprintf "field %S is not nullable" name)
   | Some json -> Error (type_error "an integer" json)

@@ -3,7 +3,7 @@ case: 08-search-unicode-request
 verification: explicit-divergence
 oracle: python
 projection: router
-reason: the same repr rule as text/43, surfacing in a refusal sentence: the router quotes the requested name back through py_repr, Python's repr escapes the zero-width space as \u200b while the port passes the codepoint through and the projection's escape renders it as \u200b too — so the two sentences differ by one backslash. Same verdict, same wording otherwise; the difference is the repr's non-printable rule.
+reason: the router's sentence is built by lib/router.ml, which is stdlib-only and quotes a requested name with its own single-quote pass (a provider name is backend or backend:flavour, never a quote or a backslash). A non-printable codepoint therefore reaches the projection's escape as itself, while Python's repr emits a backslash escape that json.dumps then doubles — so the two sentences differ by one backslash on a zero-width space. Same verdict, same wording otherwise: closing it means giving the router a repr, which its stdlib-only rule forbids.
 --- oracle
 resolve_search refused= Provider 'caf\u00e9' is not enabled on this server. Available: serper, exa:free. Retry with one of those, or omit `provider` to use the default.
 resolve_search refused= Provider 'exa\ud83d\ude00' is not enabled on this server. Available: serper, exa:free. Retry with one of those, or omit `provider` to use the default.

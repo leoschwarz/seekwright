@@ -3,7 +3,7 @@ case: 06-model-extremes
 verification: explicit-divergence
 oracle: python
 projection: model
-reason: pydantic holds a Python int of any width and FetchRequest.offset has no upper bound, so a 2**70 offset is accepted and re-encoded exactly; the port's decoder accepts a Yojson Int (or an integral Float) only and reports Intlit as a type error, so the same body is refused. Refusing is honest at a 63-bit int, but the sentence ('expected an integer, got an integer') is not — pinned and raised for the port's model layer.
+reason: pydantic holds a Python int of any width and FetchRequest.offset has no upper bound, so a 2**70 offset is accepted and re-encoded exactly; the port's FetchRequest.offset is an OCaml int, and the decoder accepts an Intlit only when it fits one, so it refuses 2**70 with 'outside the integer range'. Closing the gap needs a big-integer representation on the model surface — lib/server.ml and lib/engine.ml read offset as an int — so it is pinned as a platform limit and raised in the plan.
 --- oracle
 verdict= reject
 verdict= reject

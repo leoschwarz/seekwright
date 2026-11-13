@@ -67,6 +67,25 @@ let test_counting_is_codepoints_not_bytes () =
      five codepoints of this string is [café] and the blank after it. *)
   A.(check string) "take 5" "caf\xc3\xa9 " (U.take 5 mixed)
 
+let test_a_malformed_sequence_costs_one_per_maximal_subpart () =
+  (* Python's [utf-8] with [errors="replace"] spends one U+FFFD per maximal
+     ill-formed subsequence, and the step is what makes the count agree: an
+     interrupted sequence claims the bytes that are in range, and a byte that
+     cannot continue it starts a new subpart. *)
+  A.(check int) "a lead then ascii" 4 (U.count "\xe2abc");
+  A.(check int) "an overlong pair" 2 (U.count "\xc0\xaf");
+  A.(check int) "a surrogate encoding" 3 (U.count "\xed\xa0\x80");
+  A.(check int) "a three-byte lead cut short by ascii" 3 (U.count "\xe2\xabab");
+  A.(check int) "a truncated two-byte sequence" 1 (U.count "\xc3");
+  A.(check int) "a truncated three-byte sequence" 1 (U.count "\xe2\x80");
+  A.(check int) "a five-byte payload costs five" 5 (U.count "\xf8abcd");
+  (* The codec agrees with the count: an ill-formed subpart decodes to U+FFFD and
+     re-encodes to its bytes, so the round trip is stable, not byte-identical. *)
+  A.(check string) "decode then encode replaces" "\xef\xbf\xbdabc"
+    (U.to_string (U.of_string "\xe2abc"));
+  A.(check string) "the overlong pair is two replacements" "\xef\xbf\xbd\xef\xbf\xbd"
+    (U.to_string (U.of_string "\xc0\xaf"))
+
 let test_slices_and_codepoints_agree_with_the_walk () =
   let s = "a\xe2\x82\xac\xf0\x9f\x98\x80" in
   let cps = U.codepoints s in
@@ -140,22 +159,20 @@ let test_splitlines_breaks_where_python_does () =
   let lines s = List.map U.to_string (U.splitlines (U.of_string s)) in
   A.(check (list string)) "one line" [ "a b" ] (lines "a b");
   A.(check (list string)) "two lines" [ "a"; "b" ] (lines "a\nb");
-  A.(check (list string)) "a trailing break ends an empty last line"
-    [ "a"; "" ] (lines "a\n");
+  A.(check (list string)) "a trailing break adds no empty line" [ "a" ] (lines "a\n");
+  A.(check (list string)) "two breaks end with the one empty line they made"
+    [ "a"; "" ] (lines "a\n\n");
+  A.(check (list string)) "empty input has no lines" [] (lines "");
   A.(check (list string)) "the separators break" [ "a"; "b"; "c" ] (lines "a\x1cb\x1ec");
-  A.(check (list string)) "NEL breaks" [ "a"; "b" ] (lines "a\x85b");
+  A.(check (list string)) "NEL breaks" [ "a"; "b" ] (lines "a\xc2\x85b");
   A.(check (list string)) "the Unicode line and paragraph separators break"
     [ "a"; "b"; "c" ] (lines ("a\xe2\x80\xa8b\xe2\x80\xa9c"));
-  (* The one place this walk is {i not} Python's, pinned so the difference is a
-     recorded fact rather than a surprise: [CR] is not in the port's boundary set,
-     so a [CRLF] breaks at the [LF] and carries the [CR] into the line before it.
-     Python's {e splitlines} breaks on the [CR] itself. The fetch path's CSV
-     reader depends on the carriage return surviving the split — it refuses a bare
-     one with [csv]'s own wording, which it could not see otherwise — so the
-     difference is the walk's open question, not something to change under it. *)
-  A.(check (list string)) "CRLF carries the CR" [ "a\r"; "b" ] (lines "a\r\nb");
-  A.(check bool) "CR is not a boundary here" false (U.is_line_boundary 0x0d);
-  A.(check bool) "a tab is not either" false (U.is_line_boundary (Char.code '\t'))
+  (* CR is a boundary on its own, and [CRLF] is one break: Python's rule. *)
+  A.(check (list string)) "CRLF is one break with no CR left in the line"
+    [ "a"; "b" ] (lines "a\r\nb");
+  A.(check (list string)) "a lone CR breaks too" [ "a"; "b" ] (lines "a\rb");
+  A.(check bool) "CR is a boundary" true (U.is_line_boundary 0x0d);
+  A.(check bool) "a tab is not" false (U.is_line_boundary (Char.code '\t'))
 
 let test_ascii_lower_folds_only_ascii () =
   let cps = U.ascii_lower (U.of_string "AbZ9 \xc3\x89") in
@@ -181,6 +198,17 @@ let test_the_log_repr_is_the_one_a_refusal_quotes_with () =
      because a log reader keeps UTF-8 and rewriting it would hide the page. *)
   A.(check string) "control bytes" "'\\x01\\x7f'" (R.py_repr "\x01\x7f");
   A.(check string) "non-ascii passes through" "'caf\xc3\xa9'" (R.py_repr "caf\xc3\xa9");
+  (* The non-printable non-ASCII codepoints Python escapes: [\xNN] below U+0100,
+     [\uNNNN] in the BMP and [\UNNNNNNNN] above it. NBSP and ZWSP are the two a
+     page actually carries; the ideographic space and a format character cover
+     the other widths. *)
+  A.(check string) "nbsp is \\xa0" "'a\\xa0b'" (R.py_repr "a\xc2\xa0b");
+  A.(check string) "zwsp is \\u200b" "'a\\u200bb'" (R.py_repr "a\xe2\x80\x8bb");
+  A.(check string) "ideographic space is \\u3000" "'\\u3000'" (R.py_repr "\xe3\x80\x80");
+  A.(check string) "an astral format character is \\U" "'\\U000e0001'"
+    (R.py_repr "\xf3\xa0\x80\x81");
+  A.(check string) "a replacement character is printable" "'\xef\xbf\xbd'"
+    (R.py_repr "\xef\xbf\xbd");
   (* Idempotence is not the contract, but re-escaping a repr must not lose the
      text's own quoting — and a repr never contains a raw newline. *)
   let once = R.py_repr "a\nb" in
@@ -214,6 +242,8 @@ let () =
             A.test_case "a bad lead byte advances one" `Quick test_a_bad_lead_byte_advances_one;
             A.test_case "counting is codepoints, not bytes" `Quick
               test_counting_is_codepoints_not_bytes;
+            A.test_case "a malformed sequence costs one per maximal subpart" `Quick
+              test_a_malformed_sequence_costs_one_per_maximal_subpart;
             A.test_case "slices and codepoints agree with the walk" `Quick
               test_slices_and_codepoints_agree_with_the_walk;
           ] );
