@@ -526,7 +526,22 @@ let custom_paths app =
   [ "/healthz"; "/api/v1/search"; "/api/v1/fetch"; "/api/v1/answer" ]
   @ (if dashboard_enabled app then [ "/dashboard"; "/dashboard/data"; "/dashboard/metrics" ] else [])
 
-let handle_custom app ~meth ~path ~host ~origin ~body =
+(* Every custom-route answer crosses this boundary before the transport frames
+   it. A head wider than [Http_head.response_head_limit] is replaced by a bounded
+   500 rather than written: the route projection is the one place a header could
+   ever stop being a constant, and a caller-shaped header value must not be able
+   to decide how much this process allocates or sends. No route in the tree
+   reaches the ceiling today, which is the point of measuring it here. *)
+let bounded_response response =
+  match
+    Http_head.response_head ~status:response.status ~headers:response.headers
+      ~body_length:(String.length response.body) ()
+  with
+  | Ok _ -> response
+  | Error Http_head.Response_head_too_large ->
+      { status = 500; headers = text_content; body = "" }
+
+let route_custom app ~meth ~path ~host ~origin ~body =
   if String.length body > max_body_size then
     { status = 413; headers = text_content; body = "" }
   else
@@ -554,38 +569,28 @@ let handle_custom app ~meth ~path ~host ~origin ~body =
           text_response 405 "Method Not Allowed"
       | _ -> text_response 404 "Not Found"
 
+let handle_custom app ~meth ~path ~host ~origin ~body =
+  bounded_response (route_custom app ~meth ~path ~host ~origin ~body)
+
 (* {1 Serving} *)
 
-(* A tap on the accepted socket: every byte read through it is also recorded,
-   so a request whose head has been read can be replayed for the mcp-kit
-   handler, whose connection-level callback insists on reading the request
-   itself. *)
-module Tap = struct
-  type t = {
-    flow : Eio.Flow.two_way_ty Eio.Resource.t;
-    recorded : Buffer.t;
-  }
-
-  let read_methods : t Eio.Flow.read_method list = []
-
-  let single_read t buf =
-    let n = Eio.Flow.single_read t.flow buf in
-    if n > 0 then
-      Buffer.add_string t.recorded (Cstruct.to_string (Cstruct.sub buf 0 n));
-    n
-end
-
-(* The replay source: the recorded head first, then the socket itself. *)
+(* The replay source: the exact head bytes already consumed from the socket,
+   then [rest] — a reader that still holds whatever the head parser read ahead
+   plus the socket itself. The head is replayed because the transport's
+   connection callback insists on reading the request it is handed; wrapping the
+   original reader with [Eio.Buf_read.as_flow] rather than copying it is what
+   keeps the replay from becoming a second, unbounded recording of the
+   connection. *)
 module Replay = struct
   type t = {
     mutable prefix : string;
-    flow : Eio.Flow.two_way_ty Eio.Resource.t;
+    rest : Eio.Flow.source_ty Eio.Resource.t;
   }
 
   let read_methods : t Eio.Flow.read_method list = []
 
   let single_read t buf =
-    if t.prefix = "" then Eio.Flow.single_read t.flow buf
+    if t.prefix = "" then Eio.Flow.single_read t.rest buf
     else
       let n = min (String.length t.prefix) (Cstruct.length buf) in
       Cstruct.blit_from_string t.prefix 0 buf 0 n;
@@ -667,21 +672,129 @@ let headers_of_lines lines =
           if name = "" then headers else Http.Header.add headers name value)
     (Http.Header.init ()) lines
 
-(* [http] 6.3 has no phrase for 421 and answers the decimal code in its place;
-   the refusal this module writes says [Misdirected Request], as Python's does. *)
-let reason_phrase status =
-  let phrase = Http.Status.reason_phrase_of_code status in
-  if phrase <> string_of_int status then phrase
-  else match status with 421 -> "Misdirected Request" | _ -> phrase
-
-(* A text refusal's exact bytes, with the length computed from the body it
-   writes: the transport below this point writes its own framing, so a
-   hand-counted [content-length] would be a protocol lie the first time a
-   sentence changed. *)
+(* A text refusal's exact bytes. The head comes from [Http_head.response_head],
+   which computes [content-length] from the body it writes and refuses a head
+   wider than the outbound ceiling, so the arithmetic is never restated beside
+   the format string. The 500 arm is unreachable behind this fixed header set;
+   it is here so that a future caller with a wider header list gets a bounded
+   answer instead of an unbounded write. *)
 let http_text_response status body =
-  Printf.sprintf
-    "HTTP/1.1 %d %s\r\ncontent-type: text/plain\r\ncontent-length: %d\r\nconnection: close\r\n\r\n%s"
-    status (reason_phrase status) (String.length body) body
+  match
+    Http_head.response_head ~status
+      ~headers:[ ("content-type", "text/plain") ]
+      ~body_length:(String.length body) ()
+  with
+  | Ok head -> head ^ body
+  | Error Http_head.Response_head_too_large ->
+      "HTTP/1.1 500 Internal Server Error\r\ncontent-type: text/plain\r\n\
+       content-length: 0\r\nconnection: close\r\n\r\n"
+
+(* The head-read bound. A connection whose head has not arrived inside this is
+   refused rather than waited on, so a peer that trickles a byte at a time
+   cannot hold a connection open indefinitely. The clock is the caller's: the
+   listener hands in its monotonic clock, and a test hands in one it controls,
+   so the decision is taken by the timeout and not by elapsed wall time. *)
+let request_head_timeout_seconds = 10.0
+
+let head_rejected log kind =
+  log Config.Log_info "http.head_rejected" [ ("kind", `String kind) ]
+
+let write_text flow status sentence =
+  Eio.Buf_write.with_flow flow @@ fun oc ->
+  Eio.Buf_write.string oc (http_text_response status sentence)
+
+(* Discard whatever the peer still sends, up to the head timeout. *)
+let drain flow =
+  let buffer = Cstruct.create 4096 in
+  let rec loop () =
+    match Eio.Flow.single_read flow buffer with
+    | 0 -> ()
+    | _ -> loop ()
+    | exception End_of_file -> ()
+  in
+  loop ()
+
+(* A bounded refusal, then a clean close.
+
+   The peer may still be sending the head this refused — an over-cap head is
+   refused at the ceiling, so there is always at least the offending byte
+   unread. Closing a socket with unread input makes the kernel answer with RST,
+   and an RST can discard the refusal still queued in the send buffer. Reading
+   the remainder first (bounded by the same timeout the head had) lets the peer
+   receive the refusal and then see a clean close. The read is abandoned at the
+   timeout, so a peer that refuses to stop sending costs one timeout, not an
+   unbounded drain. *)
+let refuse ~clock flow status sentence =
+  write_text flow status sentence;
+  ignore
+    (Eio.Time.Timeout.run
+       (Eio.Time.Timeout.seconds clock request_head_timeout_seconds)
+       (fun () ->
+         drain flow;
+         Ok ()))
+
+(* One accepted connection: read the request head under the ceiling and the
+   timeout, answer a bounded refusal for what cannot be read, and otherwise hand
+   the replayed connection to the mcp-kit handler for [/mcp] or to
+   {!handle_custom} for everything else. Each driver loops keep-alive itself, so
+   the first request decides the connection. The Host allowlist is applied here,
+   in the surrounding route, because the mcp-kit adapter owns Origin but not
+   Host (plans/capability-gated-mcp-server.md §7); [/healthz] is exempt.
+
+   Every refusal carries [connection: close] and the connection ends with this
+   function, so a peer's next request arrives on a fresh connection — which is
+   what makes an over-cap head cost one connection and not the listener. *)
+let serve_connection ~clock ~log ~app ~server ~flow ~peer =
+  Eio.Switch.run @@ fun conn_sw ->
+  let reader = Http_head.request_reader flow in
+  match
+    Eio.Time.Timeout.run
+      (Eio.Time.Timeout.seconds clock request_head_timeout_seconds)
+      (fun () -> Ok (Http_head.read_request_head reader))
+  with
+  | Error `Timeout ->
+      head_rejected log "timeout";
+      refuse ~clock flow 408 "Request Timeout"
+  | Ok (Error Http_head.Client_closed) -> ()
+  | Ok (Error Http_head.Request_head_too_large) ->
+      head_rejected log "too_large";
+      refuse ~clock flow 431 "Request Header Fields Too Large"
+  | Ok (Error Http_head.Malformed_request_head) ->
+      head_rejected log "malformed";
+      refuse ~clock flow 400 "Bad Request"
+  | Ok (Ok (head, raw)) ->
+      let headers = headers_of_lines head.Http_head.header_lines in
+      let path = path_of_request_line head.Http_head.request_line in
+      let host = Http.Header.get headers "host" in
+      if not (host_gate app ~path ~host) then
+        refuse ~clock flow 421 "Invalid Host header"
+      else
+        let replay : Eio.Flow.source_ty Eio.Resource.t =
+          ( Eio.Resource.T
+              ( { Replay.prefix = raw; rest = Eio.Buf_read.as_flow reader },
+                Eio.Flow.Pi.source (module Replay) )
+            :> Eio.Flow.source_ty Eio.Resource.t )
+        in
+        let replay_reader = Http_head.request_reader replay in
+        let handler =
+          if path = "/mcp" then
+            Mcp_kit_cohttp_eio.handler ~max_body_size
+              ~allowed_origins:(origin_allowlist app.allowed_hosts)
+              server
+          else custom_handler app
+        in
+        (match
+           Eio.Buf_write.with_flow flow @@ fun oc ->
+           Cohttp_eio.Server.callback handler (conn_sw, peer) replay_reader oc
+         with
+        | () -> ()
+        | exception Eio.Buf_read.Buffer_limit_exceeded ->
+            (* A later request on this keep-alive connection brought a head
+               wider than the ceiling. Nothing was written for it yet, so it
+               gets the same bounded refusal the first request would have
+               got. *)
+            head_rejected log "too_large";
+            refuse ~clock flow 431 "Request Header Fields Too Large")
 
 let run_health_monitor (health : health) ~(config : Config.t)
     ~(sleep : unit -> unit) =
@@ -723,11 +836,6 @@ let serve_http ~env ~sw ~log app server ~host ~port =
                 run_health_monitor health ~config:app.config
                   ~sleep:(fun () -> Eio.Time.Mono.sleep env#mono_clock interval))
           | _ -> ());
-          let handler =
-            Mcp_kit_cohttp_eio.handler ~max_body_size
-              ~allowed_origins:(origin_allowlist app.allowed_hosts)
-              server
-          in
           let stop, _resolve = Eio.Promise.create () in
           (* Every connection failure is one fixed event with a bounded
              classification: a rejected Origin is an expected refusal at INFO,
@@ -740,55 +848,12 @@ let serve_http ~env ~sw ~log app server ~host ~port =
                 log Config.Log_warning "http.connection_error"
                   [ ("kind", `String (Log.classify_exn exn)) ]
           in
-          let custom = custom_handler app in
-          let serve_connection sock peer =
-            Eio.Switch.run @@ fun conn_sw ->
-            (* The tap records every byte read through [ic], so the request line this
-               loop consumes can be replayed for whichever handler takes the
-               connection. *)
-            let recorded = Buffer.create 8192 in
-            let tap_handler = Eio.Flow.Pi.source (module Tap) in
-            let tapped : Eio.Flow.source_ty Eio.Resource.t =
-              (Eio.Resource.T ({ Tap.flow = (sock :> Eio.Flow.two_way_ty Eio.Resource.t); recorded }, tap_handler)
-                :> Eio.Flow.source_ty Eio.Resource.t)
-            in
-            let ic = Eio.Buf_read.of_flow ~max_size:max_int tapped in
-            Eio.Buf_write.with_flow sock @@ fun oc ->
-            (* Peek the request line and the header block, then hand the whole
-               connection — replayed from the tap — to the mcp-kit handler for [/mcp] or
-               to the custom-route handler for everything else. Each driver loops
-               keep-alive itself, so the first request decides the connection. The Host
-               allowlist is applied here, in the surrounding route, because the mcp-kit
-               adapter owns Origin but not Host (plans/capability-gated-mcp-server.md
-               §7); [/healthz] is exempt. *)
-            let rec peek_headers acc =
-              match Eio.Buf_read.line ic with
-              | exception End_of_file -> List.rev acc
-              | "" | "\r" -> List.rev acc
-              | line -> peek_headers (line :: acc)
-            in
-            match Eio.Buf_read.line ic with
-            | exception End_of_file -> ()
-            | request_line ->
-                let headers = headers_of_lines (peek_headers []) in
-                let path = path_of_request_line request_line in
-                let host = Http.Header.get headers "host" in
-                let replay () =
-                  let replay_handler = Eio.Flow.Pi.source (module Replay) in
-                  let replay : Eio.Flow.source_ty Eio.Resource.t =
-                    ( Eio.Resource.T
-                        ({ Replay.prefix = Buffer.contents recorded; flow = (sock :> Eio.Flow.two_way_ty Eio.Resource.t) }, replay_handler)
-                      :> Eio.Flow.source_ty Eio.Resource.t )
-                  in
-                  Eio.Buf_read.of_flow ~max_size:max_int replay
-                in
-                if not (host_gate app ~path ~host) then
-                  Eio.Buf_write.string oc (http_text_response 421 "Invalid Host header")
-                else if path = "/mcp" then
-                  Cohttp_eio.Server.callback handler (conn_sw, peer) (replay ()) oc
-                else Cohttp_eio.Server.callback custom (conn_sw, peer) (replay ()) oc
+          let handle_connection sock peer =
+            serve_connection ~clock:env#mono_clock ~log ~app ~server
+              ~flow:(sock :> Eio.Flow.two_way_ty Eio.Resource.t)
+              ~peer
           in
-          match Eio.Net.run_server ~stop ~on_error socket serve_connection with
+          match Eio.Net.run_server ~stop ~on_error socket handle_connection with
           | () -> Ok ()
           | exception (Eio.Cancel.Cancelled _ as exn) -> raise exn
           | exception exn ->

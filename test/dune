@@ -407,6 +407,16 @@
 ; walk, so the suite names both libraries: pinning that the fetch path's [Utf8]
 ; {b is} this one is a compile, and only a suite that sees both modules can
 ; make it.
+; F2.1: the request-head and response-head byte ceilings. The pure cases drive
+; [Http_head] over string sources; the wire cases run one loopback connection
+; through [Server.serve_connection], which is where the ceiling, the replay and
+; the refusal statuses meet. The timeout case injects a fake monotonic clock, so
+; no case here waits on wall time to decide an outcome.
+(test
+ (name test_http_head)
+ (libraries seekwright mcp-caps mcp-kit eio eio_main mtime yojson alcotest
+   test_support))
+
 (test
  (name test_text)
  (libraries seekwright.text seekwright.fetch alcotest))

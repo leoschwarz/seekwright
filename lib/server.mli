@@ -147,6 +147,42 @@ val max_body_size : int
 (** The request-body bound, pinned so an upstream default change is a visible
     diff (the mcp-kit adapter's own default is 1 MiB). *)
 
+val request_head_timeout_seconds : float
+(** How long a connection may take to deliver a complete request head. A peer
+    that trickles bytes, or says nothing at all, is refused with 408 when this
+    passes; the clock that decides is the caller's, so the refusal is the
+    timeout's and not a measurement of elapsed wall time. *)
+
+val serve_connection :
+  clock:_ Eio.Time.Mono.t ->
+  log:Log.log ->
+  app:app ->
+  server:Mcp_kit.Server.t ->
+  flow:_ Eio.Flow.two_way ->
+  peer:Eio.Net.Sockaddr.stream ->
+  unit
+(** Drive one accepted connection: read the request head under
+    {!Http_head.request_head_limit} and {!request_head_timeout_seconds}, answer
+    a bounded refusal for a head that cannot be read, and otherwise hand the
+    replayed connection to the mcp-kit handler for [/mcp] or {!handle_custom}
+    for everything else.
+
+    The head is read here, before either driver sees the connection, because
+    both drivers would otherwise read it from an unbounded buffer. The bytes
+    are counted as they arrive and the same bytes are replayed (the internal
+    [Replay] source), so the transport parses what the peer sent rather than a
+    reconstruction of it.
+
+    Refusals are [431] for a head over the ceiling, [400] for a malformed one,
+    [408] for the timeout and [421] for a Host outside the allowlist; each
+    carries [connection: close], so the peer's next request arrives on a fresh
+    connection and one bad head costs one connection, not the listener. A
+    later request that overruns the ceiling on a keep-alive connection gets
+    the same bounded [431]. Each refusal logs [http.head_rejected] with a
+    constant [kind] ([too_large], [malformed], [timeout]); a connect-and-close
+    probe answers nothing. [peer] is only passed through to the transports,
+    which use it for logging. *)
+
 type serve_error =
   | Bind_address_unresolved
   (** The bind address could not be parsed or resolved. *)
@@ -239,8 +275,10 @@ val headers_of_lines : string list -> Http.Header.t
 
 val http_text_response : int -> string -> string
 (** The exact bytes of a plain-text refusal, with [content-length] computed
-    from the body. The transport below {!serve_http}'s routing writes its own
-    framing, so this is where the arithmetic lives. *)
+    from the body and the head rendered by {!Http_head.response_head}, so the
+    outbound ceiling and the arithmetic live in one module. The transport
+    below {!serve_http}'s routing writes its own framing, so this is where the
+    long refusal sentences are spelled once. *)
 
 val journal_fields : (string * string list) list
 (** The usage-journal field sets per line kind ([search], [fetch], [answer]),

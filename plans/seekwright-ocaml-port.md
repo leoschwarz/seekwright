@@ -633,3 +633,104 @@ Gate at landing: `dune build @install`, `dune runtest --force` and
 `dune build @doc` all exit 0 — including both `--check` pins, the stdio smoke,
 the differential suite and the matrix guard. No suite reached a provider
 endpoint.
+
+## 15. F2.1 — the request and response heads have named byte ceilings (2026-11-13)
+
+The serving path read every request through `Eio.Buf_read.of_flow ~max_size:max_int`
+and every response head was written by hand at its call site. That is the one
+trust boundary where a stranger decides how much this process allocates before
+any routing, key or allowlist is consulted — the listener has no authentication,
+so the request head is the first thing an unauthenticated peer can make it
+buffer. Both directions now have a named ceiling in one module, `Http_head`, and
+neither is `max_int`.
+
+**The ceilings.** `Http_head.request_head_limit` is 16 KiB, matching h11's
+`MAX_INCOMPLETE_EVENT_SIZE` — the bound the Python oracle inherits from uvicorn
+without ever writing it down. `Http_head.response_head_limit` is 8 KiB and is a
+guard, not a budget: no route in the tree produces a head near it, and it exists
+so a future route that starts echoing a caller-shaped value into a header cannot
+turn an answer into an allocation the caller chose.
+
+**Reading.** `Http_head.request_reader` is the only reader built at the trust
+boundary: `Buf_read.of_flow ~max_size:(limit + 1)`. `read_request_head` then
+reads a byte at a time through `Buf_read.any_char`, so the count is of wire bytes
+that actually arrived, terminators included, and the refusal happens *before*
+the byte that would pass the ceiling is asked for. That makes the ceiling
+cumulative and not per line: a thousand short headers are refused exactly as one
+long one is. The result carries the parsed head and the exact bytes consumed, so
+the transport parses what the peer sent rather than a reconstruction — a
+bare-LF head is replayed with its LF, not rewritten into CRLF. Failures are
+values (`Client_closed`, `Request_head_too_large`, `Malformed_request_head`), and
+the one exception that can still escape, `Eio.Buf_read.Buffer_limit_exceeded`,
+is caught and answered the same way.
+
+**Replay without a recording.** The old `Tap` source recorded every byte of the
+connection into an unbounded `Buffer.t`, and the replay reader was unbounded
+too. Both are gone: the replay source is the exact head prefix plus
+`Eio.Buf_read.as_flow` over the reader that consumed it, so bytes that were
+already read ahead are served from the reader's own bounded buffer and bytes
+still on the socket are read once. There is no second copy of the connection and
+no `max_int` reader left on the path.
+
+**Refusals.** The driver is now `Server.serve_connection ~clock ~log ~app
+~server ~flow ~peer`, exported so a test can drive one connection and inject its
+own clock; `serve_http` builds the listener and hands each accepted socket to
+it. A head over the ceiling is `431 Request Header Fields Too Large`, a
+malformed one `400 Bad Request`, a head that misses
+`Server.request_head_timeout_seconds` (10 s, measured on the caller's monotonic
+clock) `408 Request Timeout`, and a Host outside the allowlist (still applied
+before either transport sees the request) `421 Invalid Host header`. Each
+refusal carries `connection: close` and logs `http.head_rejected` with a
+constant `kind` (`too_large`, `malformed`, `timeout`); a connect-and-close probe
+gets no answer. After writing a refusal the driver drains the peer's remaining
+input under the same timeout before closing: a refused over-cap head always has
+at least the offending byte unread, and closing a socket with unread input makes
+the kernel answer with RST, which can discard the refusal before the peer reads
+it. The drain is bounded, so a peer that refuses to stop sending costs one
+timeout and not an unbounded read.
+
+431 is a deliberate divergence from the Python oracle: uvicorn/h11 reports a
+head overflow as 400. F2.1 asks for a "431/400-class response", 431 is the
+code HTTP defines for the condition, and the frozen surface does not name
+refusal codes, so the clearer code is taken and recorded here rather than
+inherited.
+
+**Writing.** `Http_head.response_head` renders the status line, the caller's
+headers, `content-length` from the body it will write, `connection: close` and
+the blank line, computing the size before rendering anything and returning
+`Response_head_too_large` past the ceiling. `Server.http_text_response` derives
+every refusal's head from it (its signature is unchanged, so the exact-byte pin
+in `test_p8_server.ml` still holds), and the custom routes go through
+`bounded_response`, which replaces an over-cap head with a bounded empty 500
+rather than writing it. `content-length` and `connection` are the module's,
+never a caller's: hand-written protocol bytes compute their own lengths.
+
+**Pins.** `test/test_http_head.ml` (11 cases) runs both layers. The pure cases
+assert the boundary in bytes — a head of exactly `request_head_limit` bytes is
+accepted and the next byte refused, many short headers are counted together, a
+single huge header is refused, bare-LF bytes and CRLFs survive the replay, and
+a response head at the cap is accepted while one byte over is refused. The wire
+cases run one loopback connection through `Server.serve_connection`: an at-cap
+head is served, an over-cap one gets a readable 431 with `connection: close`,
+and an ordinary request on a fresh connection immediately afterwards is served;
+a head delivered in pieces plus a chunked `POST /mcp` body reaches the tool
+list; an unterminated head meets a fake `Eio.Time.Pi` clock whose `sleep_until`
+returns at once, so the 408 is decided by the timeout and not by wall time; and
+on a keep-alive connection a later over-wide header line is refused 431 through
+the same bounded reader. No case sleeps on the wall clock.
+
+**Boundary left open.** The exact cumulative counter covers the first head on a
+connection. A later head on a keep-alive connection is read by the transport
+from the same bounded `Buf_read`, so a line past the ceiling is refused before
+the buffer grows, but a head assembled from many small lines on a *later*
+request is bounded by the transport's parser rather than by the counter. Closing
+that would mean owning keep-alive framing — reading each head with
+`read_request_head` and handing the transport one request at a time — which is a
+refactor of the connection driver, not a ceiling; it is recorded here rather
+than half-done. The other response-header path, the cohttp client read of a
+*provider's* response headers in `lib/caps/policy_net.ml`, is outside this
+task's ownership and remains a follow-up.
+
+Gate at landing: `dune build @install`, `dune runtest --force` and
+`dune build @doc` all exit 0. The new suite opens only loopback sockets; no
+suite reached a provider endpoint.
