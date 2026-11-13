@@ -1065,3 +1065,91 @@ Gate at landing: `dune build @install`, `dune runtest --force` and
 `dune build @doc` all exit 0; the `router_dependencies` pin is untouched (the
 pool lives under `lib/fetch/`, outside the pin's `lib/*.ml` glob). No suite
 reached a provider endpoint.
+
+## 20. F4.2 — one narrow MCP client, no second MCP stack (2026-11-13)
+
+Landed on `f4-2-mcpclient`. Spec: `plans/ocaml-finalisation.md` §F4.2.
+
+**What landed.** `seekwright.providers` gains `Mcp_client`
+(`lib/providers/mcp_client.ml{,i}`), the session half of the oracle's
+`ExaMcpProvider`: `initialize`/`notifications/initialized`, `tools/call` with
+sequential JSON-RPC ids, JSON and bounded SSE result framing, the
+`Mcp-Session-Id`/`MCP-Protocol-Version` headers, exactly one reconnect after a
+dead session, and a best-effort `DELETE` on close. It is not part of
+`mcp-caps` and does not grow server features: a provider adapter is a client,
+and the two share no code path, transport or type. `lib/providers/dune` needed
+no edit — the library names no module list, so the new module is picked up.
+
+**The spike's answer: discrete POSTs are sufficient, so the grant was not
+widened.** Streamable HTTP carries one JSON-RPC message per POST, so the
+"session" a client owns is the server's header value, not a held socket — the
+same one-request/one-response shape the endpoint-scoped `Provider.Net.t` grant
+already offers, with its byte ceiling and whole-operation timeout. Probed
+against the documented endpoints before writing the module (keyless tiers only;
+the one Exa search was the free anonymous one): Exa answers
+`text/event-stream` with an `mcp-session-id`, answers the notification `202`
+with an empty body, and returns a keyless search as a single SSE frame whose
+`content[0].text` is the `Title:`/`URL:`/`Published:`/`Highlights:` block;
+Parallel answers `application/json` with an `mcp-session-id`, acknowledges the
+notification `202`, and returns `content[0].type == "text"` with `isError:
+false` beside a `structuredContent` this client deliberately ignores. Two live
+findings matter for F5.1: Exa's `web_search_exa` currently requires
+`objective` in addition to `query` (the request is refused without it), and a
+bogus `Mcp-Session-Id` is still answered `200`, so Exa never exercises the
+404-reconnect path in production — that path is specification-driven and
+pinned hermetically here, not observed live.
+
+**Bounds and vocabulary are the module's own.** One frame (a JSON body or one
+SSE event) is capped at 262 144 bytes, and one POST may carry 64 events; a
+frame over the ceiling or an event over the count is refused, never truncated.
+A body that ends without its final blank line still dispatches — refusing a
+whole answer over a trailing newline would be a parser bug wearing a bound's
+clothes. Failures carry one sentence from a fixed list (`MCP handshake failed`,
+`MCP handshake timed out`, `MCP session unavailable`, `malformed MCP response`,
+`MCP response exceeded its frame bound`, `upstream MCP request was rejected`,
+`upstream MCP tool reported an error`, `rate limited`, `MCP client is closed`)
+or one of the contract's shared rows; an `isError` result is classified by the
+oracle's rule (a mention of `rate`, `quota` or `429` is the quota row,
+everything else is the tool-error sentence) and its text is never echoed. Exa's
+live invalid-key answer is a `200` with `isError: true` carrying
+`web_search_exa error (401): Invalid API key …`, so it lands on the tool-error
+row rather than the auth row: there is no status line to map, exactly as in
+Python. The reconnect trigger is exactly a `404` answering a call that carried
+a session id; one retry per call, and a second `404` is `MCP session
+unavailable`. Timeouts, malformed or oversized frames and valid provider
+errors are never retried.
+
+**Single-domain state, no new dependency.** The client's session, id counter and
+closed flag are plain references, mutated in sections that do not yield before
+the id is captured — safe on the one Eio domain a provider adapter runs on, and
+the reason the adapter library did not gain an `eio` dependency for a mutex.
+`call_tool` handshakes lazily, so a caller that fans calls out to fibers
+handshakes once first; two concurrent *first* calls would each handshake, and
+`mcp_client.mli` says so rather than pretending a lock exists.
+
+**Tests.** `test/test_mcp_client.ml` (20 cases) drives the client through a
+`Policy.with_endpoints` grant against a real loopback `Cohttp_eio.Server`, the
+same fixture shape `test_fetch_http.ml` and `test_authority_net.ml` use. The
+routes cover JSON and SSE answers, an SSE body whose first frame is a
+notification, a stateless endpoint, a `500`/garbage/RPC-error/timed-out
+handshake, `isError` in its quota, Exa-invalid-key and generic shapes, a `401`
+status, a malformed body, an oversized SSE event and an oversized JSON body,
+two concurrent calls with distinct ids, a session that dies once and one that
+dies twice, a tool-call timeout, and close (including that `DELETE` carries the
+session id and that closing twice sends one). The fixture answers every
+stateful route only for the session it issued, and echoes a probe key in the
+bodies it fails with; each expectation renders the failure it got, so a body or
+header reaching a provider error fails the case that produced it. No suite
+names a provider endpoint, so the gate cannot bill anything.
+
+**Two guards moved, minimally, with the coordinator's approval.** Adding a
+non-adapter module under `lib/providers/` tripped two pre-existing guards:
+`test_provider_contract.ml`'s "every adapter module on disk is driven here"
+now exempts `mcp_client` (it is a client, not an adapter, so it owes no failure
+row), and `test_provider.ml`'s source-discipline count moved 3 → 4 so the
+client is scanned for the forbidden literals too — it builds provider errors,
+so the redaction rule applies to it. Neither guard's rule changed.
+
+Gate at landing: `dune build @install`, `dune runtest --force` (54 suites) and
+`dune build @doc` all exit 0; the new `.mli` adds no odoc warning. Live-endpoint
+evidence above is a report finding, not part of the default gate.

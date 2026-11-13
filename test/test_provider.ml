@@ -384,9 +384,10 @@ let an_adapter_never_reaches_for_the_values_that_leak () =
             A.failf "%s mentions %S, which the redaction rule refuses" path needle)
         forbidden)
     adapter_sources;
-  (* The guard above proves nothing if it read nothing: the contract module and
-     both adapters have to be there. *)
-  check_int "adapter sources in the sandbox" 3
+  (* The guard above proves nothing if it read nothing: the contract module,
+     both adapters and the MCP client have to be there. The client is scanned
+     because it builds provider errors, so it owes the same redaction rule. *)
+  check_int "adapter sources in the sandbox" 4
     (List.length (List.filter (fun path -> Filename.check_suffix path ".ml") adapter_sources))
 
 let () =

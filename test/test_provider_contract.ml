@@ -275,11 +275,15 @@ let () =
                    (* The guard the Python suite runs against its provider
                       directory: a new adapter that skips this suite skips the
                       contract, and a name driven here that no longer exists
-                      tests nothing. [dune] and [dune-project] are not modules. *)
+                      tests nothing. [dune] and [dune-project] are not modules,
+                      and [mcp_client] is the client the two MCP-backed
+                      adapters share rather than an adapter, so it owes no row
+                      here. *)
                    let on_disk =
                      Array.to_list (Sys.readdir "../lib/providers")
                      |> List.filter (fun name -> Filename.check_suffix name ".ml")
                      |> List.map Filename.chop_extension
+                     |> List.filter (fun name -> name <> "mcp_client")
                      |> List.sort Stdlib.compare
                    in
                    let driven = List.map (fun a -> a.name) adapters |> List.sort Stdlib.compare in

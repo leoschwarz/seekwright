@@ -212,6 +212,25 @@
  (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support)
  (deps (glob_files ../lib/providers/*.ml)))
 
+; F4.2: the narrow MCP client behind Exa and Parallel. A real loopback fixture
+; behind a [Policy.with_endpoints] grant, the same shape [test_fetch_http] and
+; [test_authority_net] use: what is pinned is the session half the two MCP
+; adapters will own — framing, ids, headers, one reconnect, bounds and close —
+; and no provider endpoint is named, so no case can bill anything.
+(test
+ (name test_mcp_client)
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  cohttp-eio
+  http
+  uri
+  yojson
+  eio
+  eio_main
+  alcotest test_support))
+
 ; P5: the health board and its probe. The board's clock is injected, so the
 ; cooldown cases move a reference rather than sleeping, and the probe's net seam
 ; is a fake Provider.Net.t. The key cases set and clear environment variables,
