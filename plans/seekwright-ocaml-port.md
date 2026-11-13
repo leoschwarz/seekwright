@@ -981,3 +981,87 @@ capability grants mint tokens. No case reaches a real provider.
 Gate at landing: `dune build @install`, `dune runtest --force` and
 `dune build @doc` all exit 0 under the opam+GMP environment. The new suite is
 hermetic — loopback and fakes only.
+=======
+## 19. F2.2 — extraction runs on a bounded pool of worker domains (2026-11-13)
+
+Landed on `f2-2-extract`. Spec: `plans/ocaml-finalisation.md` §F2.2.
+
+**The runner.** `seekwright.fetch` gains `Extract_pool` (`lib/fetch/extract_pool.ml{,i}`):
+a fixed-size pool of worker domains — `workers_default = max 1 (min 4
+(recommended_domain_count - 1))`, so the Eio loop keeps a core — fed one job at
+a time over per-worker `AF_UNIX` stream sockets, not a shared-memory queue.
+That transport is the design's load-bearing choice: the loop-side half of every
+job is an ordinary cancellable `Eio.Net.connect`/flow exchange, so a deadline
+or a caller's cancellation closes the socket on the way out, the worker
+observes the half-job as EOF and discards it, and a late result arrives on a
+closed connection and fails to write — the cooperative abandonment the F2.2
+spec asks for, with no shutdown protocol to fake. Workers speak plain `Unix`
+syscalls (no Eio inside a worker domain); the frame grammar is
+length-prefixed big-endian i64 fields under `~max_body_bytes` /
+`~max_result_bytes` ceilings, so an over-declared frame closes the connection
+instead of allocating.
+
+**Bounds, by construction.** The domain count never grows. `Eio.Semaphore`
+permits (`workers + queue_limit`, default queue = workers) bound
+in-flight-plus-queued jobs; a caller past the ceiling waits as a fiber, opening
+no socket. Socket paths are created `0600` under `~dir`, named for pid + pool
+sequence + worker index, unlinked by the worker itself on exit; `~dir` over the
+107-byte `sockaddr_un` limit is refused at `make` with the real sentence. A
+worker that cannot bind fails `make` as an `Error` — a fetch stack silently
+running inline again is the failure mode the constructor exists to make loud.
+`make`'s readiness handshake keeps one close per fd: domains share the process
+fd table, so the constructor closing a pipe write-end the worker had already
+closed was a use-after-close on a reused number — it killed other domains'
+sockets at flaky odds (an accept loop starved of its quit sentinel, a
+`Domain.join` that never returned; the suite caught it, only under load). The
+worker closes the write-end and always writes its `R`/`E` byte before it can
+die; the parent closes only the read-end.
+The factory (`build_fetch_stack`) builds one pool per fetch stack in the system
+temp dir (no config key: the sockets are process-scoped, `0600`, and gone on
+close) and passes it beside `~parse_timeout_seconds:fetch.timeout_seconds` to
+`Fetcher.make`; the reader's `aclose` drains the pool (quit sentinel, then
+`Domain.join`, so running jobs are waited on — the Python fetcher's rule for
+its worker threads, said once in `extract_pool.mli`'s shutdown section).
+
+**Timeouts.** `Extract_pool.extract ?timeout_seconds` answers the sum
+`Timed_out | Pool_closed | Backend of string | Worker of string`; the timeout
+bounds the exchange from the moment the job takes its permit — queue wait is
+bounded instead by the `workers + queue_limit` semaphore ceiling. (The plan
+said "counts queue wait too, matching `asyncio.wait_for`"; building it that
+way deadlocked the suite: `Eio.Semaphore.acquire` **leaks the permit** when a
+parked fiber is cancelled mid-handoff — verified with a standalone probe — so
+deadline-cancelled queue-waiters shrink the pool's budget forever. The acquire
+is run under `Eio.Cancel.protect` and the caller's cancellation lands at a
+`Fiber.check` inside the guard that releases the permit; `asyncio` lands the
+same way, since `Queue.get` has taken the item before a `wait_for` deadline
+can fire around it.) `Fetcher`
+`extract_body` turns `Timed_out` into the oracle's exact non-retryable
+refusal (`cannot extract text: {kind} extraction did not finish within %g
+seconds; raise fetch.timeout_seconds to allow a longer parse` — the missing
+" seconds" the port had dropped from the `%g` sentence is restored),
+`Pool_closed` into a `Failed`, and `Backend`/`Worker` into the same
+`cannot extract text:` shape an inline `Extraction_failed` already produced.
+The chain budget (twice the request timeout, built at the call site) bounds
+the whole request around it. The inline path (`?workers` absent) stays as the
+fixture/embedder seam so the ~71 existing fetch tests keep their construction;
+the factory always wires the pool.
+
+**Tests.** `test/test_extract_pool.ml` (8 cases) and
+`test/test_fetch_workers.ml` (4 cases) port the oracle's
+`_GrindingExtractor`/`TestExtractionTime` shapes: a busy parse leaves the loop
+ticking (≥10 ticks) and runs on a domain other than the loop's; an overrunning
+parse answers `Timed_out` at its deadline with the pool healthy afterwards;
+ten pressured calls against two burner workers all end, in-flight never exceeds
+the pool, open fds return to baseline, and ordinary work answers afterwards;
+backend failure is carried as a value; an over-ceiling result frame is a
+`Worker` failure, not a stall; `close` waits for a running job, then answers
+`Pool_closed`, idempotently; and through the fetcher: the exact deadline
+sentence for an `application/pdf` body, a chain budget cutting an unbounded
+parse, and an in-time parse returning its page. The oracle's shared-stream
+real-PDF case is deferred with PDF support (F6.2) — this port ships no PDF
+backend, and the refusal sentence keeps the oracle's media type.
+
+Gate at landing: `dune build @install`, `dune runtest --force` and
+`dune build @doc` all exit 0; the `router_dependencies` pin is untouched (the
+pool lives under `lib/fetch/`, outside the pin's `lib/*.ml` glob). No suite
+reached a provider endpoint.
