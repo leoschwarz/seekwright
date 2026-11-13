@@ -17,8 +17,9 @@
 
     The extraction backend is injected and required
     ([Extractor.of_module (module …)]): a default would import a backend at
-    library-import time. The keyed/third-party fallbacks of the Python module
-    (jina, scrappa, crawl4ai, tavily, linkup) are out of scope for v1, and
+    library-import time. The five documented fallbacks (jina, scrappa,
+    crawl4ai, tavily, linkup) live beside this module — [Fallback],
+    [Remote_target] and the [Fallback_*] vendor modules — not in it, and
     there is no page cache (deferred by plan review).
 
     The fetcher is Eio direct style: [fetch] performs bounded I/O through the

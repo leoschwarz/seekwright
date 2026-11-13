@@ -14,10 +14,14 @@ module Config = Seekwright.Config
 module Engine = Seekwright.Engine
 module Extract_pool = Seekwright_fetch.Extract_pool
 module Extractor = Seekwright_fetch.Extractor
+module Fallback = Seekwright_fetch.Fallback
 module Fetcher = Seekwright_fetch.Fetcher
 module Jsondoc = Seekwright_fetch.Jsondoc
 module Policy = Mcp_caps.Policy
 module Provider = Seekwright.Provider
+module Remote_target = Seekwright_fetch.Remote_target
+
+let ( let* ) = Result.bind
 
 (* The funnel, named here rather than called through [Grants] only so the body
    below reads as it did where it was written: the grant this stack builds is the
@@ -53,6 +57,188 @@ let cap_of (cap : Engine.Fetch.cap) : int option =
   | Engine.Fetch.Default -> None
   | Engine.Fetch.Limit n -> Some n
   | Engine.Fetch.Uncapped -> Some Fetcher.uncapped
+
+(* The prices the fallback classes declare on themselves in the oracle — the
+   figures the fetch journal records for a served page. They live here, at the
+   wiring point, because the vendor modules are pure protocol and carry no
+   billing: [fetch.cost_per_1k] is the operator's correction of these, one key
+   for the whole ladder, and it corrects only the priced rows — a free row
+   stays free whatever the key says, because "no price to record" is not a
+   price of zero. *)
+let fallback_price name =
+  match name with
+  | "scrappa" -> Some 0.30
+  | "tavily" -> Some 1.60
+  | "linkup" -> Some 5.00
+  | _ -> None
+
+let fallback_cost config name =
+  match fallback_price name with
+  | Some _ -> (
+      match config.Config.fetch.Config.cost_per_1k with
+      | Some c -> Some c
+      | None -> fallback_price name)
+  | None -> None
+
+(* [Fallback.error] is the four-way split of the oracle's raises; the engine
+   needs the same three distinctions its search path makes — the refusal the
+   caller can act on, the non-retryable auth rejection, and the quota that
+   benches the name for a cooldown — so this is a translation, not a copy, in
+   the same spirit as [error_of] below. *)
+let fallback_error_of (name : Config.name) error =
+  match error with
+  | Fallback.Url_blocked message -> Engine.Fetch.Url_blocked message
+  | Fallback.Rejected message ->
+      Engine.Fetch.Provider (Provider.provider_error ~retryable:false ~provider:name message)
+  | Fallback.Quota message ->
+      Engine.Fetch.Provider (Provider.quota_exhausted ~provider:name ~message ())
+  | Fallback.Failed message ->
+      Engine.Fetch.Provider (Provider.provider_error ~provider:name message)
+
+(* One [Engine.Fetch.fetcher] per built fallback: the record is the same shape
+   whatever the vendor, so only the call below and the credential differ. *)
+let wrap_fallback (name : Config.name) cost fetch =
+  {
+    Engine.Fetch.name;
+    cost_per_1k = cost;
+    fetch =
+      (fun ~url ~offset ~max_chars ->
+        match fetch url ~offset ~max_chars:(cap_of max_chars) with
+        | Ok page -> Ok page
+        | Error error -> Error (fallback_error_of name error));
+    (* Nothing to drain: the grant is the factory's, tied to the app switch,
+       and the vendor module holds no socket of its own. *)
+    aclose = (fun () -> ());
+  }
+(* The per-vendor build, mirroring the oracle's [_build_*] functions: each
+   asks its own gates, returns [Ok None] when the deployment does not satisfy
+   them, and builds the one grant the vendor's endpoint deserves. *)
+let build_fallback ~sw ~net ~mono_clock ?audit config name =
+  let fetch = config.Config.fetch in
+  let row =
+    List.find_opt
+      (fun (r : Config.fetch_fallback) -> r.Config.name = name)
+      Config.known_fetch_fallbacks
+  in
+  match row with
+  | None ->
+      Error
+        (Printf.sprintf "unknown fetch fallback %S; supported: %s" name
+           (String.concat ", " (List.sort compare (List.map (fun r -> r.Config.name)
+              Config.known_fetch_fallbacks))))
+  | Some row -> (
+      (* The credential gate, for the keyed vendors: an empty [api_key] is an
+         absent one, and a permission set that omits the name leaves the
+         fallback unbuilt rather than firing it. *)
+      let keyed () =
+        match Config.api_key config name with
+        | Some key when key <> "" -> Some key
+        | _ -> None
+      in
+      match name with
+      | "jina" ->
+          if not (Config.is_permitted config name) then Ok None
+          else
+            let* grant =
+              Grants.grant_of_endpoint ~sw ~net ~mono_clock
+                ~timeout_seconds:(Float.max fetch.Config.timeout_seconds 30.0)
+                ?audit (Provider.policy_of_uri (Uri.of_string (Option.value ~default:"" row.Config.endpoint)))
+            in
+            let target = Remote_target.make net in
+            let vendor_net = Fallback.of_grant grant in
+            Ok
+              (Some
+                 (wrap_fallback name (fallback_cost config name)
+                    (Seekwright_fetch.Fallback_jina.fetch
+                       {
+                         net = vendor_net;
+                         target;
+                         max_text_chars = fetch.Config.max_text_chars;
+                         user_agent = fetch.Config.user_agent;
+                       })))
+      | "crawl4ai" ->
+          (* The self-hosted renderer: no key and no permission gate, so
+             [fetch.crawl4ai_url] is the whole prerequisite — and its endpoint
+             is the operator's own config, not a constant. *)
+          (match fetch.Config.crawl4ai_url with
+          | None | Some "" -> Ok None
+          | Some base_url ->
+              let* grant =
+                Grants.grant_of_endpoint ~sw ~net ~mono_clock
+                  ~timeout_seconds:fetch.Config.crawl4ai_timeout_seconds
+                  ?audit (Provider.policy_of_uri (Uri.of_string base_url))
+              in
+              let target = Remote_target.make net in
+              Ok
+                (Some
+                   (wrap_fallback name (fallback_cost config name)
+                      (Seekwright_fetch.Fallback_crawl4ai.fetch
+                         {
+                           net = Fallback.of_grant grant;
+                           target;
+                           max_text_chars = fetch.Config.max_text_chars;
+                           base_url;
+                           token = fetch.Config.crawl4ai_token;
+                         }))))
+      | _ ->
+          (* The keyed third parties share the two gates and the timeout
+             floor: [fetch.timeout_seconds] bounds a static read, and a
+             vendor browser or extraction waits longer. *)
+          if not (Config.is_permitted config name) then Ok None
+          else
+            match keyed () with
+            | None -> Ok None
+            | Some api_key -> (
+                match Provider.policy_of_uri (Uri.of_string (Option.value ~default:"" row.Config.endpoint)) with
+                | endpoint -> (
+                    match
+                      Grants.grant_of_endpoint ~sw ~net ~mono_clock
+                        ~timeout_seconds:(Float.max fetch.Config.timeout_seconds 30.0)
+                        ?audit endpoint
+                    with
+                    | Error message -> Error message
+                    | Ok grant ->
+                        let target = Remote_target.make net in
+                        let vendor_net = Fallback.of_grant grant in
+                        let built =
+                          match name with
+                          | "scrappa" ->
+                              Some
+                                (Seekwright_fetch.Fallback_scrappa.fetch
+                                   {
+                                     net = vendor_net;
+                                     target;
+                                     max_text_chars = fetch.Config.max_text_chars;
+                                     api_key;
+                                   })
+                          | "tavily" ->
+                              Some
+                                (Seekwright_fetch.Fallback_tavily.fetch
+                                   {
+                                     net = vendor_net;
+                                     target;
+                                     max_text_chars = fetch.Config.max_text_chars;
+                                     api_key;
+                                     timeout_seconds =
+                                       Float.max fetch.Config.timeout_seconds 30.0;
+                                   })
+                          | "linkup" ->
+                              Some
+                                (Seekwright_fetch.Fallback_linkup.fetch
+                                   {
+                                     net = vendor_net;
+                                     target;
+                                     max_text_chars = fetch.Config.max_text_chars;
+                                     api_key;
+                                   })
+                          | _ -> None
+                        in
+                        match built with
+                        | Some fetch_fn ->
+                            Ok (Some (wrap_fallback name (fallback_cost config name) fetch_fn))
+                        | None -> Ok None)))
+
+
 
 (* [error_of] is a translation, not a copy, and stays one: [Fetcher.refusal] and
    [Engine.Fetch.fetch_error] are different vocabularies on purpose — a
@@ -145,11 +331,36 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
                 aclose = (fun () -> Extract_pool.close workers);
               }
             in
-            (* The keyed/self-hosted fallbacks are deferred with P6, so the
-               ladder is empty in v1; a primary other than the local reader is
-               refused by the server's startup checks rather than silently read
-               locally. When they land they are built by [grant_of_endpoint],
-               which has no way to ask for the private-web variant: the
-               public-only rule for a third-party route is a property of how
-               its grant is built. *)
-            Some (Ok (local, []))))
+            (* The fallback ladder, in config order. Each row of
+               [Config.known_fetch_fallbacks] says what its build needs: a
+               constant endpoint, or the [fetch.crawl4ai_url] key as the host.
+               A name whose gates this deployment does not satisfy is not
+               built — a permission set that omits the name leaves the
+               fallback unbuilt rather than firing it, and a keyed fallback
+               with no key in the environment is the same, exactly as the
+               oracle's [_build_*] functions return [None].
+
+               Every grant here is [grant_of_endpoint] over the vendor the
+               row dials, which has no way to ask for the private-web
+               variant: the public-only rule for a third-party route is a
+               property of how its grant is built, not a runtime check (see
+               the local reader's grant above for the one key that does
+               choose a web variant). Crawl4AI's endpoint is this
+               deployment's own config, so it may be an internal host — the
+               operator wrote that URL — while the {i target} handed to it is
+               still vetted public by [Remote_target], as for every other
+               vendor: the renderer's browser would otherwise read the very
+               network the caller's URL could not reach. *)
+            let rec build_ladder = function
+              | [] -> Ok []
+              | name :: rest -> (
+                  match build_fallback ~sw ~net ~mono_clock ?audit config name with
+                  | Error message -> Error message
+                  | Ok None -> build_ladder rest
+                  | Ok Some fetcher ->
+                      Result.map (( @ ) [ fetcher ]) (build_ladder rest))
+            in
+            match build_ladder (Option.value ~default:[] fetch.Config.fallback) with
+            | Error message -> Some (Error message)
+            | Ok ladder -> Some (Ok (local, ladder)))
+)

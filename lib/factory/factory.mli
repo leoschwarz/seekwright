@@ -199,15 +199,17 @@ val build_fetch_stack :
   Seekwright.Config.t ->
   ((Seekwright.Engine.Fetch.fetcher * Seekwright.Engine.Fetch.fetcher list), string) result option
 (** [None] when [[fetch] enabled = false]. Otherwise the local reader as the
-    primary route plus the fallback ladder — empty in v1, where the third-party
-    fallbacks are deferred with P6 — adapted to the engine's [fetcher] record.
-    The local reader's grant is the web variant the config's
-    [fetch.allow_private_addresses] names: [Policy.with_private_web] when the
-    operator approved intranet reads, [Policy.with_public_web] otherwise. The
-    keyed/self-hosted fallbacks are not built: nothing that could bill is left
-    around unfired, and when they land their grants stay endpoint-scoped and
-    public-only, because that key licenses this process, not a third party's
-    view of the intranet.
+    primary route plus the fallback ladder [fetch.fallback] names — each name
+    built by its vendor module and adapted to the engine's [fetcher] record,
+    and each name whose gates this deployment does not satisfy (a permission
+    set that omits it, a keyed vendor with no key, [crawl4ai] with no
+    [fetch.crawl4ai_url]) simply absent. The local reader's grant is the web
+    variant the config's [fetch.allow_private_addresses] names:
+    [Policy.with_private_web] when the operator approved intranet reads,
+    [Policy.with_public_web] otherwise. The fallbacks' grants are
+    endpoint-scoped and their targets vetted public whatever that key says,
+    because the key licenses this process, not a third party's view of the
+    intranet.
 
     Extraction runs on an {!Seekwright_fetch.Extract_pool:}t — one pool per
     built stack, its workers fed through the system temp dir,
