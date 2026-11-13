@@ -30,4 +30,8 @@ let check net raw =
       | Some host -> (
           match Mcp_caps.Policy_net.vet_public_host ~net ~host with
           | Ok () -> Ok target
-          | Error error -> Error (Mcp_caps.Error.render error)))
+          (* The vet's message, not its [render]: the refusal sentences are
+             the oracle's verbatim, and the kind prefix is a caps vocabulary
+             the caller has no use for — [Url_blocked] already says what
+             kind this is. *)
+          | Error error -> Error (Mcp_caps.Error.message error)))

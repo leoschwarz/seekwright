@@ -47,7 +47,12 @@ let split_reader_body body =
           | [] -> (List.rev acc, [])
           | x :: tl -> if n = 0 then (List.rev acc, x :: tl) else go (n - 1) (x :: acc) tl
         in
-        go index [] lines
+        (* Headers come from the lines above the marker; the page starts at
+           [index + 1], because the marker line itself is dropped and only its
+           tail becomes the page's first line. *)
+        match go index [] lines with
+        | before, _marker :: rest -> (before, rest)
+        | before, [] -> (before, [])
       in
       let headers =
         List.filter_map

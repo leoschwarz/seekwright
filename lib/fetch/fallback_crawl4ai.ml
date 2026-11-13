@@ -68,11 +68,9 @@ let to_page cfg target body ~offset ~max_chars =
                 in
                 let url =
                   match
-                    Fallback.Json.string_field "redirected_url" result
-                    |> ( fun a ->
-                         match a with
-                         | Some s when s <> "" -> a
-                         | _ -> Fallback.Json.string_field "url" result )
+                    Fallback.or_string
+                      (Fallback.Json.string_field "redirected_url" result)
+                      (Fallback.Json.string_field "url" result)
                   with
                   | Some s -> s
                   | None -> target

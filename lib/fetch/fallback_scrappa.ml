@@ -13,10 +13,6 @@ type 'tag config = {
   api_key : string;
 }
 
-(* [or] across two optional string fields: Python's [a or b] takes the first
-   non-empty string, and an empty string from the vendor counts as absent. *)
-let ( ||| ) a b = match a with Some s when s <> "" -> Some s | _ -> b
-
 let to_page cfg target body ~offset ~max_chars =
   (* [site_status_code] is the {i origin's} status, distinct from Scrappa's
      own — a 404 page scraped successfully is a successful API call and a
@@ -41,7 +37,9 @@ let to_page cfg target body ~offset ~max_chars =
       in
       let url =
         match
-          Fallback.Json.string_field "final_url" body ||| Fallback.Json.string_field "url" body
+          Fallback.or_string
+            (Fallback.Json.string_field "final_url" body)
+            (Fallback.Json.string_field "url" body)
         with
         | Some s -> s
         | None -> target

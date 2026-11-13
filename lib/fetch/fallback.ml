@@ -72,6 +72,14 @@ module Json = struct
   let is_false = (( = ) (`Bool false))
 end
 
+(* Python's [a or b] over two optional string fields, as [fallback.mli] states:
+   the empty string is not a value, so the next source is the one the page
+   mapping falls back to. *)
+let or_string a b =
+  match a with
+  | Some s when s <> "" -> Some s
+  | _ -> (match b with Some s when s <> "" -> Some s | _ -> None)
+
 (* The field names [field]/[string_field]/… shadow the record labels only
    inside this module; callers spell [Json.field]. *)
 

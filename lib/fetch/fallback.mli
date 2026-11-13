@@ -121,6 +121,12 @@ module Json : sig
       tests: a missing or null flag is not a reported failure. *)
 end
 
+val or_string : string option -> string option -> string option
+(** Python's [a or b] over two optional string fields: the first value that is
+    {i neither absent nor empty} wins, because a vendor that answers an empty
+    string for a URL is answering nothing, and the {i next} source is the one
+    the page mapping falls back to. *)
+
 (** {1 The shared page tail} *)
 
 val windowed :

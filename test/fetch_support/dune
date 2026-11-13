@@ -1,0 +1,7 @@
+; A private library for the five vendor fallback suites: one scripted seam and
+; one scripted resolver, shared the same way [test_support] shares its
+; helpers. No [public_name], so [dune build @install] does not see it.
+
+(library
+ (name fallback_fixtures)
+ (libraries mcp-caps seekwright.fetch eio eio_main ipaddr uri alcotest))

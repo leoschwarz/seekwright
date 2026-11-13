@@ -777,3 +777,33 @@
 (rule
  (alias runtest)
  (action (diff no_output.expected cli_startup_primary.out)))
+
+; F6.1: the five vendor fallback modules over the scripted seam in
+; [fetch_support/] — request shape, status arms, and envelope mapping, with no
+; socket and no third party. Each suite is the port of its Python test module
+; under tests/fetch/.
+(test
+ (name test_fallback_jina)
+ (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+
+(test
+ (name test_fallback_scrappa)
+ (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+
+(test
+ (name test_fallback_crawl4ai)
+ (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+
+(test
+ (name test_fallback_tavily)
+ (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+
+(test
+ (name test_fallback_linkup)
+ (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+
+; The composition of the two guards every remote fallback runs, in order:
+; [validate_url] then the public-address vet.
+(test
+ (name test_remote_target)
+ (libraries seekwright.fetch mcp-caps eio eio_main uri alcotest fallback_fixtures))
