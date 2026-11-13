@@ -1,0 +1,53 @@
+; The F6.2 extraction benchmark. Nothing in this directory *runs* under a plain
+; [dune runtest] except the corpus-integrity check: the metric runner needs the
+; Python venv and measures time and memory, which is an operator's run, not a
+; gate step (plans/ocaml-finalisation.md, F6.2). What the gate does check is the
+; recorded quality bar, in [../../test/corpus_html/], and that the corpus is
+; still exactly what its generator writes.
+
+; The metric definitions and the bar live here, in [extract_metrics.ml]: the gate
+; rule beside the corpus in [../test/corpus_html/dune] and the table mode below
+; both run this one program, so a bar means the same thing in both. It links the
+; backend it measures, which is the whole point — a metric that no longer compiles
+; against [Extractor] is a metric that stopped meaning anything.
+(library
+ (name extract_metrics)
+ (modules extract_metrics)
+ (libraries seekwright.fetch seekwright.fetch.stdlib yojson))
+
+; The fixture generator. It writes the corpus under [../../test/corpus_html/]
+; when given a directory to write into; [gen_fixtures --check <dir>] re-derives
+; every fixture and the manifest in memory and fails when a checked-in file no
+; longer matches, so a fixture can only change by changing the program that
+; makes it. [runtest] runs the check mode, with the corpus declared as deps so
+; the sandbox carries it.
+(executable
+ (name gen_fixtures)
+ (modules gen_fixtures)
+ (libraries yojson unix))
+
+(rule
+ (alias runtest)
+ (deps
+  gen_fixtures.exe
+  (glob_files ../../test/corpus_html/fixtures/*)
+  ../../test/corpus_html/cases.json)
+ (action (run ./gen_fixtures.exe --check ../../test/corpus_html)))
+
+; The OCaml half of the metric table: runs the port's [stdlib] backend over the
+; corpus and prints one metric row per case as JSON. [yojson] builds the row,
+; [unix] is the wall clock and the GC counters. The operator commands are in the
+; header of [bench.ml], and [metrics_table.py] puts the three backends' rows
+; into the table that gets recorded.
+(executable
+ (name bench)
+ (modules bench)
+ (libraries extract_metrics yojson unix))
+
+
+; The identity check behind a plumbing change: a digest of what the backend
+; answers for every corpus case, and the phase timings of one case.
+(executable
+ (name digest_cases)
+ (modules digest_cases)
+ (libraries seekwright.fetch seekwright.fetch.stdlib extract_metrics))

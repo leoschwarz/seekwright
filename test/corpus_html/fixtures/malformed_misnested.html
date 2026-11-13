@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html><head><title>Mis-nested markup — Harbour Bulletin</title></head>
+<body>
+<article>
+<h1>Mis-nested markup</h1>
+<p>The emphasis crossed over: <b>bold starts <i>and italic starts inside it but bold ends first</b></i>, which is what a 1998 page looked like and what a parser still has to answer for.</p>
+<TABLE>
+<TR><TD>one<TD>two
+<TR><TD>three<TD>four
+</TABLE>
+<P>An uppercase paragraph with a <BR/> break and a <BR> second break.</P>
+<P>An element closed too early: <span>text<span>again</span>closed</span>.</p>
+</article>
+</body></html>

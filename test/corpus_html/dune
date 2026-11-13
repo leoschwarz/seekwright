@@ -1,0 +1,38 @@
+; The recorded quality bar over the extraction corpus (F6.2). This is the
+; hermetic half of the benchmark: [bench.exe --check] reads [cases.json], runs the
+; port's stdlib backend over each fixture, and checks the per-case bar the
+; manifest carries — essential recall, boilerplate leakage, the title rule,
+; Unicode fidelity, determinism, and a loose time ceiling that catches a parser
+; that went quadratic or stalled rather than a performance target.
+;
+; The check lives here, beside the corpus, and the code it runs lives in
+; [../ocaml-tools/extract_bench/]: one implementation of a bar, so the gate's
+; verdict and the operator's recorded table cannot drift. The full three-backend
+; timing and memory table is the operator's run (it needs the Python venv), and
+; the table it produced is recorded in [../../plans/seekwright-ocaml-port.md].
+
+(rule
+ (alias runtest)
+ (deps
+  (glob_files fixtures/*)
+  cases.json
+  ../../ocaml-tools/extract_bench/bench.exe)
+ (action (run ../../ocaml-tools/extract_bench/bench.exe --check .)))
+
+; The byte pin, which the bar cannot give: [parity/port-stdlib.txt] is a digest of
+; what the backend answers for every case, and this rule recomputes it. A bar is a
+; floor on recall, so an edit that trades one paragraph for another still passes
+; it; a digest does not. [parity/oracle-stdlib.txt] beside it is the oracle's own
+; digests, printed by [ocaml-tools/extract_bench/py_digest.py] — the gate cannot
+; run it (no Python in the sandbox), so the two files are diffed by hand, and the
+; only line that differs is [encoding-cp1252], where this port implements the
+; cp1252 codec and the oracle's strict codec replaces fifteen bytes.
+(rule
+ (alias runtest)
+ (deps
+  (glob_files fixtures/*)
+  cases.json
+  parity/port-stdlib.txt
+  ../../ocaml-tools/extract_bench/digest_cases.exe)
+ (action
+  (run ../../ocaml-tools/extract_bench/digest_cases.exe --check-parity . parity/port-stdlib.txt)))

@@ -2167,3 +2167,175 @@ exported — a doc sweep for whoever owns `lib/wire`. A compiler-enforced funnel
 `mcp-caps` public-API decision with its own review; this split is the step toward it.
 Relocating `readers` out of the factory stays blocked by dependency direction: it
 would need both `seekwright` and `seekwright.fetch`.
+
+## 32. F6.2 — an extraction corpus, a measured quality bar, and the PDF decision (2026-11-14)
+
+**The corpus, and who owns it.** Thirty-two cases under `test/corpus_html/`:
+twenty-five HTML and text pages over the families the fetch path actually meets —
+ordinary articles, navigation-heavy documents, malformed markup (unclosed tags,
+a stray `<`, misnested elements, an unterminated attribute, a two-thousand-deep
+nesting), encodings (UTF-8 BOM, cp1252, an undeclared Latin-1 page, undecodable
+bytes, an entity soup), multiscript Unicode, a JS shell, a form, a table, lists,
+an SVG sprite, a 186810-byte generated page, a page with 120 copies of one promo
+block — and seven PDFs, including a 261818-byte grinder whose pages each
+reference one shared Form XObject. Every fixture is written by one OCaml program,
+`ocaml-tools/extract_bench/gen_fixtures.ml`, and `gen_fixtures --check <dir>`
+runs under `runtest`: a fixture that no longer matches its generator fails the
+gate, so nothing in the corpus is scraped and nothing is hand-tuned. That is also
+the licensing answer — the corpus is this project's own text, Apache-2.0, with no
+third-party page in it.
+
+**What "quality" is measured as, and where the bar lives.** Not exact-string
+equality. Each case in `cases.json` carries the phrases its answer must hold
+(`essential`), the furniture it must not (`boilerplate`), what to expect of the
+title (`title_rule` is `exact`, `none` or `any`), the Unicode strings that must
+survive, and the per-case bar: `bar_essential_min`, `bar_boiler_max`,
+`bar_title_ok`, `bar_unicode_ok`, `bar_max_ms`. The metric definitions are in one
+OCaml module, `ocaml-tools/extract_bench/extract_metrics.ml`, which is what the
+gate runs (`test/corpus_html/dune` runs `bench.exe --check .` under `runtest`)
+and what the operator's table runs, so a bar cannot mean two things. Needles are
+searched over text and title together: both implementations keep a page's em dash
+only in the title, and a body-only search would call that a loss. The bar is a
+**regression floor, not an aspiration**: `derive_bars.py` rewrites the five bar
+fields in `gen_fixtures.ml` from a measured run, in the shape
+`tools/surface.py --write` has in the Python tree, so a bar only moves when an
+operator re-runs the instrument and commits the new number. `bar_max_ms` is four
+times the measured median over a 25 ms floor — a ceiling that catches a parser
+that went quadratic or stalled, not a performance target. Current state: **32 of
+32 cases meet their bar**.
+
+**Three backends, one table.** `test/corpus_html/metrics.md` records the corpus
+run against the port's `stdlib` backend and the oracle's two — totals:
+
+| backend | answer | essential | boiler leaked | title ok | Unicode ok | codepoints | U+FFFD | median ms (total) |
+|---|---|---|---|---|---|---|---|---|
+| ocaml-stdlib | 24 text / 7 refusal | 84/89 | 34/35 | 31 | 32 | 221591 | 9 | 43.3 |
+| python-stdlib | 24 text / 7 refusal | 79/89 | 18/35 | 31 | 29 | 221591 | 23 | 43.3 |
+| trafilatura | 28 text / 2 refusal | 80/89 | 2/35 | 10 | 20 | 1910349 | 23 | 5374.6 |
+
+The port holds the most of the page (84/89 essential phrases), refuses exactly
+what the oracle's stdlib backend refuses (the seven PDFs), and takes 43 ms over
+the corpus against the trafilatura backend's five and a half seconds. What
+it pays for that is boilerplate: 34 of 35 needles leak, against the oracle's 18
+and trafilatura's 2, because this backend removes the `skip_tags` elements and
+nothing else — the chrome outside them survives, which is its documented
+contract, and `shared-blocks` (120 copies of one promo block, 25744 codepoints)
+is where that contract costs the most. trafilatura buys its 2/35 by cutting
+harder: it answers 317 codepoints for that same page and loses the title on 22
+of 32 cases, and it drops a Unicode string in 12 of the 32 where the port keeps
+it. The table is generated (`metrics_table.py` reads the runners' JSON rows); the
+runners are the only place the metrics are defined.
+
+**The parity result, at the byte.** `test/corpus_html/parity/` holds two files of
+the same shape: `port-stdlib.txt` and `oracle-stdlib.txt`, each a `Digest.to_hex`
+of the text and the title and the `total_chars` for every case — the port's from
+`digest_cases.exe --digest`, the oracle's from `py_digest.py` over the same
+fixture bytes. **On 31 of 32 cases the two are identical**, which is a stronger
+claim than the matrix's `partial` row suggested before this: the port's stdlib
+backend and the oracle's stdlib backend return the same bytes, not merely the
+same phrases. The one drift is `encoding-cp1252`, and the port is ahead of the
+oracle there: it implements the cp1252 codec, so it answers 4/4 essential phrases
+with one replacement character where the oracle's strict codec gives up on fifteen
+bytes and answers 0/4. The port's own digests are a gate rule
+(`digest_cases.exe --check-parity`): a bar is a floor on recall, so an edit that
+trades one paragraph for another can still pass every bar, and the digest cannot.
+
+**The timing finding, and the fix it earned.** The measurement said the cost is
+not in the parser. On `huge_generated.html` (186810 bytes) the end-to-end extract
+was 71 ms, of which `Extractor.decode` was 0.4 ms and `Extractor.normalise` alone
+was 72.8 ms. The two whitespace passes in `Extractor.normalise` built a cons cell
+per codepoint, then `Array.of_list (List.rev …)` per pass, plus an
+`Array.to_list`/`@` per newline run. The fix does both passes in place on the
+`Uchar` array: a whitespace pass only ever deletes a codepoint, so its write
+index never passes its read index, and one array serves both passes and the
+strip. Measured: 26.8 ms for `normalise`, 30.8 ms end to end (the table's
+`huge-article` row), against python-stdlib's 17.0 ms and trafilatura's 170.8 ms —
+the port is now 1.8x off the oracle's stdlib backend on the biggest page instead
+of 3.9x, and the digests are unchanged, which is the whole point of a whitespace
+rewrite. `test_fetch.ml`'s "plain text whitespace collapses" caught the first
+attempt at it (a tab run wrote the tab instead of the space the oracle emits),
+which is the suite doing its job. `lib/fetch/extractor.ml` is outside this task's
+ownership list; the exception was asked for and granted on the strength of the
+digest parity, and it is a separate commit.
+
+**PDF: the decision is no reader, and the measurement behind it.** The port ships
+no PDF type, so `fetch` refuses a PDF by media type before spending the body, and
+the seven PDF fixtures carry `expect = "refusal"` precisely so that answer is
+visible in the table rather than inferred. The candidate was the only PDF package
+in the opam index, camlpdf 2.9 (`LGPL-2.1-or-later WITH
+OCaml-LGPL-linking-exception`, one maintainer, `ocaml >= 4.10`, no other
+dependency). It was evaluated out of the tree — no stanza, no switch-level change
+to this repository's build, a probe in `/tmp` over the corpus's own PDFs. What it
+showed:
+
+- the parser is fast and small: 0.3–2.1 ms to read all seven, object counts
+  between 1 and 15;
+- text needs a walk that camlpdf does not provide: page contents through
+  `Pdfops.parse_operators`, then `Op_Tf`/`Op_Tj`/`Op_TJ` resolved through
+  `Pdftext.text_extractor_of_font`, then Form XObjects followed by hand. On the
+  easy fixtures that walk is correct (`pdf_minimal` gives the sentence back in
+  6.8 ms);
+- on two of the six readable fixtures it is behind the oracle outright:
+  `pdf_two_pages` raises `Unknown font type` where the oracle's stack gives 2/2
+  essential phrases, and `pdf_xref_stream` answers **zero pages** — not a refusal,
+  an empty page, which is the worst way to be wrong on this path;
+- the shared-stream grinder behaves the way the oracle's PDF stack does: a naive
+  walk expands one XObject referenced per page into 80030 operators and
+  1720010 bytes of text in 380 ms, against pypdf-plus-trafilatura's 1720028
+  codepoints in 4955–10403 ms. Both readers expand; neither bounds itself. The
+  port's answer is 0 ms and a sentence;
+- malformed input is refused honestly but noisily: `pdf_truncated` and
+  `pdf_not_a_pdf` raise `Pdf.PDFError` after camlpdf prints its own repair
+  narrative — "Attempting to reconstruct the malformed pdf channel… Read 6
+  objects" — on stdout. That is a direct collision with this port's rule that
+  stdout is the JSON-RPC channel on the stdio transport, and it is not a value
+  this library lets a caller redirect.
+
+So the cost is not the dependency's size — it pulls nothing else — it is that a
+usable PDF backend is a content-stream walker on top of camlpdf plus a work
+ceiling the extraction contract does not have, plus a stdout guard, plus an LGPL
+linking-exception licence next to an Apache-2.0 tree, plus a container that has to
+keep scanning clean at CRITICAL/HIGH with a new C-stub-bearing package in it
+(camlpdf ships `libcamlpdf_stubs.a`). Against that, what this port would buy is a
+backend that answers two fixtures worse than the oracle and one of them by
+silently returning nothing. Recorded as an explicit divergence rather than a gap:
+`test/differential/matrix/behaviours.tsv` carries a row for PDF page text with
+`partial` and `explicit-divergence(the port refuses a PDF by media type, and the
+reader decision with its measurements is in plans/seekwright-ocaml-port.md)`, and
+the extraction row now names the corpus's bar and digest pins beside
+`test_fetch.ml`. The re-entry condition, if anyone wants it: a reader with a
+bounded-work API, or real traffic that shows PDF fetches matter, and then behind
+a per-call work budget in the backend contract — not behind a naive walk.
+
+**Also recorded, as divergences rather than defects.** The port is byte-identical
+to the oracle's stdlib backend on 31 of 32 cases, so the extraction row's
+`partial` status now rests on much narrower ground than it did: the cp1252 codec,
+the PDF type set, and the trafilatura backend, which this port refuses outright.
+`boiler` is where the port is measurably behind trafilatura and marginally behind
+the oracle's stdlib backend (34/35 against 18/35); closing that is a content
+decision about what the stdlib backend is allowed to remove, not a bug fix, and it
+is left to a wave that has to choose between matching the oracle byte-for-byte and
+matching trafilatura's cleanliness — the corpus is now the place where that
+argument can be run with numbers.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` and
+`dune build @doc` all exit 0, with the two new `runtest` rules in
+`test/corpus_html/dune` in the middle of it: 32/32 cases meet their bar, the
+digest pin matches, and `gen_fixtures --check` proves the checked-in corpus is
+still exactly what its generator writes. Both rules were checked for non-vacuity
+by hand: a tampered line in `parity/port-stdlib.txt` fails the run, and a
+hand-edited fixture fails the generator check. Nothing reached a provider
+endpoint and no key was read; the benchmark's Python rows need the checkout's own
+`.venv`, which is why they are an operator run and not a gate step.
+
+**Follow-ups, deliberately not folded in.** `ocaml-tools/extract_bench/` is not
+installed and not packaged, and no rule there imports the Python tree — the
+oracle rows come from `.venv`, so the three-backend table cannot be a gate step.
+`digest_cases.exe --phases` is the phase timer behind the `normalise` finding and
+is worth keeping for the next time a fetch-path number moves. The corpus's
+`note` field is prose a reader sees in `cases.json`; a per-case note in the table
+would duplicate it. The whitespace collapse over bytes rather than codepoints is
+a further 2x on the table for the price of re-deriving `total_chars` without
+decoding, and was not taken: the `Uchar` array is what keeps the strip's
+`Utf8.is_python_space` rule honest for the non-ASCII spaces Python's `strip`
+removes.

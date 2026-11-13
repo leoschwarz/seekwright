@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head>
+<title>Script bodies — Harbour Bulletin</title>
+<script>
+var markup = "<p>SHOULD NOT APPEAR a paragraph inside a script string</p>";
+if (a < b && c > d) { console.log('</div>'); }
+var tail = "-->";
+</script>
+<style>a[href^="data-"]::after { content: "SHOULD NOT APPEAR"; }</style>
+</head>
+<body>
+<article>
+<h1>Script bodies are data</h1>
+<p>The article has to survive a script body that contains angle brackets, a fake closing tag, and a comment terminator.</p>
+</article></body></html>

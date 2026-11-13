@@ -1,0 +1,11 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>A page with a byte-order mark</title></head>
+<body>
+<article>
+<h1>A page that opens with a byte-order mark</h1>
+<p>The three bytes before the doctype are the whole difficulty: a parser that decides what a body is by its first bytes has to look past them, and a decoder that keeps the mark as a character puts an invisible U+FEFF at the start of the caller's text.</p>
+<p>Text after the mark: ferry, fender, freeboard, and a café on the east pier.</p>
+</article>
+</body>
+</html>

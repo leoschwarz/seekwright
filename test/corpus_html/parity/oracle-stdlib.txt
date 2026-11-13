@@ -1,0 +1,32 @@
+article-plain              text=04accab9f6be85356b6b565aaa8e604a chars=846 title=817979e5fe05d15e51eba4e78db737ba
+article-no-title           text=2e847c9db48cba2904a097493aa81d80 chars=306 title=-
+article-jsonld             text=13a3870ae2369ce2d9a0c02925d20de6 chars=398 title=ad1aedff845639063ee1af1258f291f6
+nav-heavy-docs             text=ebde4de1d9a532f99bbf14eb97f4a3e5 chars=2852 title=682359a27151b791cb0faa1fad3490a2
+nav-heavy-portal           text=ed4fea3eccfca6811349ca7ed347a7d5 chars=2979 title=8b9a43782f5a2871f43dbbe6b3a762e8
+malformed-unclosed         text=b258efcbae7f5de0435774c2c987744f chars=381 title=6a2e7882cd38f8a019f51a7b5ce70c2a
+malformed-angle-text       text=5a37a9081c0b04b5ccf6355f34f2a52f chars=374 title=8acac9079a056856395b851367e47f8f
+malformed-misnested        text=91f66b08c9721fe947efd0d6d68f38c9 chars=316 title=a1c573f2b312963d01c41483a1f108ed
+malformed-attributes       text=c4f6d7f08e71a07d0c1fbab6c5dd3374 chars=188 title=3328ee3a59469b36310d5c37b38243c3
+malformed-comments         text=c1cca94767ad3694782e3dce9b5ed622 chars=244 title=9165af67aaa785cf5edf31241a52fc87
+malformed-script-cdata     text=3ad16453f1f8416d026df4054e402e6b chars=140 title=e38182bbfed2bdfeac29ca68350ba139
+malformed-deep-nesting     text=8cfeb91f5aa5e50d2be87b31bc6317fa chars=135 title=4c2e68cfd93bd96bc78250b9b1041827
+encoding-utf8-bom          text=8555a97c9de098c1bf0d95ed0fe5ed2c chars=370 title=5e20a1efc6c477359d49b7d730f707d5
+encoding-cp1252            text=e4f74427ead2760c98f31347b37f6f89 chars=354 title=393705e122f91e4fd2025edc5f941b11
+encoding-latin1-undeclared text=06bc6a6c788b36109e99dbcec545af3c chars=424 title=f24218dd8a06d8e930864c85bd6a1a1e
+encoding-undecodable       text=25a087c2e4873d1de9bb4476476bc9ce chars=255 title=288c07d2dbe596d38791a0a149f4e3fa
+entities-soup              text=edb1613e7e0f63ba78609a623f0a609e chars=390 title=5f26306dc33d7e68e68ef89caab7a67f
+unicode-multiscript        text=9db18ee1b1b7fb3d994020f99fd7a24d chars=725 title=19beb642fcdeddf2b937b0fea554dece
+js-shell                   text=d41d8cd98f00b204e9800998ecf8427e chars=0 title=46409b42c3ebffaff30bf798f244e61a
+form-login                 text=44b9823b1f09e3803787459fb3460e16 chars=73 title=de4f9395ba18988e81089d64d1df9d03
+table-reference            text=9f6c299ec973351900091278c15d6c8e chars=297 title=28049675af875d52d6b93f82f96dad33
+list-hybrid                text=3586578ebdc122ad07b4d35bbca7583e chars=591 title=e5a2e065b160b5751afb8897a057c980
+svg-sprite                 text=cc8820c60a50874c0f80394cf7aa64dc chars=294 title=3468c8e06b02cefe5ef16485713665e5
+huge-article               text=73a85eb38b89da526cfa130d990fb8f5 chars=182915 title=496a603e71310fa9438c98445c68e1c9
+shared-blocks              text=6dc7768e026091fe433fbd5d7a6db953 chars=25744 title=13fdbfdbd503cde3142b77c7a585c0ed
+pdf-minimal                refusal=application/pdf
+pdf-two-pages              refusal=application/pdf
+pdf-kerned-tj              refusal=application/pdf
+pdf-shared-stream          refusal=application/pdf
+pdf-truncated              refusal=application/pdf
+pdf-xref-stream            refusal=application/pdf
+pdf-not-a-pdf              refusal=application/pdf

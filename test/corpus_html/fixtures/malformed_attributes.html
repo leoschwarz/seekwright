@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html><head><title>Attribute shapes — Harbour Bulletin</title></head>
+<body>
+<article>
+<h1>Attribute shapes</h1>
+<p data-note="a > inside a quoted value must not end the tag">Text kept by a quoted attribute that holds a closing bracket.</p>
+<p data-note=a >Text kept by an unquoted attribute value.</p>
+<input type=checkbox checked>
+<a href="x.html" title="kept">A link whose text must survive</a>
+<p>An attribute value never closed: <span data-x="the quote is never closed and the rest of this line is still a page
+<p>Text after an unterminated attribute, which the parser has to recover from.</p>
+</article></body></html>
