@@ -17,9 +17,10 @@
      to stderr, because descriptor 1 is the JSON-RPC channel under stdio;
    - that the probe path is covered too: [probe_net] is a grant like any other,
      so the readiness traffic the health monitor generates is on the trail;
-   - the wiring count in the factory: one [Authority.Net.of_confinement] and one
-     [Authority.with_log], so a second grant path cannot appear here without a
-     red line;
+   - the wiring count across the factory library: one [Authority.Net.of_confinement]
+     and one [Authority.with_log] in total, held by one named file, so a second
+     grant path cannot appear anywhere in the library without a red line — and a
+     split cannot turn that count into one-per-file;
    - that the sealing is real: [lib/caps/dune] keeps the raw modules private,
      the negative-compilation mirror agrees with that file, and no production
      module outside [lib/caps] names them. A consumer that could name
@@ -502,32 +503,66 @@ let test_nothing_reaches_stdout () =
 (* the wiring is single                                                 *)
 (* ------------------------------------------------------------------ *)
 
-let factory_source = read_file "../lib/factory/factory.ml"
 let server_source = read_file "../lib/server.ml"
 let main_source = read_file "../bin/main.ml"
 let caps_dune = read_file "../lib/caps/dune"
 let mirror_source = read_file "../test/should_not_compile/mcp_caps.ml"
 
+(* Every source of [lib/factory], read from the directory rather than named by
+   hand, so a module added to the library joins the scan on its own. The sealed
+   layer scan wants the interfaces as well as the implementations; the funnel
+   counts are over implementations, because an interface's prose is allowed to
+   name the funnel it describes. *)
+let factory_all = factory_sources ()
+
+let factory_impls =
+  List.filter (fun (name, _) -> Filename.check_suffix name ".ml") factory_all
+
+let factory_source name =
+  match List.assoc_opt name factory_all with
+  | Some text -> text
+  | None ->
+      Alcotest.failf "%s is missing from this sandbox (test/dune declares the factory glob)" name
+
+(* The file that holds the one funnel. Naming it is what makes the check a
+   location as well as a total: as the library splits, this name moves with the
+   funnel, and the totals below are what stop a split from quietly turning the
+   count into one-per-file. *)
+let funnel_source = "lib/factory/factory.ml"
+
+let count_in sources needle =
+  List.fold_left
+    (fun total (_name, text) -> total + count_occurrences ~haystack:text ~needle)
+    0 sources
+
 (* One audit wrapper and one grant construction in the factory: the funnel every
    serving grant goes through. A second call to either is a second grant path,
-   and a grant path outside the funnel is an un-audited one. *)
+   and a grant path outside the funnel is an un-audited one. The two counts are
+   library-wide totals, not one file's: a per-file count would let a split put a
+   wrap in each new file and still read one. *)
 let test_the_factory_builds_grants_through_one_funnel () =
-  A.(check int "one audit wrapper" 1
-       (count_occurrences ~haystack:factory_source ~needle:"Authority.with_log"));
-  A.(check int "one grant construction" 1
-       (count_occurrences ~haystack:factory_source ~needle:"Authority.Net.of_confinement"));
-  includes "the funnel is what the builders call"
-    "grant_of_decision ~mono_clock ~timeout_seconds ?audit decision" factory_source;
-  includes "build_app installs the sink" "let audit = audit_sink log in" factory_source;
-  (* every public builder that can hand back a grant takes the sink and threads
-     it to the funnel, so none of them can drop it on the way *)
+  A.(check int "one audit wrapper across lib/factory" 1
+        (count_in factory_impls "Authority.with_log"));
+  A.(check int "one grant construction across lib/factory" 1
+        (count_in factory_impls "Authority.Net.of_confinement"));
+  let funnel = factory_source funnel_source in
+  A.(check int (funnel_source ^ " holds the audit wrapper") 1
+        (count_occurrences ~haystack:funnel ~needle:"Authority.with_log"));
+  A.(check int (funnel_source ^ " holds the grant construction") 1
+        (count_occurrences ~haystack:funnel ~needle:"Authority.Net.of_confinement"));
+  (* Each needle is asserted against the file that owns the code it names, so a
+     later move fails here rather than passing on another file's text. *)
   List.iter
-    (fun call -> includes ("the sink reaches " ^ call) call factory_source)
+    (fun (file, call) -> includes (file ^ " calls " ^ call) call (factory_source file))
     [
-      "~audit config";
-      "?audit adapter.endpoint";
-      "?audit decision";
-      "?audit endpoint)";
+      (funnel_source, "grant_of_decision ~mono_clock ~timeout_seconds ?audit decision");
+      (funnel_source, "let audit = audit_sink log in");
+      (* every public builder that can hand back a grant takes the sink and threads
+         it to the funnel, so none of them can drop it on the way *)
+      (funnel_source, "~audit config");
+      (funnel_source, "?audit adapter.endpoint");
+      (funnel_source, "?audit decision");
+      (funnel_source, "?audit endpoint)");
     ]
 
 (* The layer's per-operation counter is a caller's ceiling. Server construction
@@ -542,19 +577,24 @@ let test_no_operation_budget_on_the_serving_path () =
              (count_occurrences ~haystack:source ~needle:"Authority.with_operation_budget")
              (count_occurrences ~haystack:source ~needle:"[Authority.with_operation_budget]"));
       A.(check int (file ^ " does not take a budget argument") 0
-           (count_occurrences ~haystack:source ~needle:"?budget")))
-    [ ("lib/factory/factory.ml", factory_source); ("lib/server.ml", server_source) ]
+            (count_occurrences ~haystack:source ~needle:"?budget")))
+    (factory_all @ [ ("lib/server.ml", server_source) ])
 
-(* A grant built outside the factory is a grant outside the audit trail. These
-   are the production modules that could build one. *)
+(* A grant built outside the factory is a grant outside the audit trail. These are
+   the production modules that could build one: every implementation in the
+   library except the funnel itself, and the two modules that have to take their
+   grants from the factory. This is the negative half of the library-wide count
+   above. *)
 let test_production_modules_obtain_grants_from_the_factory () =
+  let outside_funnel = List.filter (fun (name, _) -> name <> funnel_source) factory_impls in
   List.iter
     (fun (file, source) ->
       A.(check int (file ^ " does not construct a grant") 0
-           (count_occurrences ~haystack:source ~needle:"of_confinement"));
+            (count_occurrences ~haystack:source ~needle:"of_confinement"));
       A.(check int (file ^ " does not wrap a grant") 0
-           (count_occurrences ~haystack:source ~needle:"Authority.with_log")))
-    [ ("lib/server.ml", server_source); ("bin/main.ml", main_source) ]
+            (count_occurrences ~haystack:source ~needle:"Authority.with_log")))
+    (outside_funnel
+    @ [ ("lib/server.ml", server_source); ("bin/main.ml", main_source) ])
 
 (* Nothing outside [lib/caps] may name the sealed layer: if a production module
    named the bounds record or the raw operations, a consumer could follow the
@@ -565,14 +605,10 @@ let test_nothing_outside_caps_names_the_sealed_layer () =
       List.iter
         (fun name ->
           A.(check int (file ^ " does not name " ^ name) 0
-               (count_occurrences ~haystack:source ~needle:name)))
+                (count_occurrences ~haystack:source ~needle:name)))
         [ "Policy_fs"; "Controls_raw" ])
-    [
-      ("lib/factory/factory.ml", factory_source);
-      ("lib/factory/factory.mli", read_file "../lib/factory/factory.mli");
-      ("lib/server.ml", server_source);
-      ("bin/main.ml", main_source);
-    ]
+    (factory_all
+    @ [ ("lib/server.ml", server_source); ("bin/main.ml", main_source) ])
 
 (* ------------------------------------------------------------------ *)
 (* the sealing is real                                                  *)

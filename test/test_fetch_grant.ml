@@ -249,23 +249,46 @@ let stack_on_serves_loopback () =
 
 (* {1 Source pins — the widening is constructed once, where the key is read } *)
 
-let factory_src = Test_support.read_file "../lib/factory/factory.ml"
+(* The factory's implementations, read as a set: the widening has to be
+   constructed once across the library, not once per file, and each needle is
+   asserted against the file that owns the code it names. *)
+let factory_impls =
+  List.filter
+    (fun (name, _) -> Filename.check_suffix name ".ml")
+    (Test_support.factory_sources ())
+
+let source_of name =
+  match List.assoc_opt name factory_impls with
+  | Some text -> text
+  | None ->
+      Alcotest.failf "%s is missing from this sandbox (test/dune declares the factory glob)" name
+
+let count_in_impls needle =
+  List.fold_left
+    (fun total (_name, text) -> total + Test_support.count_occurrences ~haystack:text ~needle)
+    0 factory_impls
+
+(* [stack_source] is the module that owns [build_fetch_stack]; [endpoint_source]
+   is the one that owns [grant_of_endpoint] and [probe_net]. *)
+let stack_source = "lib/factory/factory.ml"
+let endpoint_source = "lib/factory/factory.ml"
 
 let widening_is_constructed_once () =
-  (* the private-web variant appears exactly once in the factory, and only in
+  (* the private-web variant appears exactly once in the library, and only in
      the branch that reads the operator's key *)
   Test_support.check_int "one private-web construction" 1
-    (Test_support.count_occurrences ~haystack:factory_src ~needle:"Policy.with_private_web")
+    (count_in_impls "Policy.with_private_web")
   ;
   Test_support.check_int "one public-web construction (the other half of the same branch)" 1
-    (Test_support.count_occurrences ~haystack:factory_src ~needle:"Policy.with_public_web")
+    (count_in_impls "Policy.with_public_web")
   ;
   Test_support.includes "the variant is chosen from the config key"
-    "if fetch.Config.allow_private_addresses then Policy.with_private_web" factory_src
+    "if fetch.Config.allow_private_addresses then Policy.with_private_web" (source_of stack_source)
   ;
   (* every non-web grant in the factory — providers, probes, agent — goes
      through with_endpoints, which has no private-web form to be given *)
-  Test_support.includes "endpoint grants still exist" "Policy.with_endpoints" factory_src
+  Test_support.includes "endpoint grants still exist" "Policy.with_endpoints"
+    (source_of endpoint_source)
   ;
   (* the disclosure the switch has to make in --check output *)
   let check_src = Test_support.read_file "../lib/cli/cli_check.ml" in

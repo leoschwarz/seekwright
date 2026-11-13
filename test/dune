@@ -142,12 +142,15 @@
 
 ; P8: the config timeouts reach the grants they bound. A loopback listener that
 ; accepts and never answers makes the bound observable, so no billed endpoint is
-; involved; the factory source is a dep because the config-read pin scans it.
+; involved; the factory sources are a dep because the config-read pin scans them,
+; and the glob is what makes that scan see every module the library has.
 (test
  (name test_grant_timeouts)
  (libraries seekwright seekwright.factory mcp-caps uri yojson eio eio_main
    mirage-crypto-rng.unix unix alcotest test_support)
- (deps ../lib/factory/factory.ml))
+ (deps
+  (glob_files ../lib/factory/*.ml)
+  (glob_files ../lib/factory/*.mli)))
 
 ; P8: the server-side health monitor. An injected sleep pins the loop's order,
 ; and a real loopback listener (never connected to) pins that the monitor is a
@@ -442,7 +445,8 @@
   mirage-crypto-rng.unix
   alcotest test_support)
  (deps
-  ../lib/factory/factory.ml
+  (glob_files ../lib/factory/*.ml)
+  (glob_files ../lib/factory/*.mli)
   ../bin/main.ml
   ../lib/cli/cli_check.ml))
 
@@ -529,8 +533,8 @@
   alcotest test_support
   unix)
  (deps
-  ../lib/factory/factory.ml
-  ../lib/factory/factory.mli
+  (glob_files ../lib/factory/*.ml)
+  (glob_files ../lib/factory/*.mli)
   ../lib/server.ml
   ../bin/main.ml
   ../lib/caps/dune

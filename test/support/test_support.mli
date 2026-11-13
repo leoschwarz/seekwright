@@ -21,6 +21,24 @@ val contains : haystack:string -> needle:string -> bool
     fixture should do. *)
 val read_file : string -> string
 
+(** [factory_sources ()] is every OCaml source of [lib/factory] — each [.ml] and
+    each [.mli] — as [(name, text)] pairs named from the repo root
+    ([lib/factory/factory.ml]) and sorted by name.
+
+    A function, never a top-level value: [test_support] is linked by suites whose
+    sandbox carries no factory sources, and a module-load [read_file] would raise
+    [Sys_error] in every one of them. Only the pin suites call it, and only where
+    [test/dune] has filled their sandbox with [(glob_files ../lib/factory/*.mli)]
+    and [(glob_files ../lib/factory/*.ml)].
+
+    The directory is read with [Sys.readdir] rather than kept as a hand-maintained
+    list, so a new factory module joins the scan on its own and a pin can never
+    be left reading a stale file list — which is what lets a source pin count a
+    library-wide total instead of one file's. An empty directory fails, so a glob
+    that matched nothing cannot pass vacuously; a file the sandbox is missing
+    raises [Sys_error]. *)
+val factory_sources : unit -> (string * string) list
+
 (** [replace_all ~haystack ~needle ~with_] is Python's [str.replace]: every
     non-overlapping occurrence of [needle], left to right. An empty needle
     leaves the haystack unchanged, as Python does. *)

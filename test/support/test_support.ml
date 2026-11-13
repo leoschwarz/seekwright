@@ -25,6 +25,25 @@ let contains ~haystack ~needle = find_sub ~haystack ~needle () <> None
 
 let read_file path = In_channel.with_open_bin path In_channel.input_all
 
+(* The factory's sources, read as a set: a source pin that names one file counts
+   that file, and a library-wide guarantee — one audit funnel, one web-grant
+   variant — needs a total over every module in the library. [Sys.readdir] is
+   what keeps that total honest when the library gains a module: the scan widens
+   by itself, where a hand-written list would silently keep counting the old
+   file's text. Named from the repo root because that is the name a failure
+   message has to print; the [../] prefix is only what the sandbox needs to
+   open the file. *)
+let factory_sources () =
+  let dir = "../lib/factory" in
+  let names =
+    Sys.readdir dir |> Array.to_list
+    |> List.filter (fun name ->
+         Filename.check_suffix name ".ml" || Filename.check_suffix name ".mli")
+    |> List.sort String.compare
+  in
+  if names = [] then Alcotest.failf "no modules found under %s" dir;
+  List.map (fun name -> ("lib/factory/" ^ name, read_file (dir ^ "/" ^ name))) names
+
 (* Python's [str.replace]: every non-overlapping occurrence, left to right, and
    an empty needle leaves the haystack alone. Two suites had written it for
    themselves, one over a [Buffer] and one recursively. *)

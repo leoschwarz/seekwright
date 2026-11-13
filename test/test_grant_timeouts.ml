@@ -126,19 +126,29 @@ let test_a_probe_net_honours_its_bound () =
    with Done -> ())
 
 (* The wiring is one expression per key; this guards against the read being
-   dropped while the behavioural case above still passes for providers. *)
-let factory_source = "../lib/factory/factory.ml"
+   dropped while the behavioural case above still passes for providers. The scan
+   covers every implementation of the factory library, and each key is asserted
+   against the file that builds the grant it bounds — so a read cannot wander
+   into a module that constructs no grant at all. *)
+let factory_impls =
+  List.filter
+    (fun (name, _) -> Filename.check_suffix name ".ml")
+    (Test_support.factory_sources ())
+
+let source_of name =
+  match List.assoc_opt name factory_impls with
+  | Some text -> text
+  | None -> A.failf "%s is missing from this sandbox (test/dune declares the factory glob)" name
 
 let test_every_bounded_grant_reads_its_config_key () =
-  let source = read_file factory_source in
   List.iter
-    (fun (what, expression) ->
+    (fun (what, expression, file) ->
       A.(check bool (what ^ " is read where its grant is built") true
-           (contains ~haystack:source ~needle:expression)))
+            (contains ~haystack:(source_of file) ~needle:expression)))
     [
-      ("policy.provider_timeout_seconds", "policy.Config.provider_timeout_seconds");
-      ("fetch.timeout_seconds", "fetch.Config.timeout_seconds");
-      ("agent.model_timeout_seconds", "agent.Config.model_timeout_seconds");
+      ("policy.provider_timeout_seconds", "policy.Config.provider_timeout_seconds", "lib/factory/factory.ml");
+      ("fetch.timeout_seconds", "fetch.Config.timeout_seconds", "lib/factory/factory.ml");
+      ("agent.model_timeout_seconds", "agent.Config.model_timeout_seconds", "lib/factory/factory.ml");
     ]
 
 let () =
