@@ -146,7 +146,7 @@ let test_every_bounded_grant_reads_its_config_key () =
       A.(check bool (what ^ " is read where its grant is built") true
             (contains ~haystack:(source_of file) ~needle:expression)))
     [
-      ("policy.provider_timeout_seconds", "policy.Config.provider_timeout_seconds", "lib/factory/factory.ml");
+      ("policy.provider_timeout_seconds", "policy.Config.provider_timeout_seconds", "lib/factory/providers_build.ml");
       ("fetch.timeout_seconds", "fetch.Config.timeout_seconds", "lib/factory/factory.ml");
       ("agent.model_timeout_seconds", "agent.Config.model_timeout_seconds", "lib/factory/factory.ml");
     ]

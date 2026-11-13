@@ -560,7 +560,7 @@ let test_the_factory_builds_grants_through_one_funnel () =
       (* every public builder that can hand back a grant takes the sink and threads
          it to the funnel, so none of them can drop it on the way *)
       ("lib/factory/factory.ml", "~audit config");
-      ("lib/factory/factory.ml", "?audit adapter.endpoint");
+      ("lib/factory/providers_build.ml", "?audit adapter.endpoint");
       (funnel_source, "?audit decision");
       ("lib/factory/factory.ml", "?audit decision");
       ("lib/factory/factory.ml", "?audit endpoint)");
