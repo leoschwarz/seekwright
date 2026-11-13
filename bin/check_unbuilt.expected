@@ -1,0 +1,22 @@
+seekwright check
+================
+config      check_unbuilt.toml  (present)
+default     none (callers must pass provider)
+permitted   (unset: every enabled provider)
+providers
+  enabled   exa:free, parallel:free, search1api
+  effective exa:free, parallel:free, search1api
+  built     (none)
+  unsupported exa:free, parallel:free, search1api  (not built on this port; the server refuses to start on this config)
+  untested  search1api is untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
+  exa:free  not built on this port
+  parallel:free not built on this port
+  search1api not built on this port
+no providers ready -- searches would fail until configured
+fetch
+  enabled   40000 chars max, 3 redirects, private addresses blocked
+  primary   http (the local reader)
+  extractor stdlib
+  cache     off
+agent
+  disabled in config

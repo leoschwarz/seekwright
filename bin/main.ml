@@ -278,16 +278,50 @@ let check ~env ~sw ~live =
       if config.Config.providers_defaulted then
         Printf.printf "  implicit  nothing was enabled, so the keyless set (%s) is the effective set\n"
           (String.concat ", " Config.keyless_providers);
-      let untested =
-        List.filter (fun name -> List.mem name Config.untested_providers) (Config.enabled_providers config)
-      in
-      (match untested with
+      let built = Factory.build_providers ~sw ~net:(env#net) ~mono_clock:(env#mono_clock) ~now:Unix.gettimeofday config in
+      (* The five-set distinction, from the same classification the server's
+         startup verdict reads: enabled, effective, built, unsupported, and
+         OCaml-untested, each printed once, none folded into another. Every
+         offending row is printed — a diagnosis never stops at the first one,
+         and this is the same fact {!Factory.startup_verdict} refuses startup
+         over for an explicit config. *)
+      let sets = Factory.classify config built in
+      Printf.printf "  enabled   %s\n"
+        (if sets.Factory.enabled = [] then "(none)" else String.concat ", " sets.Factory.enabled);
+      Printf.printf "  effective %s\n"
+        (if sets.Factory.effective = []
+        then "(none)"
+        else String.concat ", " sets.Factory.effective);
+      Printf.printf "  built     %s\n"
+        (if sets.Factory.built = [] then "(none)" else String.concat ", " sets.Factory.built);
+      (match sets.Factory.skipped with
+      | [] -> ()
+      | names ->
+          Printf.printf "  skipped   %s  (keyless defaults not built on this port; routing uses the built remainder: %s)\n"
+            (String.concat ", " names)
+            (String.concat ", " sets.Factory.built));
+      (match sets.Factory.unsupported with
+      | [] -> ()
+      | names -> begin
+          (* Counting happens per offender row below, so the exit code carries
+             one problem per name the operator has to remove. *)
+          Printf.printf "  unsupported %s  (not built on this port; the server refuses to start on this config)\n"
+            (String.concat ", " names)
+        end);
+      (match sets.Factory.untested with
       | [] -> ()
       | names ->
           let verb = if List.length names = 1 then "is" else "are" in
-          Printf.printf "  untested  %s %s new and untested: no live verification against the real endpoint has happened in-repo (docs/reference/providers.md)\n"
+          Printf.printf "  untested  %s %s untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one\n"
             (String.concat ", " names) verb);
-      let built = Factory.build_providers ~sw ~net:(env#net) ~mono_clock:(env#mono_clock) ~now:Unix.gettimeofday config in
+      if config.Config.providers_defaulted && sets.Factory.built = []
+      then begin
+        (* The implicit keyless default with nothing keyless built: startup
+           would refuse this, and [--check] says so without refusing it. *)
+        Printf.printf "  startup   refused: no keyless provider is built on this port\n";
+        problems := !problems + 1
+      end
+      else ();
       List.iter
         (fun (name, message) ->
           Printf.printf "  %-9s grant error: %s\n" name message;
@@ -305,13 +339,13 @@ let check ~env ~sw ~live =
         (fun name ->
           match List.assoc_opt name built.Factory.built with
           | None ->
-              if List.mem name Config.providers_requiring_key && Config.api_key config name = None then begin
-                lines := !lines @ [ Printf.sprintf "  %-9s no API key (set %s)" name (Config.api_key_env_var name) ];
-                problems := !problems + 1
-              end else begin
-                let outcome = Health.probe ~net:probe_net ~table:built.Factory.probe_table config name in
-                lines := !lines @ [ Printf.sprintf "  %-9s %s" name (probe_prose outcome) ]
-              end
+              (* Enabled and not built: one row per offender, with the same
+                 words the startup refusal uses. The old branch probed these
+                 names and printed "unsupported (no connectivity probe)" —
+                 which read as a connectivity verdict on a name that has no
+                 adapter at all. *)
+              lines := !lines @ [ Printf.sprintf "  %-9s not built on this port" name ];
+              if List.mem name sets.Factory.unsupported then problems := !problems + 1
           | Some provider ->
               let outcome = Health.probe ~net:probe_net ~table:built.Factory.probe_table config name in
               let price =
@@ -335,7 +369,9 @@ let check ~env ~sw ~live =
       end;
       let effective = Config.effective_providers config in
       if List.length effective <> List.length enabled then
-        Printf.printf "effective   %d of %d enabled providers permitted; not permitted: %s\n"
+        (* The permission set's doing, spelled out after the rows because it is
+           the reason a name above was never probed. *)
+        Printf.printf "narrowed    %d of %d enabled providers permitted; not permitted: %s\n"
           (List.length effective) (List.length enabled)
           (String.concat ", " (List.filter (fun name -> not (List.mem name effective)) enabled));
       report_fetch config problems;
@@ -821,12 +857,17 @@ let run_client ~env command argv =
 
 (* {1 The server} *)
 
-let startup_log log config unsupported =
+let startup_log log config (built : Factory.providers) =
   log Config.Log_info "startup"
     [
-      ("providers", `String (String.concat "," (Config.enabled_providers config)));
+      (* The built set — the same set and order [/healthz] reports — not the
+         enabled set: an explicit enabled-without-adapter config never reaches
+         this line ([Seekwright_factory.startup_verdict] refuses startup), and
+         the [startup.providers_unsupported] warning below names exactly the
+         keyless names the implicit default skipped. *)
+      ("providers", `String (String.concat "," (List.map fst built.Factory.built)));
       ( "unsupported",
-        (match unsupported with
+        (match built.Factory.unsupported with
         | [] -> `Null
         | names -> `String (String.concat "," names)) );
       ( "default_provider",
@@ -887,7 +928,11 @@ let run_server ~env ~sw opts =
           prerr_endline ("seekwright: " ^ message);
           exit 1
       | Ok (app, built) ->
-          startup_log log config built.Factory.unsupported;
+          startup_log log config built;
+          (* Reachable only under the implicit keyless default: an explicit
+             enabled name with no adapter was refused by the [build_app] arm
+             above, so anything listed here is a skipped keyless default,
+             disclosed by name exactly as [startup_verdict] skipped it. *)
           if built.Factory.unsupported <> [] then
             log Config.Log_warning "startup.providers_unsupported"
               [

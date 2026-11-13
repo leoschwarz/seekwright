@@ -1,0 +1,19 @@
+# The [--check] smoke's config: a deployment that asks only for names this port
+# does not carry. Nothing is built, so nothing is dialled — the run reaches no
+# provider endpoint, which is what lets the diagnosis be a test at all. Pointed
+# at by SEEKWRIGHT_CONFIG in the [check_unbuilt] rule in [dune].
+#
+# [search1api] is one of the four names Python itself has never run live, so the
+# pinned output shows the OCaml-untested category beside the unsupported one:
+# the same name, two separate facts, and neither one says "ready".
+[providers."exa:free"]
+enabled = true
+
+[providers."parallel:free"]
+enabled = true
+
+[providers.search1api]
+enabled = true
+
+[fetch]
+extractor = "stdlib"

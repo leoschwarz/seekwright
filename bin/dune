@@ -31,6 +31,38 @@
   mirage-crypto-rng.unix
   unix))
 
+; The [--check] diagnosis over a deployment that asks only for names this port
+; does not carry. Nothing is built here, so nothing is dialled: the run reaches
+; no provider endpoint, which is what lets a diagnosis be a test at all. The
+; pinned stdout is [--check]'s five-set distinction — enabled, effective, built,
+; skipped, untested, and the per-name rows that say "not built on this port" —
+; and the exit code is the problem count, so the rule accepts 1, not 0.
+(rule
+ (deps main.exe check_unbuilt.toml)
+ (targets check_unbuilt.out check_unbuilt.err)
+ (action
+  (with-accepted-exit-codes
+   (or
+    1
+    (not 0))
+   (with-stderr-to check_unbuilt.err
+    (with-stdout-to check_unbuilt.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=check_unbuilt.toml ./main.exe --check"))))))
+
+(rule
+ (alias runtest)
+ (action (diff check_unbuilt.expected check_unbuilt.out)))
+
+; A diagnosis writes to stdout only: stderr stays empty, which is the same
+; discipline the stdio smoke pins for the serving path, and it means a traceback
+; or a startup log line in [--check] fails the run.
+(rule
+ (alias runtest)
+ (action (diff check_unbuilt_notes.expected check_unbuilt.err)))
+
 ; The stdio smoke: a scripted legacy JSON-RPC session (initialize,
 ; notifications/initialized, tools/list) piped through the real binary, with
 ; the config pointed at a path that does not exist so the keyless defaults are
