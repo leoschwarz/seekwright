@@ -9,7 +9,6 @@
    grant's bounds are set by the three decorators, all of which take and return a
    grant. Compiled with [-c], so no loop and no socket: the claim is that this
    code type-checks for a consumer of the package. *)
-
 (* A filesystem grant, read through, with every operation reported. *)
 let read_under_root
     ~(env :
@@ -56,3 +55,27 @@ let search_one_endpoint
           headers = [ ("accept", "application/json") ];
           body = None;
         }
+
+(* A directory the server owns, written through: the seal must not cost the cache
+   its seam, so the write, the windowed read, the [stat] an eviction pass makes and
+   the removal all have to type-check for a consumer of the package — and none of
+   them can be called without the grant [Policy.with_written_root] produced. *)
+let write_under_root
+    ~(env :
+      < fs : Eio.Fs.dir_ty Eio.Path.t;
+        mono_clock : [> Eio.Time.Mono.ty] Eio.Resource.t;
+        .. >) ~sw ~name =
+  match
+    Mcp_caps.Policy.with_written_root ~sw ~max_read_bytes:16_384 ~max_write_bytes:4_194_304
+      ~max_entries:5000 ~parent:env#fs ".cache"
+  with
+  | Error error -> Error error
+  | Ok decision ->
+      let grant =
+        Mcp_caps.Authority.Fs.of_confinement ~mono_clock:env#mono_clock decision
+      in
+      Ok
+        ( Mcp_caps.Authority.Fs.atomic_write grant ~path:name ~contents:"page",
+          Mcp_caps.Authority.Fs.read_range ~max_bytes:64 grant ~offset:0 name,
+          Mcp_caps.Authority.Fs.stat grant name,
+          Mcp_caps.Authority.Fs.unlink grant name )

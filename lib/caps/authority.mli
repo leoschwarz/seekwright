@@ -115,6 +115,52 @@ module Fs : sig
       with the same path rules as [read_file]. [""] is the root itself. The
       listing is counted as it streams, so [max_entries] bounds what is
       allocated, not only what is reported; going over is [Denied]. *)
+
+  val read_range :
+    ?max_bytes:int -> t -> offset:int -> string -> (string * bool, Error.t) result
+  (** [read_range ~max_bytes t ~offset path] reads at most [max_bytes] bytes of
+      [path] starting at byte [offset], and answers whether more bytes follow
+      what it returned. [max_bytes] may lower the grant's ceiling, never raise
+      it.
+
+      This is the read that keeps a windowed read cheap: the bytes it returns are
+      the bytes it allocates, so looking at the middle of a 30 MB file costs the
+      window. An [offset] at or past the end of the file answers ["", false]
+      rather than failing — that is what walking to the end of a document looks
+      like. The path rules, and the [Unavailable] for a missing path and
+      [Invalid] for a directory, are [read_file]'s. *)
+
+  type entry_info = {
+    size_bytes : int;  (** the entry's length on disk *)
+    accessed_at : float;  (** the filesystem's last-access time, in seconds *)
+  }
+
+  val stat : t -> string -> (entry_info, Error.t) result
+  (** [stat t path] is the entry's size and last-access time — the two numbers an
+      eviction pass reads before deciding what to remove, and the reason this
+      exists rather than [read_file] followed by [String.length]: deciding what to
+      throw away must not first read what it is throwing away. A missing path is
+      [Unavailable], the same answer [read_file] gives. *)
+
+  val atomic_write :
+    ?max_bytes:int -> t -> path:string -> contents:string -> (unit, Error.t) result
+  (** [atomic_write t ~path ~contents] writes [contents] to [path] so that a
+      reader — or a process that restarts in the middle — sees either the previous
+      file or the new one, never part of either: the payload goes to a name in the
+      same root that no reader looks at, and is renamed into place once it is
+      complete. New files are created mode [0o600]. [max_bytes] may lower the
+      grant's write ceiling, never raise it; a payload over it is [Denied] and no
+      file is created at all.
+
+      A grant whose root was opened by {!val:Policy.with_root} refuses this with
+      [Denied], before the backend is touched: the read-only case is the tool-
+      facing one, where the files belong to the operator. *)
+
+  val unlink : t -> string -> (unit, Error.t) result
+  (** [unlink t path] removes [path] inside the root. Removing an entry that is
+      already gone succeeds — eviction races readers, and a path that vanished
+      between choosing it and removing it has been removed. Same write permission
+      rule as [atomic_write]. *)
 end
 
 module Net : sig

@@ -61,6 +61,33 @@ module Fs = struct
 
   let list_dir ?max_entries grant path =
     match grant with Fs (policy, controls) -> Policy_fs.list_dir ?max_entries ~controls policy path
+
+  let read_range ?max_bytes grant ~offset path =
+    match grant with
+    | Fs (policy, controls) -> Policy_fs.read_range ?max_bytes ~controls ~offset policy path
+
+  type entry_info = {
+    size_bytes : int;
+    accessed_at : float;
+  }
+
+  (* The raw operation returns a pair because [Policy_fs] is private and its
+     records would not be nameable by a consumer of the package; a record defined
+     here, on the public side of the seal, is what a caller can bind fields of. *)
+  let stat grant path =
+    match grant with
+    | Fs (policy, controls) ->
+        Result.map
+          (fun (size_bytes, accessed_at) -> { size_bytes; accessed_at })
+          (Policy_fs.stat ~controls policy path)
+
+  let atomic_write ?max_bytes grant ~path ~contents =
+    match grant with
+    | Fs (policy, controls) ->
+        Policy_fs.atomic_write ?max_bytes ~controls policy ~path ~contents
+
+  let unlink grant path =
+    match grant with Fs (policy, controls) -> Policy_fs.unlink ~controls policy path
 end
 
 module Net = struct

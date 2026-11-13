@@ -5,8 +5,10 @@
    their witness types without a module cycle; see policy_fs.mli. *)
 
 let with_root = Policy_fs.with_root
+let with_written_root = Policy_fs.with_written_root
 
 let default_max_read_bytes = Policy_fs.default_max_read_bytes
+let default_max_write_bytes = Policy_fs.default_max_write_bytes
 let default_max_entries = Policy_fs.default_max_entries
 
 type endpoint = Policy_net.endpoint = {

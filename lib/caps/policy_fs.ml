@@ -10,11 +10,20 @@
 
 type t = {
   root : Eio.Fs.dir_ty Eio.Path.t;
+  (* Whether this confinement was opened for writing. [with_root] says no and
+     every write operation refuses on the spot; [with_written_root] says yes, and
+     is what a server holding a writable directory — the page cache — opens. The
+     flag is part of the record rather than a property of the operations because
+     the record is the thing that outlives the call: a grant made from a
+     [with_root] decision cannot be talked into writing by its caller. *)
+  writable : bool;
   max_read_bytes : int;
+  max_write_bytes : int;
   max_entries : int;
 }
 
 let default_max_read_bytes = 65_536
+let default_max_write_bytes = 65_536
 let default_max_entries = 200
 
 (* A local read inside an opened subtree, so the bound is here for a wedged
@@ -236,11 +245,187 @@ let list_dir ~controls ?max_entries t path =
     ~notes:(fun entries -> [("entries", string_of_int (List.length entries))])
     (fun () -> list_dir_body t ~max_entries path)
 
-let with_root ~sw ?max_read_bytes ?max_entries ~parent name =
+(* The ceilings one construction call can be given, validated the same way. *)
+let ceilings ?max_read_bytes ?max_write_bytes ?max_entries () =
   let ( let* ) = Result.bind in
   let* max_read_bytes =
     operator_limit ~name:"max_read_bytes" ~default:default_max_read_bytes max_read_bytes
   in
+  let* max_write_bytes =
+    operator_limit ~name:"max_write_bytes" ~default:default_max_write_bytes max_write_bytes
+  in
   let* max_entries = operator_limit ~name:"max_entries" ~default:default_max_entries max_entries in
-  open_root ~sw ~parent name >>= fun root -> Ok { root; max_read_bytes; max_entries }
+  Ok (max_read_bytes, max_write_bytes, max_entries)
+
+let with_root ~sw ?max_read_bytes ?max_entries ~parent name =
+  match ceilings ?max_read_bytes ?max_entries () with
+  | Error error -> Error error
+  | Ok (max_read_bytes, max_write_bytes, max_entries) -> (
+      match open_root ~sw ~parent name with
+      | Error error -> Error error
+      | Ok root -> Ok { root; writable = false; max_read_bytes; max_write_bytes; max_entries })
+
+(* A directory the server owns — the page cache is the case that exists today — is
+   opened for writing, which means creating it when it is missing: an operator who
+   names [fetch.cache_dir] expects the server to make the directory and to say so
+   at startup if it cannot, not to fail at the first store. [mkdirs ~exists_ok] is
+   the whole of the create half; the confinement half is the same [open_subtree]
+   call [with_root] makes, so a written root is confined exactly as a read-only
+   one is, and test/test_authority_fs.ml runs the write cases against both
+   backends.
+
+   The mode is [0o700]: this directory holds page text the server fetched, and on
+   a shared host the group and the world have no business reading it. *)
+let open_written_root ~sw ~parent name =
+  match
+    try Ok (Eio.Path.mkdirs ~exists_ok:true ~perm:0o700 (parent / name))
+    with
+    | Eio.Cancel.Cancelled _ | Eio.Exn.Multiple _ as exn -> raise exn
+    | Eio.Io _ ->
+        Error
+          (Error.make Error.Unavailable
+             ~message:
+               (Printf.sprintf "the writable root %s could not be created as a directory"
+                  (Error.sanitize name)))
+  with
+  | Error error -> Error error
+  | Ok () -> open_root ~sw ~parent name
+
+let with_written_root ~sw ?max_read_bytes ?max_write_bytes ?max_entries ~parent name =
+  match ceilings ?max_read_bytes ?max_write_bytes ?max_entries () with
+  | Error error -> Error error
+  | Ok (max_read_bytes, max_write_bytes, max_entries) -> (
+      match open_written_root ~sw ~parent name with
+      | Error error -> Error error
+      | Ok root -> Ok { root; writable = true; max_read_bytes; max_write_bytes; max_entries })
+
+(* Every write answers two questions before it touches the backend: may this
+   confinement write at all, and is the payload inside the grant's ceiling. The
+   first is a property of the decision, so it is a [Denied], and it is answered
+   before any file is opened — a read-only root never ends up with a [.tmp] in it. *)
+let not_writable path =
+  Error
+    (Error.make Error.Denied
+       ~message:(path ^ ": refused — this grant's root is read-only (it was opened by Policy.with_root)"))
+
+let writable t path = if t.writable then Ok () else not_writable path
+
+(* A write ceiling is a ceiling of the same kind as a read ceiling: a caller may
+   lower it, never raise it. *)
+let write_body t ~max_bytes path ~contents =
+  let ( let* ) = Result.bind in
+  let* () = writable t path in
+  let limit = ceiling ~grant_max:t.max_write_bytes max_bytes in
+  if String.length contents > limit then
+    Error
+      (Error.make Error.Denied
+         ~message:
+           (Printf.sprintf
+              "%s: refused — %d bytes is beyond the %d-byte write ceiling (max_bytes may lower \
+               it, never raise it)"
+              path (String.length contents) limit))
+  else
+    let* target = resolve t.root path in
+    (* Atomic replacement in the order that makes a crash cheap: write the whole
+       payload to a name no reader looks at, then [rename] it into place. A crash
+       leaves either the old file or the new one at [path], never a half-written
+       one. The temp name carries a process-local counter because two writers of
+       one path must not share a temp file, and [`Exclusive] is what makes sharing
+       one impossible rather than merely unlikely: the loser's [save] fails and it
+       takes the next number. *)
+    let rec attempt n =
+      match resolve t.root (Printf.sprintf "%s.tmp%d" path n) with
+      | Error error -> Error error
+      | Ok temp -> (
+          match
+            try
+              Eio.Path.save ~create:(`Exclusive 0o600) temp contents;
+              Ok ()
+            with
+            | Eio.Io (Eio.Fs.E (Eio.Fs.Already_exists _), _) when n < 8 -> Error `busy
+            | ex -> Error (`other ex)
+          with
+          | Error `busy -> attempt (n + 1)
+          | Error (`other ex) -> classify ex ~path
+          | Ok () -> (
+              match (try Ok (Eio.Path.rename temp target) with ex -> classify ex ~path) with
+              | Ok () -> Ok ()
+              | Error error ->
+                  (* The payload is stuck at a name nothing reads; remove it, so a
+                     failed write does not litter the root. *)
+                  (try ignore (Eio.Path.unlink ~missing_ok:true temp) with _ -> ());
+                  Error error))
+    in
+    attempt 1
+
+let atomic_write ~controls ?max_bytes t ~path ~contents =
+  Controls_raw.run controls ~operation:"fs.atomic_write"
+    ~measure:(fun () -> Some (String.length contents))
+    (fun () -> write_body t ~max_bytes path ~contents)
+
+(* A positional read, which is what lets a caller look at the middle of a large
+   file without reading the whole thing: [Eio.File.pread] reads [limit] bytes from
+   [offset] and allocates only those. [read_file] refuses a file over its ceiling
+   because a tool that asked for a file and got half of it would be reading a
+   document nobody named; a range read is the opposite shape — the caller asked
+   for a window — so it returns what is there plus [more], the flag that says
+   bytes follow. An [offset] at or past the end is an empty window with [more =
+   false], not a failure: it is the ordinary answer for a caller walking to the
+   end of a document. *)
+let read_range_body t ~max_bytes ~offset path =
+  let ( let* ) = Result.bind in
+  let limit = ceiling ~grant_max:t.max_read_bytes max_bytes in
+  let* target = resolve t.root path in
+  let* kind = kind_of ~follow:true ~label:path target >>= classify_kind ~path in
+  match kind with
+  | `Directory ->
+      Error (Error.make Error.Invalid ~message:(path ^ ": that is a directory — list it, do not read it"))
+  | `Regular_file -> (
+      try
+        Eio.Path.with_open_in target (fun flow ->
+          let size = Optint.Int63.to_int (Eio.File.size flow) in
+          if offset >= size then Ok ("", false)
+          else
+            let want = min limit (size - offset) in
+            let buffer = Cstruct.create want in
+            Eio.File.pread_exact flow ~file_offset:(Optint.Int63.of_int offset) [buffer];
+            let got = Cstruct.to_string buffer in
+            Ok (got, size - (offset + String.length got) > 0))
+      with ex -> classify ex ~path)
+
+let read_range ~controls ?max_bytes t ~offset path =
+  Controls_raw.run controls ~operation:"fs.read_range"
+    ~measure:(fun (content, _more) -> Some (String.length content))
+    ~notes:(fun (_content, more) -> [("offset", string_of_int offset); ("more", string_of_bool more)])
+    (fun () -> read_range_body t ~max_bytes ~offset path)
+
+(* The metadata the eviction pass needs: how big an entry is, and when it was last
+   touched. [atime] is the mount's, so it is a fallback rather than a counter —
+   the cache keeps its own access clock in the sidecar, and this is the number a
+   foreign entry (one this process did not write) is ranked by. *)
+let stat_body t path =
+  let ( let* ) = Result.bind in
+  let* target = resolve t.root path in
+  try
+    let info = Eio.Path.stat ~follow:true target in
+    Ok (Optint.Int63.to_int info.Eio.File.Stat.size, info.Eio.File.Stat.atime)
+  with ex -> classify ex ~path
+
+let stat ~controls t path =
+  Controls_raw.run controls ~operation:"fs.stat"
+    ~notes:(fun (size, _atime) -> [("size", string_of_int size)])
+    (fun () -> stat_body t path)
+
+(* Removal is idempotent: eviction races readers and other processes, and an entry
+   that vanished between choosing it and removing it has already been removed
+   successfully. The confinement is [openat2] again — the [unlinkat] runs against
+   the subtree handle — so a [".."] cannot remove anything outside the root. *)
+let unlink_body t path =
+  let ( let* ) = Result.bind in
+  let* () = writable t path in
+  let* target = resolve t.root path in
+  try Ok (Eio.Path.unlink ~missing_ok:true target) with ex -> classify ex ~path
+
+let unlink ~controls t path =
+  Controls_raw.run controls ~operation:"fs.unlink" (fun () -> unlink_body t path)
 

@@ -43,6 +43,26 @@ val with_root :
   string ->
   (Policy_fs.t, Error.t) result
 
+(** {b The writable root.} Same confinement as [with_root], for a directory the
+    server owns rather than reads: it is created when missing (mode [0o700]) and
+    the grant built from it also offers [Authority.Fs.atomic_write],
+    [Authority.Fs.unlink] and [Authority.Fs.stat]. The page cache is the case
+    that exists today — an operator who names [fetch.cache_dir] expects the
+    server to make the directory and to fail at startup if it cannot, not to fail
+    on the first store — and a tool-facing root stays read-only, so no tool can
+    write in the operator's files. [max_write_bytes] is that grant's ceiling for
+    a whole write; like the others a caller may lower it, never raise it. *)
+val default_max_write_bytes : int
+
+val with_written_root :
+  sw:Eio.Switch.t ->
+  ?max_read_bytes:int ->
+  ?max_write_bytes:int ->
+  ?max_entries:int ->
+  parent:_ Eio.Path.t ->
+  string ->
+  (Policy_fs.t, Error.t) result
+
 type endpoint = Policy_net.endpoint = {
   scheme : [ `Http | `Https ];
   host : string;

@@ -1,0 +1,5 @@
+File "raw_fs_write_needs_bounds.ml", line 14, characters 35-37:
+14 |   Policy_fs.atomic_write ~controls:() confinement ~path ~contents
+                                        ^^
+Error: This expression should not be a unit literal, the expected type is
+       "Controls_raw.t"

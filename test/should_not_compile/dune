@@ -177,6 +177,19 @@
     (run sh -c
      "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c direct_fs_operation.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
 
+; The write side of the same seal: [Policy_fs] in scope, the call otherwise well
+; typed, and the bounds record still impossible to produce.
+; raw_fs_write_needs_bounds
+(rule
+ (targets raw_fs_write_needs_bounds.out)
+ (deps raw_fs_write_needs_bounds.ml error.cmi event.cmi budget.cmi controls_raw.cmi tool.cmi policy_fs.cmi policy_net.cmi authority.cmi policy.cmi registry.cmi server.cmi mcp_caps.cmi)
+ (action
+  (with-accepted-exit-codes
+   (not (or 0))
+   (with-outputs-to raw_fs_write_needs_bounds.out
+    (run sh -c
+     "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c raw_fs_write_needs_bounds.ml 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'")))))
+
 ; direct_net_operation
 (rule
  (targets direct_net_operation.out)
@@ -268,4 +281,5 @@
    (diff controls_record_forge.expected controls_record_forge.out)
    (diff controls_record_update.expected controls_record_update.out)
    (diff raw_fs_call_needs_bounds.expected raw_fs_call_needs_bounds.out)
+   (diff raw_fs_write_needs_bounds.expected raw_fs_write_needs_bounds.out)
    (diff grant_path.expected grant_path.out))))
