@@ -72,16 +72,106 @@ let accept_header =
 let ascii_lower s =
   String.map (fun c -> if c >= 'A' && c <= 'Z' then Char.chr (Char.code c + 32) else c) s
 
-(* The port's [repr] for a token quoted back at the caller. The copy here was a
-   no-op that only added quotes, so a scheme with a control byte or a non-ASCII
-   byte reached the message raw (style review H2). *)
-let py_repr = Repr.py_repr_ascii
+(* The port's [repr] for a token quoted back at the caller: Python's own refusal
+   messages use [repr], so a printable non-ASCII token stays readable (F1.5). *)
+let py_repr = Repr.py_repr
+
+(* {2 Bracketed hosts}
+
+   CPython's [urlsplit] validates a bracketed host before any code sees the
+   parsed URI: a netloc with one bracket of the pair, data before the [\[], or
+   junk between [\]] and the port delimiter is [Invalid IPv6 URL], and the
+   bracketed host itself has to be an IPvFuture literal or an IP address. [Uri]
+   accepts all of those silently and reparses them into something else, so the
+   check has to run on the raw netloc. The messages are the oracle's. *)
+
+let invalid_ipv6 = "unparseable URL: Invalid IPv6 URL"
+
+let ipvfuture_ok host =
+  (* [re.fullmatch(r"v[a-fA-F0-9]+\..+", host)]: a lower-case [v], at least one
+     hex digit, a dot, and at least one character after it. *)
+  let n = String.length host in
+  if n = 0 || host.[0] <> 'v' then false
+  else
+    let is_hex c =
+      (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
+    in
+    let rec hex_end i = if i < n && is_hex host.[i] then hex_end (i + 1) else i in
+    let dot = hex_end 1 in
+    dot > 1 && dot < n && host.[dot] = '.' && dot + 1 < n
+
+let does_not_appear host =
+  Printf.sprintf "unparseable URL: %s does not appear to be an IPv4 or IPv6 address"
+    (py_repr host)
+
+let check_bracketed_host host =
+  if ipvfuture_ok host then None
+  else if String.length host > 0 && host.[0] = 'v' then
+    Some "unparseable URL: IPvFuture address is invalid"
+  else
+    (* Python's [ipaddress] accepts a scope id on IPv6 ([fe80::1%eth0]) but not
+       on IPv4, and requires a non-empty one. [Ipaddr.of_string] has no scope
+       syntax, so the zone is split off and checked by hand. *)
+    let literal, zone =
+      match String.index_opt host '%' with
+      | Some i ->
+          ( String.sub host 0 i,
+            Some (String.sub host (i + 1) (String.length host - i - 1)) )
+      | None -> (host, None)
+    in
+    match Ipaddr.of_string literal with
+    | Ok (Ipaddr.V6 _) -> (
+        match zone with Some "" -> Some (does_not_appear host) | _ -> None)
+    | Ok (Ipaddr.V4 _) ->
+        if zone = None then Some "unparseable URL: An IPv4 address cannot be in brackets"
+        else Some (does_not_appear host)
+    | Error _ -> Some (does_not_appear host)
+
+let check_bracketed_netloc netloc =
+  (* [netloc] is the whole authority, userinfo included; Python partitions at
+     the last [@] before looking for the bracket, because a password may hold
+     one. *)
+  let has_open = String.contains netloc '[' in
+  let has_close = String.contains netloc ']' in
+  if has_open <> has_close then Some invalid_ipv6
+  else if not has_open then None
+  else
+    let hostname_and_port =
+      match String.rindex_opt netloc '@' with
+      | Some at -> String.sub netloc (at + 1) (String.length netloc - at - 1)
+      | None -> netloc
+    in
+    match String.index_opt hostname_and_port '[' with
+    | None ->
+        (* Brackets in the userinfo only: Python still vets the host before the
+           port delimiter, so [u[ser]@host] is judged by [host] alone. *)
+        let host =
+          match String.index_opt hostname_and_port ':' with
+          | Some i -> String.sub hostname_and_port 0 i
+          | None -> hostname_and_port
+        in
+        check_bracketed_host host
+    | Some open_at ->
+        if open_at > 0 then Some invalid_ipv6
+        else
+          let bracketed =
+            String.sub hostname_and_port 1 (String.length hostname_and_port - 1)
+          in
+          let host, port =
+            match String.index_opt bracketed ']' with
+            | Some close ->
+                ( String.sub bracketed 0 close,
+                  String.sub bracketed (close + 1) (String.length bracketed - close - 1) )
+            | None -> (bracketed, "")
+          in
+          if port <> "" && port.[0] <> ':' then Some invalid_ipv6
+          else check_bracketed_host host
 
 (* The URL gate returns a value: the fetch chain turns a hop-0 refusal into
    [Url_blocked] and a later hop's into [Redirect_blocked]. *)
 
 let validate_url (raw : string) : (string, string) result =
-  let s = String.trim raw in
+  let s = Utf8.strip raw in
   let n = String.length s in
   let scheme, rest =
     match String.index_opt s ':' with
@@ -114,20 +204,23 @@ let validate_url (raw : string) : (string, string) result =
        a refusal only when a username or a password is actually present. *)
 
     let hostinfo =
-      match String.rindex_opt netloc '@' with
-      | Some at ->
-          let userinfo = String.sub netloc 0 at in
-          let user, password =
-            match String.index_opt userinfo ':' with
-            | Some i ->
-                ( String.sub userinfo 0 i,
-                  Some (String.sub userinfo (i + 1) (String.length userinfo - i - 1)) )
-            | None -> (userinfo, None)
-          in
-          if user <> "" || password <> Some "" && password <> None then
-            Error "URLs with embedded credentials are refused"
-          else Ok (String.sub netloc (at + 1) (String.length netloc - at - 1))
-      | None -> Ok netloc
+      match check_bracketed_netloc netloc with
+      | Some message -> Error message
+      | None -> (
+          match String.rindex_opt netloc '@' with
+          | Some at ->
+              let userinfo = String.sub netloc 0 at in
+              let user, password =
+                match String.index_opt userinfo ':' with
+                | Some i ->
+                    ( String.sub userinfo 0 i,
+                      Some (String.sub userinfo (i + 1) (String.length userinfo - i - 1)) )
+                | None -> (userinfo, None)
+              in
+              if user <> "" || password <> Some "" && password <> None then
+                Error "URLs with embedded credentials are refused"
+              else Ok (String.sub netloc (at + 1) (String.length netloc - at - 1))
+          | None -> Ok netloc)
     in
     match hostinfo with
     | Error message -> Error message
@@ -194,14 +287,7 @@ let validate_url (raw : string) : (string, string) result =
 
 (* {1 The response window} *)
 
-let rstrip_py (s : string) : string =
-  let a = Utf8.of_string s in
-  let n = Array.length a in
-  let j = ref (n - 1) in
-  while !j >= 0 && Utf8.is_python_space a.(!j) do
-    decr j
-  done;
-  if !j < 0 then "" else Utf8.to_string (Array.sub a 0 (!j + 1))
+let rstrip_py = Utf8.rstrip
 
 let window_text (text : string) ~offset ~max_chars : string * bool =
   (* Slice the window [[offset, offset + max_chars)] out of an extraction, in

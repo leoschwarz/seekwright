@@ -134,6 +134,66 @@ let test_an_ordinary_port_passes () =
 let test_the_scheme_is_lowercased_and_an_empty_path_becomes_root () =
   A.check A.string "normalised" "https://e.com/" (expect_url "HTTPS://e.com")
 
+let test_url_trim_is_unicode_whitespace () =
+  (* Python's [validate_url] strips the raw URL before [urlsplit], so an
+     ideographic or no-break space around it is blank (F1.5). *)
+  A.check A.string "ideographic spaces" "https://example.com/"
+    (expect_url "\xe3\x80\x80https://example.com/\xe3\x80\x80")
+
+(* The bracketed forms CPython's [urlsplit] refuses before [Uri] sees them, with
+   the oracle's exact sentences (F1.5). [Uri.of_string] accepts every one of
+   these and reparses it, which is why the check runs on the raw netloc. *)
+let test_bracketed_ipv6_forms_the_oracle_refuses () =
+  let expect_refusal url =
+    A.check (A.result A.string A.string) url
+      (Error "unparseable URL: Invalid IPv6 URL")
+      (F.validate_url url)
+  in
+  List.iter expect_refusal
+    [
+      "http://[::1";
+      "http://[::1]junk/";
+      "http://[::1]x:80/";
+      "http://[::1]]/";
+      "http://a[b/";
+      "http://a]b/";
+    ];
+  List.iter
+    (fun url ->
+      A.check (A.result A.string A.string) url
+        (Error "unparseable URL: IPvFuture address is invalid")
+        (F.validate_url url))
+    [ "http://[v.abc]/"; "http://[v1.]/" ];
+  A.check (A.result A.string A.string) "an unparseable literal"
+    (Error "unparseable URL: 'zz::1' does not appear to be an IPv4 or IPv6 address")
+    (F.validate_url "http://[zz::1]/");
+  A.check (A.result A.string A.string) "an IPv4 address in brackets"
+    (Error "unparseable URL: An IPv4 address cannot be in brackets")
+    (F.validate_url "http://[127.0.0.1]/");
+  A.check (A.result A.string A.string) "an empty IPv6 zone"
+    (Error "unparseable URL: 'fe80::1%' does not appear to be an IPv4 or IPv6 address")
+    (F.validate_url "http://[fe80::1%]/")
+
+let test_bracketed_ipv6_forms_the_oracle_accepts () =
+  List.iter
+    (fun url -> A.check A.string url url (expect_url url))
+    [
+      "http://[::1]/";
+      "http://[::1]:80/";
+      "http://[::1]:8443/";
+      "http://[::1]:65535/";
+      "http://[v1.abc]/";
+      "http://[fe80::1%eth0]/";
+      "http://[::ffff:127.0.0.1]/";
+    ];
+  (* The port rules do not change because the host is bracketed. *)
+  A.check (A.result A.string A.string) "port zero"
+    (Error "port 0 is not fetchable")
+    (F.validate_url "http://[::1]:0/");
+  A.check (A.result A.string A.string) "port above the range"
+    (Error "invalid port: 65536 is not a port in 1-65535")
+    (F.validate_url "http://[::1]:65536/")
+
 (* {1 Image sniffing} *)
 
 let test_the_signature_table_names_exactly_the_admitted_types () =
@@ -414,6 +474,12 @@ let () =
           A.test_case "an ordinary port passes" `Quick test_an_ordinary_port_passes;
           A.test_case "scheme lowercased, empty path is root" `Quick
             test_the_scheme_is_lowercased_and_an_empty_path_becomes_root;
+          A.test_case "url trim is unicode whitespace" `Quick
+            test_url_trim_is_unicode_whitespace;
+          A.test_case "broken bracketed ipv6 forms are refused" `Quick
+            test_bracketed_ipv6_forms_the_oracle_refuses;
+          A.test_case "valid bracketed ipv6 forms are accepted" `Quick
+            test_bracketed_ipv6_forms_the_oracle_accepts;
         ] );
       ( "images",
         [

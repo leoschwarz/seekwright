@@ -159,12 +159,11 @@ never written is a failure. The provider rows must be exactly
 `Config.known_providers`, and the areas the behaviour rows claim must be exactly
 the areas `corpus/` carries.
 
-## Accepted divergences, and one gap
+## Accepted divergences
 
 `gen_goldens.py` is the source of truth: its `DIVERGENCES` table gives each
 accepted difference a reason, and every one of them is pinned as an
 `explicit-divergence` golden, so the suite notices if any of them changes shape.
-One of them is **not** an accepted difference: `fetch/12-url-ipv6-broken`, where
-the oracle refuses `http://[::1/x` and the port accepts it. That is a port gap,
-recorded in `../../plans/seekwright-ocaml-port.md`, and pinned so the day it
-closes the suite says so.
+There is no open gap left: `fetch/12-url-ipv6-broken` used to be one, and it is
+now an ordinary `differential-golden` because the port refuses `http://[::1/x`
+with the oracle's sentence.

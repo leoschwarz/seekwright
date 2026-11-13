@@ -257,7 +257,7 @@ and reads the Python tree read-only. Format, mutation checks and the regeneratio
 recipe: `test/differential/README.md`.
 
 Eight areas are pinned — config, router, model, sanitize, engine, fetch, jsondoc,
-tabledoc — 165 cases, and the two trees agree everywhere except seven registered
+tabledoc — 165 cases, and the two trees agree everywhere except six registered
 divergences. Each is an `explicit-divergence` golden: the suite fails if the port
 changes shape *or* if the difference closes on its own.
 
@@ -274,12 +274,9 @@ changes shape *or* if the difference closes on its own.
   refuses `trafilatura`, which the oracle defaults to. A P6 backend decision, on
   the record in the matrix and in the goldens.
 
-**Open port gap, not an accepted divergence:** `fetch/12-url-ipv6-broken` —
-the oracle refuses `http://[::1/x` as an invalid IPv6 literal and the port's URL
-parser accepts it. Pinning it as an explicit divergence makes the suite fail the
-day the port closes the gap; closing it is an F-series fetch item, and the golden
-plus the `DIVERGENCES` entry in `ocaml-tools/oracle/gen_goldens.py` are the two
-places that have to change together.
+The former open port gap, `fetch/12-url-ipv6-broken`, is closed: the port now
+refuses `http://[::1/x` with the oracle's `Invalid IPv6 URL` sentence, the golden
+is an ordinary `differential-golden`, and the `DIVERGENCES` entry is gone (F1.5).
 
 The matrix is four committed TSVs (17 providers, 63 config keys, 21 behaviours,
 16 surface items) validated at every `runtest`: no row may leave a consumer
@@ -415,3 +412,58 @@ directory only.
 
 Gate at landing: `dune build @install`, `dune runtest --force`, `dune build @doc`
 and `dune runtest test/should_not_compile` all exit 0.
+
+## 12. F1.5 — the small oracle edge cases (2026-11-13)
+
+Landed on `f1-5-edges`. Five forks between the port and the oracle are closed,
+each pinned by a test that states the oracle's own answer.
+
+**Non-ASCII repr.** A path refusal now quotes a token through
+`Seekwright_text.Repr.py_repr`, so a printable non-ASCII key comes back as the
+character the caller wrote instead of its bytes. `Repr.py_repr_ascii` is gone:
+the only remaining ASCII-only escape is `Jsondoc.json_string_ascii`, which exists
+because a path rendering has to read back through JSON, not because a refusal
+wants every byte written out. `test/test_jsondoc.ml` pins the readable token.
+
+**Unicode whitespace.** `Seekwright_text.Utf8` now owns `lstrip`, `rstrip`,
+`strip` and `split_whitespace`, all over `is_python_space`; the separate
+`is_ascii_space` set is deleted. `Engine.strip`, `Provider.normalise`/`rstrip`,
+the agent's `.strip()` and whitespace test, `Fetcher`'s URL trim and `Jsondoc`'s
+trim helpers all take the shared walk. The `min_text_chars` gate is covered by a
+page padded with ideographic spaces: it counts as empty, where the old ASCII
+walk counted three hundred characters of padding. `test/test_text.ml` pins the
+helpers, `test/test_provider.ml` the collapse, and
+`test/test_fetch_engine.ml` the gate.
+
+**Bracketed IPv6.** `Fetcher.validate_url` checks the raw netloc before `Uri`
+reparses it, mirroring CPython's `_check_bracketed_netloc` /
+`_check_bracketed_host`: an unmatched bracket, data before `[`, or junk after
+`]` before the port delimiter is `unparseable URL: Invalid IPv6 URL`; the host
+itself is IPvFuture (`v` + hex + `.` + anything) or an IP address, with the
+oracle's `An IPv4 address cannot be in brackets` and `'…' does not appear to be
+an IPv4 or IPv6 address` sentences. A zone id is accepted on IPv6 only, as
+Python's `ipaddress` does. `test/test_fetch.ml` pins both the refusals and every
+accepted form (`[::1]`, `:80`, `:8443`, `:65535`, `[v1.abc]`, `[fe80::1%eth0]`,
+`[::ffff:127.0.0.1]`). The differential golden `fetch/12-url-ipv6-broken` moved
+from `explicit-divergence` to `differential-golden`, and its `DIVERGENCES` entry
+is removed.
+
+**Public-web port policy.** `Policy_net` now names `port_policy`
+(`Default_ports | Any_port`) and `with_public_web` takes an optional one,
+defaulting to `Default_ports`; `Policy` re-exports both. The default keeps the
+safe rule — the scheme's own port only — while `Any_port` accepts 1..65535 when
+the resolved address is public, which is the oracle's rule. The address policy is
+untouched: private permission is a separate axis. The factory's one
+`with_public_web` call passes `~port_policy:Policy.Any_port`; no other factory
+structure changed. `test/test_authority_net.ml` pins `:8443` accepted, `:0` and
+`:65536` refused as malformed, and a private answer on `:8443` still denied.
+The duplicated port-policy prose is gone from the implementation; the interface
+and `Policy` docs state the two modes once.
+
+**Ownership notes.** Two surgical exceptions were approved by the coordinator:
+the `Engine.strip` body and the single `~port_policy` argument at the factory's
+call site. `lib/fetch/dune` gains `ipaddr` for the bracketed-host check; no other
+library direction changed.
+
+Gate at landing: `dune build @install`, `dune runtest --force` and
+`dune build @doc` exit 0. No default-gate step contacts a provider.

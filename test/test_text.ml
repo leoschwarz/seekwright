@@ -110,26 +110,31 @@ let test_encode_writes_the_sequence () =
        (fun cp -> U.of_string (U.encode cp) = [| cp |])
        [ 0x41; 0xa0; 0x2028; 0x1f600 ])
 
-(* {2 Whitespace — two sets, one module} *)
+(* {2 Whitespace} *)
 
-let test_the_two_whitespace_sets_are_two_decisions () =
-  (* [is_python_space] is [str.isspace()], which is what [splitlines] breaks on
-     and what the fetch path strips and runs on. *)
+let test_the_whitespace_set_is_pythons () =
+  (* [is_python_space] is [str.isspace()], which is what [strip], [split] and
+     [splitlines] all agree on. One set, one rule: the old ASCII-only set was a
+     behavioural fork (F1.5). *)
   List.iter
     (fun cp ->
       A.(check bool) (Printf.sprintf "python space U+%04X" cp) true (U.is_python_space cp))
     [ 0x09; 0x0a; 0x0b; 0x0c; 0x0d; 0x20; 0x1c; 0x1d; 0x1e; 0x1f; 0x85; 0xa0; 0x1680; 0x2000; 0x2028; 0x2029; 0x202f; 0x205f; 0x3000 ];
   A.(check bool) "a letter is not" false (U.is_python_space (Char.code 'a'));
-  A.(check bool) "and NUL is not" false (U.is_python_space 0x00);
-  (* [is_ascii_space] is the search path's narrower set, deliberately: Python's
-     [split] also splits on the Unicode spaces, and this does not. Both live here
-     so the next reader sees two decisions rather than one rule typed twice. *)
-  List.iter
-    (fun ch -> A.(check bool) "ascii space" true (U.is_ascii_space ch))
-    [ ' '; '\t'; '\n'; '\r'; '\011'; '\012' ];
-  List.iter
-    (fun ch -> A.(check bool) "not an ascii space" false (U.is_ascii_space ch))
-    [ Char.unsafe_chr 0x1c; Char.unsafe_chr 0x85; Char.unsafe_chr 0xa0 ]
+  A.(check bool) "and NUL is not" false (U.is_python_space 0x00)
+
+let test_strip_and_split_use_the_unicode_set () =
+  (* U+3000 IDEOGRAPHIC SPACE and U+00A0 NO-BREAK SPACE are whitespace to Python
+     and therefore to every strip and word split in the port. *)
+  let padded = "\xe3\x80\x80\xc2\xa0 a b \xe3\x80\x80" in
+  A.(check string) "strip drops both ends" "a b" (U.strip padded);
+  A.(check string) "lstrip alone" "a b \xe3\x80\x80" (U.lstrip padded);
+  A.(check string) "rstrip alone" "\xe3\x80\x80\xc2\xa0 a b" (U.rstrip padded);
+  A.(check (list string)) "split collapses every run" [ "a"; "b" ]
+    (U.split_whitespace padded);
+  A.(check (list string)) "an all-blank string has no words" []
+    (U.split_whitespace "\xe3\x80\x80\xc2\xa0");
+  A.(check (list string)) "empty is no words" [] (U.split_whitespace "")
 
 let test_splitlines_breaks_where_python_does () =
   let lines s = List.map U.to_string (U.splitlines (U.of_string s)) in
@@ -156,9 +161,9 @@ let test_ascii_lower_folds_only_ascii () =
   let cps = U.ascii_lower (U.of_string "AbZ9 \xc3\x89") in
   A.(check string) "ascii folds" "abz9 \xc3\x89" (U.to_string cps)
 
-(* {2 The two [repr]s} *)
+(* {2 The [repr]} *)
 
-let test_the_log_repr_quotes_the_way_python_does () =
+let test_the_log_repr_is_the_one_a_refusal_quotes_with () =
   A.(check string) "plain" "'plain'" (R.py_repr "plain");
   A.(check string) "empty" "''" (R.py_repr "");
   (* The rule that makes a log line safe: a newline in a scraped title is
@@ -179,16 +184,11 @@ let test_the_log_repr_quotes_the_way_python_does () =
   (* Idempotence is not the contract, but re-escaping a repr must not lose the
      text's own quoting — and a repr never contains a raw newline. *)
   let once = R.py_repr "a\nb" in
-  A.(check bool) "no raw newline survives" true (not (String.contains once '\n'))
-
-let test_the_ascii_repr_is_the_one_a_refusal_quotes_with () =
-  (* The quote is fixed, so a token that holds one comes back escaped rather than
-     re-quoted, and every byte above ASCII is written out. *)
-  A.(check string) "the quote stays single" "'it\\'s'" (R.py_repr_ascii "it's");
-  A.(check string) "non-ascii arrives as its bytes" "'caf\\xc3\\xa9'"
-    (R.py_repr_ascii "caf\xc3\xa9");
-  A.(check string) "the same escapes as the log pass" "'a\\nb'" (R.py_repr_ascii "a\nb");
-  A.(check string) "del escapes" "'\\x7f'" (R.py_repr_ascii "\x7f")
+  A.(check bool) "no raw newline survives" true (not (String.contains once '\n'));
+  (* The path grammar's refusals use this same pass, so a non-ASCII token comes
+     back readable rather than as its bytes (F1.5). *)
+  A.(check string) "a refusal quotes a non-ascii token the same way" "'caf\xc3\xa9'"
+    (R.py_repr "caf\xc3\xa9")
 
 (* {2 The library boundary} *)
 
@@ -224,18 +224,18 @@ let () =
           ] );
       ( "blanks and lines",
           [
-            A.test_case "the two whitespace sets are two decisions" `Quick
-              test_the_two_whitespace_sets_are_two_decisions;
+            A.test_case "the whitespace set is python's" `Quick
+              test_the_whitespace_set_is_pythons;
+            A.test_case "strip and split use the unicode set" `Quick
+              test_strip_and_split_use_the_unicode_set;
             A.test_case "splitlines breaks where python does" `Quick
               test_splitlines_breaks_where_python_does;
             A.test_case "ascii lower folds only ascii" `Quick test_ascii_lower_folds_only_ascii;
           ] );
       ( "repr",
           [
-            A.test_case "the log repr quotes the way python does" `Quick
-              test_the_log_repr_quotes_the_way_python_does;
-            A.test_case "the ascii repr is the one a refusal quotes with" `Quick
-              test_the_ascii_repr_is_the_one_a_refusal_quotes_with;
+            A.test_case "the log repr is the one a refusal quotes with" `Quick
+              test_the_log_repr_is_the_one_a_refusal_quotes_with;
           ] );
       ( "one owner",
           [ A.test_case "the fetch path walks this walk" `Quick test_the_fetch_path_walk_is_this_walk ];

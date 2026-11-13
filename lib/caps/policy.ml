@@ -17,5 +17,7 @@ type endpoint = Policy_net.endpoint = {
 
 let default_max_response_bytes = Policy_net.default_max_response_bytes
 
+type port_policy = Policy_net.port_policy = Default_ports | Any_port
+
 let with_endpoints = Policy_net.with_endpoints
 let with_public_web = Policy_net.with_public_web

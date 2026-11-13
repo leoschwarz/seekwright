@@ -532,6 +532,17 @@ let empty_text_is_reported_not_raised () =
   check_string "text" "" (say r.Model.text);
   includes "the shell diagnosis" "JavaScript-rendered" (say r.Model.notice)
 
+let unicode_whitespace_does_not_clear_the_emptiness_gate () =
+  (* [min_text_chars] counts what is left after Python's [str.strip()]. A page
+     padded with ideographic spaces is blank, so the gate has to see one
+     character, not three hundred (F1.5). *)
+  let padded =
+    "a" ^ String.concat "" (List.init 300 (fun _ -> "\xe3\x80\x80"))
+  in
+  let fetch = { Config.default_fetch_config with min_text_chars = 200 } in
+  let r = served (make_engine ~fetch ~local:(stub ~text:padded ()) ()) url in
+  includes "the blank page is a shell" "JavaScript-rendered" (say r.Model.notice)
+
 (* {1 TestQueryTargeting} *)
 
 let walrus_first = "The walrus lives in the arctic. " ^ String.make 1600 'x'
@@ -1465,7 +1476,9 @@ let () =
           A.test_case "blocked url does not advise a retry" `Quick blocked_url_does_not_advise_a_retry;
         ] );
       ( "empty extraction"
-      , [ A.test_case "empty text is reported not raised" `Quick empty_text_is_reported_not_raised ] );
+      , [ A.test_case "empty text is reported not raised" `Quick empty_text_is_reported_not_raised;
+          A.test_case "unicode whitespace does not clear the emptiness gate" `Quick
+            unicode_whitespace_does_not_clear_the_emptiness_gate ] );
       ( "query targeting"
       , [
           A.test_case "query fetches uncapped" `Quick query_fetches_uncapped;

@@ -42,9 +42,16 @@ type destination = {
   peer_ip : Ipaddr.t option;
 }
 
+type port_policy =
+  | Default_ports
+      (** The scheme's own port only: the safe default. *)
+  | Any_port
+      (** Any port in 1..65535, once the address policy has vetted the
+          destination. *)
+
 type policy =
   | Endpoints of destination list
-  | Public_web
+  | Public_web of port_policy
 
 (* [Eio.Net.t] is parameterised by the backend's resource tag ([ `Posix ],
    [ `Linux ], …), and a record type cannot carry an existential tag — [_] is not
@@ -246,21 +253,26 @@ let decide_destination (t : 'tag confinement) uri =
              ~message:
                (Printf.sprintf "%s://%s:%d is not one of the endpoints this grant allows"
                   (scheme_name scheme) (Error.sanitize host) port))
-  | Public_web ->
-      (* One documented port policy: a public-web read goes to the default port
-         of the scheme it names. Any other port is a tunnel to some other
-         service, which is what the port half of an SSRF allow-list is for;
-         [with_endpoints] is how an operator names a non-default port. *)
-      if port <> scheme_port scheme then
-        Error
-          (Error.make Error.Denied
-             ~message:
-               (Printf.sprintf
-                  "%s://%s:%d is refused: the public-web grant uses port %d for %s, and an \
-                   explicit port needs an endpoint list"
-                  (scheme_name scheme) (Error.sanitize host) port (scheme_port scheme)
-                  (scheme_name scheme)))
-      else Ok candidate
+  | Public_web port_policy -> (
+      (* The port half of the policy is a mode, not a second allow-list: the
+         safe default pins the scheme's own port, and [Any_port] is the
+         seekwright mode that matches Python. The address half — public
+         destinations only — is [satisfies_address]'s and is unaffected by this
+         choice; private-address permission is a separate axis. *)
+      match port_policy with
+      | Default_ports when port <> scheme_port scheme ->
+          Error
+            (Error.make Error.Denied
+               ~message:
+                 (Printf.sprintf
+                    "%s://%s:%d is refused: the public-web grant uses port %d for %s, and an \
+                     explicit port needs an endpoint list or the any-port mode"
+                    (scheme_name scheme) (Error.sanitize host) port (scheme_port scheme)
+                    (scheme_name scheme)))
+      | Default_ports | Any_port ->
+          (* [port_of_uri] has already bounded an explicit port to 1..65535, so
+             [Any_port] accepts every port that reaches this point. *)
+          Ok candidate)
 
 (** {1 Address classification for the public-web policy}
 
@@ -352,7 +364,7 @@ let in_special_use ip =
 let satisfies_address policy ip =
   match policy with
   | Endpoints _ -> true
-  | Public_web ->
+  | Public_web _ ->
       Ipaddr.is_global ip && not (Ipaddr.is_multicast ip) && not (in_special_use ip)
 
 (** {1 Resolution, and the binding to one vetted address} *)
@@ -737,8 +749,8 @@ let with_endpoints ~sw:_ ~net ~max_response_bytes endpoints =
   in
   Ok (T { net; max_response_bytes; policy = Endpoints allowed; tls })
 
-let with_public_web ~sw:_ ~net ~max_response_bytes () =
+let with_public_web ~sw:_ ~net ?(port_policy = Default_ports) ~max_response_bytes () =
   let ( let* ) = Result.bind in
   let* max_response_bytes = response_ceiling max_response_bytes in
   tls_config () >>= (fun tls ->
-    Ok (T { net; max_response_bytes; policy = Public_web; tls = Some tls }))
+    Ok (T { net; max_response_bytes; policy = Public_web port_policy; tls = Some tls }))

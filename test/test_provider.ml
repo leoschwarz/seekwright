@@ -139,6 +139,15 @@ let whitespace_is_normalised_before_the_cap () =
   check_opt_string "collapsed" (Some "a b c") snippet;
   check_opt_int "the length the cap received" (Some 5) uncapped
 
+let unicode_whitespace_is_normalised_before_the_cap () =
+  (* Python's [str.split()] splits on the Unicode spaces, not ASCII only, so an
+     ideographic or no-break space is a word boundary here too (F1.5). *)
+  let snippet, uncapped =
+    Provider.truncate_snippet (Some "\xe3\x80\x80a\xc2\xa0b\xe3\x80\x80") 500
+  in
+  check_opt_string "unicode blanks collapse" (Some "a b") snippet;
+  check_opt_int "measured after collapsing" (Some 3) uncapped
+
 let a_sentence_boundary_beats_mid_word () =
   let snippet, uncapped = Provider.truncate_snippet (Some "alpha beta. gamma delta") 12 in
   check_opt_string "cut at the sentence" (Some "alpha beta.") snippet;
@@ -404,6 +413,8 @@ let () =
               test_case "a missing snippet stays missing" `Quick a_missing_snippet_stays_missing;
               test_case "whitespace is normalised before the cap" `Quick
                 whitespace_is_normalised_before_the_cap;
+              test_case "unicode whitespace is normalised before the cap" `Quick
+                unicode_whitespace_is_normalised_before_the_cap;
               test_case "a sentence boundary beats mid-word" `Quick a_sentence_boundary_beats_mid_word;
               test_case "a boundary too early is not used" `Quick a_boundary_too_early_is_not_used;
               test_case "the cap counts characters, not bytes" `Quick the_cap_counts_characters_not_bytes;

@@ -297,8 +297,8 @@ let with_endpoints ~net ~sw ?(max_response_bytes = Policy.default_max_response_b
   | Error error -> failf "with_endpoints: %s" (Error.render error)
   | Ok decision -> f decision
 
-let with_public_web ~net ~sw ?(max_response_bytes = Policy.default_max_response_bytes) f =
-  match Policy.with_public_web ~sw ~net ~max_response_bytes () with
+let with_public_web ?port_policy ~net ~sw ?(max_response_bytes = Policy.default_max_response_bytes) f =
+  match Policy.with_public_web ?port_policy ~sw ~net ~max_response_bytes () with
   | Error error -> failf "with_public_web: %s" (Error.render error)
   | Ok decision -> f decision
 
@@ -567,8 +567,8 @@ let public_web_refuses_smuggled_ip_literals () =
     | Error error -> failf "a public literal was refused: %s" (Error.render error)
     | Ok response -> failf "a public literal was served (status %d)" response.status)
 
-(* The port policy of [with_public_web] is one rule: the scheme's default port,
-   and an explicit port is [with_endpoints]' business. *)
+(* The default port mode is one rule: the scheme's default port, and an explicit
+   port is [with_endpoints]' or [Any_port]'s business. *)
 let public_web_refuses_other_ports () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
@@ -582,6 +582,51 @@ let public_web_refuses_other_ports () =
         Alcotest.(check (list (pair string string))) "no resolver query" [] (Atomic.get state.queries)
     | Ok _ -> failf "a non-default port was served"
     | exception Simulated address -> failf "connected to %s" (show_address address))
+
+(* [Any_port] is the seekwright mode: any port 1..65535 on a public destination,
+   while the address rule is untouched. :8443 is accepted (the oracle's own
+   differential case), :0 and :65536 are refused as malformed before DNS, and a
+   private address on a non-default port is still an address refusal. *)
+let public_web_any_port () =
+  let run ?(answers = [ ("api.test", [ "93.184.216.34" ]) ]) uri =
+    Eio_main.run @@ fun env ->
+    Eio.Switch.run @@ fun sw ->
+    let state, net = scripted_net ~answers () in
+    with_public_web ~port_policy:Policy.Any_port ~net ~sw (fun decision ->
+      let grant = grant_of ~env decision in
+      let outcome =
+        match request grant uri with
+        | exception Simulated address -> Ok address
+        | Error error -> Error error
+        | Ok response ->
+            Error
+              (Error.make Error.Failed
+                 ~message:(Printf.sprintf "served a response (status %d)" response.status))
+      in
+      (outcome, Atomic.get state.connects))
+  in
+  (match run "http://api.test:8443/x" with
+  | Ok address, connects ->
+      Alcotest.(check address_testable) "the 8443 port is connected to"
+        (`Tcp (eio_address "93.184.216.34", 8443)) address;
+      Alcotest.(check (list address_testable)) "and it is the only connection"
+        [ `Tcp (eio_address "93.184.216.34", 8443) ] connects
+  | Error error, _ -> failf "a public host on :8443 was refused: %s" (Error.render error));
+  List.iter
+    (fun (uri, name) ->
+      match run uri with
+      | Error error, connects ->
+          check_kind Error.Invalid error;
+          Alcotest.(check (list address_testable)) (name ^ ": no connection") [] connects
+      | Ok _, _ -> failf "%s was accepted" name)
+    [ ("http://api.test:0/x", ":0"); ("http://api.test:65536/x", ":65536") ];
+  (* The port mode does not widen the address rule: a private answer is refused
+     on a non-default port exactly as on 80. *)
+  match run ~answers:[ ("api.test", [ "10.0.0.7" ]) ] "http://api.test:8443/x" with
+  | Error error, connects ->
+      check_kind Error.Denied error;
+      Alcotest.(check (list address_testable)) "no private connection" [] connects
+  | Ok _, _ -> failf "a private address on :8443 was connected to"
 
 (* The rebinding case §5 names: the vetted answer is the address that is
    connected to, and the HTTP client is handed a connector that cannot look the
@@ -963,6 +1008,8 @@ let () =
               public_web_refuses_smuggled_ip_literals;
             Alcotest.test_case "the public-web grant uses the scheme's port" `Quick
               public_web_refuses_other_ports;
+            Alcotest.test_case "the any-port mode, on a public destination" `Quick
+              public_web_any_port;
             Alcotest.test_case "connect uses the vetted answer" `Quick connect_uses_the_vetted_answer;
             Alcotest.test_case "a listed name may reach a private address" `Quick
               listed_names_may_reach_private_addresses;

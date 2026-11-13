@@ -287,6 +287,14 @@ let test_a_blank_path_is_refused_rather_than_read_as_the_root () =
   assert_path_syntax ~match_:(Some "names nothing") (fun () -> J.parse_path " ");
   assert_path_syntax ~match_:(Some "names nothing") (fun () -> J.parse_path "")
 
+let test_a_path_refusal_keeps_printable_non_ascii_readable () =
+  (* The oracle's refusal messages use [repr], which leaves a printable
+     non-ASCII token readable. The ASCII-only escape stays for the path
+     rendering itself, not for what a refusal quotes back (F1.5). *)
+  assert_path_syntax
+    ~match_:(Some "cannot read the bracketed step ['caf\xc3\xa9']")
+    (fun () -> J.parse_path "$.items[caf\xc3\xa9]")
+
 let test_a_sloppy_dot_before_a_bracket_is_tolerated () =
   check_steps (J.parse_path "$[\"a b\"]") (J.parse_path "$[\"a b\"]")
 
@@ -583,6 +591,8 @@ let () =
             test_a_quoted_key_holding_a_colon_is_a_name_not_a_slice;
           Alcotest.test_case "a blank path is refused" `Quick
             test_a_blank_path_is_refused_rather_than_read_as_the_root;
+          Alcotest.test_case "a path refusal keeps non-ascii readable" `Quick
+            test_a_path_refusal_keeps_printable_non_ascii_readable;
           Alcotest.test_case "a sloppy dot before a bracket is tolerated" `Quick
             test_a_sloppy_dot_before_a_bracket_is_tolerated;
           Alcotest.test_case "a path this grammar cannot honour is refused by name" `Quick

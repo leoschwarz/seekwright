@@ -131,18 +131,11 @@ let grouped (n : int) : string =
   Buffer.contents buffer
 
 let strip (text : string) : string =
-  (* [str.strip()], over the whitespace an extraction actually leaves behind —
-     the set [Utf8.is_ascii_space] states, which the agent's citation parser and
-     the provider caps use too. *)
-  let first = ref 0 in
-  while !first < String.length text && Utf8.is_ascii_space text.[!first] do
-    incr first
-  done;
-  let last = ref (String.length text) in
-  while !last > !first && Utf8.is_ascii_space text.[!last - 1] do
-    decr last
-  done;
-  String.sub text !first (!last - !first)
+  (* [str.strip()]. Python strips the Unicode whitespace set everywhere, so this
+     is [Utf8.strip] — the agent's citation parser and the provider caps take
+     the same helper, and a page padded with an ideographic space is blank to
+     all of them (F1.5). *)
+  Utf8.strip text
 
 let zero_results_advice =
   " Zero results usually means the phrasing, not an empty web: retry once on a"

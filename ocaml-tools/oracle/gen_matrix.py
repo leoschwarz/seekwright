@@ -191,7 +191,7 @@ BEHAVIOURS = [
      "ported", "unit; differential-golden"),
     ("fetch URL guardrails, windowing, caps, image sniffing",
      "fetcher.py", "tests/fetch/", "lib/fetch/fetcher.ml", "test_fetch.ml + corpus/fetch",
-     "ported", "unit; differential-golden; explicit-divergence(ipv6 gap)"),
+     "ported", "unit; differential-golden"),
     ("JSON document rendering, schema view, path selection",
      "jsondoc.py", "tests/fetch/test_jsondoc.py", "lib/fetch/jsondoc.ml", "test_jsondoc.ml + corpus/jsondoc",
      "ported", "unit; differential-golden"),

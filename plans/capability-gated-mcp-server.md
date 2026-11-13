@@ -336,6 +336,7 @@ val with_endpoints :
 
 val with_public_web :
   sw:Eio.Switch.t -> net:_ Eio.Net.t -> clock:_ Eio.Time.clock ->
+  ?port_policy:port_policy ->
   max_response_bytes:int -> unit ->
   (net Authority.t, Error.t) result
 ```
@@ -345,8 +346,12 @@ scheme, normalized host, and effective port. In seekwright those sets are derive
 from enabled providers, never exposed as a second egress config file.
 `with_public_web` is for `fetch`: HTTP(S) only, no userinfo, only globally
 routable unicast IP destinations, with loopback/private/link-local/multicast/
-unspecified/special-use addresses, IPv4-mapped IPv6 variants, and non-default or
-explicitly disallowed ports denied according to one documented policy.
+unspecified/special-use addresses and IPv4-mapped IPv6 variants denied. The port
+half is a mode: `Default_ports` (the default) admits the scheme's own port only,
+while `Any_port` admits 1..65535 once the address rule has passed — the
+seekwright mode, because Python's `fetch` accepts a public host on any valid
+port. The two axes are independent: `Any_port` never widens which addresses are
+public.
 
 **Landed 2026-11-10, in two shapes.** The constructors take no clock and return
 the confinement *decision* — `(Policy_net.t, Error.t)`, exactly the `with_root`

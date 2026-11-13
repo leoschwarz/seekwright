@@ -393,31 +393,19 @@ let render_json text =
       Some (String.concat "\n" (List.rev !lines))
 
 (* [str.strip], [str.lstrip] on codepoints: the ASCII blanks plus the Unicode
-   spaces Python also drops. *)
+   spaces Python also drops. The walk is [Utf8]'s, so the fetch path shares one
+   definition of whitespace. *)
 
-let trim_py s =
-  let a = Utf8.of_string s in
-  let n = Array.length a in
-  let i = ref 0 in
-  while !i < n && Utf8.is_python_space a.(!i) do incr i done;
-  let j = ref (n - 1) in
-  while !j >= !i && Utf8.is_python_space a.(!j) do decr j done;
-  if n = 0 || !j < !i then "" else Utf8.to_string (Array.sub a !i (!j - !i + 1))
+let trim_py = Utf8.strip
+let trim_left = Utf8.lstrip
 
-let trim_left s =
-  let a = Utf8.of_string s in
-  let n = Array.length a in
-  let i = ref 0 in
-  while !i < n && Utf8.is_python_space a.(!i) do incr i done;
-  Utf8.to_string (Array.sub a !i (n - !i))
+(* Python's [repr] of a string in a refusal message. The oracle's own refusals
+   use [repr], so printable non-ASCII stays readable rather than arriving as its
+   bytes (F1.5). The ASCII-only escape a path rendering needs is
+   [json_string_ascii] above: it exists because the path must read back through
+   JSON, not because a refusal wants every byte written out. *)
 
-(* Python's [repr] of a string in a refusal message: the quote is fixed and every
-   byte above ASCII is escaped, so a path token the caller wrote comes back
-   readable whatever the transport does with it. One escape pass with the engine's
-   [safe] now sits in [Seekwright_text.Repr]; the two quoting policies stay
-   separate functions there (style review H2). *)
-
-let py_repr = Repr.py_repr_ascii
+let py_repr = Repr.py_repr
 
 (* [int("…")] as Python reads it: an optional sign then digits, and nothing
    else — no [0x] or [1_000] the way [int_of_string] would take. *)

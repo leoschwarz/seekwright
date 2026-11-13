@@ -1,10 +1,7 @@
 area: fetch
 case: 12-url-ipv6-broken
-verification: explicit-divergence
+verification: differential-golden
 oracle: python
 projection: fetch
-reason: OPEN PORT GAP, not an accepted difference: the oracle refuses http://[::1/x as an invalid IPv6 literal, the port's URL parser accepts it. Pinned so the suite fails the day the port closes the gap or someone quietly rewrites the golden; recorded for follow-up in plans/seekwright-ocaml-port.md.
 --- oracle
 url-refused= unparseable URL: Invalid IPv6 URL
---- port
-url= http://[::1/x

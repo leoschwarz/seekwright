@@ -58,10 +58,6 @@ DIVERGENCES: dict[tuple[str, str], str] = {
         "09-url-port-word",
     ): "same as fetch/08 on a non-numeric port: refusal on both sides, wording is each parser's own.",
     (
-        "fetch",
-        "12-url-ipv6-broken",
-    ): "OPEN PORT GAP, not an accepted difference: the oracle refuses http://[::1/x as an invalid IPv6 literal, the port's URL parser accepts it. Pinned so the suite fails the day the port closes the gap or someone quietly rewrites the golden; recorded for follow-up in plans/seekwright-ocaml-port.md.",
-    (
         "config",
         "49-doc-example",
     ): "the documented example names fetch.extractor = \"trafilatura\" explicitly; the port ships one backend and refuses that name outright, where the oracle accepts it when the library is installed. The same P6 backend gap as the systematic extractor default divergence, visible here in the acceptance rather than the default.",

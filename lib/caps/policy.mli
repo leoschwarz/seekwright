@@ -78,15 +78,24 @@ val with_endpoints :
   endpoint list ->
   (Policy_net.t, Error.t) result
 
-(** M3, §5. What [fetch] gets: HTTP(S) only, on each scheme's default port only,
-  no URI userinfo, and globally routable unicast destinations only — with the
-  loopback/private/link-local/multicast/unspecified/special-use and
-  IPv4-mapped-IPv6 ranges denied by one documented policy
-  ([Policy_net.satisfies_address]). A name that resolves only to refused
-  addresses is a [Denied] before any connection is attempted. *)
+(** M3, §5. What [fetch] gets: HTTP(S) only, no URI userinfo, and globally
+    routable unicast destinations only — with the
+    loopback/private/link-local/multicast/unspecified/special-use and
+    IPv4-mapped-IPv6 ranges denied by one documented policy
+    ([Policy_net.satisfies_address]). A name that resolves only to refused
+    addresses is a [Denied] before any connection is attempted.
+
+    [port_policy] is separate from the address rule. The default,
+    [Default_ports], accepts only each scheme's default port — the safe mode.
+    [Any_port] is the seekwright mode: any port in 1..65535 when the resolved
+    address is public, matching Python's fetch. Neither mode relaxes the
+    address check, and permission for private addresses is a separate axis. *)
+type port_policy = Policy_net.port_policy = Default_ports | Any_port
+
 val with_public_web :
   sw:Eio.Switch.t ->
   net:_ Eio.Net.t ->
+  ?port_policy:port_policy ->
   max_response_bytes:int ->
   unit ->
   (Policy_net.t, Error.t) result

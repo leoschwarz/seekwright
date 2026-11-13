@@ -86,13 +86,23 @@ val is_python_space : int -> bool
     {e str.isspace()}, which is also what {e str.splitlines()} breaks on and what
     the fetch path's blanks, strips and word runs have to agree about. *)
 
-val is_ascii_space : char -> bool
-(** The narrower set the search path strips and collapses on: space, tab, VT, FF,
-    CR and LF. Python's {e str.split()} also splits on the Unicode spaces, and
-    this deliberately does not — every provider payload in the oracle's fixtures
-    separates on ASCII blanks, and a non-ASCII space inside a snippet only costs
-    the collapse. Both sets live here so the next reader sees that they are two
-    different decisions rather than one rule typed twice. *)
+val lstrip : string -> string
+(** [lstrip s] is Python's [s.lstrip()]: the leading run of {!is_python_space}
+    codepoints removed. *)
+
+val rstrip : string -> string
+(** [rstrip s] is Python's [s.rstrip()]. *)
+
+val strip : string -> string
+(** [strip s] is Python's [s.strip()]: both ends trimmed over the Unicode set
+    {!is_python_space} states. This is the one strip every path uses — the
+    search engine, the provider caps, the citation parser and the fetch
+    path — because Python strips the same set everywhere. *)
+
+val split_whitespace : string -> string list
+(** [split_whitespace s] is Python's [s.split()] with no separator: runs of
+    whitespace are one boundary, and leading or trailing whitespace yields no
+    empty word. The division is {!is_python_space}, not ASCII. *)
 
 val is_line_boundary : int -> bool
 (** Whether a codepoint ends a line for {e str.splitlines()}: LF, VT, FF, the four

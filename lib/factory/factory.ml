@@ -266,7 +266,9 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
     | Error message -> Some (Error message)
     | Ok extractor -> (
     match
-      Policy.with_public_web ~sw ~net ~max_response_bytes:fetch.Config.max_download_bytes ()
+      Policy.with_public_web ~sw ~net
+        ~port_policy:Policy.Any_port
+        ~max_response_bytes:fetch.Config.max_download_bytes ()
     with
     | Error error -> Some (Error (Caps.Error.render error))
     | Ok decision ->

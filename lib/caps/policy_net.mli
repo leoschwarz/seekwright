@@ -12,9 +12,10 @@
 
     - {b The endpoint decision.} A request is matched against the grant's
       policy — an exact (scheme, host, port) set for [with_endpoints], or
-      HTTP(S) on the default ports for [with_public_web] — before any name is
-      looked up. An unlisted host is refused without a DNS query, so a grant
-      cannot be probed by resolver traffic.
+      HTTP(S) with the port policy [with_public_web] was built with (the
+      scheme's own port by default, any port in [Any_port] mode) — before any
+      name is looked up. An unlisted host is refused without a DNS query, so a
+      grant cannot be probed by resolver traffic.
     - {b The address binding.} [Eio.Net.getaddrinfo_stream] answers the
       allowlisted name, every answer is filtered against the policy, and
       [Eio.Net.connect] is then called with one {b of those vetted addresses}.
@@ -101,18 +102,34 @@ val with_endpoints :
     v1 registers nothing on it because a connection is opened and closed inside
     one operation rather than pooled across a server's life. *)
 
+type port_policy =
+  | Default_ports
+      (** The scheme's default port only (80 for http, 443 for https): the
+          safe mode, and the default when no mode is named. *)
+  | Any_port
+      (** Any port in 1..65535, subject to the same address policy. This is the
+          mode seekwright builds: Python's fetch accepts a public host on any
+          valid port, and a port outside that range is refused as a malformed
+          URI before the decision runs. *)
+
 val with_public_web :
   sw:Eio.Switch.t ->
   net:_ Eio.Net.t ->
+  ?port_policy:port_policy ->
   max_response_bytes:int ->
   unit ->
   (t, Error.t) result
-(** The decision behind [Policy.with_public_web]: HTTP(S] on ports 80/443 only,
-    and every resolved destination must be a globally routable unicast address.
+(** The decision behind [Policy.with_public_web]: HTTP(S), the scheme's default
+    ports under [Default_ports] or any port in 1..65535 under [Any_port], and
+    every resolved destination must be a globally routable unicast address.
     The ranges refused are listed on [satisfies_address] in the implementation:
     loopback, private, link-local, multicast, unspecified, broadcast, the
     IPv4-mapped IPv6 forms, unique-local, CGNAT, the IETF reserved and
-    documentation blocks, 6to4 and Teredo. *)
+    documentation blocks, 6to4 and Teredo.
+
+    The port mode and the address rule are separate axes: [Any_port] widens
+    which port a public destination may be reached on, never which addresses
+    are public. *)
 
 val request :
   controls:Controls_raw.t ->

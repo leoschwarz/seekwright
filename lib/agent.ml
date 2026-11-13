@@ -85,9 +85,9 @@ let markers prose =
   List.rev !acc
 
 let has_whitespace s =
-  let found = ref false in
-  String.iter (fun c -> if Utf8.is_ascii_space c then found := true) s;
-  !found
+  (* Python's [any(c.isspace() for c in s)], over the Unicode set; a marker
+     padded with an ideographic space is whitespace here too (F1.5). *)
+  Array.exists Utf8.is_python_space (Utf8.of_string s)
 
 let is_all_digits s =
   (* Python's [str.isdigit] plus [int(token)]: the port accepts ASCII digits
@@ -272,7 +272,7 @@ let read_pages t hits ~run ~tally ~notices =
             | Error _ -> incr skipped
             | Ok page ->
               (match page.Model.text with
-              | Some text when text <> "" && String.trim text <> "" ->
+              | Some text when text <> "" && Utf8.strip text <> "" ->
                 texts.(index) <- Some text;
                 tally.fetched <- tally.fetched + 1
               | _ -> incr skipped)
@@ -438,7 +438,7 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
          carries what the walk collected. *)
       let plan = assemble t hits texts in
       plan.notices <- !notices_ref;
-      if plan.items = [] || not (List.exists (fun item -> String.trim item.text <> "") plan.items)
+      if plan.items = [] || not (List.exists (fun item -> Utf8.strip item.text <> "") plan.items)
       then
         Error
           (Agent_failed
@@ -483,13 +483,13 @@ let read_completion body : (completion, failure) result =
         match json_get "message" first with Some (`Assoc _ as message) -> message | _ -> `Assoc []
       in
       match json_get "content" message with
-      | Some (`String content) when String.trim content <> "" ->
+      | Some (`String content) when Utf8.strip content <> "" ->
         let usage =
           match json_get "usage" body with Some (`Assoc _ as usage) -> usage | _ -> `Assoc []
         in
         Ok
           {
-            prose = String.trim content;
+            prose = Utf8.strip content;
             truncated = json_get "finish_reason" first = Some (`String "length");
             prompt_tokens = Option.bind (json_get "prompt_tokens" usage) token_count;
             completion_tokens = Option.bind (json_get "completion_tokens" usage) token_count;
@@ -577,7 +577,7 @@ let cite prose items =
   let seen_urls = ref [] in
   List.iter
     (fun marker ->
-      let token = String.trim marker in
+      let token = Utf8.strip marker in
       if token = "" || has_whitespace token then ()
       else if is_all_digits token then
         match int_of_string_opt token with

@@ -68,32 +68,12 @@ let decode_json_object ~provider body =
    them. *)
 
 (* Python's [" ".join(text.split())]: runs of whitespace collapse to one space
-   and the ends are trimmed. Python splits on Unicode whitespace; every
-   provider payload in the oracle's fixtures separates on ASCII blanks, and a
-   non-ASCII space inside a snippet only costs the collapse, so this keeps
-   [Utf8.is_ascii_space] and says so. *)
-let normalise text =
-  let words = ref [] in
-  let start = ref 0 in
-  let flush stop =
-    if stop > !start then words := String.sub text !start (stop - !start) :: !words
-  in
-  String.iteri
-    (fun i c ->
-      if Utf8.is_ascii_space c then begin
-        flush i;
-        start := i + 1
-      end)
-    text;
-  flush (String.length text);
-  String.concat " " (List.rev !words)
+   and the ends are trimmed. Python splits on Unicode whitespace, so this is the
+   shared [Utf8.split_whitespace] — the old ASCII-only walk left an ideographic
+   space inside a snippet uncollapsed (F1.5). *)
+let normalise text = String.concat " " (Utf8.split_whitespace text)
 
-let rstrip text =
-  let stop = ref (String.length text) in
-  while !stop > 0 && Utf8.is_ascii_space text.[!stop - 1] do
-    decr stop
-  done;
-  String.sub text 0 !stop
+let rstrip text = Utf8.rstrip text
 
 let clip text limit =
   (* Prefer a sentence boundary to mid-word, but only one far enough in to be

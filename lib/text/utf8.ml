@@ -155,14 +155,57 @@ let is_python_space cp =
   | 0xa0 | 0x1680 | 0x2028 | 0x2029 | 0x202f | 0x205f | 0x3000 -> true
   | cp -> cp >= 0x2000 && cp <= 0x200a
 
-let is_ascii_space ch =
-  (* The set the search path's [strip], [normalise] and citation parsing use.
-     Deliberately narrower than [is_python_space]: Python splits on Unicode
-     whitespace, but every provider payload in the oracle's fixtures separates on
-     ASCII blanks, and a non-ASCII space inside a snippet only costs the
-     collapse. Keeping both sets in one module is the point — the port had three
-     byte-identical copies of this one and a wider one it confused with it. *)
-  match ch with ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true | _ -> false
+let lstrip s =
+  (* [str.lstrip()]: the leading run of {!is_python_space} codepoints goes. The
+     original string is returned untouched when there is nothing to strip, and
+     the remainder is re-encoded from the codepoint walk — which is byte-identity
+     for well-formed UTF-8 and the same lenient one-entry-per-bad-lead rule as
+     the rest of this module otherwise. *)
+  let a = of_string s in
+  let n = Array.length a in
+  let i = ref 0 in
+  while !i < n && is_python_space a.(!i) do
+    incr i
+  done;
+  if !i = 0 then s else to_string (Array.sub a !i (n - !i))
+
+let rstrip s =
+  (* [str.rstrip()], the mirror of {!lstrip}. *)
+  let a = of_string s in
+  let n = Array.length a in
+  let j = ref (n - 1) in
+  while !j >= 0 && is_python_space a.(!j) do
+    decr j
+  done;
+  if !j = n - 1 then s else to_string (Array.sub a 0 (!j + 1))
+
+let strip s = lstrip (rstrip s)
+
+let split_whitespace s =
+  (* [str.split()] with no separator: runs of {!is_python_space} collapse to one
+     boundary and neither leading nor trailing whitespace yields an empty word.
+     Python splits on the Unicode spaces here, so the search path's old
+     ASCII-only walk of [text.split()] was a behavioural fork, not a fast path
+     (F1.5). *)
+  let a = of_string s in
+  let n = Array.length a in
+  let words = ref [] in
+  let start = ref 0 in
+  let in_word = ref false in
+  for i = 0 to n - 1 do
+    if is_python_space a.(i) then begin
+      if !in_word then begin
+        words := to_string (Array.sub a !start (i - !start)) :: !words;
+        in_word := false
+      end
+    end
+    else if not !in_word then begin
+      in_word := true;
+      start := i
+    end
+  done;
+  if !in_word then words := to_string (Array.sub a !start (n - !start)) :: !words;
+  List.rev !words
 
 let is_line_boundary cp =
   (* The set the port had, kept exactly: [splitlines]'s pairing rule is what

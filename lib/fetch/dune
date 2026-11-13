@@ -30,5 +30,6 @@
   seekwright.wire
   mcp-caps
   uri
+  ipaddr
   yojson
   eio))
