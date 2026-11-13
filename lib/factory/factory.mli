@@ -57,10 +57,70 @@ type providers = {
   (** Names whose grant could not be constructed (a missing trust store, say).
       [--check] reports them as problems; {!build_app} refuses to start. *)
   unsupported : Seekwright.Config.name list;
-  (** Enabled names this build has no adapter for, in config order. The startup
-      line binds them and emits [startup.providers_unsupported], so the silence
-      that used to make a config name look served is gone. *)
+  (** Enabled names this build has no adapter for, sorted. These are a
+      startup failure under {!startup_verdict} — a served process must never
+      hold a config name with no adapter behind it — and under an implicit
+      keyless default they are the skipped keyless names, which the startup
+      line names through [startup.providers_unsupported]. *)
 }
+
+(** {1 One routable set, and the configs that may serve it}
+
+    Runtime routing — the engine's registry, its effective set, its default,
+    its free walk and its fallback rungs — describes exactly the names this
+    build constructed and the permission set permits. These two functions
+    state which configurations may hold such a set: {!build_app} runs
+    {!startup_verdict} before it builds an engine, and [--check] reads
+    {!classify} for its provider section, so both paths report the same fact
+    from one classification. *)
+
+type set_report = {
+  enabled : Seekwright.Config.name list;
+  (** The names the config enables, sorted — what the file {i asks} for. *)
+  effective : Seekwright.Config.name list;
+  (** Enabled ∩ permitted — what the permission set {i allows}. *)
+  built : Seekwright.Config.name list;
+  (** The names this process can dispatch, sorted — what the build {i has}.
+      Routing chooses only from this set. *)
+  unsupported : Seekwright.Config.name list;
+  (** Enabled with no adapter, from an explicitly enabled set: startup-fatal.
+      Empty under an implicit keyless default, where the same fact is
+      [skipped]. *)
+  skipped : Seekwright.Config.name list;
+  (** The implicit keyless defaults this build has no adapter for: skipped,
+      logged by name at startup, and out of every routing set. *)
+  untested : Seekwright.Config.name list;
+  (** Enabled names with no live verification on {i this port}: the four
+      Python itself calls untested, plus every name this build dispatches —
+      an OCaml live run of the shipped provider set is what retires one. This is a disclosure, never a readiness verdict: a built, probed,
+      reachable name is still untested until its own live run is recorded. *)
+}
+
+val classify : Seekwright.Config.t -> providers -> set_report
+(** The five sets [--check] prints, from one config and one build pass. The
+    categories partition {i nothing}: a name can be enabled, effective,
+    untested and unsupported at once (Python's four untested names have no
+    adapter here), and [classify] reports each fact once rather than
+    collapsing them into one word. *)
+
+val startup_verdict :
+  Seekwright.Config.t -> providers -> (unit, string) result
+(** Whether {!build_app} may construct an engine over this pair:
+
+    - an explicitly enabled name with no adapter is refused, naming {i all}
+      the offending names sorted with "not built on this port" — one row per
+      offender would make an operator fix a config one restart at a time;
+    - an implicit keyless default that leaves no keyless adapter built is
+      refused too: the skipped-names disclosure is honest only while the
+      built remainder can route;
+    - a [default_provider] outside the built set is refused wherever it came
+      from (config validation already refuses one outside [enabled]; the
+      enabled⇒built step is this verdict's).
+
+    A permitted-but-not-enabled name, and a fallback ladder naming an
+    enabled name the implicit default skipped, keep the oracle's runtime
+    sentences — a refusal, or an inert rung — because neither is a server
+    holding a name it cannot dispatch. *)
 
 val build_providers :
   sw:Eio.Switch.t ->
@@ -140,10 +200,12 @@ val build_app :
   allowed_hosts:string list ->
   Seekwright.Config.t ->
   (Seekwright.Server.app * providers, string) result
-(** Build the process-wide {!Seekwright.Server.app}: the usage recorder (a bad
-    [dashboard.history_path] is a config problem and reads as one), the shared
-    health board, the search engine over the built providers, the fetch engine
-    when enabled, and the agent engine when enabled (its model endpoint gets
-    its own endpoint-scoped grant over [[agent] base_url]). The {!providers}
-    pass travels back with the app so the startup line can bind the names this
-    build could not dispatch. *)
+(** Build the process-wide {!Seekwright.Server.app}: {!startup_verdict} first
+    (an unusable config is refused before anything is constructed around it),
+    then the usage recorder (a bad [dashboard.history_path] is a config
+    problem and reads as one), the shared health board, the search engine over
+    the built providers, the fetch engine when enabled, and the agent engine
+    when enabled (its model endpoint gets its own endpoint-scoped grant over
+    [[agent] base_url]). The {!providers} pass travels back with the app so
+    the startup line can bind the names this build skipped, and so [/healthz]
+    and the engines all read one built set. *)
