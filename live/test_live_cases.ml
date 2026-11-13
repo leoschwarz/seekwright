@@ -144,7 +144,9 @@ let test_build_status_follows_the_registry () =
   expect (Cases.Provider "anysearch") "runnable";
   expect (Cases.Provider "exa") "F5.1";
   expect (Cases.Provider "parallel:free") "F5.1";
-  expect (Cases.Provider "serper") "F5.2";
+  expect (Cases.Provider "serper") "runnable";
+  expect (Cases.Provider "scrappa") "runnable";
+  expect (Cases.Provider "searxng") "runnable";
   expect (Cases.Provider "tavily") "F5.3";
   expect (Cases.Provider "algolia") "F5.4";
   expect (Cases.Provider "deepseek") "F5.5";
