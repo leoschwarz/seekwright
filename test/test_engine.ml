@@ -1523,6 +1523,98 @@ let escaping_cases =
     A.test_case "a reread response is not escaped again" `Quick a_reread_response_is_not_escaped_again;
   ]
 
+(* {1 One routable set (F1.1)
+
+   The engine's registry is the only set routing may name: the routing table's
+   [effective] field is the registry narrowed by the permission set, not the
+   config's enabled table. That makes the named route's refusal and the
+   default route's answer describe one set — no served configuration where a
+   name is a 400 when named and a 502 when defaulted — and it is why the
+   runtime no-adapter branch is a guard rather than a route. The construction
+   half of the invariant (an explicitly enabled name with no adapter refuses
+   startup) is pinned in [test_routing_sets.ml]; these cases pin the routing
+   half. *)
+
+let a_name_without_an_adapter_refuses_rather_than_failing () =
+  (* [exa:free] is a real provider name — it is even in the frozen schema — but
+     this registry has no adapter for it. The named route answers with the
+     "not enabled" refusal, the same sentence the Python oracle gives a name
+     it never built, and never with the guard's 502. *)
+  let board = make_engine ~default:"serper" [ rig ~name:"serper" () ] in
+  let text = refused board ~provider:"exa:free" (query "x y") in
+  includes "the enabled sentence" "is not enabled on this server" text;
+  includes "the registry is what the refusal lists" "serper" text;
+  excludes "not the runtime guard's sentence" "no adapter was built" text;
+  check_int "nothing was dispatched" 0 (calls board "serper");
+  (* The default route resolves inside the same registry: one set, no
+     named-400/default-502 disagreement about [exa:free]. *)
+  let r = served board (query "x y") in
+  check_string "the default route serves from the same set" "serper" r.Model.provider
+
+let the_free_walk_only_names_built_permitted_names () =
+  (* Every enabled name here is free and there is no default, so the unnamed
+     route takes the free walk — over the registry narrowed by the permission
+     set. The permitted-out name stays dialled-zero, and no free name outside
+     the registry enters the walk at all. *)
+  let board =
+    make_engine ~permitted:[ "freeserp" ]
+      [ rig ~name:"freeserp" (); rig ~name:"anysearch" () ]
+  in
+  let r = served board (query "x y") in
+  check_string "the walk reaches the built permitted name" "freeserp" r.Model.provider;
+  check_int "the permitted-out name was never dialed" 0 (calls board "anysearch")
+
+let the_default_ladder_skips_a_name_outside_the_registry () =
+  (* A fallback rung naming a name the registry has no adapter for is an inert
+     rung — {e skipped}, like a rung for a provider that was never enabled — and
+     the failure sentence names no phantom fallback. The config here is one
+     [Seekwright_factory.startup_verdict] refuses to serve; it is built directly
+     to reach the ladder's own skip branch, which is what keeps the ladder a
+     walk over the registry rather than over the file. *)
+  let lines = ref [] in
+  let cfg = config ~default:"serper" ~fallback:[ "exa:free" ] [ "serper"; "exa:free" ] in
+  let r = rig ~name:"serper" ~fail:(failure ~name:"serper" "HTTP 503") () in
+  let engine = Engine.Search.create cfg [ (r.name, r.provider) ] ~log:(sink lines) ~clock ~now () in
+  let text =
+    match Engine.Search.search engine (query "x y") with
+    | Error (Engine.Search.Failed sentence) -> sentence
+    | Error (Engine.Search.Refused sentence) ->
+      A.failf "expected a failure (502), got a refusal (400): %s" sentence
+    | Ok response -> A.failf "expected a failure, got results from %s" response.Model.provider
+  in
+  includes "the original failure leads" "Search failed - serper: HTTP 503." text;
+  excludes "no unbuilt rung is reported as failed" "Fallbacks also failed" text;
+  check_int "the ladder is the registry's, so no rung is attempted" 1 (count lines "search.failed");
+  check_int "no fallback event names the unbuilt rung" 0 (count lines "search.fallback_failed");
+  check_int "the built default was dispatched once" 1 !(r.stub.calls)
+
+let the_no_adapter_guard_is_a_value_not_a_crash () =
+  (* An engine assembled outside [Seekwright_factory.build_app] can still be
+     handed a registry that omits the config's default — [startup_verdict]
+     refuses that pairing at app construction, but the engine's own promise is
+     that it fails through its return value. The guard answers on the 502
+     channel, which is honest here: a provider dispatch is what was attempted. *)
+  let cfg = config ~default:"exa:free" [ "exa:free" ] in
+  let engine = Engine.Search.create cfg [] ~clock ~now () in
+  match Engine.Search.search engine (query "x y") with
+  | Error (Engine.Search.Failed sentence) ->
+    includes "the guard names the fact" "no adapter was built" sentence
+  | Error (Engine.Search.Refused sentence) ->
+    A.failf "expected the guard's failure channel, got a refusal: %s" sentence
+  | Ok response -> A.failf "expected a failure, got results from %s" response.Model.provider
+
+let routable_set_cases =
+  [
+    A.test_case "a name without an adapter refuses rather than failing" `Quick
+      a_name_without_an_adapter_refuses_rather_than_failing;
+    A.test_case "the free walk only names built permitted names" `Quick
+      the_free_walk_only_names_built_permitted_names;
+    A.test_case "the default ladder skips a name outside the registry" `Quick
+      the_default_ladder_skips_a_name_outside_the_registry;
+    A.test_case "the no-adapter guard is a value not a crash" `Quick
+      the_no_adapter_guard_is_a_value_not_a_crash;
+  ]
+
 let () =
   A.run "engine"
     [
@@ -1533,6 +1625,7 @@ let () =
       ("free mode", free_mode_cases);
       ("the free-only default route", free_only_default_route_cases);
       ("the allow-list", allow_list_cases);
+      ("one routable set", routable_set_cases);
       ("zero results", zero_results_cases);
       ("observability", observability_cases);
       ("usage recording", usage_recording_cases);

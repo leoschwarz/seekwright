@@ -168,6 +168,17 @@
    seekwright.providers seekwright.factory mcp-caps uri yojson eio eio_main
    mirage-crypto-rng.unix unix alcotest))
 
+; F1.1: one routable provider set. The factory's classification and startup
+; verdict, the five sets [--check] prints from them, and the built set
+; [/healthz] advertises. Grants are constructed and never dialled, so no
+; provider endpoint is reached; the Eio loop and Unix belong to the caller,
+; as in [test_boot].
+(test
+ (name test_routing_sets)
+ (libraries seekwright seekwright.fetch seekwright.fetch.stdlib
+   seekwright.providers seekwright.factory mcp-caps uri yojson eio eio_main
+   mirage-crypto-rng.unix unix alcotest test_support))
+
 ; P4: the provider contract's machinery — the constraint report, the caps, and
 ; the failure rows provider-contract.md's Failures table fixes. It reads the
 ; adapter sources from the sandbox as well, which is what the (deps) line is:
