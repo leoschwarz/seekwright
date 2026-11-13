@@ -7,7 +7,19 @@
    answers nothing else — and [startup_verdict] is the deciding half, the one
    [Factory.build_app] runs before an engine exists. They are one module because
    they are one classification: two renderings of the same sets, which is what
-   makes [--check] and a startup refusal agree without a second rule. *)
+   makes [--check] and a startup refusal agree without a second rule.
+
+   A configured name with no adapter in this build is a construction-time fact,
+   and it is acted on at construction: [startup_verdict] refuses to start a server
+   on an explicitly enabled name this port does not carry, naming every offender at
+   once, because a running server holding such a config answers the named route with
+   one refusal and the default route with a dispatch failure — and the honest choice
+   is to refuse the half-configured deployment before it serves. The only exception
+   is the implicit keyless default (no [providers] table at all), which may start
+   over its built remainder with the skipped names logged by name; when even that
+   remainder is empty, it refuses too. Every routing decision then reads one built,
+   permitted set, and the engine's runtime no-adapter branch is a guard, never a
+   route. *)
 
 module Config = Seekwright.Config
 

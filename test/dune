@@ -536,6 +536,8 @@
   (glob_files ../lib/factory/*.ml)
   (glob_files ../lib/factory/*.mli)
   ../lib/server.ml
+  ../lib/cli/cli_check.ml
+  ../lib/cli/cli_flags.ml
   ../bin/main.ml
   ../lib/caps/dune
   ../lib/caps/policy_net.mli

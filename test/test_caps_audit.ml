@@ -566,6 +566,43 @@ let test_the_factory_builds_grants_through_one_funnel () =
       ("lib/factory/app.ml", "?audit endpoint)");
     ]
 
+(* The two rules the split exists to keep, now that the construction code sits in
+   modules no caller can name. The first is an ordering the compiler cannot
+   express: an app build that constructed its engines before taking the
+   routable-set verdict would pay for an engine it then refuses to use, and every
+   type would still check. The needle is the call site rather than the bare name,
+   because app.ml re-exports the verdict under a local alias and a bare needle
+   would find that alias line and pass without looking at the order at all. *)
+let test_the_verdict_runs_before_the_engine () =
+  let app = factory_source "lib/factory/app.ml" in
+  match
+    ( find_sub ~haystack:app ~needle:"startup_verdict config built in" (),
+      find_sub ~haystack:app ~needle:"Engine.Search.create" () )
+  with
+  | Some verdict_at, Some engine_at ->
+      A.(check bool "the verdict runs before the engine construction" true
+           (verdict_at < engine_at))
+  | _ -> Alcotest.fail "app.ml lost the verdict call or the engine construction"
+
+(* The second is the boundary that keeps the diagnosis cheap: [--check] answers
+   with names and numbers, so it builds no engine and has no reason to reach the
+   app build.  [bin/main.ml] is the one caller allowed to, because it is the only
+   path with a socket and an engine, and its [Factory.build_app] call is what
+   records that. build_app leaves the facade in one direction only, so a caller
+   that wanted an app on a diagnosis path would have to name a private module. *)
+let cli_check_source = read_file "../lib/cli/cli_check.ml"
+let cli_flags_source = read_file "../lib/cli/cli_flags.ml"
+
+let test_the_diagnosis_never_builds_an_app () =
+  List.iter
+    (fun (file, source) ->
+      excludes (file ^ " does not name the App module") "App." source;
+      excludes (file ^ " does not call build_app") "build_app" source)
+    [ ("lib/cli/cli_check.ml", cli_check_source); ("lib/cli/cli_flags.ml", cli_flags_source) ];
+  includes "bin/main.ml builds the app through the facade" "Factory.build_app" main_source;
+  includes "factory.ml re-exports the app build" "let build_app = App.build_app"
+    (factory_source "lib/factory/factory.ml")
+
 (* The layer's per-operation counter is a caller's ceiling. Server construction
    has no caller scope to attach one to, so a budget on the serving path is a
    server-lifetime limit wearing a request's name. Every mention of it in the
@@ -700,6 +737,10 @@ let () =
         [
           A.test_case "the factory builds grants through one funnel" `Quick
             test_the_factory_builds_grants_through_one_funnel;
+          A.test_case "the verdict runs before the engine" `Quick
+            test_the_verdict_runs_before_the_engine;
+          A.test_case "the diagnosis never builds an app" `Quick
+            test_the_diagnosis_never_builds_an_app;
           A.test_case "no operation budget on the serving path" `Quick
             test_no_operation_budget_on_the_serving_path;
           A.test_case "production modules obtain grants from the factory" `Quick
