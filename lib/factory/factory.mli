@@ -48,7 +48,7 @@
 val audit_sink : Seekwright.Engine.log -> Mcp_caps.Event.t -> unit
 
 (** What one pass of {!build_providers} produced. *)
-type providers = {
+type providers = Provider_set.providers = {
   built : (Seekwright.Config.name * Seekwright.Provider.t) list;
   (** The adapters this deployment can dispatch, in config order. A name whose
       registry row defers its adapter to a later wave is absent — and is listed
@@ -90,7 +90,7 @@ type providers = {
     {!classify} for its provider section, so both paths report the same fact
     from one classification. *)
 
-type set_report = {
+type set_report = Provider_set.set_report = {
   enabled : Seekwright.Config.name list;
   (** The names the config enables, sorted — what the file {i asks} for. *)
   effective : Seekwright.Config.name list;

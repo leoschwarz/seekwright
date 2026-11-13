@@ -32,7 +32,7 @@ module Server = Seekwright.Server
 
 let ( let* ) = Result.bind
 
-type providers = {
+type providers = Provider_set.providers = {
   built : (Config.name * Provider.t) list;
   probe_table : (Config.name * Health.probe_spec) list;
   endpoints : Policy.endpoint list;
@@ -238,7 +238,7 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit ?log config =
 
 (* {1 One routable set, and the configs that may serve it} *)
 
-type set_report = {
+type set_report = Provider_set.set_report = {
   enabled : Config.name list;
   effective : Config.name list;
   built : Config.name list;
