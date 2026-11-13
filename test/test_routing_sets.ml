@@ -64,16 +64,19 @@ let the_default_config_starts_over_its_built_remainder () =
     A.(check bool "and the default config may start" true
          (Result.is_ok (Factory.startup_verdict Config.default built))))
 
-let the_built_free_remainder_is_ocaml_untested () =
-  (* OCaml-untested is this port's own status: Python's four untested names
-     plus everything this build dispatches, until the OCaml live runner
-     records a run of its own. A reachability probe never moves a name —
-     [freeserp] is live-green in Python and still untested here. *)
+let the_built_free_remainder_is_ocaml_live_tested () =
+  (* OCaml-untested is this port's own status: a name leaves it only in the
+     change that records its successful OCaml live run, never because Python
+     was green for it. F4.3's first acceptance check ran the two keyless built
+     names, so the one name the implicit config dispatches is now tested and
+     the untested set is empty. *)
   with_env (fun ~env ~sw ->
     let built = build ~env ~sw Config.default in
     let sets = Factory.classify Config.default built in
-    A.(check (list string) "the one dispatched name is untested on this port"
-         [ "freeserp" ] sets.Factory.untested))
+    A.(check (list string) "the one dispatched name is live-tested on this port"
+         [ "freeserp" ] sets.Factory.built);
+    A.(check (list string) "and no built name is OCaml-untested" []
+         sets.Factory.untested))
 
 let no_keyless_adapter_left_refuses_the_implicit_config () =
   (* The transition exception stops applying when it would serve nothing: a
@@ -180,9 +183,10 @@ let the_five_sets_are_reported_apart () =
   (* One config that touches all five categories at once: [exa] is enabled,
      unsupported and startup-fatal; [search1api] is enabled, permitted,
      unsupported and one of Python's untested four; [freeserp] is enabled,
-     permitted, built — and still untested on this port, because OCaml has
-     recorded no live run. No category collapses into another, and none of
-     them says "ready": the ready count is the probe's, printed elsewhere. *)
+     permitted and built, and now OCaml live-tested by F4.3's keyless run, so
+     it is no longer in the untested set. No category collapses into another,
+     and none of them says "ready": the ready count is the probe's, printed
+     elsewhere. *)
   with_env (fun ~env ~sw ->
     let cfg =
       config ~permitted:[ "freeserp"; "search1api" ] [ "freeserp"; "exa"; "search1api" ]
@@ -194,7 +198,7 @@ let the_five_sets_are_reported_apart () =
     A.(check (list string) "built" [ "freeserp" ] sets.Factory.built);
     A.(check (list string) "unsupported" [ "exa"; "search1api" ] sets.Factory.unsupported);
     A.(check (list string) "OCaml-untested, built names included"
-         [ "freeserp"; "search1api" ] sets.Factory.untested);
+         [ "search1api" ] sets.Factory.untested);
     A.(check bool "and the verdict is the startup-fatal reading" false
          (Result.is_ok (Factory.startup_verdict cfg (build ~env ~sw cfg)))))
 
@@ -277,8 +281,8 @@ let () =
           [
             A.test_case "the default config starts over its built remainder" `Quick
               the_default_config_starts_over_its_built_remainder;
-            A.test_case "the built free remainder is OCaml-untested" `Quick
-              the_built_free_remainder_is_ocaml_untested;
+            A.test_case "the built free remainder is OCaml-live-tested" `Quick
+              the_built_free_remainder_is_ocaml_live_tested;
             A.test_case "no keyless adapter left refuses the implicit config" `Quick
               no_keyless_adapter_left_refuses_the_implicit_config;
           ] );

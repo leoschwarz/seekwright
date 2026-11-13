@@ -130,13 +130,17 @@ let every_name_has_a_row_built_or_deferred () =
     check (list string) "the deferred rows are the rest" unbuilt
        (List.sort String.compare deferred);
     check int "the two halves are the seventeen" 17 (List.length built + List.length deferred));
-  (* live-tested is a property of this port, and no OCaml live run has happened:
-     the runner (F4.3) retires a name in the change that records its run, and it
-     never inherits Python's live history. *)
-  List.iter
-    (fun r ->
-      A.(check bool (r.Registry.name ^ " has no recorded OCaml live run") true (not r.Registry.ocaml_live_tested)))
-    Registry.rows
+  (* live-tested is a property of this port: the runner (F4.3) retires a name in
+     the change that records its successful run in
+     [plans/seekwright-ocaml-port.md], and it never inherits Python's live
+     history. F4.3's first acceptance check ran the two keyless built names. *)
+  let live_tested =
+    List.filter_map
+      (fun r -> if r.Registry.ocaml_live_tested then Some r.Registry.name else None)
+      Registry.rows
+  in
+  A.(check (list string) "only the recorded keyless runs are live-tested"
+       [ "anysearch"; "freeserp" ] (List.sort String.compare live_tested))
 
 (* {1 Price: one figure per name, and one name with none to spend} *)
 

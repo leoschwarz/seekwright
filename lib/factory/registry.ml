@@ -92,6 +92,7 @@ let make_row ~name ~endpoint ~build
     ?(context = Snippets)
     ?(probe = No_probe)
     ?(settings = [])
+    ?(ocaml_live_tested = false)
     () =
   {
     name;
@@ -105,12 +106,12 @@ let make_row ~name ~endpoint ~build
     context;
     probe;
     settings;
-    (* No name on this port has a recorded OCaml live run: the runner (F4.3) is
-       what retires a name from [untested], and it never inherits Python's live
-       history. A row that says [true] before that run is a disclosure bug, so
-       the field is not a labelled argument — it is written here, once, until the
-       runner says otherwise. *)
-    ocaml_live_tested = false;
+    (* False is the only safe default: a name retires from [untested] in the
+       change that records its successful OCaml live run in
+       [plans/seekwright-ocaml-port.md], and it never inherits Python's live
+       history. A row that passes [true] without that record is a disclosure
+       bug, so the argument is named and set only at that row. *)
+    ocaml_live_tested;
   }
 
 (* A probe at the adapter's own endpoint. The URL is that URI with the probe's
@@ -150,7 +151,7 @@ let rows =
        POST-only, so the bodyless probe proves the network path and the live test
        proves the contract. *)
     make_row ~name:"anysearch" ~endpoint:(Fixed_uri Anysearch.endpoint) ~requires:[]
-      ~probe:(probe_at Anysearch.endpoint)
+      ~probe:(probe_at Anysearch.endpoint) ~ocaml_live_tested:true
       ~build:
         (Adapter
            (fun a ->
@@ -189,6 +190,7 @@ let rows =
        thing. *)
     make_row ~name:"freeserp" ~endpoint:(Fixed_uri Freeserp.endpoint) ~requires:[]
       ~probe:(probe_at ~query:[ ("index", [ "web" ]); ("q", [ "probe" ]) ] Freeserp.endpoint)
+      ~ocaml_live_tested:true
       ~build:
         (Adapter
            (fun a ->

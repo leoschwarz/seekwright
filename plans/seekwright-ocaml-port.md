@@ -1343,3 +1343,75 @@ rewrite intact — `build_providers` names its endpoint/bound pair `adapter` and
 `agent_net` binds `endpoint`, so the source scan still reads one
 `Authority.with_log`, one `Authority.Net.of_confinement`, `?audit adapter.endpoint`
 and `?audit endpoint)`. No suite reached a provider endpoint; no key was needed.
+
+## 23. F4.3 — the explicit live harness, and its first keyless runs (2026-11-13)
+
+Landed on `f4-3-live`. Spec: `plans/ocaml-finalisation.md` §F4.3.
+
+**What landed.** `live/` holds the port's live runner: a `live_harness` library
+(`Cases`, `Checks`, `Runner`), the executable `main` published as
+`seekwright-live`, and the hermetic `test_live_cases`. It is deliberately *not*
+part of the test aliases — `dune runtest` stays offline, and no gate step
+reaches a provider. `seekwright-live` is built by `dune build @install` so the
+instrument travels with the tree, but running it is a maintainer act, not CI.
+
+**One named case, never a sweep.** `main` requires
+`SEEKWRIGHT_LIVE_TESTS=1` and exactly one selector: one of the seventeen
+provider names (the flavour form `exa:free` is parsed as a provider before the
+namespace split), `fetch:local|metadata|jina|scrappa|tavily|linkup`, or
+`agent:brief|report`. `all`, `*`, `every` and the empty string are refused; there
+is no "everything configured" mode, so a billed name is reached only by setting
+the gate and spelling it. `--list` and `--help` are hermetic.
+
+**The case is data; the assertions are per adapter.** `Cases` holds the query,
+width, filters and cost class of each case and derives build status from the F4.1
+registry rows: the fifteen unbuilt names skip with their wave (`F5.1`–`F5.5`) and
+the fetch fallbacks with `F6.1`, while `freeserp` and `anysearch` are runnable.
+`Checks` ports the oracle's assertion bodies one function per case — a SERP
+backend fills `snippet` and never `text`, a content backend the reverse, a domain
+filter constrains the returned URLs, an answer backend answers, the metadata case
+is a refusal — and `Checks.provider_step` fails loudly for a name with no arm, so
+a new adapter cannot arrive behind a generic "returned something" check. Status
+mapping: 0 pass/skip, 1 failed assertion, 2 refused/misused, 3 inconclusive. The
+quota branch is the engine's own "Do not retry immediately." advice, so a
+rate-limited run is recorded as unproven, never as a pass.
+
+**Construction is the application's.** A provider case builds through
+`Factory.build_providers` and one `Engine.Search` (a named provider is terminal,
+as when served); a fetch case through `Factory.build_fetch_stack` and one
+`Engine.Fetch`, closing the stack afterwards; an agent case through
+`Factory.build_app` with only `freeserp` enabled, so the unnamed retrieval route
+is free-only. The header prints `scheme://host` and the credential's *variable
+name*, never a key value or a URL query.
+
+**Initial acceptance: the two keyless runs.** The maintainer authorised exactly
+one run of each keyless built case, separately, and no billed call:
+
+| date | case | commit | result | note |
+|---|---|---|---|---|
+| 2026-11-13 | `freeserp` | `73fcf73` | passed, 6/6 | keyless; `search "python asyncio tutorial"`, 5 results |
+| 2026-11-13 | `anysearch` | `73fcf73` | passed, 6/6 | keyless; same query; endpoint is POST-only |
+
+Neither was rate-limited, so neither is inconclusive. Both checks held: the
+response names the asked-for provider, returns at least one result, every result
+has an http(s) URL and a title, at least one carries a snippet, and no result
+carries `text` (both are SERP-shaped). `ocaml_live_tested` is now `true` for
+exactly these two `Registry` rows, and `test/test_provider_registry.ml` pins that
+set instead of the former all-untested assertion. The routing-set pins that
+asserted the implicit default's dispatch was untested move with it: `freeserp` is
+now the built, tested name there, and `search1api` is the only name left in the
+five-way config's untested set. Every other name stays OCaml-untested: its
+adapter, or its first recorded live run, is still to come.
+
+The fetch and agent cases are ported and selectable but **not yet run live** —
+`fetch:local` would dial the open web and the agent case needs an operator model
+endpoint plus a model call. They remain OCaml-untested in
+`Cases.recorded_non_provider_runs`.
+
+Gate at landing: `dune build @install`, `dune runtest --force` (58 suites, the
+harness's 19 hermetic cases included) and `dune build @doc` all exit 0. The two
+live runs above are the only provider contacts made; no billed endpoint was
+reached. The skip paths were exercised gated but offline for `serper` (no key,
+and its build is deferred to F5.2), `exa` (F5.1), `fetch:jina` (F6.1) and
+`searxng` (F5.2): each exits 0 with its reason named, as a missing configuration
+must.
