@@ -394,52 +394,58 @@ let sniffs_html (body : string) : bool =
 
 let normalise (text : string) (title : string option) : extract_result =
   let t = Utf8.of_string text in
-  let collapsed =
-    let ws =
-      let out = ref [] in
-      let n = Array.length t in
-      let i = ref 0 in
-      while !i < n do
-        let c = t.(!i) in
-        if c = 0x20 || c = 0x09 then (
-          out := 0x20 :: !out;
-          let j = ref (!i + 1) in
-          while !j < n && (t.(!j) = 0x20 || t.(!j) = 0x09) do
-            incr j
-          done;
-          i := !j)
-        else (
-          out := c :: !out;
-          incr i)
-      done;
-      Array.of_list (List.rev !out)
-    in
-    let blanks =
-      let out = ref [] in
-      let n = Array.length ws in
-      let i = ref 0 in
-      while !i < n do
-        if ws.(!i) = 0x0A then (
-          let j = ref !i in
-          while !j < n && ws.(!j) = 0x0A do
-            incr j
-          done;
-          let run = !j - !i in
-          out := (if run >= 3 then [ 0x0A; 0x0A ] else Array.to_list (Array.sub ws !i run)) @ !out;
-          i := !j)
-        else (
-          out := ws.(!i) :: !out;
-          incr i)
-      done;
-      Array.of_list (List.rev !out)
-    in
-    let n = Array.length blanks in
-    let rec lead i = if i < n && Utf8.is_python_space blanks.(i) then lead (i + 1) else i in
-    let rec trail i = if i >= 0 && Utf8.is_python_space blanks.(i) then trail (i - 1) else i in
-    let a = lead 0 and b = trail (n - 1) in
-    if a > b then [||] else Array.sub blanks a (b - a + 1)
+  (* Both passes run in place on the [Uchar] array: each writes its own prefix of
+     the array it reads, which is safe only because a whitespace pass never
+     inserts a codepoint, so its write index cannot overtake its read index. A
+     cons cell per codepoint and an [Array.of_list] per pass was the whole cost of
+     a 187 kB page in the F6.2 measurement; the numbers are in the plan. *)
+  let n0 = Array.length t in
+  let space_end =
+    let w = ref 0 and i = ref 0 in
+    while !i < n0 do
+      let c = t.(!i) in
+      if c = 0x20 || c = 0x09 then (
+        (* One space for a run of spaces and tabs, whatever the run is made of:
+           a tab never survives this pass. *)
+        t.(!w) <- 0x20;
+        incr w;
+        let j = ref (!i + 1) in
+        while !j < n0 && (t.(!j) = 0x20 || t.(!j) = 0x09) do
+          incr j
+        done;
+        i := !j)
+      else (
+        t.(!w) <- c;
+        incr w;
+        incr i)
+    done;
+    !w
   in
-  let text = Utf8.to_string collapsed in
+  let blank_end =
+    let w = ref 0 and i = ref 0 in
+    while !i < space_end do
+      if t.(!i) = 0x0A then (
+        let j = ref (!i + 1) in
+        while !j < space_end && t.(!j) = 0x0A do
+          incr j
+        done;
+        let keep = if !j - !i >= 3 then 2 else !j - !i in
+        for _ = 1 to keep do
+          t.(!w) <- 0x0A;
+          incr w
+        done;
+        i := !j)
+      else (
+        t.(!w) <- t.(!i);
+        incr w;
+        incr i)
+    done;
+    !w
+  in
+  let rec lead i = if i < blank_end && Utf8.is_python_space t.(i) then lead (i + 1) else i in
+  let rec trail i = if i >= 0 && Utf8.is_python_space t.(i) then trail (i - 1) else i in
+  let a = lead 0 and b = trail (blank_end - 1) in
+  let text = Utf8.to_string (if a > b then [||] else Array.sub t a (b - a + 1)) in
   {
     text;
     title = (match title with Some t when t <> "" -> Some t | _ -> None);
