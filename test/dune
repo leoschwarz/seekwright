@@ -371,7 +371,11 @@
 ; tests/fetch/test_jsondoc.py and test_tabledoc.py.
 (test
  (name test_jsondoc)
- (libraries seekwright.fetch alcotest test_support))
+ (libraries seekwright.fetch alcotest test_support)
+ (deps
+  ../lib/fetch/jsondoc.ml
+  ../lib/fetch/tabledoc.ml
+  ../lib/fetch/extractor.ml))
 
 ; F1.4: fetch.allow_private_addresses — the capability variant the local
 ; reader is built with, pinned through a loopback fixture (the same shape as

@@ -210,17 +210,28 @@ let dump_float f =
     let s = format digits decpt in
     if neg then "-" ^ s else s
 
-let dump_leaf (json : Yojson.Safe.t) =
-  match json with
-  | `Null -> "null"
-  | `Bool true -> "true"
-  | `Bool false -> "false"
-  | `Int i -> string_of_int i
-  | `Intlit s -> s
-  | `Float f -> dump_float f
-  | `String s -> json_string s
-  | _ -> assert false
-(* Containers never reach here: the walk renders them as headers. *)
+(* A leaf is the part of a document a rendering prints as a value; a container
+   is printed as its own header line by the walk instead. Saying that as a type
+   is what lets {!dump_leaf} be total: a container is not a leaf, so the walk
+   cannot hand one over. *)
+
+type leaf =
+  | Null
+  | Bool of bool
+  | Int of int
+  | Intlit of string
+  | Float of float
+  | String of string
+
+let dump_leaf (leaf : leaf) =
+  match leaf with
+  | Null -> "null"
+  | Bool true -> "true"
+  | Bool false -> "false"
+  | Int i -> string_of_int i
+  | Intlit s -> s
+  | Float f -> dump_float f
+  | String s -> json_string s
 
 let is_name_start c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c = '_'
 
@@ -353,6 +364,7 @@ let render_json text =
                     :: Frame (path, depth, tail)
                     :: rest)
               | Node (path, depth, json) -> (
+                  let leaf_line leaf = (Printf.sprintf "%s  %s" path (dump_leaf leaf), None) in
                   let line, push =
                     match json with
                     | `Assoc members ->
@@ -381,7 +393,12 @@ let render_json text =
                                  ( path,
                                    depth,
                                    List.mapi (fun i v -> (Ordinal i, v)) items )) )
-                    | leaf -> (Printf.sprintf "%s  %s" path (dump_leaf leaf), None)
+                    | `Null -> leaf_line Null
+                    | `Bool b -> leaf_line (Bool b)
+                    | `Int i -> leaf_line (Int i)
+                    | `Intlit s -> leaf_line (Intlit s)
+                    | `Float f -> leaf_line (Float f)
+                    | `String s -> leaf_line (String s)
                   in
                   lines := line :: !lines;
                   spent := !spent + Utf8.count line + 1;
@@ -776,9 +793,9 @@ let classify payload =
       && payload.[kl] = '('
     then
       let rest = String.sub payload (kl + 1) (String.length payload - kl - 1) in
-      (* The bound is parsed once and destructured where it appears. The guard
-         and the force beside it evaluated [python_int] on the same slice twice
-         and re-sliced it a third time (style review M3). *)
+      (* The bound is read once: the closing parenthesis and the number before
+         it come from the same slice, so the size that is kept is the one the
+         guard tested. *)
       (match String.index_opt rest ')' with
       | Some i -> (
           match python_int (String.sub rest 0 i) with

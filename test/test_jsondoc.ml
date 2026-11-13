@@ -130,6 +130,31 @@ let test_kinds_survive_the_rendering () =
     [ "$.a  1"; "$.b  \"1\""; "$.c  true"; "$.d  \"true\""; "$.e  null" ]
     (List.tl ls)
 
+let test_float_and_out_of_range_integers_are_leaves_too () =
+  (* Every scalar Yojson can hand the walk is named by the [leaf] type: a float
+     keeps Python's [repr], and an integer past the machine word arrives as
+     [Intlit] and is printed verbatim. *)
+  let ls = lines (render "{\"f\": 1.5, \"big\": 123456789012345678901234567890}") in
+  A.check (A.list A.string) "leaf kinds"
+    [ "$  object(2)"; "$.f  1.5"; "$.big  123456789012345678901234567890" ] ls
+
+(* F8: the renderer and the media-type phrase stay total. [dump_leaf]'s domain
+   is the [leaf] type, so it needs no unreachable arm; [describe_types] walks
+   its list rather than taking [List.hd]/[List.tl]. The compiler proves the
+   first at the call site, and this reads the sources so a partial accessor
+   cannot return unnoticed. *)
+let test_no_unreachable_arm_or_partial_list_accessor () =
+  let forbidden = [ "assert false"; "List.hd"; "List.tl" ] in
+  List.iter
+    (fun (name, path) ->
+      let source = read_file path in
+      List.iter
+        (fun needle -> excludes (Printf.sprintf "%s has no %S" name needle) needle source)
+        forbidden)
+    [ ("jsondoc.ml", "../lib/fetch/jsondoc.ml");
+      ("tabledoc.ml", "../lib/fetch/tabledoc.ml");
+      ("extractor.ml", "../lib/fetch/extractor.ml") ]
+
 let test_document_order_is_kept () =
   let ls = lines (render "{\"z\": 1, \"a\": 2}") in
   A.check (A.list A.string) "document order" [ "$.z  1"; "$.a  2" ] (List.tl ls)
@@ -561,6 +586,10 @@ let () =
             test_a_leaf_is_compact_json_at_its_own_path;
           Alcotest.test_case "kinds survive the rendering" `Quick
             test_kinds_survive_the_rendering;
+          Alcotest.test_case "float and out-of-range integer leaves render" `Quick
+            test_float_and_out_of_range_integers_are_leaves_too;
+          Alcotest.test_case "no unreachable arm or partial list accessor" `Quick
+            test_no_unreachable_arm_or_partial_list_accessor;
           Alcotest.test_case "document order is kept" `Quick test_document_order_is_kept;
           Alcotest.test_case "a duplicate key keeps its first place and its last value" `Quick
             test_a_duplicate_key_keeps_its_first_place_and_its_last_value;

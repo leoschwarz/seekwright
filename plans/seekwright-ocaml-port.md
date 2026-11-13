@@ -1533,3 +1533,27 @@ differential-golden(provider)`, and the adapter-parity row claims
 @doc` all exit 0, and the three new `.mli` files build doc-clean. Nothing in this
 change reached a provider endpoint: no live test ran, no key was read, and each
 new row keeps `ocaml_live_tested = false` until the F4.3 runner records a run.
+
+## 25. F8 — jsondoc/tabledoc totality and comment sweep (2026-11-13)
+
+Landed on `f8-jsondoc`, the jsondoc slice of F8. `Jsondoc.dump_leaf` no longer
+has an `assert false`: its domain is a local `leaf` variant (`Null`, `Bool`,
+`Int`, `Intlit`, `Float`, `String`), and `render_json` destructures exactly those
+six Yojson constructors, so the container cases are handled by the branches that
+print headers and the leaf case cannot reach a failure arm.
+`Extractor.describe_types` walks the label list with one recursive `phrase`
+instead of `List.rev`/`List.tl`/`List.hd`; the phrase is byte-for-byte the old one
+(`a, b and c`, `a and b`, `nothing`), so no golden moved. The `supported_types`
+doc is on the value in `extractor.mli`, and the `json_types`/`table_types` docs
+that had drifted onto `text_types`/`json_types` are back on their own
+declarations. Two stale comments went with the change: the `dump_leaf` note that
+said containers could never arrive, and the `classify` note that recounted a past
+style-review edit rather than the constraint it protects.
+
+`test/test_jsondoc.ml` gains a leaf-kind case (float repr and an out-of-range
+integer that Yojson hands over as `Intlit`) and a source guard over `jsondoc.ml`,
+`tabledoc.ml` and `extractor.ml` refusing `assert false`, `List.hd` and
+`List.tl`. The three files are declared in the stanza's `deps`, so the guard reads
+them from the dune sandbox. No differential golden changed. Gate at landing:
+`dune build @install`, `dune runtest --force` (61 suites) and `dune build @doc`
+all exit 0; nothing reached a provider endpoint.

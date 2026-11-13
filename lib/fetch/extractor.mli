@@ -75,12 +75,20 @@ parses and does nothing is the failure mode both exist to remove. *)
 (* {1 Media types} *)
 
 val html_types : string list
+(** The HTML media types a backend may claim. *)
+
 val pdf_types : string list
+(** The PDF media types, which no backend in this port claims: there is no PDF
+reader here, so the type set is what refuses a PDF before its body is spent. *)
+
 val text_types : string list
+(** Plain-text and XML types, read decoded and passed through rather than walked
+as a structure. *)
+
+val json_types : string list
 (** The JSON family the backend claims: one-document types and the JSON
 Lines stream types, [Jsondoc]'s two lists joined. *)
 
-val json_types : string list
 val table_types : string list
 (** [Tabledoc.table_types]. *)
 

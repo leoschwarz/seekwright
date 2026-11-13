@@ -85,6 +85,9 @@ let json_types = Jsondoc.json_document_types @ Jsondoc.jsonl_types
 let table_types = Tabledoc.table_types
 
 let supported_types = html_types @ pdf_types @ text_types @ json_types @ table_types
+(** The union every Python backend with its extra installed claimed — kept for
+    the derived-phrase tests, not for dispatch: the gate reads a backend's own
+    [supported_types]. *)
 
 let known_extractors = [ "stdlib" ]
 (** Every fetch extraction backend this build knows how to construct, by name.
@@ -482,6 +485,11 @@ let table_extraction (text : string) (kind : string) : extract_result =
 
 (* {1 The phrase the refusal is built from} *)
 
+(* Families render in a fixed order and an unclaimed type is appended verbatim
+   and sorted, so a given set always reads the same way. The phrase is
+   model-facing, so it follows the backend's own claim rather than a hardcoded
+   list. *)
+
 let describe_types (types : string list) : string =
   let families =
     [
@@ -512,21 +520,13 @@ let describe_types (types : string list) : string =
     List.sort compare (List.filter (fun k -> not (List.mem k claimed)) types)
   in
   let labels = labels @ extras in
-  let rec join = function
-    | [] -> ""
-    | [ last ] -> last
-    | next :: rest -> next ^ ", " ^ join rest
+  let rec phrase = function
+    | [] -> "nothing"
+    | [ one ] -> one
+    | [ left; right ] -> left ^ " and " ^ right
+    | head :: rest -> head ^ ", " ^ phrase rest
   in
-  match labels with
-  | [] -> "nothing"
-  | [ one ] -> one
-  | _ -> join (List.rev (List.tl (List.rev labels))) ^ " and " ^ List.hd (List.rev labels)
-  (** A human phrase naming the media types a backend can read. Derived rather
-      than hardcoded, because the phrase is model-facing: it appears in the
-      refusal for a URL the backend cannot read, and a backend swap must not
-      leave that message claiming a type the new one lacks. Families render in
-      a fixed order, so a given set always reads the same way; a type no family
-      claims is appended verbatim and sorted. *)
+  phrase labels
 
 (* {1 Passage selection} *)
 
