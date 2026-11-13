@@ -855,3 +855,59 @@ no socket opens, no provider is contacted, and `application.toml` sets
 `dune build @doc` exit 0 under the opam+GMP environment. No gate step reaches a
 provider; the live application script is not part of `runtest`, and its only
 network traffic is loopback to the binary it started.
+=======
+## 17. F3.2 — the CLI as library plus effects (2026-11-13)
+
+Landed on `f3-2-cli`. Spec: `plans/ocaml-finalisation.md` §F3.2.
+
+**Why the split.** The Python's CLI calls `parser.error` and `sys.exit` from
+the middle of its argument code, so nothing of it is callable — which is why
+`tests/test_cli.py` can only drive it as a subprocess. The port moves every
+decision out of `bin/main.ml` into a new library, `seekwright.cli`
+(`lib/cli/`), that names no stream and never exits:
+
+- `Cli_extract` — the client's argument scan (`scan_args`) and the three
+  request bodies; the scan keeps argparse's quirks, `--flag=value` inline,
+  `BooleanOptionalAction` for `--safe-search`/`--no-safe-search` (both
+  spellings fill the field without eating the next token), and the request
+  models are the validators, so a body the REST route would refuse is refused
+  at the scan with the Python's sentence.
+- `Cli_flags` — the server-flag scanner (still dispatched only through
+  `Server.flag_spec` and the table's keys) and `startup_refusal`, the four
+  startup refusals in the Python's order, as sentences.
+- `Cli_client` — verbs, routes, status handling, human rendering, exit codes,
+  over an injected `post : path -> string -> (int * string, string) result`.
+- `Cli_check` / `Cli_metrics` — the two reports, driven through an `emit`
+  line callback, and the metrics report takes `now` as an argument so the
+  window's dates are facts of the test rather than of the clock.
+
+`bin/main.ml` (1011 → 263 lines) keeps only the effects: which verb or flag
+set this invocation is, the `Eio_main` loop and the `Eio.Stdenv.t` the
+network grants open on, the one real `post` (plain HTTP to the loopback
+default, HTTPS through `ca-certs` + `tls-eio`), stdout/stderr and the exit
+status. The verb's own flags stay with the verb: `Cli_client.run` reads
+`--json` and `--server` from its scan, so the binary spells no flag at all.
+`test_p8_server`'s flag guard now reads `lib/cli/cli_flags.ml` for
+the scanner and requires `bin/main.ml` to hold no `flag_spec` and no flag
+spelling of its own; `test_fetch_grant`'s private-web disclosure guard reads
+`lib/cli/cli_check.ml`.
+
+**New suites** (`test/test_cli_extract|flags|client|check|metrics.ml`): the
+flag-to-field table, the usage sentences, the startup refusals over in-memory
+fixture configs, the client around a fake `post` (route per verb, `--server`
+origin, status → sentence → exit code, the human layouts, the `--json`
+echo), and both report pieces through `emit`. Plus executable rules in
+`test/dune` (the pattern `bin/check_unbuilt` already used) that pin the
+binary's frozen sentences byte for byte: three usage refusals and two startup
+refusals on stderr with their exit codes, empty stdout pinned beside each by
+one shared empty golden, and `--metrics --json` over an empty board on
+stdout — the only metrics pin that survives the calendar,
+since the report's window is counted from the run's clock; the dated table
+stays pinned in `test_cli_metrics.ml` with the clock injected. `seen` is now
+the Python's `fromisoformat().astimezone(UTC)` rendering rather than a
+string cut, so `±HH:MM` stamps print as UTC like Python's do.
+
+Gate at landing: `dune build @install`, `dune runtest --force` and
+`dune build @doc` all exit 0 — every existing golden (`bin/check_unbuilt*`,
+`bin/smoke*`, `test/check_transitional*`) byte-identical. No suite reached a
+provider endpoint.
