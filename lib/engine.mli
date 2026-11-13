@@ -77,6 +77,17 @@ module Search : sig
       zero-results notice's "other enabled providers" list and the routing
       table's [providers] field, so it is kept, not sorted.
 
+      The registry is also the {i only} set routing may choose: the routing
+      table's [effective] field is the registry narrowed by the permission
+      set, not the config's enabled names, so the default route, the free
+      walk, and the fallback rungs can never name a route with no adapter
+      behind it. A config that enabled an unbuilt name is refused before an
+      engine is built — [Seekwright_factory.startup_verdict] — which is what
+      keeps the named route's refusal and the default route's answer
+      describing one set (Python's [factory.py] cannot produce the split: it
+      builds an adapter for every enabled name or refuses startup for a
+      missing key).
+
       [?health] absent is a fresh board, as in Python's tests and [--check]; the
       server passes the shared one so the engine and the health monitor agree on
       who is up. That board's cooldowns read [~clock]. *)

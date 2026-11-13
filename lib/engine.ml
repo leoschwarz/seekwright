@@ -187,9 +187,20 @@ module Search = struct
      may swap; here those are values, so the only way to change them is to build
      another engine — and reading the table per call is what makes a route come
      from what this engine holds at the moment it routes, however it got those
-     fields. *)
+     fields.
+
+     Every field that names a dispatchable set is derived from the registry, not
+     from the config's enabled table: [providers] is the registry and [effective]
+     is the registry narrowed by the permission set. A served config therefore
+     cannot have the config's enabled names outrunning the adapters —
+     [Seekwright_factory.startup_verdict] refuses that pairing before an engine
+     is ever built — and the free walk and the default can only resolve to a
+     name with an adapter behind it. [Config.effective_providers] stays what
+     [--check] reports about a {i file}; routing answers with what this engine
+     {i runs}. *)
   let table (t : t) : Router.search_table =
-    { Router.providers = List.map fst t.providers
+    let built = List.map fst t.providers in
+    { Router.providers = built
     ; default = t.config.Config.default_provider
     ; permitted = t.config.Config.permitted_providers
     ; fallback = (match t.config.Config.search.fallback with None -> [] | Some ladder -> ladder)
@@ -197,7 +208,10 @@ module Search = struct
         (match t.config.Config.search.free_fallback with None -> [] | Some ladder -> ladder)
     ; free = Config.free_providers
     ; free_order = Config.free_provider_order
-    ; effective = Config.effective_providers t.config
+    ; effective =
+        (match t.config.Config.permitted_providers with
+        | None -> built
+        | Some permitted -> List.filter (fun name -> List.mem name permitted) built)
     }
 
   let resolve t ?mode requested =
@@ -226,9 +240,14 @@ module Search = struct
        separate question. A named failure still fails, and still counts. *)
     match List.assoc_opt name t.providers with
     | None ->
-      (* Unreachable through [resolve], which answers only names taken from this
-         same registry. Guarded rather than assumed, because [search] promises to
-         fail through its return value and not by raising. *)
+      (* Unreachable in a served process: [Seekwright_factory.startup_verdict]
+         refuses startup when an explicitly enabled name has no adapter and
+         skips the implicit default's unbuilt keyless names, so every name
+         [resolve] can answer is in this same registry. Kept as a guard, not a
+         route, because [search] promises to fail through its return value and
+         never by raising — an engine assembled directly by a test or caller
+         sits outside that startup check, and its failure is still a returned
+         {!Failed}, not a crash. *)
       Error (Provider.provider_error ~provider:name "no adapter was built for this name")
     | Some adapter ->
       (match Provider.search adapter q with
