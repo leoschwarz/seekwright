@@ -1,0 +1,37 @@
+; The OCaml live harness (F4.3): one explicitly named case per invocation, a
+; gate variable that must be set, and per-adapter assertions rather than one
+; generic "returned something" check.
+;
+; [seekwright-live] is built by [dune build @install] and is deliberately NOT
+; part of the test aliases: [dune runtest] stays hermetic, and no gate step
+; reaches a provider. Only the pure inventory and assertion tables are tested
+; hermetically below — those tests dial nothing.
+;
+; The harness is manual/maintainer-only:
+;   SEEKWRIGHT_LIVE_TESTS=1 seekwright-live freeserp
+; A billed name is reachable only by naming it on a gated invocation; there is
+; no "all configured providers" selector to sweep.
+(executable
+ (name main)
+ (public_name seekwright-live)
+ (package seekwright)
+ (modules main)
+ (libraries live_harness eio_main mirage-crypto-rng.unix unix))
+
+(library
+ (name live_harness)
+ (modules cases checks runner)
+ ; [seekwright.factory] is where the registry rows, the fetch stack and the app
+ ; come from, so a live run exercises the application's own construction rather
+ ; than a harness-only path. [eio] is the loop the grants are opened on; [unix]
+ ; is the clock this one-shot process injects.
+ (libraries seekwright seekwright.factory eio unix))
+
+; Hermetic: the case table (17 provider names, 6 fetch cases, 2 agent depths),
+; the selection rules — no all-providers spelling — the per-adapter assertion
+; arms over synthetic responses, and the live-status consistency between the
+; harness and the registry row. No socket, no key, no clock.
+(test
+ (name test_live_cases)
+ (modules test_live_cases)
+ (libraries live_harness seekwright.factory alcotest))
