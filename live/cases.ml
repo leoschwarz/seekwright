@@ -147,8 +147,9 @@ let provider_config name =
           Error "SEEKWRIGHT_ALGOLIA_APP_ID and SEEKWRIGHT_ALGOLIA_INDEX are not set")
   | _ -> Ok base
 
-(* A provider's build status comes from its registry row: [Adapter] is runnable,
-   [Deferred wave] names the phase that lands it. The two local fetch cases are
+(* A provider's build status comes from its registry row: [Adapter] and
+   [Adapter_session] are runnable, [Deferred wave] names the phase that lands
+   it. The two local fetch cases are
    this build's own reader; the four third-party fetch cases and both agent
    depths arrive with F6.1 and are named now so the selector is stable. *)
 let build_status = function
@@ -156,7 +157,7 @@ let build_status = function
       match Registry.row name with
       | Some row -> (
           match row.Registry.build with
-          | Registry.Adapter _ -> Runnable
+          | Registry.Adapter _ | Registry.Adapter_session _ -> Runnable
           | Registry.Deferred wave -> Deferred wave)
       | None -> Deferred "unlisted")
   | Fetch Local | Fetch Metadata -> Runnable
