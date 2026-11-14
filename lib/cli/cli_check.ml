@@ -20,7 +20,9 @@ let outcome_prose = function
   | Health.Key_rejected -> "reachable, but API key rejected"
   | Health.Key_required -> "no API key (key is mandatory)"
   | Health.Unreachable -> "unreachable"
-  | Health.Unsupported -> "unsupported (no connectivity probe)"
+  (* Not a connectivity verdict: [Unsupported] means this port has no bodyless GET
+     for a name it did build, and the row below says so in those words. *)
+  | Health.Unsupported -> "no connectivity probe"
 
 let default_route_line config =
   match config.Config.default_provider with
@@ -292,6 +294,12 @@ let run ~env ~sw ~config ~emit ~live =
       built.Factory.endpoints
   in
   let ready = ref 0 in
+  (* Built, probed, and this port has no probe for the name; and the names that
+     failed a probe or a build. The summary needs them separately: "no providers
+     ready" is a claim about the deployment, and it must not fire because this
+     binary has nothing to dial. *)
+  let unprobed_names = ref [] in
+  let failed = ref 0 in
   let lines = ref [] in
   List.iter
     (fun name ->
@@ -303,7 +311,10 @@ let run ~env ~sw ~config ~emit ~live =
              which read as a connectivity verdict on a name that has no
              adapter at all. *)
           lines := !lines @ [ Printf.sprintf "  %-9s not built on this port" name ];
-          if List.mem name sets.Factory.unsupported then problems := !problems + 1
+          if List.mem name sets.Factory.unsupported then begin
+            problems := !problems + 1;
+            incr failed
+          end
       | Some provider ->
           let outcome = Health.probe ~net:probe_net ~table:built.Factory.probe_table config name in
           let price =
@@ -312,7 +323,17 @@ let run ~env ~sw ~config ~emit ~live =
           in
           (match outcome with
           | Health.Reachable | Health.Reachable_no_key -> incr ready
-          | _ -> problems := !problems + 1);
+          | Health.Unsupported ->
+              (* Built here, and this port has no bodyless GET for it — the two
+                 anonymous MCP rows answer readiness with the handshake at warmup,
+                 which the probe vocabulary cannot express. Nothing about the
+                 deployment is wrong and the server serves these names, so this is
+                 neither ready nor a problem: it is a hole in what [--check] can
+                 say, and it is reported as one in the summary below. *)
+              unprobed_names := !unprobed_names @ [ name ]
+          | _ ->
+              problems := !problems + 1;
+              incr failed);
           lines := !lines @ [ Printf.sprintf "  %-9s %-22s %s" name (outcome_prose outcome) price ])
     (Config.enabled_providers config);
   if live then
@@ -322,8 +343,22 @@ let run ~env ~sw ~config ~emit ~live =
   let enabled = Config.enabled_providers config in
   if !ready > 0 then emit (Printf.sprintf "%d of %d enabled providers ready" !ready (List.length enabled))
   else begin
-    emit "no providers ready -- searches would fail until configured";
-    problems := !problems + 1
+    (* A built name this port cannot probe is a hole in the diagnosis, not a fault
+       in the deployment: the server starts and serves these names, and their
+       readiness is the MCP handshake at warmup. Say which names are unprobed
+       rather than claiming none is ready — the claim would send an operator to
+       fix a config that is already right, and would make an exit code out of a
+       gap in this binary's own vocabulary. *)
+    if !unprobed_names <> [] then
+      emit (Printf.sprintf "  probes    no connectivity probe on this port for: %s -- built here, and their readiness is the MCP handshake at warmup"
+        (String.concat ", " !unprobed_names));
+    if !unprobed_names = [] || !failed > 0 then begin
+      (* The refusal to serve stands only where a probe or a build actually
+         failed: with an unprobed built name in the set, "searches would fail"
+         is a prediction this port has not earned. *)
+      emit "no providers ready -- searches would fail until configured";
+      problems := !problems + 1
+    end
   end;
   let effective = Config.effective_providers config in
   if List.length effective <> List.length enabled then

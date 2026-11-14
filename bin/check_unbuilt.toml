@@ -1,7 +1,9 @@
-# The [--check] smoke's config: a deployment that asks only for names this port
-# does not carry. Nothing is built, so nothing is dialled — the run reaches no
-# provider endpoint, which is what lets the diagnosis be a test at all. Pointed
-# at by SEEKWRIGHT_CONFIG in the [check_unbuilt] rule in [dune].
+# The [--check] smoke's config: a keyless deployment whose built pair this port
+# has no probe for, plus one name it does not carry. Nothing is dialled — the
+# anonymous names answer their readiness at the MCP handshake rather than a
+# bodyless GET, and an unbuilt name is never probed — which is what lets the
+# diagnosis be a test at all. Pointed at by SEEKWRIGHT_CONFIG in the
+# [check_unbuilt] rule in [dune].
 #
 # [search1api] is one of the four names Python itself has never run live, so the
 # pinned output shows the OCaml-untested category beside the unsupported one:

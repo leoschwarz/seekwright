@@ -1,0 +1,14 @@
+# The [--check] gate's other half: a name this port does build and does probe,
+# probed and found down. Pointed at by SEEKWRIGHT_CONFIG in the
+# [check_unreachable] rule in [dune]. [searxng] is the choice because its host is
+# config, not a constant: the URL is a loopback port nothing listens on, so the
+# probe answers a connection refusal in milliseconds and no public provider is
+# ever dialled — which is what lets a failing probe be a test at all. The exit
+# code is the problem count, so the rule accepts 1: with every built name either
+# down or absent, "no providers ready" is a claim this run earned.
+[providers.searxng]
+enabled = true
+url = "http://127.0.0.1:1/"
+
+[fetch]
+extractor = "stdlib"

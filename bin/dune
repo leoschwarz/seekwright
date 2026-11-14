@@ -32,20 +32,21 @@
   mirage-crypto-rng.unix
   unix))
 
-; The [--check] diagnosis over a deployment that asks only for names this port
-; does not carry. Nothing is built here, so nothing is dialled: the run reaches
-; no provider endpoint, which is what lets a diagnosis be a test at all. The
-; pinned stdout is [--check]'s five-set distinction — enabled, effective, built,
-; skipped, untested, and the per-name rows that say "not built on this port" —
-; and the exit code is the problem count, so the rule accepts 1, not 0.
+; The [--check] diagnosis over a deployment that works: the two anonymous MCP names
+; this port does build, plus one name it does not carry. Nothing is dialled — the
+; built pair has no bodyless-GET probe on this port, and an unbuilt name is never
+; probed — which is what lets a diagnosis be a test at all. The pinned stdout is
+; [--check]'s five-set distinction (enabled, effective, built, skipped, untested),
+; the per-name rows, and the probe-gap sentence standing where "no providers
+; ready" used to. The accepted exit code is 0, and that is the assertion: a keyless
+; MCP-only deployment serves, so the port's own missing probe must not be reported
+; to the operator as a fault in their config.
 (rule
  (deps main.exe check_unbuilt.toml)
  (targets check_unbuilt.out check_unbuilt.err)
  (action
   (with-accepted-exit-codes
-   (or
-    1
-    (not 0))
+   0
    (with-stderr-to check_unbuilt.err
     (with-stdout-to check_unbuilt.out
      (run

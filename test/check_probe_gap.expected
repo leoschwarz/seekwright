@@ -1,0 +1,21 @@
+seekwright check
+================
+config      check_probe_gap.toml  (present)
+default     none (a bare search walks the free set)
+permitted   (unset: every enabled provider)
+providers
+  enabled   exa:free, searxng
+  effective exa:free, searxng
+  built     exa:free, searxng
+  untested  exa:free, searxng are untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
+  exa:free  no connectivity probe  unbilled
+  searxng   unreachable            unbilled
+  probes    no connectivity probe on this port for: exa:free -- built here, and their readiness is the MCP handshake at warmup
+no providers ready -- searches would fail until configured
+fetch
+  enabled   40000 chars max, 3 redirects, private addresses blocked
+  primary   http (the local reader)
+  extractor stdlib
+  cache     off
+agent
+  disabled in config

@@ -13,6 +13,11 @@
     - the five-set distinction (enabled, effective, built, skipped,
       unsupported) is read from {!Factory.classify}, the same classification
       the server's startup verdict reads;
+    - a built name whose probe this port does not implement is neither counted
+      ready nor counted as a problem: the summary names those rows as a gap in
+      the diagnosis, and "no providers ready" stays unprinted unless a build or
+      a probe actually failed — a hole in what this binary can check is not a
+      fault in the deployment;
     - what the config asks for that this port does not run is named twice —
       beside the row it qualifies and in one aggregated list at the end. *)
 

@@ -1,0 +1,16 @@
+# The [--check] gate's mixed case: one name this port builds and cannot probe,
+# one name it builds and probes and finds down. Pointed at by SEEKWRIGHT_CONFIG
+# in the [check_probe_gap] rule in [dune]. It pins the two sentences apart: the
+# probe gap is reported as a gap and not counted, while the failed probe still
+# earns "no providers ready" and the exit code. [searxng]'s URL is a loopback
+# port nothing listens on, so the refusal is instant and no public provider is
+# dialled.
+[providers."exa:free"]
+enabled = true
+
+[providers.searxng]
+enabled = true
+url = "http://127.0.0.1:1/"
+
+[fetch]
+extractor = "stdlib"

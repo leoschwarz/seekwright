@@ -491,7 +491,8 @@
 ; is what makes "0 entries, 0 B" the answer instead of whatever an earlier run
 ; left behind. The exit code is the problem count, so the rule accepts 1: a key
 ; that loads and changes nothing is a problem [--check] has to name. Nothing is
-; built under this config, so nothing is dialled.
+; dialled under this config: its one enabled name is built here and has no
+; connectivity probe on this port.
 (rule
  (deps ../bin/main.exe check_transitional.toml)
  (targets check_transitional.out check_transitional.err)
@@ -514,6 +515,58 @@
 (rule
  (alias runtest)
  (action (diff check_transitional_notes.expected check_transitional.err)))
+
+; The exit-code rule's other half: a built name this port does probe, probed and
+; found down. [searxng] is the name to use because its host is config rather than
+; a constant — the URL is a loopback port nothing listens on, so the refusal is
+; immediate and no public provider is dialled, which is the only way a failing
+; probe can be a test. Without this pin a [--check] that never claims a deployment
+; is broken would look green.
+(rule
+ (deps ../bin/main.exe check_unreachable.toml)
+ (targets check_unreachable.out check_unreachable.err)
+ (action
+  (with-accepted-exit-codes
+   1
+   (with-stderr-to check_unreachable.err
+    (with-stdout-to check_unreachable.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=check_unreachable.toml ../bin/main.exe --check"))))))
+
+(rule
+ (alias runtest)
+ (action (diff check_unreachable.expected check_unreachable.out)))
+
+(rule
+ (alias runtest)
+ (action (diff check_unreachable_notes.expected check_unreachable.err)))
+
+; The two sentences kept apart: an [exa:free] this port builds but has no probe for
+; is a gap in the diagnosis and counts as nothing, while [searxng]'s failed probe
+; still earns the refusal sentence and the exit code. This is the pin that keeps
+; one fix from swallowing the other.
+(rule
+ (deps ../bin/main.exe check_probe_gap.toml)
+ (targets check_probe_gap.out check_probe_gap.err)
+ (action
+  (with-accepted-exit-codes
+   1
+   (with-stderr-to check_probe_gap.err
+    (with-stdout-to check_probe_gap.out
+     (run
+      sh
+      -c
+      "SEEKWRIGHT_CONFIG=check_probe_gap.toml ../bin/main.exe --check"))))))
+
+(rule
+ (alias runtest)
+ (action (diff check_probe_gap.expected check_probe_gap.out)))
+
+(rule
+ (alias runtest)
+ (action (diff check_probe_gap_notes.expected check_probe_gap.err)))
 
 (test
  (name test_tabledoc)
