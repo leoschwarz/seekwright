@@ -31,9 +31,17 @@ val transitional_features : Seekwright.Config.t -> (string * string) list
     honoured" table the plan refuses. *)
 
 val report_fetch :
+  ?cache_stats:((int * int) option, string) result ->
   (string -> unit) -> Seekwright.Config.t -> int -> int
 (** [report_fetch emit config problems] writes the fetch block and returns the
-    problem count plus whatever this block found. *)
+    problem count plus whatever this block found.
+
+    [?cache_stats] is the measured half of the cache row: [Factory.page_cache_stats]
+    read over the directory [fetch.cache_dir] names, so the row can say how many
+    entries and how many body bytes are actually there. An absent argument means
+    not measured, which the row prints as the cap and ttl with no figures beside
+    them; an [Error] means the directory could not be opened, which is a problem
+    because the server refuses to start on such a config. *)
 
 val report_agent :
   (string -> unit) -> Seekwright.Config.t -> int -> int
@@ -41,6 +49,7 @@ val report_agent :
 
 val run :
   env:< net : [> [> `Generic ] Eio.Net.ty] Eio.Resource.t;
+    fs : Eio.Fs.dir_ty Eio.Path.t;
     mono_clock : [> Eio.Time.Mono.ty] Eio.Resource.t;
     .. > ->
   sw:Eio.Switch.t ->

@@ -468,11 +468,14 @@
 
 ; F1.4: the [--check] disclosure. The config's keys all load and validate;
 ; this rule pins that the diagnosis says, beside each row and in one
-; aggregated list at the end, that the cache, the third-party fetch ladder
-; and the private-web widening are not run by this binary. The exit code is
-; the problem count, so the rule accepts 1: a key that loads and changes
-; nothing is a problem [--check] has to name. Nothing is built under this
-; config, so nothing is dialled.
+; aggregated list at the end, that the third-party fetch ladder and the
+; private-web widening are not run by this binary. It also pins the cache row:
+; [cache_dir] has a consumer since F7, so the row answers with what the
+; directory holds rather than with a refusal, and [rm -rf] in front of the run
+; is what makes "0 entries, 0 B" the answer instead of whatever an earlier run
+; left behind. The exit code is the problem count, so the rule accepts 1: a key
+; that loads and changes nothing is a problem [--check] has to name. Nothing is
+; built under this config, so nothing is dialled.
 (rule
  (deps ../bin/main.exe check_transitional.toml)
  (targets check_transitional.out check_transitional.err)
@@ -486,7 +489,7 @@
      (run
       sh
       -c
-      "SEEKWRIGHT_CONFIG=check_transitional.toml ../bin/main.exe --check"))))))
+      "rm -rf check_cache; SEEKWRIGHT_CONFIG=check_transitional.toml ../bin/main.exe --check"))))))
 
 (rule
  (alias runtest)

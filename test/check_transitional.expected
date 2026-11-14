@@ -16,9 +16,8 @@ fetch
   extractor stdlib
   fallback  jina  unsupported on this port
   jina      unsupported on this port
-  cache     .cache (256 MiB cap, ttl 300s)  unsupported on this port
+  cache     check_cache (256 MiB cap, ttl 300s)  0 entries, 0 B
 agent
   disabled in config
 unsupported on this port
-  cache     cache_dir is set (.cache), and no page cache is built on this port: every fetch reaches the origin, and the size and ttl keys configure nothing
   fallback  jina, and no third-party fetch fallback is built on this port: the local reader is the only fetch route this build runs

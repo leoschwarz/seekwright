@@ -22,9 +22,11 @@ let load text =
   (match Sys.file_exists path with true -> Sys.remove path | false -> ());
   result
 
-let lines config =
+let lines ?cache_stats config =
   let out = ref [] in
-  let n1 = Cli_check.report_fetch (fun line -> out := !out @ [ line ]) config 0 in
+  let n1 =
+    Cli_check.report_fetch ?cache_stats (fun line -> out := !out @ [ line ]) config 0
+  in
   let n2 = Cli_check.report_agent (fun line -> out := !out @ [ line ]) config n1 in
   (n2, !out)
 
@@ -84,7 +86,10 @@ let transitional text =
 
 let feature_names rows = List.map fst rows
 
-let test_cache_dir_inert () =
+let test_cache_dir_is_no_longer_inert () =
+  (* F7 landed the consumer: [cache_dir] builds a written root and page entries,
+     so it leaves the transitional list. The row that says so is the measured one
+     in the fetch block, pinned below. *)
   let rows =
     transitional
       {|
@@ -93,15 +98,7 @@ enabled = true
 cache_dir = "/var/cache/seekwright"
 |}
   in
-  Alcotest.(check (list string)) "cache is named" [ "cache" ] (feature_names rows);
-  match rows with
-  | [ (_, detail) ] ->
-      Alcotest.(check bool) "the detail names the key and the phase" true
-        (try
-           ignore (Str.search_forward (Str.regexp_string "no page cache is built on this port") detail 0);
-           true
-         with Not_found -> false)
-  | _ -> Alcotest.fail "one row expected"
+  Alcotest.(check (list string)) "nothing is inert here" [] (feature_names rows)
 
 let test_requested_fallback_routes_aggregated () =
   let rows =
@@ -202,6 +199,77 @@ primary = "tavily"
          with Not_found -> false)
   | `Error m -> Alcotest.failf "fixture: %s" m
 
+(* A row that mentions a phrase anywhere in the block. *)
+let mentions phrase out =
+  List.exists
+    (fun line ->
+      try
+        ignore (Str.search_forward (Str.regexp_string phrase) line 0);
+        true
+      with Not_found -> false)
+    out
+
+let test_unset_cache_says_off () =
+  match load
+    {|
+[fetch]
+enabled = true
+|}
+  with
+  | `Config config ->
+      let problems, out = lines config in
+      Alcotest.(check int) "an unset cache is not a problem" 0 problems;
+      Alcotest.(check bool) "the row says off" true (List.mem "  cache     off" out)
+  | `Error m -> Alcotest.failf "fixture: %s" m
+
+let test_cache_row_carries_measured_figures () =
+  (* The cap and the ttl are configured; the entry count and the body bytes are
+     measured off the directory. [report_fetch] takes the measurement as an
+     argument precisely so this suite can hand it a number without a filesystem,
+     and the pin is that the row prints that number rather than a restatement of
+     the ceiling. *)
+  match load
+    {|
+[fetch]
+enabled = true
+cache_dir = "/var/cache/seekwright"
+cache_max_bytes = 268435456
+cache_ttl_seconds = 300
+|}
+  with
+  | `Config config ->
+      let problems, out = lines ~cache_stats:(Ok (Some (3, 1_234))) config in
+      Alcotest.(check int) "measured entries are not a problem" 0 problems;
+      Alcotest.(check bool) "the row names the directory, the cap and the ttl" true
+        (mentions "cache     /var/cache/seekwright (256 MiB cap, ttl 300s)" out);
+      Alcotest.(check bool) "and the figures it measured" true
+        (mentions "3 entries, 1.2 KiB" out);
+      let problems, out = lines ~cache_stats:(Ok (Some (0, 0))) config in
+      Alcotest.(check int) "an empty directory reads as zero, not as a refusal" 0 problems;
+      Alcotest.(check bool) "and says zero" true (mentions "0 entries, 0 B" out)
+  | `Error m -> Alcotest.failf "fixture: %s" m
+
+let test_unopenable_cache_dir_counts_a_problem () =
+  (* The server refuses to start on a [cache_dir] it cannot create or open, so
+     the diagnosis counts it: an operator whose config names a read-only mount
+     has to learn that from [--check], not from a startup failure. *)
+  match load
+    {|
+[fetch]
+enabled = true
+cache_dir = "/var/cache/seekwright"
+|}
+  with
+  | `Config config ->
+      let problems, out =
+        lines ~cache_stats:(Error "/var/cache/seekwright: permission denied") config
+      in
+      Alcotest.(check int) "the refusal counts" 1 problems;
+      Alcotest.(check bool) "and names the reason" true
+        (mentions "cache     /var/cache/seekwright" out
+          && mentions "UNAVAILABLE: /var/cache/seekwright: permission denied" out)
+  | `Error m -> Alcotest.failf "fixture: %s" m
+
 let test_agent_incomplete_counts_a_problem () =
   match load {|
 [agent]
@@ -244,7 +312,7 @@ let () =
         ] );
       ( "inert features",
         [
-          Alcotest.test_case "cache_dir is inert on this port" `Quick test_cache_dir_inert;
+          Alcotest.test_case "cache_dir is not an inert key any more" `Quick test_cache_dir_is_no_longer_inert;
           Alcotest.test_case "the requested routes are aggregated" `Quick test_requested_fallback_routes_aggregated;
           Alcotest.test_case "a configured crawl4ai url is a route" `Quick test_crawl4ai_url_alone_asks_for_a_route;
           Alcotest.test_case "a disabled fetch reports nothing" `Quick test_disabled_fetch_reports_nothing;
@@ -253,6 +321,9 @@ let () =
         [
           Alcotest.test_case "the fetch block states the SSRF stance" `Quick test_fetch_block_states_the_private_address_stance;
           Alcotest.test_case "an unbuildable primary counts a problem" `Quick test_unbuildable_primary_counts_a_problem;
+          Alcotest.test_case "an unset cache says off" `Quick test_unset_cache_says_off;
+          Alcotest.test_case "the cache row carries measured figures" `Quick test_cache_row_carries_measured_figures;
+          Alcotest.test_case "an unopenable cache dir counts a problem" `Quick test_unopenable_cache_dir_counts_a_problem;
           Alcotest.test_case "half-configured agent mode counts a problem" `Quick test_agent_incomplete_counts_a_problem;
           Alcotest.test_case "agent off is quiet" `Quick test_agent_off_is_quiet;
         ] );

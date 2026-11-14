@@ -80,23 +80,14 @@ let requested_fetch_routes (fetch : Config.fetch_config) =
    the operator's file asks for that this binary does not do. Each entry names the
    phase that lands its consumer, and disappears from this list in that phase's
    pull request — a permanent entry here is the "parsed, not honoured" table the
-   plan refuses. *)
+   plan refuses. The page cache left this list when the disk entries landed:
+   [cache_dir] now has a consumer, and its row answers with what is in the
+   directory rather than with a refusal. *)
 let transitional_features config =
   let fetch = config.Config.fetch in
   if not fetch.Config.enabled then []
   else
     let routes = requested_fetch_routes fetch in
-    (match fetch.Config.cache_dir with
-    | None -> []
-    | Some dir ->
-        [
-          ( "cache"
-          , Printf.sprintf
-              "cache_dir is set (%s), and no page cache is built on this port: every fetch \
-               reaches the origin, and the size and ttl keys configure nothing"
-              dir )
-        ])
-    @
     if routes = []
     then []
     else
@@ -123,7 +114,22 @@ let print_transitional emit features problems =
       features
   end
 
-let report_fetch emit config problems =
+(* The cache row's measured half: [Some (Ok (Some (entries, body_bytes)))] read off
+   the directory the config names — [Factory.page_cache_stats] is the reader
+   [--check] passes — or [Error] with the reason that directory could not be read.
+   The reader is an argument rather than a call because the pure half of this
+   report, which [test_cli_check] drives, has no filesystem to read: a row that
+   invented figures it had not measured is the invention this file refuses. *)
+let human_bytes bytes =
+  let kib = float_of_int bytes /. 1024.0 in
+  if bytes < 1024 then Printf.sprintf "%d B" bytes
+  else if kib < 1024.0 then Printf.sprintf "%.1f KiB" kib
+  else Printf.sprintf "%.1f MiB" (kib /. 1024.0)
+
+let human_entries entries =
+  Printf.sprintf "%d %s" entries (if entries = 1 then "entry" else "entries")
+
+let report_fetch ?cache_stats emit config problems =
   let problems = ref problems in
   let fetch = config.Config.fetch in
   emit "fetch";
@@ -164,12 +170,28 @@ let report_fetch emit config problems =
             | Some row -> emit (Printf.sprintf "  %-9s %s" name (fallback_state config row))
             | None -> emit (Printf.sprintf "  %-9s %s, no row in the fallback registry" name unsupported_here))
           names);
-    (match fetch.Config.cache_dir with
-    | Some dir ->
-        emit (Printf.sprintf "  cache     %s (%.0f MiB cap, ttl %.0fs)  %s" dir
+    (match fetch.Config.cache_dir, cache_stats with
+    | None, _ -> emit "  cache     off"
+    | Some dir, Some (Ok (Some (entries, body_bytes))) ->
+        (* The oracle prints the cap and the ttl; the port adds what is actually
+           in the directory, because on this path those are measured rather than
+           configured, and a diagnosis that could count them but prints only the
+           ceiling is a diagnosis holding back the answer the operator wants. *)
+        emit (Printf.sprintf "  cache     %s (%.0f MiB cap, ttl %.0fs)  %s, %s" dir
           (float_of_int fetch.Config.cache_max_bytes /. 1_048_576.0)
-          fetch.Config.cache_ttl_seconds unsupported_here)
-    | None -> emit "  cache     off")
+          fetch.Config.cache_ttl_seconds (human_entries entries) (human_bytes body_bytes))
+    | Some dir, Some (Error message) ->
+        (* A [cache_dir] this process cannot open is a startup failure the server
+           would refuse on, so it counts as a problem here even though the config
+           key itself is fine. *)
+        emit (Printf.sprintf "  cache     %s (%.0f MiB cap, ttl %.0fs)  UNAVAILABLE: %s" dir
+          (float_of_int fetch.Config.cache_max_bytes /. 1_048_576.0)
+          fetch.Config.cache_ttl_seconds message);
+        problems := !problems + 1
+    | Some dir, _ ->
+        emit (Printf.sprintf "  cache     %s (%.0f MiB cap, ttl %.0fs)" dir
+          (float_of_int fetch.Config.cache_max_bytes /. 1_048_576.0)
+          fetch.Config.cache_ttl_seconds))
   end;
   !problems
 
@@ -310,7 +332,13 @@ let run ~env ~sw ~config ~emit ~live =
     emit (Printf.sprintf "narrowed    %d of %d enabled providers permitted; not permitted: %s"
       (List.length effective) (List.length enabled)
       (String.concat ", " (List.filter (fun name -> not (List.mem name effective)) enabled)));
-  let problems = report_fetch emit config !problems in
+  (* The cache figures are read before the fetch block prints, because the row
+     that names the cap is the row that carries them. [page_cache_stats] opens the
+     same written root [build_page_cache] does, so a [cache_dir] this process
+     cannot create or open arrives here as an [Error] and counts as a problem —
+     which is what the server would do with it at startup. *)
+  let cache_stats = Factory.page_cache_stats ~sw ~mono_clock:env#mono_clock ~fs:env#fs config in
+  let problems = report_fetch ~cache_stats emit config !problems in
   let problems = report_agent emit config problems in
   (* Printed last and named together: what the file asks for that this binary
      does not do, one line per feature, and each one counted as a problem
