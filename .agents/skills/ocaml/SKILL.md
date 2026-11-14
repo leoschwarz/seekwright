@@ -99,8 +99,12 @@ pass; both echo servers answer `initialize` → `notifications/initialized` →
   directory, so it reads them as `../lib/caps/…`.
 - The dev profile treats warnings as errors: an unused variable, an unused
   value not in the `.mli`, or an unused operator binding fails the build.
-- **OCaml 5.3.0 has no `Result.Syntax`.** Use `let ( let* ) = Result.bind` and
-  `let ( >>= ) = Result.bind` in the module that needs them.
+- **OCaml 5.3.0 has no `Result.Syntax`.** The tree's convention is one
+  spelling: `let ( let* ) = Result.bind` at module level for result chains,
+  nested `match` where each level maps to a different status. No `>>=`.
+- **A literal `(*` inside a comment body opens a nested comment.** Comment
+  prose that mentions `(*` (e.g. naming the `let ( let* )` binding) silently
+  swallows text until a matching `*)` — write it as `let*` or leave it out.
 - `Mcp_kit.Schema.check_input_schema` only rejects a schema *document* that is
   not a JSON object: `{"type":"string"}` passes it. `Schema.require_input_object`
   is the one that insists the root describes an object, and it **raises**

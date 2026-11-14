@@ -2467,3 +2467,83 @@ lookup. `test/differential/matrix/behaviours.tsv` moves the page-cache row from
 `not-ported / pending-F7` to `ported`, with the LRU divergence named in its
 verification column, and the four `fetch.cache_*` rows in `config-fields.tsv` move
 from `transitional` to `honoured` with the consumer each now has.
+
+## 34. F8 — the style and architecture leftovers, closed (2026-11-14)
+
+Landed on `f8-rest`, the rest of `plans/ocaml-finalisation.md` §F8 after the
+jsondoc slice (§25). Eight commits; no wire behaviour moved and no differential
+golden changed.
+
+**`surface.ml` by name, not by position.** The ten-int tuple `count_lines`
+returns is a `counts` record with one field per counter, the config-key scan
+returns a `record`-shaped `config_keys` record, the two stripping passes share
+one `strip_trailing_blanks`, and the prefix/suffix tests are `String.starts_with`
+/ `String.ends_with` rather than `String.sub` arithmetic. The record scanner's
+layout assumptions (a header line starts at column 0, a record line never
+does) are now written beside it rather than implied. The proof this is a
+no-op is already in the tree and ran unchanged: the `surface.expected` golden
+and the body-diff rule in `ocaml-tools/dune` both pass byte-identically.
+
+**`usage.ml` grows by cons.** `samples_ms` is accumulated newest-first by
+`fold_days` (its reads only sort and sum, so the order it builds in is free),
+and the recent deque is stored newest-first with a `take_first` — `drop_first`
+is gone, so the deque never rebuilds itself from the wrong end. The snapshot
+emits `("recent", `List t.recent)` directly. Two existing pins are the proof:
+`the_deque_is_bounded_and_newest_first` and the "both lines … newest first"
+check.
+
+**Arity-only parameters removed.** `Config.api_key` takes just the provider
+name (no config table), `Factory.Registry.key_for` just the registry row, and
+`Factory.Registry.missing_prerequisite` the row and its provider config — the
+Python oracle's `api_key(self, …)` body never reads `self`, and nothing in the
+tree passes a shared function type that would need these arities. `live/runner.ml`
+and the two config/registry suites take the new calls mechanically; no
+behaviour changes.
+
+**Total pattern matches over position.** `validate_fetch_fallbacks` reads the
+ladder's last rung with a `List.rev` match instead of `List.hd (List.rev …)` /
+`List.nth`, and `Usage.remember_run` evicts with `_ :: older -> older` instead
+of `List.tl t.recent_runs`. `Policy_net`'s vetted address arrives as
+`address :: _`. An audit closed the rest of the partial-accessor bullet: the
+remaining `List.hd`/`List.nth`/`List.tl` uses in
+`extractors/stdlib.ml`, `agent.ml`, `usage.ml`'s percentile, `cli_metrics.ml`
+and `extract_pool.ml` are each guarded by a length or index check beside them,
+so they stay.
+
+**One bind spelling.** `>>=` is gone from `lib/` and from the two caps test
+suites; every module that chains Results binds `let ( let* ) = Result.bind` at
+module level (a local shadow was promoted, and `policy_net`/`policy_fs` lost
+their local bindings entirely). The convention is recorded in the OCaml skill.
+
+**Argument labelling.** `Event.add_note ~key ~value`, `Jsondoc.select_paths
+~text ~path ~max_chars`, `Extractor.select_passages ~text ~query ~max_chars`,
+`Extractor.table_extraction ~text ~kind` and `Tabledoc.table_delimiter ~kind
+~text` now carry labels, which caught one live hazard: `table_extraction` and
+`table_delimiter` had their two `string` arguments in opposite orders, and
+`extractors/stdlib.ml` passes them positionally at the seam. The readers record
+in `Engine` already named its fields, so the eta-reduced wiring in
+`factory/fetch_stack.ml` and the differential harness's call sites follow
+without touching a golden; `test/differential/projection.ml` and
+`test_differential_properties.ml` are updated as harness code only.
+
+**Typed agent failures, pinned not parsed.** The typed `Agent_error` variants
+landed with the lifecycle work; what F8 asked for was the proof no consumer
+reads sentences. `test_p8_server.ml`'s `an_answer_failure_projects_the_typed_
+failure` drives one failing model endpoint through all three consumers: REST
+answers 502 with the failure's prose verbatim, MCP answers `isError` with the
+same text, and the usage journal records class `AgentFailed` — each field
+arrives by destructuring `Agent.failure_class` / `failure_message`, never by
+matching on a sentence.
+
+**Judged and left alone.** The duplicate `type name = string` aliases
+(`config.mli`, `provider.mli`, `router.mli`) stay: `Router` imports nothing of
+`Seekwright` — `test/router_dependencies.expected` pins that — so it cannot
+re-use `Config.name`, and the aliases are three modules' claims about the same
+plain string, not one type spelled twice. Small frozen config-sized `@ [x]`
+lists (adapter param builders, the engine's ladder refs, the caps registry
+fold) stay per §F8's own carve-out: their length is bounded by a config
+ceiling, and reversing them would read worse.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` and
+`dune build @doc` exit 0 after every commit. Nothing reached a provider
+endpoint.
