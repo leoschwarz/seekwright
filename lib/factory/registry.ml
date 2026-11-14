@@ -522,16 +522,17 @@ let cost_of row ~cost_per_1k n =
 
 (* The credential decision, in one place: a keyless row answers [None] whatever the
    environment holds, so [exa:free] stays anonymous while [exa] spends the same
-   variable, and a [searxng] grant cannot acquire a header by accident. *)
-let key_for row config =
-  if List.mem Api_key row.requires then Config.api_key config row.name else None
+   variable, and a [searxng] grant cannot acquire a header by accident. It reads
+   no [{!Seekwright.Config.t}]: the variable is the provider name's, not a
+   configuration's. *)
+let key_for row = if List.mem Api_key row.requires then Config.api_key row.name else None
 
-let missing_prerequisite (row : row) (config : Config.t) (pc : Config.provider_config) =
+let missing_prerequisite (row : row) (pc : Config.provider_config) =
   let missing =
     List.filter_map
       (fun need ->
         match need with
-        | Api_key when Config.api_key config row.name = None ->
+        | Api_key when Config.api_key row.name = None ->
             Some (Printf.sprintf "no %s in the environment" (Config.api_key_env_var row.name))
         | Config_url when non_empty pc.Config.url = None ->
             Some (Printf.sprintf "[providers.%s] url is not set" row.name)

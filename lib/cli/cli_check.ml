@@ -43,7 +43,7 @@ let fallback_state config (row : Config.fetch_fallback) =
   let config_reason =
     if row.Config.endpoint <> None && not (Config.is_permitted config row.Config.name) then
       Some "not permitted"
-    else if row.Config.billable && Config.api_key config row.Config.name = None then
+    else if row.Config.billable && Config.api_key row.Config.name = None then
       Some "no API key"
     else
       match row.Config.fetch_key with

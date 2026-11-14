@@ -422,7 +422,7 @@ let the_probe_asks_the_endpoint_the_grant_allows () =
       let spec = Registry.probe_spec row in
       let asked =
         set_keys ();
-        let answer = spec.Health.endpoint fixture_config (Registry.key_for row fixture_config) in
+        let answer = spec.Health.endpoint fixture_config (Registry.key_for row) in
         clear_keys ();
         answer
       in
@@ -480,7 +480,7 @@ let the_probe_authenticates_the_way_the_adapter_does () =
   List.iter
     (fun name ->
       let row = row_of name in
-      let key = Registry.key_for row fixture_config in
+      let key = Registry.key_for row in
       let headers = (Registry.probe_spec row).Health.headers fixture_config key in
       (* the MCP-backed names have no probe at all, so there is no header to
          compare against: the probe-free claim is pinned in the case above. *)
@@ -572,7 +572,7 @@ let only_the_names_that_may_bill_are_handed_a_key () =
            (match row.Registry.credential with
            | Registry.No_credential -> false
            | Registry.Header _ | Registry.App_id_and_key _ | Registry.Key_in_query _ -> true));
-      match Registry.key_for row fixture_config with
+      match Registry.key_for row with
       | Some key ->
           A.(check string (name ^ " reads its own variable") sentinel key;
             check bool "only a name that needs a key gets one" true needs_key)
@@ -581,20 +581,20 @@ let only_the_names_that_may_bill_are_handed_a_key () =
   (* [exa] and [exa:free] share one variable, and only one of them reads it:
      the anonymous half cannot be handed the key by a shell that happens to
      hold one *)
-  A.(check bool "exa gets the key" true (Registry.key_for (row_of "exa") fixture_config <> None);
+  A.(check bool "exa gets the key" true (Registry.key_for (row_of "exa") <> None);
     check bool "exa:free does not" true
-      (Registry.key_for (row_of "exa:free") fixture_config = None);
+      (Registry.key_for (row_of "exa:free") = None);
     check bool "parallel:free does not" true
-      (Registry.key_for (row_of "parallel:free") fixture_config = None);
+      (Registry.key_for (row_of "parallel:free") = None);
     check bool "searxng does not, whatever the environment holds" true
-      (Registry.key_for (row_of "searxng") fixture_config = None));
+      (Registry.key_for (row_of "searxng") = None));
   clear_keys ();
   (* with the variables empty again, the same rows answer [None]: the key is
      read at construction, from the environment only *)
   List.iter
     (fun name ->
       A.(check bool (name ^ " reads nothing once the environment is empty") true
-           (Registry.key_for (row_of name) fixture_config = None)))
+           (Registry.key_for (row_of name) = None)))
     Config.known_providers
 
 (* Why a deployment cannot build a name, in one sentence naming every missing
@@ -605,7 +605,7 @@ let a_missing_prerequisite_is_named () =
   List.iter
     (fun name ->
       let row = row_of name in
-      match Registry.missing_prerequisite row fixture_config (entry_of name) with
+      match Registry.missing_prerequisite row (entry_of name) with
       | None ->
           (* nothing missing means the row asks for no key, since the fixture
              fills in every config-side prerequisite *)
@@ -624,7 +624,7 @@ let a_missing_prerequisite_is_named () =
   set_keys ();
   let algolia = row_of "algolia" in
   let half_registered = entry ~app_id:"only-the-id" () in
-  (match Registry.missing_prerequisite algolia fixture_config half_registered with
+  (match Registry.missing_prerequisite algolia half_registered with
   | Some sentence ->
       includes "the remaining half is named" "index" sentence;
       excludes "and the present half is not complained about" "app_id is not set" sentence

@@ -132,7 +132,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
          absent one, and a permission set that omits the name leaves the
          fallback unbuilt rather than firing it. *)
       let keyed () =
-        match Config.api_key config name with
+        match Config.api_key name with
         | Some key when key <> "" -> Some key
         | _ -> None
       in

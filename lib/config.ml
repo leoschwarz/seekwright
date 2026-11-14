@@ -440,7 +440,11 @@ let env name =
   | Some value when value <> "" -> Some value
   | _ -> None
 
-let api_key (_config : t) name = env (api_key_env_var name)
+(* The key lookup takes no [Config.t]: the variable is named by the provider
+   string alone (see [api_key_env_var]), and the Python method's [self] is used
+   no more than here — a parameter carried only to match the method's arity
+   would be a parameter no caller can influence. *)
+let api_key name = env (api_key_env_var name)
 
 (* Not [SEEKWRIGHT_<provider>_API_KEY]: the model is not a provider — not
    searchable, not pinnable, not one of the interchangeable things
@@ -451,7 +455,7 @@ let agent_api_key () = env "SEEKWRIGHT_AGENT_API_KEY"
    prints the same fact and keeps going. *)
 let missing_api_keys config =
   List.filter
-    (fun name -> List.mem name providers_requiring_key && api_key config name = None)
+    (fun name -> List.mem name providers_requiring_key && api_key name = None)
     (enabled_providers config)
 
 let missing_agent_settings config =

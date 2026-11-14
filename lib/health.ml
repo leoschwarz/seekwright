@@ -226,7 +226,7 @@ let serpapi_endpoint ~(base : string) : Config.t -> string option -> string opti
     Some (base ^ "?api_key=" ^ url_form_escape value)
 
 let probe ~(net : Provider.Net.t) ~table (config : Config.t) (name : Config.name) : outcome =
-  let key = Config.api_key config name in
+  let key = Config.api_key name in
   (* A mandatory key that is absent ends the probe ahead of the table lookup: the
      shared tail's [Reachable_no_key] is a true readiness for a keyless adapter
      and a false one for a name whose key is never optional. *)

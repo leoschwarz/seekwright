@@ -166,7 +166,7 @@ let run_provider ~env ~sw ~name ~emit =
               match Registry.row name with
               | None -> failed emit (name ^ " has no registry row")
               | Some row -> (
-                  match Registry.missing_prerequisite row config pc with
+                  match Registry.missing_prerequisite row pc with
                   | Some reason -> skipped emit reason
                   | None ->
                       let built : Factory.providers =

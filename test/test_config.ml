@@ -443,7 +443,7 @@ let api_key_cases =
         setenv "SEEKWRIGHT_EXA_API_KEY" "k";
         let flavoured = expect (Config.resolve ~providers:(named [ "exa:free" ]) ()) in
         A.(
-          check maybe_string "the key is the backend's" (Some "k") (Config.api_key flavoured "exa:free");
+          check maybe_string "the key is the backend's" (Some "k") (Config.api_key "exa:free");
           check strings "nothing missing" [] (Config.missing_api_keys flavoured));
         unsetenv "SEEKWRIGHT_EXA_API_KEY")
   ; ( "the variable is named for the backend segment"
@@ -1159,23 +1159,9 @@ let name_scheme_cases =
   ; ( "no name derives an illegal environment variable"
     , fun () ->
         clear_keys ();
-        let providers =
-          List.map
-            (fun name ->
-              let base = Config.default_provider_config in
-              ( name,
-                {
-                  base with
-                  url = (if name = "searxng" then Some "http://searx.internal:8080" else base.url);
-                  app_id = (if name = "algolia" then Some "APP" else base.app_id);
-                  index = (if name = "algolia" then Some "idx" else base.index);
-                } ))
-            Config.known_providers
-        in
-        let cfg = expect (Config.resolve ~providers ()) in
         (* What an [export] accepts. The name taken whole is the illegal spelling
            whenever it is flavoured -- that is why the split exists at all -- and
-           the variable a name does derive has to sit inside this set. *)
+           the variable a key does derive has to sit inside this set. *)
         let legal_identifier text =
           text <> ""
           && List.for_all
@@ -1197,7 +1183,7 @@ let name_scheme_cases =
             setenv variable "k";
             A.(
               check maybe_string (name ^ " reads the right variable") (Some "k")
-                (Config.api_key cfg name));
+                (Config.api_key name));
             unsetenv variable)
           Config.known_providers )
   ]

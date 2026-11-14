@@ -230,17 +230,19 @@ val cost_of : row -> cost_per_1k:float -> int -> float
     [cost_for], and the registry suite pins the two together for every adapter
     this build carries. *)
 
-val key_for : row -> Seekwright.Config.t -> string option
+val key_for : row -> string option
 (** The name's credential, environment-only, and only for a row that declares
     [Api_key]. A keyless name answers [None] even when its variable is set, which
     is what keeps [exa:free] anonymous while [exa] spends the key. *)
 
 val missing_prerequisite :
-  row -> Seekwright.Config.t -> Seekwright.Config.provider_config -> string option
+  row -> Seekwright.Config.provider_config -> string option
 (** Why this deployment cannot build this name, in one sentence naming every
     missing prerequisite, or [None] when all are present. A name whose row can
     build it is not an unsupported name: it is this deployment's incomplete
-    configuration, and the two deserve different sentences. *)
+    configuration, and the two deserve different sentences. It reads the row's
+    own [provider_config] and the environment, so no whole [{!Seekwright.Config.t}]
+    is needed to answer it. *)
 
 val probe_spec : row -> Seekwright.Health.probe_spec
 (** The probe row: the row's [probe] for the destination and its [credential] for

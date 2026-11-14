@@ -297,9 +297,10 @@ val api_key_env_var : name -> string
     site that names a variable goes through here, so the operator-facing
     messages cannot drift from {!api_key}. *)
 
-val api_key : t -> name -> string option
+val api_key : name -> string option
 (** Read from the environment; an empty value reads as absent, as Python's [or
-    None] does. *)
+    None] does. Takes no [{!t}]: the variable is named for the provider string
+    alone, so no configuration can change the answer. *)
 
 val agent_api_key : unit -> string option
 (** The model endpoint's key. Not [SEEKWRIGHT_<provider>_API_KEY]: the model is

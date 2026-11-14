@@ -95,7 +95,7 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit ?log config =
               with
               | None -> go built table endpoints errors (name :: unsupported) warmups rest
               | Some produce -> (
-                  match Registry.missing_prerequisite row config pc with
+                  match Registry.missing_prerequisite row pc with
                   | Some _reason -> go built table endpoints errors unsupported warmups rest
                   | None -> (
                       match adapter_of_row ~policy_seconds row pc with
@@ -116,7 +116,7 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit ?log config =
                                 {
                                   Registry.net = Provider.Net.of_grant grant;
                                   now;
-                                  key = Registry.key_for row config;
+                                  key = Registry.key_for row;
                                   (* The destination the row resolved, which is the
                                      same reading {!grant_endpoint} confined this
                                      grant to: a config-derived name ([searxng])
