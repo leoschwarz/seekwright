@@ -7,8 +7,8 @@ POST /api/v1/fetch	rest-route	server.py	lib/server.ml	honoured	unit(test_p8_serv
 POST /api/v1/answer	rest-route	server.py (404 while agent off)	lib/server.ml	honoured	unit(test_p8_server)
 GET /healthz	operational-path	server.py	lib/server.ml	honoured	unit(test_p8_server); loopback-integration(test_http_transport)
 GET /dashboard	operational-path	server.py + dashboard.py	lib/server.ml + dashboard_html.ml	honoured	unit(test_p8_server)
-seekwright search|fetch|answer (client verbs)	cli	cli.py argv[0] dispatch	(pending F-series)	not-ported	pending
-seekwright --check	cli	cli.py	bin/main.ml + factory probes	honoured	unit(test_boot)
+seekwright search|fetch|answer (client verbs)	cli	cli.py argv[0] dispatch	lib/cli/cli_client.ml:verb_of_string and run	honoured	unit(test_cli_client); unit(test_cli_flags)
+seekwright --check	cli	cli.py	bin/main.ml + factory probes	honoured	unit(test_cli_check); unit(test_boot)
 seekwright --http	cli	cli.py	bin/main.ml	honoured	loopback-integration(test_http_transport)
 stdio JSON-RPC session (blessed transcript)	transport	server.py stdio	bin/main.ml + bin/smoke.jsonl	honoured	official-conformance(bin/smoke.expected)
 --host/--port/--path/--allowed-host and friends (ten flags)	cli-flags	cli.py	bin/main.ml (wired set pinned by test_p8_surface.ml)	partial	unit(test_p8_surface)
