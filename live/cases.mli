@@ -69,8 +69,9 @@ type cost_class = Unbilled | Billed
 (** Whether this build carries what the case needs. [Deferred wave] names the
     phase in [plans/ocaml-finalisation.md] that lands the adapter: a selected but
     deferred case skips with that wave. [Runnable] says only that this build
-    carries the case — whether a page-shape assertion is ported for it is
-    {!Runner}'s question, and it fails one it cannot check. *)
+    carries the case — whether its credential is present is {!Cases.credential}'s
+    question, and a fetch case whose key is absent skips naming the variable
+    rather than dialling unauthenticated. *)
 type build_status = Runnable | Deferred of string
 
 (** Every selector, sorted: the seventeen provider names in

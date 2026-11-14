@@ -300,7 +300,11 @@ let credential = function
 
 (* {1 Live status} *)
 
-let recorded_non_provider_runs = [ (* see cases.mli; empty until a run is recorded *) ]
+(* Fetch and agent cases have no registry row, so their recorded OCaml live runs
+   are spelled here. Both rows are F9.3's keyless runs of 2026-11-14, recorded in
+   [plans/seekwright-ocaml-port.md] beside the provider runs of the same batch;
+   an agent case has never run from this port, so it stays out. *)
+let recorded_non_provider_runs = [ "fetch:local"; "fetch:metadata" ]
 
 let live_status selector =
   match selector with

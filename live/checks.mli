@@ -39,6 +39,11 @@ val provider_step : name:string -> step:int -> Model.search_response -> check li
     an arm may name it. *)
 val fetch_url : string
 
+(** One arm per fetch case, ported from the oracle live suite's fetch tests: the
+    page shape a reader must return for its own URL, and a page carrying no text
+    of its own fails. A case with no arm fails loudly rather than passing
+    vacuously, and a case that expects a refusal is [Runner]'s to assert, since
+    the refusal never reaches a page. *)
 val verify_fetch : Cases.fetch_case -> Model.fetch_response -> check list
 (** The shape assertions for a readable fetch case: [Local] and the four
     third-party rungs [Jina], [Scrappa], [Tavily] and [Linkup], each arm the

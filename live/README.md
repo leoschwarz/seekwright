@@ -55,9 +55,13 @@ report inconclusive instead of failed.
   `fetch:tavily`, `fetch:linkup`.
 - **Agent** — `agent:brief`, `agent:report`.
 
-A case this build cannot run yet skips with the wave that lands it (`F5.1`… for
-providers, `F6.1` for fetch fallbacks). `--list` prints each case's build
-status, OCaml live status, spend class and required environment.
+Every case is runnable on this build: `Cases.build_status` reads the `Registry`
+rows, and since the last adapter and the last fetch fallback landed there is no
+wave left to defer to. What still keeps a selected case from dialing is missing
+configuration, and that skips with the variable named — a provider key, a
+`searxng` or `algolia` instance, or a fetch fallback the config does not build
+because its key is absent. `--list` prints each case's build status, OCaml live
+status, spend class and required environment.
 
 ## Construction follows the application
 
@@ -76,6 +80,13 @@ The harness does not build a private stack:
 `fetch:metadata` is the one case that expects an error: the public-web grant must
 refuse `169.254.169.254` before a request leaves, so an answer there is a failed
 run.
+
+A vendor fetch case (`fetch:jina|scrappa|tavily|linkup`) names its route — the
+config it builds lists only that rung in `fetch.fallback` and the run dispatches
+`fetch ~provider:<name>` — so the ladder cannot serve the run from another
+vendor, and the page-shape assertions in `Checks.verify_fetch` are the case's
+own. A keyed one whose key is absent skips with the variable named rather than
+spending a call it cannot authenticate.
 
 The provider config the harness builds is env-driven where a name cannot run
 without an instance or an index: `SEEKWRIGHT_SEARXNG_URL`,

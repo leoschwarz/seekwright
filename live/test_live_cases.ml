@@ -320,6 +320,86 @@ let test_the_local_reader_shape () =
   A.(check bool "the content type is asserted" true
        (failures (Checks.verify_fetch Cases.Local wrong_type) > 0))
 
+(* The vendor arms are the same kind of value as the provider arms, so the same
+   rule applies to them: each is pinned against synthetic pages, because a live
+   run is the only other thing that reads one and an arm that never fires would
+   make the live case pass vacuously. The words of the page are not the point —
+   the point is which facts the arm refuses to accept. *)
+
+let vendor_page ?(url = Checks.fetch_url) ?(text = "Example Domain text")
+    ?(title = Some "Example Domain") ?(content_type = None)
+    ?(status_code = Some 200) ?(requested_url = Checks.fetch_url) () =
+  {
+    Model.url;
+    requested_url;
+    title;
+    text = Some text;
+    content_type;
+    status_code;
+    retrieved_at = None;
+    truncated = false;
+    total_chars = None;
+    offset = None;
+    matches = None;
+    image = None;
+    notice = None;
+  }
+
+let test_a_vendor_reader_returns_page_text_not_its_own_body () =
+  (* The facts every vendor arm owns: the route answered, the page's text came
+     back, and the response is about the URL the harness asked for. The words are
+     not asserted — a reader may answer from its own snapshot, which is the
+     oracle live suite's own reasoning for the same choice. *)
+  List.iter
+    (fun case ->
+      let name = Cases.name (Cases.Fetch case) in
+      A.(check int (name ^ " passes its own page") 0
+           (failures (Checks.verify_fetch case (vendor_page ()))));
+      let empty = vendor_page ~text:"   " () in
+      A.(check bool (name ^ " refuses an extraction that came back empty") true
+           (failures (Checks.verify_fetch case empty) > 0));
+      let other = vendor_page ~requested_url:"https://example.org/" () in
+      A.(check bool (name ^ " refuses a page for another URL") true
+           (failures (Checks.verify_fetch case other) > 0));
+      let wrong_status = vendor_page ~status_code:(Some 500) () in
+      A.(check bool (name ^ " refuses a route that did not answer 200") true
+           (failures (Checks.verify_fetch case wrong_status) > 0)))
+    [ Cases.Jina; Cases.Scrappa; Cases.Tavily; Cases.Linkup ]
+
+let test_a_vendor_media_type_stays_inside_the_envelope () =
+  (* Two arms carry the oracle's [content_type is None] assertion, because those
+     two vendors hand back a body whose own media type would otherwise reach the
+     caller as the page's. The other two do not assert it: the oracle's live test
+     for them does not either, and an arm may not claim more than its oracle. *)
+  List.iter
+    (fun case ->
+      let vendor_type = vendor_page ~content_type:(Some "application/json") () in
+      A.(check bool (Cases.name (Cases.Fetch case) ^ " refuses the vendor's media type") true
+           (failures (Checks.verify_fetch case vendor_type) > 0)))
+    [ Cases.Tavily; Cases.Linkup ]
+
+let test_jina_parses_its_header_block_off_the_body () =
+  let framed = vendor_page ~text:"Markdown Content:\nExample Domain text" () in
+  A.(check bool "the reader's header marker is not left in the page text" true
+       (failures (Checks.verify_fetch Cases.Jina framed) > 0));
+  let untitled = vendor_page ~title:None () in
+  A.(check bool "the reader's own title line is asserted" true
+       (failures (Checks.verify_fetch Cases.Jina untitled) > 0))
+
+let test_linkup_names_where_the_page_landed () =
+  let elsewhere = vendor_page ~url:"https://example.org/elsewhere" () in
+  A.(check bool "the landed URL is asserted" true
+       (failures (Checks.verify_fetch Cases.Linkup elsewhere) > 0))
+
+let test_the_metadata_case_has_no_page_to_pass () =
+  (* There is no page that satisfies this arm: what the case proves is the
+     refusal, which the runner asserts on the error channel. Reaching the arm at
+     all is the guardrail having let the request out. *)
+  A.(check bool "a page for the metadata URL fails, whatever it says" true
+       ((failures (Checks.verify_fetch Cases.Metadata (vendor_page ()))) > 0));
+  A.(check bool "so does an empty one" true
+       ((failures (Checks.verify_fetch Cases.Metadata (vendor_page ~text:"" ()))) > 0))
+
 let test_the_agent_contract () =
   A.(check int "a cited brief passes" 0
        (failures (Checks.verify_agent ~depth:Model.Brief ~model:"operator-model"
@@ -387,6 +467,14 @@ let () =
       ( "fetch, agent and classification",
         [
           A.test_case "the local reader shape" `Quick test_the_local_reader_shape;
+          A.test_case "a vendor reader returns page text" `Quick
+            test_a_vendor_reader_returns_page_text_not_its_own_body;
+          A.test_case "a vendor media type stays inside the envelope" `Quick
+            test_a_vendor_media_type_stays_inside_the_envelope;
+          A.test_case "jina parses its header block off the body" `Quick
+            test_jina_parses_its_header_block_off_the_body;
+          A.test_case "linkup names where the page landed" `Quick test_linkup_names_where_the_page_landed;
+          A.test_case "the metadata case has no page to pass" `Quick test_the_metadata_case_has_no_page_to_pass;
           A.test_case "the agent contract" `Quick test_the_agent_contract;
           A.test_case "a rate-limited run is inconclusive" `Quick test_a_rate_limited_run_is_inconclusive;
           A.test_case "the summary counts failures" `Quick test_the_summary_counts_failures;

@@ -166,7 +166,7 @@ let content_type_is kind (page : Model.fetch_response) =
     (Printf.sprintf "the content type was %s"
        (match page.Model.content_type with Some kind -> kind | None -> "absent"))
 
-let text_is_empty_no (page : Model.fetch_response) =
+let text_arrives (page : Model.fetch_response) =
   expect "the route came back with the page's text"
     (String.length (String.trim (text_of page)) > 0)
     "the extraction was empty: on a page this simple that means the envelope moved"
@@ -226,7 +226,7 @@ let verify_fetch case (page : Model.fetch_response) =
   | Cases.Jina ->
       [
         status_is 200 page;
-        text_is_empty_no page;
+        text_arrives page;
         expect "the reader's header block is parsed off the body, not left in the text"
           (not (contains (text_of page) "Markdown Content:"))
           "the raw Markdown Content: marker is still in the text: the body's shape moved";
@@ -236,11 +236,11 @@ let verify_fetch case (page : Model.fetch_response) =
   | Cases.Scrappa ->
       [ status_is 200 page; text_carries "example" page; asked_url fetch_url page ]
   | Cases.Tavily ->
-      [ status_is 200 page; text_is_empty_no page; no_vendor_media_type page; asked_url fetch_url page ]
+      [ status_is 200 page; text_arrives page; no_vendor_media_type page; asked_url fetch_url page ]
   | Cases.Linkup ->
       [
         status_is 200 page;
-        text_is_empty_no page;
+        text_arrives page;
         landed_url fetch_url page;
         no_vendor_media_type page;
         asked_url fetch_url page;
