@@ -139,26 +139,36 @@ handled on the HTTP path only.
 five provider sets (enabled, effective, built, unsupported, untested) it runs a
 keyless readiness probe against every built name that has one — a bodyless GET —
 and never sends a key on that path. The two anonymous MCP rows, `exa:free` and
-`parallel:free`, have no probe in this build and print
-`unsupported (no connectivity probe)`. So expect DNS and egress to the providers
-you enabled to work when you run it (see [`egress.md`](egress.md)).
+`parallel:free`, have no probe in this build and each prints `no connectivity
+probe`: their readiness is the MCP handshake at warmup, which the probe
+vocabulary cannot express. So expect DNS and egress to the providers you enabled
+to work when you run it (see [`egress.md`](egress.md)).
 
 `--check --live` then adds **one real search per ready permitted provider** — the
 one path on this port that bills. Each row carries the per-1k figure
 `[providers.*] cost_per_1k` corrects, or `unbilled` for a name that cannot
 charge, so probing the free half is safe and the keyed half is not free.
 
-The exit code counts problems, and the counting is per row: a name that is
-enabled but not built, a probe that does not come back reachable, an
-uncreatable `[fetch] cache_dir`, a transitional key. **One consequence to know
-before you make `--check` a deployment gate**: `exa:free` and
-`parallel:free` have no connectivity probe in this build — their readiness is
-the MCP handshake at warmup, which the probe vocabulary cannot express — so a
-keyless MCP-only deployment prints `unsupported (no connectivity probe)` for
-them, prints `no providers ready -- searches would fail until configured`, and
-exits 1 even though the server starts and serves. `freeserp`, which does have a
-probe, exits 0. The startup verdict and `GET /healthz` are the authority on
-whether the process serves; treat `--check`'s exit code as "the config names
+The exit code counts problems, and the counting is per row: a name this binary
+does not carry at all, a probe that comes back as anything but reachable, an
+`[fetch] primary` route the deployment's gates do not build, an enabled
+`[agent]` block missing its endpoint or model, an uncreatable
+`[fetch] cache_dir`, an extractor library that is not installed. Two rows are
+deliberately **not** counted: a name this port builds but has no probe for,
+which is a hole in the diagnosis rather than a fault in the config; and an
+enabled name the binary carries that this deployment could not build for want of
+a key. Both print a row — `no connectivity probe` and `not built on this port`
+respectively — and neither moves the exit code. **What that means before you
+make `--check` a deployment gate**: a keyless MCP-only deployment, `exa:free`
+and `parallel:free` and nothing else, prints `no connectivity probe` for both
+names, prints a `probes` line naming them, prints no `no providers ready`
+sentence, and exits **0** — the same config boots and serves. The `no providers
+ready -- searches would fail until configured` sentence and exit 1 still fire
+where a build or a probe actually failed: `test/check_unreachable.expected`
+(a probed name found down) and `test/check_probe_gap.expected` (an unprobed
+built name beside a probed name found down) pin both halves, and both dial only
+a closed loopback port. The startup verdict and `GET /healthz` are the authority
+on whether the process serves; treat `--check`'s exit code as "the config names
 something this binary cannot honour, or a probe failed".
 
 ### Caps, agent mode, and what is not honoured
