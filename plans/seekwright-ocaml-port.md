@@ -2750,3 +2750,107 @@ calls were the keyless readiness probe `--check` makes, which sends no key, and
 `--check --live` was never run. podman has still never built this file — its
 `--ignorefile` and `--format docker` requirements are documented from the
 Containerfile header, not verified here.
+
+## 37. The three F9.2 follow-ups: `--check`'s exit code, the `scan` job's scope, and the stale `F6.1` rows (2026-11-14)
+
+**What landed.** Three commits on `f9-followups`, the full OCaml gate green after
+each one: `71905bd` (ci), `53034b0` (the probe accounting), `5a6fb2d` (the fetch
+rows in the report and in the live inventory). Nothing outside `lib/cli/`, the two
+fixture directories, `live/cases.ml{,i}`, its test, and `ci.yml` changed.
+
+**`--check` on a keyless MCP-only deployment.** `exa:free` and `parallel:free` are
+built here and have no bodyless-GET probe, so each row read
+`unsupported (no connectivity probe)`, the run printed `no providers ready --
+searches would fail until configured`, and the exit code was 1 — on a deployment
+whose server starts and serves. A row now reads `no connectivity probe`, and a
+built-but-unprobed name is neither counted ready nor counted as a problem: the
+summary prints `probes      no connectivity probe on this port for: …` and says
+where its readiness actually lives. `bin/check_unbuilt.expected` is re-pinned to
+that shape with the rule's accepted exit code moved from 1 to 0, which is the
+assertion: a keyless MCP-only config is not a fault in the config. The refusal
+sentence still fires where a build or a probe actually failed, and two new pins
+hold that half — `test/check_unreachable.*` (one probed name, found down: the
+sentence prints, exit 1) and `test/check_probe_gap.*` (one unprobed built name and
+one probed-and-down name together: both sentences, exit 1). Both dial only
+`http://127.0.0.1:1/`, a loopback port nothing listens on, so a failing probe can be
+a test without a public provider in the gate.
+
+**The `scan` job's `fs` scan.** Measured here with trivy 0.76.2 against the current
+DB: `uv.lock` reads 0 at CRITICAL/HIGH, `test/conformance/package-lock.json` reads
+7 HIGH — all seven `Status: fixed`, so neither stance of `ignore-unfixed` hides
+them, and the step's comment was asserting a flag it never passed. The job failed on
+a lockfile that reaches no artifact (`uv_build` packages only `src/`,
+`.containerignore` drops `tests/`). The failing `fs` step now passes
+`skip-dirs: test/conformance` and spells `ignore-unfixed: "false"` as an argument,
+and a second, report-only step scans that directory at `exit-code: "0"` so the seven
+stay in the log; the job header names that step as the one exception to "the job
+fails rather than reports". Locally: the scoped scan exits 0 with `uv.lock` still
+read, the report-only step prints the seven and exits 0.
+`uv run pytest tests/repo -q` is 113 passed with the change (the SHA-pin and
+job-timeout guards included).
+
+**The stale `F6.1` disclosures.** `lib/cli/cli_check.ml` had it twice: every fetch
+row carried `unsupported on this port`, and one aggregated row counted a problem,
+while `lib/factory/fetch_stack.ml` had been building all five registry rows since
+F6.1. `fallback_state` now reads the registry row, the permission set and
+`Config.providers_requiring_key` and answers the Python's vocabulary — `keyed`,
+`keyless`, `self-hosted  <host>`, or one of the four `(inactive: …)` reasons — and a
+`fetch.primary` counts a problem only when its state begins `(inactive:`, which is
+the one case the server's startup verdict refuses on. `transitional_features`,
+`print_transitional`, `unsupported_here` and `requested_fetch_routes` are gone: their
+last entry was that ladder, and an empty mechanism for a table the plan refuses is
+the table. `test/test_cli_check.ml`'s inert-features group is replaced by five route-
+state cases — keyless primary built, keyed primary inert with and without the
+environment's key, the permission set refusing `jina`, the self-hosted renderer
+naming its host, disabled fetch — and `check_transitional` is re-pinned to the
+honest rows with its accepted exit code at 0. Deliberately ported *not*: the
+renderer `/health` probe the Python runs inside `_fallback_state`. `--check` dials
+nobody's reader on the operator's behalf, so the row prints the configured host and
+no probe, which is the same rule the probe accounting above applies to providers. In
+`live/cases.ml` every fetch case is `Runnable`, and `live/test_live_cases.ml` now
+fails if any fetch case is deferred.
+
+**Follow-ups this wave leaves to other owners.**
+
+- `ocaml-docs/configuration.md`, "`--check` dials, and `--check --live` bills": the
+  row spelling, the `no providers ready` sentence and the exit code it quotes are all
+  now wrong for the keyless MCP-only case, and "a transitional key" is no longer a
+  counted category.
+- `ocaml-docs/testing.md`: the "Transitional `--check` output" row names
+  `test/check_transitional*.expected`, which no longer pins a transitional
+  disclosure; the two new pins (`check_unreachable`, `check_probe_gap`) belong in
+  that census too. The fixture keeps its name because `ocaml-docs/testing.md` and
+  `test/differential/matrix/config-fields.tsv` both cite it.
+- `test/differential/matrix/config-fields.tsv` still marks `fetch.fallback`,
+  `fetch.cost_per_1k` and the three `fetch.crawl4ai_*` keys `transitional` with the
+  F6 wave as their consumer; `Fetch_stack.build_fallback` and `Cli_check.fallback_state`
+  are consumers today. `providers.*.url` looks dated on the same evidence — a
+  `searxng` whose host is config is built and probed by `test/check_unreachable.toml`.
+  Untouched: the matrix and its guard are not this wave's ownership.
+- `live/runner.ml` and `live/checks.ml`: with those rows runnable, `Checks.verify_fetch`'s
+  placeholder arm and the runner's `this fetch case has no ported assertion in the
+  runner` failure are now the reachable path. That failure is the honest outcome —
+  the harness refuses to invent a check — and closing it means one page-shape
+  assertion per case, plus the arm comment that still says those cases are
+  unreachable and the `--list` skip sentence "the fallback lands with wave %s".
+- `live/README.md`, "Selectors": still says a fetch case skips with `F6.1`.
+- `.containerignore` drops the Python tree's own non-context entries but not the
+  OCaml fixture directories (`lib/`, `bin/`, `live/`, `test/`, `plans/`,
+  `ocaml-docs/`, `*.opam*`, `dune*`), so the Python build context carries them. It
+  changes no artifact; it does mean the 18.39 kB context F9.2 measured is not what
+  that file's comment reads.
+
+**Host note.** The global opam selection on this box moved to a new switch
+(`f9-1-resolve`, empty at the time) mid-wave, which is what makes `dune: command not
+found` and a `cannot find -lgmp` link failure look like source breakage. Every gate
+run here therefore pins the switch per command — `eval "$(opam env --switch=default
+--set-switch)"` with the `CPATH`/`LIBRARY_PATH`/`PKG_CONFIG_PATH` triple
+`plans/infra-setup.md` records for the hand-placed `libgmp-dev` tree.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` and
+`dune build @doc` exit 0 at each of the three commits — 81 alcotest suites, 2239
+cases, unchanged from §36 because the `test_cli_check` group was replaced rather than
+grown — and the four `--check` pins run as `runtest` rules, not as alcotest suites.
+No gate step contacted a public provider or a billed endpoint: the new pins dial a
+closed loopback port, `--check --live` was never run, and `SEEKWRIGHT_LIVE_TESTS` was
+never set.
