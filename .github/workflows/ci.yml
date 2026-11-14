@@ -78,8 +78,9 @@ jobs:
 
   # The dependency gate: the manifests and lockfiles the tree pins are scanned on every
   # pull request, and on the lanes where artifact-build minutes are free the image the
-  # `container` job builds is scanned too. A finding is fixed by the pull request that
-  # introduced it, so the job fails rather than reports.
+  # `container` job builds is scanned too. A finding in a dependency this repo ships is
+  # fixed by the pull request that introduced it, so the job fails rather than reports --
+  # with one report-only step for a vendored upstream test fixture, explained where it runs.
   scan:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -90,9 +91,19 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # `ignore-unfixed` stays off on purpose: an unfixed CRITICAL/HIGH is still a fact
-      # about the dependency set the pull request ships, and hiding it is how the gate
-      # stops being a gate. The fix is a lockfile bump in that same pull request.
+      # `ignore-unfixed` stays off on purpose, and it is spelled as an argument rather
+      # than left to trivy's own default, so a later edit cannot quietly widen the gate:
+      # an unfixed CRITICAL/HIGH is still a fact about the dependency set the pull request
+      # ships, and hiding it is how the gate stops being a gate. The fix is a lockfile
+      # bump in that same pull request.
+      #
+      # `test/conformance/` is outside this scan's scope, which is a scope decision rather
+      # than a mute: what it pins is the upstream MCP conformance runner's npm lockfile,
+      # and those packages reach no artifact -- `uv_build` packages only `src/` and
+      # `.containerignore` drops `tests/`. Measured on this checkout: `uv.lock` is clean at
+      # CRITICAL/HIGH and that lockfile carries seven HIGH. Failing here would gate the
+      # wheel on a dependency no user installs, so the step below scans that directory and
+      # reports it instead.
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
@@ -100,6 +111,22 @@ jobs:
           scanners: vuln
           exit-code: "1"
           severity: "CRITICAL,HIGH"
+          skip-dirs: test/conformance
+          ignore-unfixed: "false"
+
+      # The job's one report-only step, and why it is not a gate: those findings are in a
+      # lockfile vendored from upstream at a named version, so a CRITICAL/HIGH there is an
+      # upstream-refresh question for whoever moves the conformance pin, not something the
+      # pull request in front of the gate can fix. Scanning it anyway is what keeps a new
+      # finding in the log rather than unobserved.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: test/conformance
+          scanners: vuln
+          exit-code: "0"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: "false"
 
       # Jobs do not share a filesystem, so the image `container` built on its own runner
       # is not here: build the same Containerfile locally, then scan it. This half runs
