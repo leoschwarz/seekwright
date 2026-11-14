@@ -2888,10 +2888,12 @@ status flips and the hermetic fetch-arm pins too. No keyed or billed name was ru
 
 **1 — the gate.** `dune build @install && dune runtest --force && dune build
 @doc`, each exit code read from dune itself: `INSTALL_EXIT=0`, `RUNTEST_EXIT=0`,
-`DOC_EXIT=0` at `aaa4678`. 81 alcotest suites, 2244 cases, plus the pinned-rule
-diffs that are not suites (`bin/smoke`, the four `--check` report pins, the CLI
-usage pins, the corpus bench). No step contacted a provider: the only network in
-the gate is loopback.
+`DOC_EXIT=0`. 81 alcotest suites, 2244 cases, plus the pinned-rule diffs that are
+not suites (`bin/smoke`, the four `--check` report pins, the CLI usage pins, the
+corpus bench). The run quoted is at `aaa4678`, the last commit of this wave that
+changes anything the gate reads; `5b783bb` — this section, prose only — re-runs
+identically. No step contacted a provider: the only network in the gate is
+loopback.
 
 *One flake, reported rather than hidden.* The first baseline run on this host
 failed `test/corpus_html`'s rule — `bench.exe --check .` reported
@@ -2996,7 +2998,7 @@ and `test_fetch_workers.ml`. Shared state under concurrent calls:
 `test_concurrency.ml`, which also asserts no connection outlives the switch.
 Cache format, ceilings, TTL and the served-path seam: `test_page_cache.ml` and
 `test_fetch_cache.ml`. Log privacy: the two `test/log_guard/` suites
-(`log-field-sets`, `log-source-discipline`) and `test_logs.ml`. Negative
+(`log-field-sets`, `log-source-discipline`) and `test_log.ml`. Negative
 compilation: fourteen programs under `test/should_not_compile/`, each diffed
 against its `.expected`. Drain: `test_drain.ml` (library level, both
 `Drained` and `Grace_expired`) and `test_binary_drain.ml`, which sends a real
