@@ -1,9 +1,9 @@
 (* The [--check] report's pure parts — port of [tests/test_cli.py]'s
-   [TestCheckStreams] and the inert/unsupported-feature reporting: what the
+   [TestCheckStreams] and the inert-feature reporting: what the
    report says about a config, without dialling anything. The full report
    needs a network, so this suite drives the pieces the report is built
-   from — the default-route line, the transitional-feature list, and the
-   fetch and agent blocks through the [emit] callback. *)
+   from — the default-route line and the fetch and agent blocks through the
+   [emit] callback, a fetch route's state being the part worth pinning. *)
 
 module Config = Seekwright.Config
 
@@ -77,78 +77,138 @@ enabled = true
         (Cli_check.default_route_line config)
   | `Error m -> Alcotest.failf "fixture: %s" m
 
-(* {1 Transitional features — the inert-key report} *)
+(* {1 The fetch route rows — built, or inert with the reason} *)
 
-let transitional text =
+(* A row that mentions a phrase anywhere in the block. *)
+let mentions phrase out =
+  List.exists
+    (fun line ->
+      try
+        ignore (Str.search_forward (Str.regexp_string phrase) line 0);
+        true
+      with Not_found -> false)
+    out
+
+(* A key lookup reads the process environment, so a route's state is a fact about
+   the config only with the environment pinned beside it. *)
+let set_key name value =
+  Unix.putenv ("SEEKWRIGHT_" ^ String.uppercase_ascii name ^ "_API_KEY") value
+
+let fetch_block text =
   match load text with
-  | `Config config -> Cli_check.transitional_features config
+  | `Config config ->
+      let problems, out = lines config in
+      (problems, out)
   | `Error m -> Alcotest.failf "fixture: %s" m
 
-let feature_names rows = List.map fst rows
-
-let test_cache_dir_is_no_longer_inert () =
-  (* F7 landed the consumer: [cache_dir] builds a written root and page entries,
-     so it leaves the transitional list. The row that says so is the measured one
-     in the fetch block, pinned below. *)
-  let rows =
-    transitional
-      {|
-[fetch]
-enabled = true
-cache_dir = "/var/cache/seekwright"
-|}
-  in
-  Alcotest.(check (list string)) "nothing is inert here" [] (feature_names rows)
-
-let test_requested_fallback_routes_aggregated () =
-  let rows =
-    transitional
+let test_keyless_primary_is_a_built_route () =
+  (* [jina] needs no key and sits in the default permission set, so a config that
+     names it gets a route row and its price. The row used to read "unsupported on
+     this port" and count a problem, which was a claim about a build that had
+     already landed. *)
+  let problems, out =
+    fetch_block
       {|
 [fetch]
 enabled = true
 primary = "jina"
-fallback = ["crawl4ai", "jina"]
+fallback = ["jina"]
 |}
   in
-  Alcotest.(check (list string)) "fallback is named" [ "fallback" ] (feature_names rows);
-  match rows with
-  | [ (_, detail) ] ->
-      (* the ladder and the primary are named once each, sorted, deduped *)
-      Alcotest.(check bool) "the routes are spelled out" true
-        (try
-           ignore (Str.search_forward (Str.regexp_string "crawl4ai, jina") detail 0);
-           true
-         with Not_found -> false)
-  | _ -> Alcotest.fail "one row expected"
+  Alcotest.(check int) "a built primary is not a problem" 0 problems;
+  Alcotest.(check bool) "the primary row says how it pays" true
+    (mentions "primary   jina keyless" out);
+  Alcotest.(check bool) "the ladder row agrees" true (mentions "jina      keyless" out);
+  Alcotest.(check bool) "and no aggregated disclosure stands behind it" true
+    (not (mentions "unsupported on this port" out))
 
-let test_crawl4ai_url_alone_asks_for_a_route () =
-  let rows =
-    transitional
+let test_keyed_route_without_a_key_is_inactive () =
+  (* The same config read on either side of one environment variable: inert while
+     the key is absent, where a primary's inertness is a startup refusal and a
+     ladder rung's is nothing at all. *)
+  set_key "tavily" "";
+  let config_text =
+    {|
+[fetch]
+enabled = true
+primary = "tavily"
+fallback = ["tavily"]
+|}
+  in
+  let problems, out = fetch_block config_text in
+  Alcotest.(check int) "an unbuilt primary counts one" 1 problems;
+  Alcotest.(check bool) "the primary row names the missing prerequisite" true
+    (mentions "primary   tavily (inactive: no API key)" out);
+  Alcotest.(check bool) "the ladder row names it and adds nothing to the count" true
+    (mentions "tavily    (inactive: no API key)" out);
+  set_key "tavily" "test-key";
+  Fun.protect
+    ~finally:(fun () -> set_key "tavily" "")
+    (fun () ->
+      let problems, out = fetch_block config_text in
+      Alcotest.(check int) "with the key the same config builds a route" 0 problems;
+      Alcotest.(check bool) "and says how it pays" true
+        (mentions "primary   tavily keyed" out))
+
+let test_permission_set_names_an_inert_third_party () =
+  (* The permission set can leave a keyed *and* a keyless third party inert, so the
+     row names who refused the route rather than implying a missing key. *)
+  let problems, out =
+    fetch_block
+      {|
+permitted_providers = ["exa:free"]
+
+[providers."exa:free"]
+enabled = true
+
+[fetch]
+enabled = true
+primary = "jina"
+|}
+  in
+  Alcotest.(check int) "a primary the set refuses is unbuilt" 1 problems;
+  Alcotest.(check bool) "and the row says who refused it" true
+    (mentions "primary   jina (inactive: not permitted)" out)
+
+let test_self_hosted_renderer_names_its_host () =
+  (* A self-hosted row's host is the operator's own config, so the row prints what it
+     dials and promises no probe of it: [--check] never dials somebody's renderer on
+     the operator's behalf. *)
+  let problems, out =
+    fetch_block
       {|
 [fetch]
 enabled = true
 crawl4ai_url = "http://renderer:11235"
+fallback = ["crawl4ai"]
 |}
   in
-  match rows with
-  | [ ("fallback", detail) ] ->
-      Alcotest.(check bool) "the configured endpoint is itself a route" true
-        (try
-           ignore (Str.search_forward (Str.regexp_string "fetch.crawl4ai_url") detail 0);
-           true
-         with Not_found -> false)
-  | other -> Alcotest.failf "expected one fallback row, got %d" (List.length other)
+  Alcotest.(check int) "a renderer the config names is built" 0 problems;
+  Alcotest.(check bool) "the row names the host" true
+    (mentions "crawl4ai  self-hosted  http://renderer:11235" out);
+  let problems, out =
+    fetch_block
+      {|
+[fetch]
+enabled = true
+fallback = ["crawl4ai"]
+|}
+  in
+  Alcotest.(check int) "a ladder rung with no host is never a problem" 0 problems;
+  Alcotest.(check bool) "and the row names the key to write" true
+    (mentions "crawl4ai  (inactive: no fetch.crawl4ai_url)" out)
 
 let test_disabled_fetch_reports_nothing () =
-  let rows =
-    transitional
+  let problems, out =
+    fetch_block
       {|
 [fetch]
 enabled = false
 cache_dir = "/var/cache/seekwright"
 |}
   in
-  Alcotest.(check int) "a disabled fetch configures nothing" 0 (List.length rows)
+  Alcotest.(check int) "a disabled fetch configures nothing" 0 problems;
+  Alcotest.(check bool) "and says so once" true (List.mem "  disabled in config" out)
 
 (* {1 The fetch and agent blocks} *)
 
@@ -175,39 +235,6 @@ enabled = true
            true
          with Not_found -> false)
   | `Error m -> Alcotest.failf "fixture: %s" m
-
-let test_unbuildable_primary_counts_a_problem () =
-  match load {|
-[fetch]
-enabled = true
-primary = "tavily"
-|} with
-  | `Config config ->
-      let problems, out = lines config in
-      Alcotest.(check int) "the row counts" 1 problems;
-      Alcotest.(check bool) "and says what it is" true
-        (try
-           ignore
-             (List.find
-                (fun line ->
-                  try
-                    ignore (Str.search_forward (Str.regexp_string "primary   tavily unsupported on this port") line 0);
-                    true
-                  with Not_found -> false)
-                out);
-           true
-         with Not_found -> false)
-  | `Error m -> Alcotest.failf "fixture: %s" m
-
-(* A row that mentions a phrase anywhere in the block. *)
-let mentions phrase out =
-  List.exists
-    (fun line ->
-      try
-        ignore (Str.search_forward (Str.regexp_string phrase) line 0);
-        true
-      with Not_found -> false)
-    out
 
 let test_unset_cache_says_off () =
   match load
@@ -310,17 +337,22 @@ let () =
           Alcotest.test_case "no default, a billed name enabled" `Quick test_no_default_billed;
           Alcotest.test_case "no default, all free" `Quick test_no_default_all_free;
         ] );
-      ( "inert features",
+      ( "fetch route states",
         [
-          Alcotest.test_case "cache_dir is not an inert key any more" `Quick test_cache_dir_is_no_longer_inert;
-          Alcotest.test_case "the requested routes are aggregated" `Quick test_requested_fallback_routes_aggregated;
-          Alcotest.test_case "a configured crawl4ai url is a route" `Quick test_crawl4ai_url_alone_asks_for_a_route;
-          Alcotest.test_case "a disabled fetch reports nothing" `Quick test_disabled_fetch_reports_nothing;
+          Alcotest.test_case "a keyless primary is a built route" `Quick
+            test_keyless_primary_is_a_built_route;
+          Alcotest.test_case "a keyed route without its key is inert" `Quick
+            test_keyed_route_without_a_key_is_inactive;
+          Alcotest.test_case "the permission set names who refused a route" `Quick
+            test_permission_set_names_an_inert_third_party;
+          Alcotest.test_case "the self-hosted renderer names its host" `Quick
+            test_self_hosted_renderer_names_its_host;
+          Alcotest.test_case "a disabled fetch reports nothing" `Quick
+            test_disabled_fetch_reports_nothing;
         ] );
       ( "report blocks",
         [
           Alcotest.test_case "the fetch block states the SSRF stance" `Quick test_fetch_block_states_the_private_address_stance;
-          Alcotest.test_case "an unbuildable primary counts a problem" `Quick test_unbuildable_primary_counts_a_problem;
           Alcotest.test_case "an unset cache says off" `Quick test_unset_cache_says_off;
           Alcotest.test_case "the cache row carries measured figures" `Quick test_cache_row_carries_measured_figures;
           Alcotest.test_case "an unopenable cache dir counts a problem" `Quick test_unopenable_cache_dir_counts_a_problem;

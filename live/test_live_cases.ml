@@ -157,8 +157,22 @@ let test_build_status_follows_the_registry () =
   expect (Cases.Provider "deepseek") "runnable";
   expect (Cases.Fetch Cases.Local) "runnable";
   expect (Cases.Fetch Cases.Metadata) "runnable";
-  expect (Cases.Fetch Cases.Jina) "F6.1";
-  expect (Cases.Agent Model.Brief) "runnable"
+  expect (Cases.Fetch Cases.Jina) "runnable";
+  expect (Cases.Fetch Cases.Scrappa) "runnable";
+  expect (Cases.Fetch Cases.Tavily) "runnable";
+  expect (Cases.Fetch Cases.Linkup) "runnable";
+  expect (Cases.Agent Model.Brief) "runnable";
+  (* F6.1 landed the five fallbacks, so nothing in the fetch namespace is deferred
+     against this build: a case the harness cannot yet assert on has to fail, not
+     skip with a wave that already passed. *)
+  List.iter
+    (fun case ->
+      match Cases.build_status (Cases.Fetch case) with
+      | Cases.Runnable -> ()
+      | Cases.Deferred wave ->
+          Alcotest.failf "%s is deferred (%s) though the fetch stack is built"
+            (Cases.name (Cases.Fetch case)) wave)
+    [ Cases.Local; Cases.Metadata; Cases.Jina; Cases.Scrappa; Cases.Tavily; Cases.Linkup ]
 
 let test_cost_classes () =
   let unbilled selector = A.(check bool (Cases.name selector ^ " is unbilled") true (Cases.cost_class selector = Cases.Unbilled)) in

@@ -149,9 +149,11 @@ let provider_config name =
 
 (* A provider's build status comes from its registry row: [Adapter] and
    [Adapter_session] are runnable, [Deferred wave] names the phase that lands
-   it. The two local fetch cases are
-   this build's own reader; the four third-party fetch cases and both agent
-   depths arrive with F6.1 and are named now so the selector is stable. *)
+   it. Every fetch case is runnable: F6.1 landed the five fallbacks, so the four
+   third-party names build and dial through the same stack as the local reader.
+   Runnable says what this build carries, nothing about what the harness asserts —
+   [Runner] fails a runnable case whose assertion is missing rather than reporting
+   a check it never made, and that failure is where the harness's own gap belongs. *)
 let build_status = function
   | Provider name -> (
       match Registry.row name with
@@ -160,8 +162,7 @@ let build_status = function
           | Registry.Adapter _ | Registry.Adapter_session _ -> Runnable
           | Registry.Deferred wave -> Deferred wave)
       | None -> Deferred "unlisted")
-  | Fetch Local | Fetch Metadata -> Runnable
-  | Fetch (Jina | Scrappa | Tavily | Linkup) -> Deferred "F6.1"
+  | Fetch _ -> Runnable
   | Agent _ -> Runnable
 
 (* {1 Spend} *)

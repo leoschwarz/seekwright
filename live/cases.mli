@@ -22,10 +22,11 @@
 module Config = Seekwright.Config
 module Model = Seekwright.Model
 
-(** One fetch case. [Local] and [Metadata] are the two the local reader answers
-    today; the three third-party fallbacks plus the keyless Jina reader are
-    named now so the F6 wave inherits a working selector rather than a second
-    vocabulary. *)
+(** One fetch case. [Local] and [Metadata] are the two the local reader answers;
+    [Jina], [Scrappa], [Tavily] and [Linkup] are the third-party rungs F6.1
+    landed, each built with its own vendor grant. Whether the harness has an
+    assertion for a runnable case is a separate question — see {!Runner}, which
+    fails one it cannot check rather than inventing a check. *)
 type fetch_case =
   | Local
   | Metadata
@@ -66,9 +67,10 @@ type step = { label : string; spec : query_spec }
 type cost_class = Unbilled | Billed
 
 (** Whether this build carries what the case needs. [Deferred wave] names the
-    phase in [plans/ocaml-finalisation.md] that lands the adapter: a selected
-    but deferred case skips with that wave, which is what makes the harness
-    ready for F5 and F6 rather than only for today's build. *)
+    phase in [plans/ocaml-finalisation.md] that lands the adapter: a selected but
+    deferred case skips with that wave. [Runnable] says only that this build
+    carries the case — whether a page-shape assertion is ported for it is
+    {!Runner}'s question, and it fails one it cannot check. *)
 type build_status = Runnable | Deferred of string
 
 (** Every selector, sorted: the seventeen provider names in

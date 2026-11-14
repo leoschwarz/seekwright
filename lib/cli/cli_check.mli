@@ -13,13 +13,15 @@
     - the five-set distinction (enabled, effective, built, skipped,
       unsupported) is read from {!Factory.classify}, the same classification
       the server's startup verdict reads;
+    - a configured fetch route answers with what this build made of it — built
+      and how it pays, or [(inactive: …)] naming the prerequisite that is
+      missing — and only an unbuilt {!report_fetch} primary counts as a problem,
+      because that is the one the server refuses to start on;
     - a built name whose probe this port does not implement is neither counted
       ready nor counted as a problem: the summary names those rows as a gap in
       the diagnosis, and "no providers ready" stays unprinted unless a build or
       a probe actually failed — a hole in what this binary can check is not a
-      fault in the deployment;
-    - what the config asks for that this port does not run is named twice —
-      beside the row it qualifies and in one aggregated list at the end. *)
+      fault in the deployment. *)
 
 val outcome_prose : Seekwright.Health.outcome -> string
 (** [outcome_prose outcome] is a probe row's right-hand wording — the one
@@ -28,12 +30,6 @@ val outcome_prose : Seekwright.Health.outcome -> string
 val default_route_line : Seekwright.Config.t -> string
 (** [default_route_line config] names the default route, or says why there is
     none — the free-walk sentence and the must-name-a-provider sentence. *)
-
-val transitional_features : Seekwright.Config.t -> (string * string) list
-(** [transitional_features config] is one [(feature, detail)] row per feature
-    the config asks for and this port has not built. Each feature names the
-    phase that lands its consumer; a permanent entry here is the "parsed, not
-    honoured" table the plan refuses. *)
 
 val report_fetch :
   ?cache_stats:((int * int) option, string) result ->

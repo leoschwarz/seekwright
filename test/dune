@@ -482,25 +482,24 @@
   ../bin/main.ml
   ../lib/cli/cli_check.ml))
 
-; F1.4: the [--check] disclosure. The config's keys all load and validate;
-; this rule pins that the diagnosis says, beside each row and in one
-; aggregated list at the end, that the third-party fetch ladder and the
-; private-web widening are not run by this binary. It also pins the cache row:
-; [cache_dir] has a consumer since F7, so the row answers with what the
-; directory holds rather than with a refusal, and [rm -rf] in front of the run
-; is what makes "0 entries, 0 B" the answer instead of whatever an earlier run
-; left behind. The exit code is the problem count, so the rule accepts 1: a key
-; that loads and changes nothing is a problem [--check] has to name. Nothing is
-; dialled under this config: its one enabled name is built here and has no
-; connectivity probe on this port.
+; The [--check] fetch block over a config that names a keyless third-party route.
+; The primary and the ladder answer with what this build made of them — [jina] is
+; built, and [keyless] is the whole of its state — [fetch.allow_private_addresses]
+; widens the local reader's grant, and the cache row answers with what the directory
+; holds rather than with a refusal: [cache_dir] has had a consumer since F7, and
+; [rm -rf] in front of the run is what makes "0 entries, 0 B" the answer instead of
+; whatever an earlier run left behind. The accepted exit code is 0, which is the
+; point: a route this build runs is not a problem to report. The file's name
+; predates the fetch ladder landing, and what it pins no longer has a disclosure in
+; it. Nothing is dialled under this config: its one enabled name is built here and
+; has no connectivity probe on this port, and [jina] is named as a route, not
+; dialled for a diagnosis.
 (rule
  (deps ../bin/main.exe check_transitional.toml)
  (targets check_transitional.out check_transitional.err)
  (action
   (with-accepted-exit-codes
-   (or
-    1
-    (not 0))
+   0
    (with-stderr-to check_transitional.err
     (with-stdout-to check_transitional.out
      (run

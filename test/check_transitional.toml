@@ -1,12 +1,12 @@
-# The [--check] disclosure smoke: a config whose keys all load and validate,
+# The [--check] fetch-block smoke: a config whose keys all load and validate,
 # pointed at by SEEKWRIGHT_CONFIG in the [check_transitional] rule in [../test/
 # dune]. Nothing is dialled — its one enabled name is built here and has no
-# connectivity probe on this port — so what the run exercises is the disclosure
-# side of the report: a fetch primary and ladder marked "unsupported on this
-# port" beside their rows and collected in the aggregated list at the end, the
+# connectivity probe on this port — so what the run exercises is the fetch
+# block: a keyless third party as [primary] and again on the ladder,
 # [fetch.allow_private_addresses] widening the local reader's grant, and the
-# cache row, which since F7 answers with what the directory holds. [rm -rf]
-# in the rule keeps that figure at zero.
+# cache row, which since F7 answers with what the directory holds. [rm -rf] in
+# the rule keeps that figure at zero. The file's name predates the fetch ladder
+# landing; nothing in what it pins any longer discloses an unbuilt route.
 [providers."exa:free"]
 enabled = true
 

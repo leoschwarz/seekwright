@@ -12,12 +12,10 @@ providers
   probes    no connectivity probe on this port for: exa:free -- built here, and their readiness is the MCP handshake at warmup
 fetch
   enabled   40000 chars max, 3 redirects, private addresses allowed (the local reader is built with the private-web grant)
-  primary   jina unsupported on this port
+  primary   jina keyless
   extractor stdlib
-  fallback  jina  unsupported on this port
-  jina      unsupported on this port
+  fallback  jina
+  jina      keyless
   cache     check_cache (256 MiB cap, ttl 300s)  0 entries, 0 B
 agent
   disabled in config
-unsupported on this port
-  fallback  jina, and no third-party fetch fallback is built on this port: the local reader is the only fetch route this build runs
