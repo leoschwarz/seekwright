@@ -424,6 +424,22 @@
   ../lib/fetch/tabledoc.ml
   ../lib/fetch/extractor.ml))
 
+; F7: the disk page cache. It speaks only through an [Authority.Fs] grant, so the
+; suite opens a real one over a temp directory — the same construction the factory
+; uses, and the reason [mcp-caps] and [eio_main] are here. [unix] is for the
+; [Unix.stat] that pins the LRU divergence: a hit rewrites the sidecar and leaves
+; the body's inode and mtime alone.
+(test
+ (name test_page_cache)
+ (libraries
+  seekwright.fetch
+  mcp-caps
+  eio
+  eio_main
+  unix
+  alcotest
+  test_support))
+
 ; F1.4: fetch.allow_private_addresses — the capability variant the local
 ; reader is built with, pinned through a loopback fixture (the same shape as
 ; test_fetch_http.ml's), through the stack builder, and by a source pin that
