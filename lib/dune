@@ -2,6 +2,24 @@
 ; to as [Seekwright.Model] is [lib/model.ml]. The Python tree's own src/ is not
 ; part of this workspace.
 ;
+; F9.1: [dune-project]'s [(version …)] is the one version owner. This rule
+; generates the module every OCaml reader uses, so the package version is never
+; spelled twice; [lib/version.mli] is a source file, so the generated [.ml] is
+; the only half that is not reviewed. [dune build version.txt] prints the same
+; variable for an image label or release script. The URL below has to equal
+; [dune-project]'s [(homepage …)]; [test/test_metadata.ml] pins them together,
+; so a homepage move changes both in one commit.
+(rule
+ (targets version.ml)
+ (action
+  (with-stdout-to version.ml
+   (progn
+    (echo "let package = \"%{version:seekwright}\"\n")
+    (echo "let project_url = \"https://github.com/leoschwarz/seekwright\"\n")
+    (echo
+     "let user_agent = \"seekwright/\" ^ package ^ \" (+\" ^ project_url ^ \")\"\n")
+    (echo "let mcp_server = \"0.1.0\"\n")))))
+;
 ; The provider adapters are NOT in this library: they sit in [lib/providers/],
 ; which carries its own stanza because [(include_subdirs qualified)] here would
 ; forbid the [lib/caps/] stanza that defines mcp-caps. The direction is the one

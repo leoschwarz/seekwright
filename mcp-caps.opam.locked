@@ -1,0 +1,120 @@
+opam-version: "2.0"
+name: "mcp-caps"
+version: "0.1.1"
+synopsis: "Capability-gated tool registration for OCaml MCP servers"
+description:
+  "A small layer over mcp-kit: tools declare the authority their operations need, registration supplies an abstract grant of exactly that type, and policy constructors own filesystem and network confinement."
+license: "Apache-2.0"
+depends: [
+  "alcotest" {= "1.9.1" & with-test}
+  "angstrom" {= "0.16.1"}
+  "asn1-combinators" {= "0.3.3"}
+  "astring" {= "0.8.5"}
+  "base" {= "v0.17.3"}
+  "base-bigarray" {= "base"}
+  "base-domains" {= "base"}
+  "base-effects" {= "base"}
+  "base-nnp" {= "base"}
+  "base-threads" {= "base"}
+  "base-unix" {= "base"}
+  "base64" {= "3.5.2"}
+  "bigstringaf" {= "0.10.0"}
+  "bos" {= "0.3.0"}
+  "ca-certs" {= "1.0.3"}
+  "camlp-streams" {= "5.0.1" & with-doc}
+  "cmdliner" {= "2.1.1"}
+  "cohttp" {= "6.3.0"}
+  "cohttp-eio" {= "6.3.0"}
+  "conf-gmp" {= "5"}
+  "conf-gmp-powm-sec" {= "4"}
+  "conf-pkg-config" {= "5"}
+  "cppo" {= "1.8.0" & with-doc}
+  "crunch" {= "4.1.0" & with-doc}
+  "csexp" {= "1.5.2"}
+  "cstruct" {= "6.3.0"}
+  "digestif" {= "1.4.2"}
+  "domain-local-await" {= "1.0.1"}
+  "domain-name" {= "0.5.0"}
+  "dune" {= "3.24.2"}
+  "dune-configurator" {= "3.24.2"}
+  "duration" {= "0.3.1"}
+  "ecma-regex" {= "0.1.0"}
+  "eio" {= "1.6"}
+  "eio_linux" {= "1.6" & with-test}
+  "eio_main" {= "1.6" & with-test}
+  "eio_posix" {= "1.6" & with-test}
+  "eqaf" {= "0.10"}
+  "fmt" {= "0.11.0"}
+  "fpath" {= "0.7.3"}
+  "gmap" {= "0.3.0"}
+  "hmap" {= "0.8.1"}
+  "http" {= "6.3.0"}
+  "idna" {= "0.4.0"}
+  "iomux" {= "0.4" & with-test}
+  "ipaddr" {= "5.6.2"}
+  "kdf" {= "1.1.2"}
+  "logs" {= "0.10.0"}
+  "lwt-dllist" {= "1.1.0"}
+  "macaddr" {= "5.6.2"}
+  "mcp-kit" {= "0.2.0"}
+  "mcp-kit-cohttp-eio" {= "0.2.0" & with-test}
+  "mirage-crypto" {= "2.4.1"}
+  "mirage-crypto-ec" {= "2.4.1"}
+  "mirage-crypto-pk" {= "2.4.1"}
+  "mirage-crypto-rng" {= "2.4.1"}
+  "mtime" {= "2.2.0"}
+  "ocaml" {= "5.3.0"}
+  "ocaml-compiler-libs" {= "v0.17.0"}
+  "ocaml-config" {= "3"}
+  "ocaml-syntax-shims" {= "1.0.0"}
+  "ocaml-system" {= "5.3.0"}
+  "ocaml_intrinsics_kernel" {= "v0.17.3"}
+  "ocamlbuild" {= "0.16.1"}
+  "ocamlfind" {= "1.9.8"}
+  "odoc" {= "3.2.2" & with-doc}
+  "odoc-parser" {= "3.2.2" & with-doc}
+  "ohex" {= "0.2.0"}
+  "optint" {= "0.3.0"}
+  "ppx_derivers" {= "1.2.1"}
+  "ppx_sexp_conv" {= "v0.17.1"}
+  "ppxlib" {= "0.39.0"}
+  "ppxlib_jane" {= "v0.17.4"}
+  "psq" {= "0.2.1"}
+  "ptime" {= "1.2.0"}
+  "re" {= "1.14.0"}
+  "rresult" {= "0.7.0"}
+  "seq" {= "base"}
+  "sexplib0" {= "v0.17.0"}
+  "stdlib-shims" {= "0.3.0" & with-test}
+  "stringext" {= "1.6.0"}
+  "thread-table" {= "1.0.0"}
+  "tls" {= "2.1.5"}
+  "tls-eio" {= "2.1.5"}
+  "topkg" {= "1.1.1"}
+  "tyxml" {= "5.0.0" & with-doc}
+  "uri" {= "4.4.0"}
+  "uri-sexp" {= "4.4.0"}
+  "uring" {= "2.15.1" & with-test}
+  "uutf" {= "1.0.4" & with-test}
+  "x509" {= "1.2.0"}
+  "yojson" {= "3.0.0"}
+  "zarith" {= "1.14"}
+]
+build: [
+  ["dune" "subst"] {dev}
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "@install"
+    "@runtest" {with-test}
+    "@doc" {with-doc}
+  ]
+]
+maintainer: "Leonardo Schwarz <mail@leoschwarz.com>"
+authors: "Leonardo Schwarz <mail@leoschwarz.com>"
+homepage: "https://github.com/leoschwarz/seekwright"
+bug-reports: "https://github.com/leoschwarz/seekwright/issues"

@@ -345,7 +345,7 @@ let mcp_server app =
       (fun (Registry.Duplicate_tool name) -> Server.Duplicate_tool name)
       (registry app)
   in
-  Server.of_registry ~name:"seekwright" ~version:"0.1.0" registry
+  Server.of_registry ~name:"seekwright" ~version:Version.mcp_server registry
 
 (* {1 The Host guard} *)
 

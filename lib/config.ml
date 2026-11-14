@@ -127,10 +127,10 @@ let known_fetch_fallbacks =
     };
   ]
 
-(* [fetch.user_agent]'s default. The version travels with the Python package's
-   [__version__]: the frozen surface pins both, so a release moves them
-   together. *)
-let default_user_agent = "seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright)"
+(* [fetch.user_agent]'s default comes from the one version owner (F9.1), so a
+   release bump moves the User-Agent with the package instead of leaving a
+   second literal behind. *)
+let default_user_agent = Version.user_agent
 
 let default_config_path = "~/.config/seekwright/config.toml"
 

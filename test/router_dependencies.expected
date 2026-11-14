@@ -21,8 +21,10 @@
     ../lib/engine.cmi \
     ../lib/config.cmi
 ../lib/config.cmo : \
+    ../lib/version.cmi \
     ../lib/config.cmi
 ../lib/config.cmx : \
+    ../lib/version.cmx \
     ../lib/config.cmi
 ../lib/config.cmi :
 ../lib/dashboard_html.cmo : \
@@ -116,6 +118,7 @@
     ../lib/sanitize.cmi
 ../lib/sanitize.cmi :
 ../lib/server.cmo : \
+    ../lib/version.cmi \
     ../lib/usage.cmi \
     ../lib/router.cmi \
     ../lib/provider.cmi \
@@ -130,6 +133,7 @@
     ../lib/agent.cmi \
     ../lib/server.cmi
 ../lib/server.cmx : \
+    ../lib/version.cmx \
     ../lib/usage.cmx \
     ../lib/router.cmx \
     ../lib/provider.cmx \
@@ -162,3 +166,8 @@
     ../lib/usage.cmi
 ../lib/usage.cmi : \
     ../lib/log.cmi
+../lib/version.cmo : \
+    ../lib/version.cmi
+../lib/version.cmx : \
+    ../lib/version.cmi
+../lib/version.cmi :

@@ -2547,3 +2547,92 @@ ceiling, and reversing them would read worse.
 **Gate at landing.** `dune build @install`, `dune runtest --force` and
 `dune build @doc` exit 0 after every commit. Nothing reached a provider
 endpoint.
+=======
+## 35. F9.1 — one version owner, coherent metadata, and a tested lock (2026-11-14)
+
+**What landed.** `dune-project` now owns the release version (`0.1.1`, matching
+the Python oracle) and the licence (`Apache-2.0`, matching `LICENSE`); the two
+opam files are generated from it; `lib/version.ml` is generated from the same
+field; the mcp-kit components are exact pins; the declared compiler floor is
+the tested 5.3.0; and both `.opam.locked` files are committed. The metadata
+suite is `test/test_metadata.ml`.
+
+**One number, four readers, and one deliberate exception.** The chain is
+`dune-project`'s `(version …)` → `lib/version.ml` (`package`, `user_agent`) →
+`Config.default_user_agent`; → both generated opam files; → `version.txt`
+(root `dune`, `@version`) for a release script or the F9.2 image label. No
+other source spells the release: `lib/fetch/fetcher.ml` is outside F9.1's
+ownership, so its default User-Agent stays a literal and the metadata suite
+compares it with `Version.user_agent` rather than editing that layer.
+`Version.mcp_server` stays `0.1.0` on purpose: the MCP `serverInfo` version is
+protocol identity (the Python oracle lets FastMCP supply it, not
+`__version__`), and `bin/smoke.expected` and the conformance transcripts pin
+it. The suite asserts the two values differ, so a refactor cannot quietly
+collapse them.
+
+**The manifests say the same thing.** Project-level `authors`, `maintainers`,
+`homepage` and `bug_reports` are declared once and generated into both files;
+`opam lint` passes on each. The compiler floor moved from 5.1 to 5.3.0 because
+5.3.0 is what CI builds and what this switch runs, and the tree is not tested
+below it. Every mcp-kit component carries `= 0.2.0`; `mcp-caps` spells
+`mcp-kit-cohttp-eio` as `(and (= 0.2.0) :with-test)` because dune 3.11 rejects
+a constraint and a flag as separate atoms. `seekwright.opam`'s
+`mcp-kit-cohttp-eio` moved from `>= 0.2.0` to `= 0.2.0` — the drift the task
+named.
+
+**The lock records a combination, not a platform.** `opam lock .` (opam 2.3.0,
+repository `https://opam.ocaml.org`, snapshot stamp
+`a5eaafdc34c654a11462c864b3a55621e68e9ae3`) produced both `.opam.locked`
+files. From an empty switch both resolutions succeed: unlocked `--deps-only
+--with-test --with-doc` asks for 104 installations and takes
+`ocaml-base-compiler 5.4.1` (the newest compiler the floor allows), while
+`--locked` asks for 102 and takes `ocaml-system 5.3.0` (the tested compiler).
+The caveat is in `plans/infra-setup.md`: the lock was exported from this
+host's `default` switch, so it names the system compiler and host depext
+packages; a lock exported on CI would name `ocaml-base-compiler`. It is a
+reproducible record of the tested combination, not a cross-platform build
+plan, and it is refreshed by re-running `opam lock .` on the switch that was
+tested.
+
+**`opam install . --with-test` could not run, and that is pre-existing.** The
+generated files build with `dune build -p <package> @runtest`, and `-p`
+restricts the build to one package. The test stanzas in `bin/`,
+`test/log_guard/`, `test/differential/`, `live/` and `ocaml-tools/` are not
+package-attributed, so the filtered build fails with `No rule found for
+bin/main.exe` and a `mcp-caps` library conflict between `_build/default` and
+the installed switch. Repairing that means adding package/module attribution
+across directories F9.1 does not own; it is recorded rather than papered over.
+The equivalent verification was done: `opam reinstall . --working-dir
+--with-doc -y` rebuilt and installed both packages at 0.1.1, and the installed
+`seekwright` binary run from outside the checkout produced output identical to
+`bin/smoke.expected` (serverInfo `0.1.0`, all three tools) and stderr identical
+to `bin/smoke_notes.expected`. The smoke stops before any tool call, so no
+provider was contacted and no key was read.
+
+**mcp-kit provenance stays a recorded caveat.** The opam entry names Nomadic
+Labs' `ocaml-mcp` and checks its `v0.2.0` archive (sha256
+`43c8319a13be91e323ae952a71ab673533fb3295886029eed9d81e5828de5ef7`), while
+the archive's own `dune-project` says "Epure Team" and
+`github.com/epure-team/mcp-kit` (404). The `epure-team` organisation is real
+and shares a maintainer with the Nomadic Labs entry, so this reads as two
+homes for one maintainer rather than a substituted artifact; the checksum is
+unchanged. Staying on `0.2.0` with the caveat in `plans/infra-setup.md`
+satisfies F9.1, and an upgrade that widens the trust boundary still needs an
+upstream answer.
+
+**Tests.** `test/test_metadata.ml` has seven cases: the version is the same in
+`dune-project`, `Version.package` and both manifests; the User-Agent derives
+from the owner in `Version`, `Config` and `Fetcher`; the project URL agrees in
+`dune-project`, `Version` and both manifests; the licence is Apache-2.0 and no
+MIT declaration survives; the compiler floor and both mcp-kit pins agree while
+the old 5.1 floor and moving transport floor are gone; the MCP identity stays
+separate and matches `bin/smoke.expected`; and every embedded prompt plus the
+dashboard is present and the dashboard is the served page. Every file the suite
+reads is a declared `deps` entry, so a source pin in the dune sandbox cannot
+read an undeclared tree. `test/router_dependencies.expected` was re-pinned for
+the new `Version` module and the `Config`/`Server` edges to it.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` (81 suites,
+all `Test Successful`, including the metadata suite's seven cases) and
+`dune build @doc` all exit 0. Nothing reached a provider endpoint; the
+installed-binary check is the stdio smoke above, which stops at `tools/list`.

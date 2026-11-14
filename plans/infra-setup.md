@@ -270,4 +270,115 @@ OCAMLPATH=$HOME/.opam/default/lib opam install odoc
 Both were hit on this machine on 2026-11-12; the CI runner is a fresh switch and
 needs neither workaround.
 
+## F9.1 packaging metadata, the dependency lock, and mcp-kit provenance (2026-11-14)
+
+**One version owner.** `dune-project`'s `(version 0.1.1)` is the release
+version. Dune generates `lib/version.ml` from `%{version:seekwright}` (the rule
+is in `lib/dune`; the reviewed half is `lib/version.mli`), and the generated
+opam files take their `version:` from the same field. `dune build version.txt`
+prints it for a release script or an image label that cannot read a dune file,
+and the root `@version` alias depends on that file. The value matches the
+Python oracle's `seekwright.__version__`, so the User-Agent is the same string
+on both implementations. Nothing else in the tree spells the release number:
+`Config.default_user_agent` reads `Version.user_agent`, and
+`lib/fetch/fetcher.ml`'s literal is pinned equal by `test/test_metadata.ml`
+rather than edited (that layer is outside F9.1's ownership).
+
+`Version.mcp_server` is deliberately a separate value (`0.1.0`). The MCP
+`serverInfo` version is protocol identity, the Python server lets FastMCP
+supply it rather than `seekwright.__version__`, and `bin/smoke.expected` plus
+the conformance transcripts pin it. Moving it would be an identity change, not
+a release bump; the metadata suite refuses to let the two values collapse into
+one.
+
+**Licence and contact fields.** `(license Apache-2.0)` matches `LICENSE`, and
+`dune-project` now carries `(authors …)`, `(maintainers …)`, `(homepage …)` and
+`(bug_reports …)` once, so both generated manifests say the same thing and
+`opam lint` passes with no missing-field diagnostics. The MIT notices under
+`test/conformance/` stay separate: they cover copied upstream fixtures, not
+this project's code.
+
+**Floors and pins.** The declared compiler floor is `(>= 5.3.0)` — the compiler
+CI builds and this switch runs (`ocaml-system.5.3.0`). The tree is not tested on
+an older compiler, so the floor is the tested version, not mcp-kit's own 5.1.
+Every mcp-kit component is exact: `mcp-kit = 0.2.0` and
+`mcp-kit-cohttp-eio = 0.2.0` in both packages. The `mcp-caps` entry spells the
+test-only transport as `(and (= 0.2.0) :with-test)`, because at `(lang dune
+3.11)` a dependency entry takes one atom and a constraint plus a flag as two
+atoms is rejected. An mcp-kit upgrade therefore moves every component and the
+lock together.
+
+**The lock.** `opam lock .` (opam 2.3.0, repository `https://opam.ocaml.org`,
+snapshot stamp `a5eaafdc34c654a11462c864b3a55621e68e9ae3`) writes
+`mcp-caps.opam.locked` and `seekwright.opam.locked`. Resolution was checked
+from an empty switch (`f9-1-resolve`), both with and without the lock:
+
+```sh
+opam install --switch=f9-1-resolve --dry-run --deps-only \
+  --with-test --with-doc . --working-dir                 # 104 installations
+opam install --switch=f9-1-resolve --dry-run --deps-only \
+  --with-test --with-doc --locked . --working-dir        # 102 installations
+```
+
+Both resolutions succeed; the dry run stops at its confirmation prompt (exit
+10), which is not a resolution failure. The unlocked run picks the newest
+compiler the floor allows (`ocaml-base-compiler 5.4.1`), while the locked run
+resolves `ocaml-system 5.3.0` — the exact compiler the gate was run on. That is
+the point of the lock and also its limit:
+
+- **The lock records this host's switch, not a cross-platform build plan.** It
+  names `ocaml-system 5.3.0` because the `default` switch was created from the
+  system compiler; a lock exported on a CI runner or on a switch created with
+  `ocaml-base-compiler` would name that package instead. Host-only entries
+  (`conf-gmp`, `conf-pkg-config`) and the local GMP tree below are likewise
+  this machine's arrangement, not a production claim. A lock is refreshed by
+  `opam lock .` on the switch whose combination was tested, and committed with
+  the dependency change that motivated it.
+- The locked build has not been installed under a *fresh* compiler from the
+  lock alone on this host; what was verified is the resolution above plus the
+  working-dir reinstall under the tested compiler.
+
+**`opam install . --with-test` is blocked by pre-existing package
+attribution, not by this task.** The generated opam files run
+`dune build -p <package> @runtest`, and `-p` restricts the build to one
+package. The tree's test stanzas are not package-attributed, so the filtered
+build reaches for stanzas in directories F9.1 does not own and fails:
+
+```
+File "bin/dune", lines 41-54: Error: No rule found for bin/main.exe
+Error: Conflict between the following libraries:
+- "mcp-caps" in _build/default/lib/caps
+- "mcp-caps" in /home/leo/.opam/default/lib/mcp-caps
+  -> required by library "seekwright.fetch" …
+```
+
+Fixing that means adding `(package …)`/`(modules …)` attribution across `bin/`,
+`test/log_guard/`, `test/differential/`, `live/` and `ocaml-tools/` — outside
+the F9.1 ownership boundary and a tree-wide dune change, not a metadata fix. It
+is recorded here so the next packaging task starts from the real error rather
+than rediscovering it. The equivalent install was verified instead:
+
+- `opam reinstall . --working-dir --with-doc -y` rebuilt `mcp-caps` and
+  `seekwright` at 0.1.1 from the working tree and installed both;
+- the installed `seekwright` binary, run from outside the checkout with a
+  config naming only the `stdlib` extractor, returned byte-identical stdout to
+  `bin/smoke.expected` for `initialize` + `tools/list` (serverInfo version
+  `0.1.0`) and byte-identical stderr to `bin/smoke_notes.expected`;
+- no request left the machine: the smoke script stops before any tool call, so
+  no provider endpoint was reached and no key was read.
+
+**mcp-kit provenance, resolved enough to keep the pin.** The opam-repository
+entry for `mcp-kit.0.2.0` names Mathias Bourgoin (Nomadic Labs) and
+`gitlab.com/nomadic-labs/ai-harness/ocaml-mcp`; the archive it checks is that
+project's `v0.2.0` tag (sha256
+`43c8319a13be91e323ae952a71ab673533fb3295886029eed9d81e5828de5ef7`). The tree
+inside that archive describes itself as "Epure Team" and
+`github.com/epure-team/mcp-kit`, which 404s. `epure-team` is a real GitHub
+organisation, and Mathias Bourgoin is a contributor to `epure-team/cabal`; the
+same maintainer publishes from two homes, and the URL the package declares
+about itself is not public. That is a naming/provenance wrinkle, not a
+checksum or ownership change, so the candidate stays pinned at `0.2.0` with
+the caveat recorded. An upgrade that widens the trust boundary still needs an
+upstream answer first, as the earlier note says.
+
 

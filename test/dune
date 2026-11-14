@@ -140,6 +140,22 @@
   ../docs/reference/configuration.md
   ../docs/reference/deploying.md))
 
+; F9.1: the packaging metadata has one owner ([dune-project]) and generated
+; manifests; the suite compares the owner with [lib/version.ml], both opam
+; files, the User-Agent defaults and the MCP identity, and it reads the
+; embedded prose so an installed artifact cannot lose the strings it serves.
+; Every file it reads is a dep: a source pin that reads an undeclared tree is
+; the failure the dune sandbox exists to prevent.
+(test
+ (name test_metadata)
+ (libraries seekwright seekwright.fetch alcotest test_support)
+ (deps
+  ../dune-project
+  ../mcp-caps.opam
+  ../seekwright.opam
+  ../LICENSE
+  ../bin/smoke.expected))
+
 ; P8: the config timeouts reach the grants they bound. A loopback listener that
 ; accepts and never answers makes the bound observable, so no billed endpoint is
 ; involved; the factory sources are a dep because the config-read pin scans them,
