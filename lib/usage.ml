@@ -593,7 +593,10 @@ let remember_run (t : t) (run : string) (provider : string) (results : int) : un
      the order a run stops being relevant in. *)
   let runs =
     if List.mem_assoc run t.runs || List.length t.runs < runs_max then t.runs
-    else List.tl t.runs
+    else
+      (* Evict the oldest; the total match keeps the cap from depending on
+         [runs_max > 0]. *)
+      match t.runs with [] -> [] | _ :: older -> older
   in
   let counts = Option.value ~default:[] (List.assoc_opt run runs) in
   let counts =

@@ -528,14 +528,20 @@ let validate_fetch_fallbacks registry fallbacks =
             (join unknown) (join registry_names))
     | _ ->
       let priced = fallbacks |> List.filter billable |> List.sort String.compare in
-      let last = List.nth fallbacks (List.length fallbacks - 1) in
-      if priced <> [] && (List.length priced > 1 || last <> List.hd priced)
-      then
-        Error
-          (Printf.sprintf
-             "fetch.fallback: %s can bill and belongs last, so a page reaches every free fallback \
-              before a credit is spent" (join priced))
-      else Ok ()
+      (* At most one billable rung, and it must be the ladder's last name. Read
+         by pattern rather than by index: the empty ladder already returned
+         [Ok ()] above, and the match stays total whatever this guard's shape
+         becomes later. *)
+      let priced_too_late =
+        Printf.sprintf
+          "fetch.fallback: %s can bill and belongs last, so a page reaches every free fallback \
+           before a credit is spent" (join priced)
+      in
+      match (List.rev fallbacks, priced) with
+      | _, [] -> Ok ()
+      | _, _ :: _ :: _ -> Error priced_too_late
+      | last :: _, [only] -> if last = only then Ok () else Error priced_too_late
+      | [], _ -> Ok ()
 
 (* The primary route's shape: a name, and no tier rule. The tier rule governs the
    walk, not the route it leads, and the ladder behind a billable primary still
