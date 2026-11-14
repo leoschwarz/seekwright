@@ -258,7 +258,7 @@ let rows =
       ~endpoint:(Url_override Exa.default_uri)
       ~requires:[] ~default_cost:None ~timeout_floor:30.0 ~context:Text
       ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
-      ~settings:[ "url" ]
+      ~settings:[ "url" ] ~ocaml_live_tested:true
       ~build:
         (Adapter_session
            (fun a ->
@@ -314,6 +314,7 @@ let rows =
     make_row ~name:"parallel:free"
       ~endpoint:(Url_override Parallel.mcp_uri)
       ~requires:[] ~timeout_floor:30.0 ~context:Text ~settings:[ "url" ]
+      ~ocaml_live_tested:true
       (* [ParallelMcpProvider] is a subclass of [ExaMcpProvider] in the oracle, so
          its [cost_for] is Exa's rung and this row spells the same shape; a config
          [cost_per_1k] on this name would buy the rung, which is why the row models

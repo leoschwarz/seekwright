@@ -67,19 +67,20 @@ let the_default_config_starts_over_its_built_remainder () =
     A.(check bool "and the default config may start" true
          (Result.is_ok (Factory.startup_verdict Config.default built))))
 
-let the_built_free_remainder_is_ocaml_live_tested () =
+let the_keyless_default_set_is_ocaml_live_tested () =
   (* OCaml-untested is this port's own status: a name leaves it only in the
      change that records its successful OCaml live run, never because Python
-     was green for it. F4.3's first acceptance check ran [freeserp]; the two MCP
-     keyless names F5.1 registered have not run live from this port yet, so the
-     implicit config dispatches three names and reports two as untested. *)
+     was green for it. F4.3's first acceptance check ran [freeserp], and F9.3's
+     final verification ran the two anonymous MCP halves of the keyless default,
+     so the implicit config now dispatches three names and reports none of them
+     as untested. A name that loses its recorded run would come back here. *)
   with_env (fun ~env ~sw ->
     let built = build ~env ~sw Config.default in
     let sets = Factory.classify Config.default built in
     A.(check (list string) "the dispatched set is the keyless default"
          [ "exa:free"; "freeserp"; "parallel:free" ] sets.Factory.built);
-    A.(check (list string) "the names still awaiting their OCaml live run"
-         [ "exa:free"; "parallel:free" ] sets.Factory.untested))
+    A.(check (list string) "no keyless default name is left untested"
+         [] sets.Factory.untested))
 
 let no_keyless_adapter_left_refuses_the_implicit_config () =
   (* The transition exception stops applying when it would serve nothing: a
@@ -330,7 +331,7 @@ let () =
             A.test_case "the default config starts over its built remainder" `Quick
               the_default_config_starts_over_its_built_remainder;
             A.test_case "the built free remainder is OCaml-live-tested" `Quick
-              the_built_free_remainder_is_ocaml_live_tested;
+              the_keyless_default_set_is_ocaml_live_tested;
             A.test_case "no keyless adapter left refuses the implicit config" `Quick
               no_keyless_adapter_left_refuses_the_implicit_config;
           ] );

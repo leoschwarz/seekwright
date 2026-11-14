@@ -131,14 +131,17 @@ let every_name_has_a_row_built_or_deferred () =
   (* live-tested is a property of this port: the runner (F4.3) retires a name in
      the change that records its successful run in
      [plans/seekwright-ocaml-port.md], and it never inherits Python's live
-     history. F4.3's first acceptance check ran the two keyless built names. *)
+     history. F4.3's first acceptance check ran the two keyless built names, and
+     F9.3's final verification added the two anonymous halves of the Exa and
+     Parallel pair — still no keyed name, which would need an operator key. *)
   let live_tested =
     List.filter_map
       (fun r -> if r.Registry.ocaml_live_tested then Some r.Registry.name else None)
       Registry.rows
   in
   A.(check (list string) "only the recorded keyless runs are live-tested"
-       [ "anysearch"; "freeserp" ] (List.sort String.compare live_tested))
+       [ "anysearch"; "exa:free"; "freeserp"; "parallel:free" ]
+       (List.sort String.compare live_tested))
 
 (* {1 Price: one figure per name, and one name with none to spend} *)
 

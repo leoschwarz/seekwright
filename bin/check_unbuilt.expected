@@ -7,7 +7,7 @@ providers
   enabled   exa:free, parallel:free, search1api
   effective exa:free, parallel:free, search1api
   built     exa:free, parallel:free
-  untested  exa:free, parallel:free, search1api are untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
+  untested  search1api is untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
   exa:free  no connectivity probe  unbilled
   parallel:free no connectivity probe  unbilled
   search1api not built on this port

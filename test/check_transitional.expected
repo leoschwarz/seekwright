@@ -7,7 +7,6 @@ providers
   enabled   exa:free
   effective exa:free
   built     exa:free
-  untested  exa:free is untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
   exa:free  no connectivity probe  unbilled
   probes    no connectivity probe on this port for: exa:free -- built here, and their readiness is the MCP handshake at warmup
 fetch

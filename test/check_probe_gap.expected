@@ -7,7 +7,7 @@ providers
   enabled   exa:free, searxng
   effective exa:free, searxng
   built     exa:free, searxng
-  untested  exa:free, searxng are untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
+  untested  searxng is untested on this port: no live verification against the real endpoint has happened in the OCaml build, and a reachability probe is not one
   exa:free  no connectivity probe  unbilled
   searxng   unreachable            unbilled
   probes    no connectivity probe on this port for: exa:free -- built here, and their readiness is the MCP handshake at warmup
