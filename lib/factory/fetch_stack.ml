@@ -17,6 +17,7 @@ module Extractor = Seekwright_fetch.Extractor
 module Fallback = Seekwright_fetch.Fallback
 module Fetcher = Seekwright_fetch.Fetcher
 module Jsondoc = Seekwright_fetch.Jsondoc
+module Page_cache = Seekwright_fetch.Page_cache
 module Policy = Mcp_caps.Policy
 module Provider = Seekwright.Provider
 module Remote_target = Seekwright_fetch.Remote_target
@@ -364,3 +365,187 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
             | Error message -> Some (Error message)
             | Ok ladder -> Some (Ok (local, ladder)))
 )
+
+(* {2 The page cache (F7)} *)
+
+(* The wiring between [Seekwright_fetch.Page_cache] (the entry format, the bounds,
+   the window cut) and [Engine.Fetch.Cache] (the two questions the engine asks).
+   The three things that live only here are the grant over the operator's
+   directory, the fill's singleflight table, and the preflight — and each is here
+   for a layering reason rather than a taste one.
+
+   The grant is the startup decision the oracle makes in its builder: a
+   [cache_dir] this process cannot create or use is a refusal to start, not a miss
+   typed lazily all day long. Its ceilings are the config's own — a stored page is
+   one whole write and one whole read, so a ceiling below [cache_max_entry_bytes]
+   would make the cache refuse its own entries — with a floor at the windowed
+   read's chunk, because that is the read the streaming promise is about.
+   [cache_max_entries] is deliberately not a config key: the directory cap bounds
+   what fits whatever this says, and it only has to be above the entry count that
+   cap allows at the smallest page this server stores. *)
+
+(* [Page_cache]'s read chunk, as the grant's floor: a ceiling under it would make
+   the streaming read refuse its own chunk. The two numbers have to agree, and this
+   is a construction decision while the chunk is an implementation one. *)
+let cache_read_floor = 65_536
+
+(* The grant's entry ceiling: comfortably above what the byte cap can hold, so the
+   cap that matters is the byte cap. *)
+let cache_max_entries = 10_000
+
+let preflight_of ~(net : _ Eio.Net.t) config =
+  (* The URL-level guardrails, run before any cache lookup when the cache is on.
+
+     [Fetcher.validate_url] is the normalisation the entry keys on, so a caller's
+     spelling of a page and its post-redirect landing cannot share an entry, and a
+     refused URL is refused with a warm entry just as without one. The address vet
+     applies under the same rule the local reader applies it — opted out of by
+     [fetch.allow_private_addresses], because the guardrail protects this server's
+     network, not the fetcher's code path. The third-party fallbacks apply it
+     always: [Remote_target] says why. The fetchers re-run their own guardrails on
+     a miss; that reads as duplicate work only until it reads as what makes a warm
+     hit safe. *)
+  let fetch = config.Config.fetch in
+  fun (raw : string) ->
+    match Fetcher.validate_url raw with
+    | Error message -> Error (Engine.Fetch.Url_blocked message)
+    | Ok validated ->
+        if fetch.Config.allow_private_addresses
+        then Ok validated
+        else (
+          match Uri.host (Uri.of_string validated) with
+          | None -> Error (Engine.Fetch.Url_blocked "URL has no host")
+          | Some host -> (
+              match Caps.Policy_net.vet_public_host ~net ~host with
+              | Ok () -> Ok validated
+              | Error error -> Error (Engine.Fetch.Url_blocked (Caps.Error.message error))))
+
+(* The engine's seam over one [Page_cache.t]: the entry lookup, and the fill one
+   caller leads while the rest wait for it.
+
+   [fills] is the per-key in-flight table, and it sits here rather than inside
+   [Page_cache] because what a follower inherits is the leader's {i fetch error},
+   a type the cache module has no business naming. The rules are the oracle's: the
+   fill dispatches uncapped at offset 0, so the whole extraction is what gets
+   stored; a follower that finds an entry is dispatch-free and reported cached,
+   and one whose fill could not store (an over-cap page) fetches its own window; a
+   failed fill wakes every waiter with the one failure the leader saw and stores
+   nothing; and the leader itself is a dispatch, even though it then serves its own
+   window out of the entry it wrote — the flag answers "was this dispatch-free",
+   not "was a cache used". An image page bypasses the store: bytes pass through as
+   they do with no cache at all. *)
+let cache_seam ~(net : _ Eio.Net.t) config (cache : Page_cache.t) =
+  let fetch = config.Config.fetch in
+  let fills : (string, (unit, Engine.Fetch.fetch_error) result Eio.Promise.t) Hashtbl.t =
+    Hashtbl.create 16
+  in
+  let read ~rung ~url ~offset ~max_chars ~dispatch =
+    (* The window this call serves, whichever way the entry arrives: [cap] is the
+       same resolution the configured fetchers apply to the same request, which is
+       what makes a cached window byte-identical to the live one. *)
+    let cap = Fetcher.resolved_cap fetch.Config.max_text_chars (cap_of max_chars) in
+    let lookup () =
+      match max_chars with
+      | Engine.Fetch.Uncapped -> Page_cache.get cache ~rung ~url
+      | _ -> Page_cache.get_window cache ~rung ~url ~offset ~max_chars:cap
+    in
+    match lookup () with
+    | Some entry -> Ok (Page_cache.to_page entry, true)
+    | None -> (
+      let key = Page_cache.entry_name ~rung ~url in
+      match Hashtbl.find_opt fills key with
+      | Some waiting -> (
+          match Eio.Promise.await waiting with
+          | Error exc -> Error exc
+          | Ok () -> (
+              match lookup () with
+              | Some entry -> Ok (Page_cache.to_page entry, true)
+              | None -> Result.map (fun page -> (page, false)) (dispatch ~offset ~max_chars)))
+      | None ->
+        let waiting, resolve = Eio.Promise.create () in
+        Hashtbl.add fills key waiting;
+        Fun.protect
+          ~finally:(fun () ->
+            Hashtbl.remove fills key;
+            (* Only reaches a promise nobody resolved: a fill cut short by
+               cancellation would otherwise leave every waiter parked on it. *)
+            ignore
+              (Eio.Promise.try_resolve
+                 resolve
+                 (Error
+                    (Engine.Fetch.Provider
+                       (Provider.provider_error ~provider:"http"
+                          "the page fetch was interrupted")))))
+          (fun () ->
+            match dispatch ~offset:0 ~max_chars:Engine.Fetch.Uncapped with
+            | Error exc ->
+                Eio.Promise.resolve resolve (Error exc);
+                Error exc
+            | Ok full ->
+                if full.image = None
+                then ignore (Page_cache.put cache ~rung ~url ~page:(Page_cache.of_page full));
+                Eio.Promise.resolve resolve (Ok ());
+                (* The leader serves its own window through the entry it just
+                   wrote, so a paged read streams only its window even on the call
+                   that filled the cache. When the store refused the page, what is
+                   left is the uncapped read this call was holding, cut to the
+                   window a live paged fetch would have applied. *)
+                match lookup () with
+                | Some entry -> Ok (Page_cache.to_page entry, false)
+                | None ->
+                    if max_chars = Engine.Fetch.Uncapped
+                    then Ok (full, false)
+                    else
+                      let window, truncated = Fetcher.window_text full.text ~offset ~max_chars:cap in
+                      Ok ({ full with text = window; truncated }, false)))
+  in
+  { Engine.Fetch.Cache.preflight = preflight_of ~net config; read }
+
+(* The written root, once: the same grant the served process builds, so [--check]
+   reports the entries the server will read rather than a guess about them. The
+   [0o700] is the cache's own, because a stored page is somebody else's text
+   sitting in this host's filesystem, and a directory that cannot be created or
+   opened is a refusal, not an empty report. *)
+let open_cache_grant ~sw ~mono_clock ~(fs : _ Eio.Path.t) config =
+  let fetch = config.Config.fetch in
+  match fetch.Config.cache_dir with
+  | None -> Ok None
+  | Some dir -> (
+      let ceiling = Stdlib.max fetch.Config.cache_max_entry_bytes cache_read_floor in
+      match
+        Policy.with_written_root ~sw ~max_read_bytes:ceiling ~max_write_bytes:ceiling
+          ~max_entries:cache_max_entries ~parent:fs dir
+      with
+      | Error error -> Error (Caps.Error.render error)
+      | Ok decision ->
+          Ok (Some (Caps.Authority.Fs.of_confinement ~mono_clock decision)))
+
+(* [None] when [fetch.cache_dir] is unset — the always-false [cached] path, with
+   no directory touched. *)
+let build_page_cache ~sw ~(net : _ Eio.Net.t) ~mono_clock ~now ?audit ~fs config =
+  match open_cache_grant ~sw ~mono_clock ~fs config with
+  | Error message -> Error message
+  | Ok None -> Ok None
+  | Ok Some grant ->
+      let fetch = config.Config.fetch in
+      let grant =
+        match audit with Some sink -> Caps.Authority.with_log ~sink grant | None -> grant
+      in
+      let cache =
+        Page_cache.create ~fs:grant
+          ~max_bytes:fetch.Config.cache_max_bytes
+          ~max_entry_bytes:fetch.Config.cache_max_entry_bytes
+          ~ttl_seconds:fetch.Config.cache_ttl_seconds
+          ~now ()
+      in
+      Ok (Some (cache_seam ~net config cache))
+
+(* [entries, body_bytes] for the directory the config names: [--check]'s line, and
+   the reason this is a separate call rather than a field of the seam — a
+   diagnosis reads the directory, it does not go through the serving path. *)
+let page_cache_stats ~sw ~mono_clock ~fs config =
+  match open_cache_grant ~sw ~mono_clock ~fs config with
+  | Error message -> Error message
+  | Ok None -> Ok None
+  | Ok Some grant -> Ok (Some (Page_cache.stats (Page_cache.create ~fs:grant ~now:(fun () -> 0.0) ())))
+

@@ -27,6 +27,7 @@ let grant_of_endpoint = Grants.grant_of_endpoint
 let probe_net = Grants.probe_net
 let build_providers = Providers_build.build_providers
 let build_fetch_stack = Fetch_stack.build_fetch_stack
+let build_page_cache = Fetch_stack.build_page_cache
 let readers = Fetch_stack.readers
 let startup_verdict = Verdict.startup_verdict
 
@@ -90,12 +91,22 @@ let build_app ~sw
             | None -> Ok None
             | Some (Error message) -> Error message
             | Some (Ok (local, fallbacks)) -> (
+                (* The page cache is wired here rather than inside
+                   [build_fetch_stack] because it is the engine's seam, not one of
+                   the fetch routes: [fetch.cache_dir] unset leaves [cache] absent
+                   and every read dispatching, and a [cache_dir] this process
+                   cannot create or open refuses the start. *)
                 match
-                  Engine.Fetch.create config local ~readers ~usage ~log ~fallbacks
-                    ~clock:mono_now ~now ()
+                  build_page_cache ~sw ~net:(env#net) ~mono_clock ~now ~audit ~fs:(env#fs) config
                 with
-                | Ok engine -> Ok (Some engine)
-                | Error message -> Error message)
+                | Error message -> Error message
+                | Ok cache -> (
+                    match
+                      Engine.Fetch.create config local ~readers ?cache ~usage ~log ~fallbacks
+                        ~clock:mono_now ~now ()
+                    with
+                    | Ok engine -> Ok (Some engine)
+                    | Error message -> Error message))
           in
           let* agent =
             if not config.Config.agent.Config.enabled then Ok None

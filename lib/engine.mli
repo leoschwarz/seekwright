@@ -36,15 +36,23 @@
     through [bind]). So the bound fields are threaded as a list, and every event
     here emits base fields then event fields, which is loguru's merge order.
 
-    {1 What is not here yet}
+    {1 The page cache}
 
-    The disk page cache ([pagecache.py], P6): {!Fetch} takes the {!Readers} seam
-    — [jsondoc]/[tabledoc]/[select_passages], also P6 — because a page read that
-    may select a subtree or a passage needs them, and Python's {i no-cache} path
-    ([self.cache is None]) is the path this port serves today: every read
-    dispatches, so the [cached] flag on [fetch.ok] is always [false] and every
-    journal line is priced. Adding the cache is a change to {!Fetch.read_page},
-    which is where the flag is decided. *)
+    {!Fetch} consults a {!Fetch.Cache} seam when one is wired in, and the disk
+    entry behind that seam is [Seekwright_fetch.Page_cache] (port of
+    [pagecache.py], plans F7). The seam is a record rather than a dependency
+    because of the layering: [lib/engine.ml] may not link [seekwright.fetch], and
+    the whole page behind a cache hit has to be cut with the {i same} window
+    function a live read uses — so the cache lives beside the fetcher and the
+    engine asks for a window. [read_page] is the one decision site: with
+    no seam wired, every read dispatches, [cached] is [false], and every journal
+    line is priced.
+
+    {1 The document readers}
+
+    {!Fetch} takes the {!Readers} seam — [jsondoc]/[tabledoc]/[select_passages] —
+    because a page read that may select a subtree or a passage needs them, and a
+    suite drives the route logic around them with stubs. *)
 
 (** {1 Shared types} *)
 
@@ -182,6 +190,38 @@ module Fetch : sig
       served ([_fallback_cost_usd]), which is what a value gives and a module
       does not. *)
 
+  module Cache : sig
+    type t = {
+      preflight : string -> (string, fetch_error) result
+          (** The URL-level guardrails, run before any cache lookup: the answer is
+              the {i validated} URL the entry keys on, and the refusal is the same
+              {!fetch_error} a live fetch of that URL would have reported. A
+              refused URL must be refused with a warm entry just as without one,
+              which is why this is a field of the seam and not a step the caller
+              may skip. *)
+    ; read :
+        rung:Config.name ->
+        url:string ->
+        offset:int ->
+        max_chars:cap ->
+        dispatch:(offset:int -> max_chars:cap -> (page, fetch_error) result) ->
+        (page * bool, fetch_error) result
+          (** One entry's window, or the dispatch that fills it. [url] is the
+              [preflight]'s answer, never the caller's spelling. [~dispatch] is
+              this rung's fetcher: a cold fill calls it uncapped at offset 0 so
+              the whole extraction is stored, and a follower whose fill could not
+              store calls it for the window it asked for. The [bool] answers "was
+              this {i dispatch-free}": a warm entry is, and so is a cold fill led
+              by a concurrent call; the call that dispatched is not, even when it
+              then served itself from the entry it wrote. *)
+    }
+    (** The disk page cache, as the two questions the engine asks it. It is a
+        record for the same reason {!Readers} is one: the seam crosses a library
+        boundary the other way up — [Seekwright_fetch.Page_cache] holds the entry
+        format and the window cut, [Seekwright_factory] wires both into this
+        shape, and [lib/engine.ml] links neither. *)
+  end
+
   module Readers : sig
     type selection = int * string
     (** One span of a selection: its [offset] into the {i full} rendering and its
@@ -214,6 +254,7 @@ module Fetch : sig
     :  Config.t ->
     fetcher ->
     readers:Readers.t ->
+    ?cache:Cache.t ->
     ?usage:Usage.t ->
     ?log:log ->
     ?fallbacks:fetcher list ->
@@ -225,7 +266,10 @@ module Fetch : sig
       primary route and the built fallbacks behind it. [~readers] is mandatory
       rather than defaulted: a fetch that can address a [path] and a [structure]
       is a fetch with the document readers wired in, and a stub is what the suite
-      hands it. The [Error] sentence is Python's [ValueError] from the
+      hands it. [?cache] is the {!Cache} seam: absent is Python's
+      [self.cache is None], the always-dispatching path, and [fetch.cache_dir]
+      unset is what leaves it absent in a served process. The [Error] sentence is
+      Python's [ValueError] from the
       constructor: [fetch.primary] names a fallback this deployment did not
       build, and falling back to the local reader instead would dial from this
       server's own IP against the operator's config. *)

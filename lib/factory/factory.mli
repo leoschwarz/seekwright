@@ -223,6 +223,36 @@ val readers : Seekwright.Engine.Fetch.Readers.t
     grammar, schema rendering and path selection, and the shared passage
     selection. *)
 
+val build_page_cache :
+  sw:Eio.Switch.t ->
+  net:_ Eio.Net.t ->
+  mono_clock:_ Eio.Time.Mono.t ->
+  now:(unit -> float) ->
+  ?audit:(Mcp_caps.Event.t -> unit) ->
+  fs:_ Eio.Path.t ->
+  Seekwright.Config.t ->
+  (Seekwright.Engine.Fetch.Cache.t option, string) result
+(** [None] when [fetch.cache_dir] is unset — the path on which every read
+    dispatches and [fetch.ok]'s [cached] is always [false]. Otherwise the fetch
+    engine's cache seam over one directory of page entries: the entry key is the
+    hash of the route rung and the {i validated} URL, the directory is capped by
+    [fetch.cache_max_bytes] with LRU eviction, an entry over
+    [fetch.cache_max_entry_bytes] is never stored, and an entry older than
+    [fetch.cache_ttl_seconds] reads as a miss. [Policy.with_written_root] creates
+    the directory (mode [0o700]) or refuses: an operator's [cache_dir] this
+    process cannot create or open is a startup failure, not a cache miss. See
+    [Seekwright_fetch.Page_cache] for the entry format and the windowed read. *)
+
+val page_cache_stats :
+  sw:Eio.Switch.t ->
+  mono_clock:_ Eio.Time.Mono.t ->
+  fs:_ Eio.Path.t ->
+  Seekwright.Config.t ->
+  ((int * int) option, string) result
+(** [Some (entries, body_bytes)] for the directory [fetch.cache_dir] names, [None]
+    when it is unset: the figures [--check] prints, read off the same written root
+    the served process builds. *)
+
 val build_app :
   sw:Eio.Switch.t ->
   env:< net : [> [> `Generic ] Eio.Net.ty] Eio.Resource.t;

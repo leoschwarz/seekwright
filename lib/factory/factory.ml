@@ -69,5 +69,7 @@ let probe_net = Grants.probe_net
 let build_extractor = Fetch_stack.build_extractor
 let readers = Fetch_stack.readers
 let build_fetch_stack = Fetch_stack.build_fetch_stack
+let build_page_cache = Fetch_stack.build_page_cache
+let page_cache_stats = Fetch_stack.page_cache_stats
 
 let build_app = App.build_app

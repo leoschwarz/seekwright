@@ -33,3 +33,32 @@ val build_fetch_stack :
   ?audit:(Mcp_caps.Event.t -> unit) ->
   Seekwright.Config.t ->
   ((Seekwright.Engine.Fetch.fetcher * Seekwright.Engine.Fetch.fetcher list), string) result option
+
+(** The page cache's seam: [None] when [fetch.cache_dir] is unset, and otherwise
+    the two questions the fetch engine asks of one directory of entries. The
+    directory is opened (and created, mode [0o700]) by
+    {!Mcp_caps.Policy.with_written_root}, so an operator's [cache_dir] this process
+    cannot create or use is an [Error] here — the refusal to start the oracle
+    raises in its builder, rather than a miss typed lazily all day long. The
+    public contract is on [Factory.build_page_cache] in [factory.mli]. *)
+val build_page_cache :
+  sw:Eio.Switch.t ->
+  net:_ Eio.Net.t ->
+  mono_clock:_ Eio.Time.Mono.t ->
+  now:(unit -> float) ->
+  ?audit:(Mcp_caps.Event.t -> unit) ->
+  fs:_ Eio.Path.t ->
+  Seekwright.Config.t ->
+  (Seekwright.Engine.Fetch.Cache.t option, string) result
+
+(** [Some (entries, body_bytes)] for the directory [fetch.cache_dir] names, [None]
+    when it is unset: the figures [--check] prints, read off the same written root
+    the served process builds. A diagnosis reads the directory; it does not go
+    through the serving path, which is why this is a call of its own rather than a
+    field of the seam. *)
+val page_cache_stats :
+  sw:Eio.Switch.t ->
+  mono_clock:_ Eio.Time.Mono.t ->
+  fs:_ Eio.Path.t ->
+  Seekwright.Config.t ->
+  ((int * int) option, string) result

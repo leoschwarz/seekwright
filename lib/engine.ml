@@ -660,10 +660,24 @@ module Fetch = struct
      this server's own reader), and whether a warm cache entry served it. *)
   type served = { page : page; fallback : Config.name option; cached : bool }
 
+  module Cache = struct
+    type t = {
+      preflight : string -> (string, fetch_error) result
+    ; read :
+        rung:Config.name ->
+        url:string ->
+        offset:int ->
+        max_chars:cap ->
+        dispatch:(offset:int -> max_chars:cap -> (page, fetch_error) result) ->
+        (page * bool, fetch_error) result
+    }
+  end
+
   type t = {
     config : Config.t
   ; fetcher : fetcher
   ; fallbacks : fetcher list
+  ; cache : Cache.t option
   ; usage : Usage.t option
   ; readers : Readers.t
   ; log : log
@@ -682,6 +696,7 @@ module Fetch = struct
       (config : Config.t)
       (fetcher : fetcher)
       ~(readers : Readers.t)
+      ?cache
       ?usage
       ?log
       ?(fallbacks = [])
@@ -705,6 +720,7 @@ module Fetch = struct
         { config
         ; fetcher
         ; fallbacks
+        ; cache
         ; usage
         ; readers
         ; log = (match log with None -> quiet | Some sink -> sink)
@@ -901,16 +917,34 @@ module Fetch = struct
      local reader: it keys the cache entry and it is what the journal prices, so the
      local read and a fallback's stay different answers to the same URL.
 
-     This port has no page cache yet, which is Python's [self.cache is None] path:
-     every read dispatches, [cached] is [false], and no window is recomputed out of
-     a stored whole page. The cache changes this function and nothing else in here,
-     which is why the flag is threaded through the calls below even though no caller
-     sets it yet. *)
-  let read_page (_t : t) (fetcher : fetcher) ~(rung : Config.name option) ~(url : string) ~(offset : int)
+     With no cache wired in — Python's [self.cache is None] — every read dispatches
+     and [cached] is [false]. With one, the answer comes from {!Cache.read}, and the
+     two rules that hold across it are Python's: the preflight runs before the
+     lookup, so a refused URL is refused with a warm entry just as without one and
+     the entry keys on the validated URL rather than the caller's spelling; and
+     [cached] says "dispatch-free", so the call that filled an entry is journalled
+     and priced as a dispatch even though it then serves itself from that entry.
+     Everything below this function is unchanged by the cache, which is why the flag
+     was threaded through those calls from the start. *)
+  let read_page (t : t) (fetcher : fetcher) ~(rung : Config.name option) ~(url : string) ~(offset : int)
       ~(max_chars : cap) : (served, fetch_error) result =
-    Result.map
-      (fun page -> { page; fallback = rung; cached = false })
-      (fetcher.fetch ~url ~offset ~max_chars)
+    match t.cache with
+    | None ->
+      Result.map (fun page -> { page; fallback = rung; cached = false })
+        (fetcher.fetch ~url ~offset ~max_chars)
+    | Some cache -> (
+      (* The rung name is the entry's first key, and [http] is the local reader's
+         own name: the same string the journal prices the rung by. *)
+      match cache.Cache.preflight url with
+      | Error exc -> Error exc
+      | Ok validated ->
+        let dispatch ~(offset : int) ~(max_chars : cap) =
+          fetcher.fetch ~url:validated ~offset ~max_chars
+        in
+        let rung_name = match rung with None -> "http" | Some name -> name in
+        Result.map
+          (fun (page, cached) -> { page; fallback = rung; cached })
+          (cache.Cache.read ~rung:rung_name ~url:validated ~offset ~max_chars ~dispatch))
 
   let try_fallbacks t (url : string) notices ~(original_reason : string) base
       ~(tried : Config.name list ref)
