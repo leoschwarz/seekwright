@@ -71,7 +71,7 @@ What `--check` reports is the *built* set, not the configured one:
   enabled   exa:free, parallel:free, search1api
   effective exa:free, parallel:free, search1api
   built     exa:free, parallel:free
-  untested  exa:free, parallel:free, search1api are untested on this port: …
+  untested  search1api is untested on this port: …
   search1api not built on this port
 ```
 

@@ -38,18 +38,28 @@ in [`configuration.md`](configuration.md).
 | --- | --- | --- | --- |
 | 2026-11-13 | `freeserp` | `73fcf73` | passed, 6/6 (keyless) |
 | 2026-11-13 | `anysearch` | `73fcf73` | passed, 6/6 (keyless, POST-only endpoint) |
+| 2026-11-14 | `freeserp` | `4b6b443` | passed, 6/6 (keyless) |
+| 2026-11-14 | `anysearch` | `4b6b443` | passed, 6/6 (keyless) |
+| 2026-11-14 | `exa:free` | `4b6b443` | passed, 3/3 (keyless, anonymous MCP endpoint) |
+| 2026-11-14 | `parallel:free` | `4b6b443` | passed, 3/3 (keyless, anonymous MCP endpoint) |
+| 2026-11-14 | `fetch:local` | `4b6b443` | passed, 5/5 (keyless read of a public page) |
+| 2026-11-14 | `fetch:metadata` | `4b6b443` | passed, 3/3 (the cloud-metadata refusal is the assertion; no endpoint was dialed) |
 
 That is the whole record: **no billed endpoint has been contacted from the OCaml
-build**, and no fetch-fallback or agent case has run live. `live/cases.ml` still
-marks the `fetch:jina`, `fetch:scrappa`, `fetch:tavily` and `fetch:linkup` rows
-`Deferred "F6.1"`, even though `Factory.build_fetch_stack` constructs those
-fallbacks and the hermetic suites exercise them. So the fallbacks are built and
-hermetically tested, and unverified against their real endpoints. Do not describe
-them as live-verified until a gated run says otherwise.
+build**. The four keyed fetch fallbacks — `fetch:jina` apart, which is keyless
+but was not selected — `fetch:scrappa`, `fetch:tavily` and `fetch:linkup` have
+never run against their real endpoints, and neither has an agent case, which
+would need an operator model endpoint. Those cases are built, and
+`Checks.verify_fetch` now asserts each one's page shape; `live/test_live_cases.ml`
+pins those arms offline, so an arm that never fires fails a suite rather than
+letting a live case pass vacuously. But "built and asserted offline" is not
+"live-verified", and none of those four names may be described as verified
+against its vendor until a gated run records one.
 
 `--check` says the same thing at startup: enabled names never live-verified in
 this build appear on its `untested` line, and a reachability probe does not move
-a name off it.
+a name off it. The keyless default set — `exa:free`, `parallel:free`, `freeserp`
+— no longer appears there, because each of the three has a recorded run.
 
 ## Recording a pass
 

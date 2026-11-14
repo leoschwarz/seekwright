@@ -78,19 +78,16 @@ naming the reason. Everything else in `[logging]` works.
 
 ## Live verification is thinner than the shipped surface
 
-All seventeen names are registered and buildable (`lib/factory/registry.ml`), but
-live verification in this build has passed for `freeserp` and `anysearch` only;
-the rest sit on `--check`'s `untested` line until a live run passes. Two related
-disclosures in the tree are stale and tracked as open items, so do not read them
-as either a feature or a bug:
-
-- `lib/cli/cli_check.ml` still prints that no third-party fetch fallback is built
-  on this port, while `lib/factory/fetch_stack.ml` does build `crawl4ai`, `jina`,
-  `scrappa`, `tavily` and `linkup`; and
-- `live/cases.ml` still marks those fetch-fallback rows `Deferred "F6.1"`.
-
-The honest position: the fallbacks are constructed and exercised hermetically, and
-have not been run against their real endpoints on this port.
+All seventeen names are registered and buildable (`lib/factory/registry.ml`).
+Live verification in this build has passed for `freeserp`, `anysearch`,
+`exa:free` and `parallel:free` — the whole keyless default set — and for the
+`fetch:local` read and the `fetch:metadata` refusal. Every other name sits on
+`--check`'s `untested` line until a keyed gated run passes, and the four keyed
+fetch fallbacks (`fetch:scrappa`, `fetch:tavily`, `fetch:linkup`, and
+`fetch:jina`, which is keyless but has not been selected) are constructed and
+exercised hermetically without having reached their real endpoints. The runs and
+their dates are the live-run table in `plans/seekwright-ocaml-port.md` and in
+[`live-tests.md`](live-tests.md).
 
 ## Egress and trust store
 

@@ -9,9 +9,14 @@ as the Python implementation, on Alpine, as UID 10001.
 
 This branch ports [seekwright](README.md) to OCaml; the Python tree in this
 checkout is the reference implementation the port is built against. The port is
-**not a drop-in replacement yet**: the differences it ships with are listed in
-[`ocaml-docs/divergences.md`](ocaml-docs/divergences.md), and they are the first
-page an operator of the Python deployment should read.
+a **production candidate**: the F9.3 checklist and the parity declaration in
+[`plans/seekwright-ocaml-port.md`](plans/seekwright-ocaml-port.md) record what
+was verified, how, and at which commit. It is **not** full behavioural parity —
+a fetched PDF has no reader on this port, and the extraction backend is not
+`trafilatura` — so [`ocaml-docs/divergences.md`](ocaml-docs/divergences.md) stays
+the first page an operator of the Python deployment should read. Turning the
+candidate into a limited production release is a maintainer decision, not a
+branch one.
 
 [`VISION.md`](VISION.md) is the spec both implementations steer by, and
 [`plans/seekwright-ocaml-port.md`](plans/seekwright-ocaml-port.md) is the
