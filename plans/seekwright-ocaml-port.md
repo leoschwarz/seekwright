@@ -2339,3 +2339,131 @@ a further 2x on the table for the price of re-deriving `total_chars` without
 decoding, and was not taken: the `Uchar` array is what keeps the strip's
 `Utf8.is_python_space` rule honest for the non-ASCII spaces Python's `strip`
 removes.
+
+## 33. F7 — the page cache, its written root, and the seam on the served path (2026-11-14)
+
+**What landed.** `src/seekwright/pagecache.py`'s `DiskPageCache` is
+`Seekwright_fetch.Page_cache` (`lib/fetch/page_cache.ml`), and a served
+`fetch` reads through it whenever `fetch.cache_dir` names a directory. Four
+pull requests: the filesystem API the cache needs; the cache itself; the seam
+above it; and `--check` reporting what the directory holds.
+
+**The entry format is the oracle's, with one clock moved.** One entry is a pair of
+files in one directory, named by the hex SHA-256 of `provider`, a NUL byte and the
+*i validated* URL — never a spelling of the URL, so nothing a model typed becomes a
+path. The body file is the extraction; the sidecar carries the metadata the cache
+reads back (the rung, the URL, the stored size, the retrieval instant and the
+access clock). Per-entry and total ceilings, TTL, LRU eviction, orphan and corrupt
+entries reading as misses, and the atomic temp-file-then-rename pair are ported case
+for case, and the digests themselves are pinned against values computed from the
+Python (`test_page_cache.ml`).
+
+**The divergence, on record.** The oracle keeps the LRU order in the body file's
+*atime* and touches it on a hit. This port keeps the access clock in the sidecar and
+rewrites only the sidecar on a hit. It is not a shortcut: Eio's filesystem API has no
+`utimes`, and on Linux `relatime` would not move the atime at cache timescales (it
+updates at most once per mount interval, and a cache TTL is measured in minutes), so
+the mount's atime cannot be the clock here. `stat`'s atime is still read, as the
+fallback for an entry this process did not write. The case that pins the
+divergence — and the one a reviewer should read before calling it a bug — is
+`a_hit_touches_the_sidecar_not_the_body`: a hit leaves the body's inode and mtime
+alone and moves `accessed`.
+
+**The filesystem API extension stayed inside the capability layer.**
+`Mcp_caps.Policy_fs.with_written_root` opens (and creates, mode `0o700`) a subtree
+and confers, on top of the read grant's bounded reads, exactly the operations the
+cache needs: `read_range` (the bounded range read, which is what lets a windowed
+read stream instead of loading the body), `stat`, `atomic_write` (temp-then-rename
+*inside* the subtree), and `unlink`. No native path operation escapes the subtree,
+and the grant's byte and entry ceilings apply to writes as well as reads.
+`Authority.Fs` re-exports them, and `test/test_authority_fs.ml` exercises each
+against a real temporary directory.
+
+**The grant is minted in the funnel, not at the call site.** The caps-audit guard
+(`test/test_caps_audit.ml`, which counts text occurrences in `lib/factory/*.ml`
+comments included) refused a second place that turns a confinement into an
+authority, so `lib/factory/grants.ml` gained
+`fs_grant_of_written_root ~sw ~parent ~mono_clock ~max_bytes ~max_entries ?audit dir`
+— the one `Authority.with_log` site for a written root, with the same audit
+decoration every other factory grant gets — and `fetch_stack.ml` calls that. The
+guard's own file was not touched. The cache root's ceilings are
+`max_read_bytes = max_write_bytes = max cache_max_entry_bytes 65_536` and
+`max_entries = 10_000`: the per-entry ceiling is what the store enforces, and the
+floor is the window chunk, so a grant can never refuse a read the cache's own
+config asked for.
+
+**The engine's seam is two questions, and only one site asks them.**
+`Seekwright.Engine.Fetch.Cache` is `{ preflight; read }`, and `Engine.Fetch.create`
+takes `?cache`. `read_page` in `lib/engine.ml` is the only place
+that decides between a cached page and a dispatch, which is why the flag it returns
+means *dispatch-free* rather than *cache involved*: the call that fills an entry is
+journalled and priced as the dispatch it was, and every later read of that entry is
+not. `preflight` is a field of the seam rather than a step the caller may skip,
+because the guardrails have to answer before the directory does — with a warm entry
+and without one alike. `fetch.ok` carries `cached` on every line, and a cached read
+of a priced rung carries no `cost_usd`, whatever that rung charges, because the
+journal's absence means "nothing was spent".
+
+**Singleflight lives in the factory seam, not in the cache.** `cache_seam` in
+`lib/factory/fetch_stack.ml` holds the per-key in-flight table, because what a
+follower inherits is the leader's `Engine.Fetch.fetch_error` — a type
+`Page_cache` has no business naming. The rules are the oracle's: the fill dispatches
+uncapped at offset 0 so one entry answers every later window; a follower that finds
+an entry is dispatch-free; a follower whose fill could not store (an over-cap page)
+fetches its own window; a failed fill wakes every waiter with the one failure the
+leader saw and stores nothing; the leader serves its own window out of the entry it
+just wrote but is still reported as a dispatch.
+
+**Window parity is one function, not a mirror.** The oracle's cache cuts a window
+with its own `_cut` because `pagecache.py` may not import `fetcher`. This port
+imports it: `get_window` streams a head of `offset + max_chars + 2` codepoints
+through chunked `Authority.Fs.read_range` (64 KiB at a time) and hands it to
+`Fetcher.window_text`, the same function a live read uses. So the parity sweep asks
+the cached path and the live path for the same window instead of pinning a copy
+against an original, and it includes a body far larger than the chunk — which is
+where a chunked walk over a UTF-8 text goes wrong on its own, at a codepoint
+split across a chunk boundary. That case is pinned too.
+
+**`--check` measures the directory instead of restating the ceiling.**
+`fetch.cache_dir` left the transitional list because it has a consumer now, and the
+row answers with figures: `cache <dir> (256 MiB cap, ttl 300s)  3 entries, 1.2 KiB`
+— the cap and the TTL configured, the entry count and the body bytes read off the
+directory by `Factory.page_cache_stats`, which opens the same written root the
+served process builds. That is also why an unopenable `cache_dir` is a problem row
+(`UNAVAILABLE: <reason>`, counted) rather than a row of zeroes: the server refuses
+to start on such a config, and a diagnosis that could not open the directory should
+not print a comfortable answer. An unset `cache_dir` prints `cache off`. The
+`check_transitional` golden was re-blessed for both halves, and its rule `rm -rf`s
+the cache directory first so "0 entries, 0 B" is the answer rather than whatever an
+earlier run left behind.
+
+**Tests, and the negative pins that did not move.** `test_page_cache.ml` (18 cases)
+is the entry format against a real grant and an injected clock, including the
+concurrency race where a reader meets a writer and an eviction and must see a whole
+entry or none; `test_fetch_cache.ml` (12 cases) is the seam on the served path —
+one cold fill per key with the followers reported cached (three fibers, one
+dispatch), the failed fill that wakes its waiters with the leader's failure and
+stores nothing, the over-cap page that is served and stays uncached, the image page
+that bypasses the store, the priced rung that is unbilled on a cached page, the
+guardrail that answers a warm entry with the address refusal, and the directory this
+process cannot create, which is a refusal at build time rather than a cache that
+silently never fills. `test_cli_check.ml` gained three cases and re-pinned the transitional one, which now
+says `cache_dir` is no longer inert.
+
+No new negative-compilation pin was added. The two existing ones already seal the
+write path this wave opened: `test/should_not_compile/raw_fs_write_needs_bounds.ml`
+(a write through a grant whose ceiling the body would breach) with its expected
+output, and the `write_under_root` half of `grant_path.ml` (a write at a path the
+grant does not confer). A `cache_write_needs_grant` fixture would have re-asked one
+of those two questions from the cache's side, and the cache has no path-building
+code of its own to get wrong — it names entries by a digest.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` (80 suites, all
+`Test Successful`) and `dune build @doc` all exit 0. Nothing reached a provider
+endpoint and no key was read: the pages in the served-path suite come from stub
+fetchers, and the one case that needs an address refusal asks for a loopback IP
+literal, which `Policy_net.vet_public_host` answers from the address rule with no
+lookup. `test/differential/matrix/behaviours.tsv` moves the page-cache row from
+`not-ported / pending-F7` to `ported`, with the LRU divergence named in its
+verification column, and the four `fetch.cache_*` rows in `config-fields.tsv` move
+from `transitional` to `honoured` with the consumer each now has.
