@@ -21,7 +21,27 @@ module Server = Seekwright.Server
 
 let ( // ) = Filename.concat
 
-(* {1 The config.mli record scan} *)
+(* {1 The config.mli record scan}
+
+   The keys are read from [config.mli] as text, the same way the Python tool
+   reads [config.py] with [ast] rather than importing it. That works because
+   [config.mli] follows one layout, and the scanner reads exactly that layout:
+
+   - a record header is one line starting at column 0, spelled [type <name> =
+     {] with nothing after the opening brace — a type alias whose right-hand
+     side is not a record ({!Config.name}) never matches;
+   - the block ends at the first line whose first character is [}];
+   - one field per line, recognised by its first [:] — everything before it,
+     trimmed, is the key name, and a name not starting lowercase is not a
+     field;
+   - inside a block, blank lines and doc-comment lines (those whose first two
+     characters after trimming open an OCaml comment) are skipped, not
+     mistaken for keys.
+
+   If [config.mli] ever moves away from that layout the scan reads short, and
+   a missing key is a missing manifest line: the [surface.expected] golden and
+   the [docs/reference/surface.md] body diff both fail [dune runtest] on the
+   spot, so the assumptions are pinned rather than trusted. *)
 
 (* The section table -> the Python model name the manifest prints, and the
    record type in [config.mli] the keys are read from. The mapping is the
@@ -42,11 +62,11 @@ let record_fields lines type_name =
     | [] -> List.rev acc
     | line :: rest ->
         if in_block then
-          if String.length line > 0 && line.[0] = '}' then scan false acc rest
+          if String.starts_with ~prefix:"}" line then scan false acc rest
           else
             match String.trim line with
             | "" -> scan true acc rest
-            | trimmed when String.length trimmed > 2 && String.sub trimmed 0 2 = "(*" ->
+            | trimmed when String.starts_with ~prefix:"(*" trimmed ->
                 scan true acc rest
             | trimmed -> (
                 match String.index_opt trimmed ':' with
@@ -57,8 +77,7 @@ let record_fields lines type_name =
                     else scan true acc rest
                 | None -> scan true acc rest)
         else if
-          String.length line > 5
-          && String.sub line 0 5 = "type "
+          String.starts_with ~prefix:"type " line
           && (match String.index_opt line '=' with
              | Some eq ->
                  String.trim (String.sub line 5 (eq - 5)) = type_name
@@ -68,6 +87,14 @@ let record_fields lines type_name =
         else scan false acc rest
   in
   scan false [] lines
+
+(* The three key lists the manifest prints, each already sorted the way the
+   Python tool sorts it. *)
+type config_keys = {
+  section_keys : (string * string list) list;
+  per_provider : string list;
+  top_level : string list;
+}
 
 let read_config_keys path =
   let lines = String.split_on_char '\n' (In_channel.with_open_text path In_channel.input_all) in
@@ -81,30 +108,58 @@ let read_config_keys path =
   let top_level =
     List.filter (( <> ) "providers_defaulted") (List.sort compare (record_fields lines "t"))
   in
-  (section_keys, per_provider, top_level)
+  { section_keys; per_provider; top_level }
+
+let strip_trailing_blanks lines =
+  (* The manifest ends at its last name: a trailing separator moves on every
+     regeneration. *)
+  let rec go lines =
+    match List.rev lines with
+    | "" :: rest -> go (List.rev rest)
+    | _ -> lines
+  in
+  go lines
 
 (* {1 Rendering} *)
 
 let entry label = "- `" ^ label ^ "`"
 
-let count_lines (section_keys, per_provider, top_level) =
-  let section_total = List.fold_left (fun acc (_, keys) -> acc + List.length keys) 0 section_keys in
-  ( List.length Server.tools_surface,
-    List.length Server.rest_routes,
-    List.length Server.cli_verbs,
-    List.length Server.server_flags,
-    List.length Config.known_providers,
-    section_total,
-    List.length section_keys,
-    List.length per_provider,
-    List.length Server.operational_routes,
-    List.length top_level )
+(* One named count per rendered heading, in the order the manifest prints
+   them. A record rather than a positional tuple: every consumer of these
+   numbers prints a different subset, and [render_full]'s summary sentence
+   reaches past [count_lines] for the journal total, which no ten-position
+   tuple could keep straight. *)
+type counts = {
+  tools : int;
+  routes : int;
+  verbs : int;
+  flags : int;
+  providers : int;
+  section_total : int;
+  section_count : int;
+  per_provider_count : int;
+  operational : int;
+  top_level_count : int;
+}
 
-let render_body config_keys =
-  let tools, routes, verbs, flags, providers, section_total, section_count, per_provider_count, operational, top_level_count =
+let count_lines { section_keys; per_provider; top_level } =
+  {
+    tools = List.length Server.tools_surface;
+    routes = List.length Server.rest_routes;
+    verbs = List.length Server.cli_verbs;
+    flags = List.length Server.server_flags;
+    providers = List.length Config.known_providers;
+    section_total = List.fold_left (fun acc (_, keys) -> acc + List.length keys) 0 section_keys;
+    section_count = List.length section_keys;
+    per_provider_count = List.length per_provider;
+    operational = List.length Server.operational_routes;
+    top_level_count = List.length top_level;
+  }
+
+let render_body ({ section_keys; per_provider; top_level } as config_keys) =
+  let { tools; routes; verbs; flags; providers; section_total; section_count; per_provider_count; operational; top_level_count } =
     count_lines config_keys
   in
-  let (section_keys, per_provider, top_level) = config_keys in
   let lines = [ ""; Printf.sprintf "## MCP tools (%d)" tools; "" ] in
   let lines =
     List.fold_left
@@ -171,14 +226,7 @@ let render_body config_keys =
     @ [ Printf.sprintf "### Top-level keys -- `Config` (%d)" top_level_count; "" ]
     @ List.map entry top_level
   in
-  (* The manifest ends at its last name: a trailing separator moves on every
-     regeneration. *)
-  let rec strip lines =
-    match List.rev lines with
-    | "" :: rest -> strip (List.rev rest)
-    | _ -> lines
-  in
-  strip lines
+  strip_trailing_blanks lines
 
 let render_journal () =
   let total = List.fold_left (fun acc (_, fields) -> acc + List.length fields) 0 Server.journal_fields in
@@ -191,14 +239,10 @@ let render_journal () =
       @ [ Printf.sprintf "### `%s` line (%d fields)" kind (List.length fields); "" ]
       @ List.map entry fields @ [ "" ])
     lines Server.journal_fields
-  |> fun lines ->
-  let rec strip lines =
-    match List.rev lines with "" :: rest -> strip (List.rev rest) | _ -> lines
-  in
-  strip lines
+  |> strip_trailing_blanks
 
 let render_full config_keys =
-  let tools, routes, verbs, flags, providers, section_total, section_count, per_provider_count, operational, _top =
+  let { tools; routes; verbs; flags; providers; section_total; section_count; per_provider_count; operational; top_level_count = _ } =
     count_lines config_keys
   in
   let journal_total =
@@ -227,7 +271,11 @@ let render_full config_keys =
 let print lines = List.iter print_endline lines
 
 let () =
-  let args = List.tl (Array.to_list Sys.argv) in
+  (* argv always carries the executable name, but reading the tail by pattern
+     keeps the scan total. *)
+  let args =
+    match Array.to_list Sys.argv with _ :: args -> args | [] -> []
+  in
   let python_body = List.mem "--python-body" args in
   let path_args = List.filter (fun a -> a <> "--python-body") args in
   let config_mli =
