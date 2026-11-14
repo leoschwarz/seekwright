@@ -106,7 +106,9 @@ let test_a_blank_line_between_records_does_not_consume_a_row_index () =
 let test_two_columns_with_one_name_print_twice_and_both_are_addressable () =
   (* The file's defect is reported, not renamed away: [path] answers both
      cells. *)
-  let spans, _ = J.select_paths (render "id,id\n1,2\n") "$.rows[0].id" ~max_chars:6000 in
+  let spans, _ =
+    J.select_paths ~text:(render "id,id\n1,2\n") ~path:"$.rows[0].id" ~max_chars:6000
+  in
   A.check (A.list A.string) "both cells"
     [ "$.rows[0].id  \"1\"\n$.rows[0].id  \"2\"" ]
     (List.map snd spans)
@@ -135,7 +137,9 @@ let test_the_shape_names_the_columns_and_withholds_the_values () =
       if contains ~haystack:schema ~needle:"12.50" then A.fail "a value rode through"
 
 let test_one_column_of_every_row_is_one_wildcard_step () =
-  let spans, dropped = J.select_paths (table ()) "$.rows[*].price" ~max_chars:6000 in
+  let spans, dropped =
+    J.select_paths ~text:(table ()) ~path:"$.rows[*].price" ~max_chars:6000
+  in
   A.check (A.list A.string) "one cell per row"
     [ "$.rows[0].price  \"12.50\"";
       "$.rows[1].price  \"7.00\"";
@@ -147,7 +151,7 @@ let test_one_column_of_every_row_is_one_wildcard_step () =
 
 let test_a_slice_of_rows_is_two_whole_row_blocks () =
   let rendered = table () in
-  let spans, dropped = J.select_paths rendered "$.rows[1:3]" ~max_chars:6000 in
+  let spans, dropped = J.select_paths ~text:rendered ~path:"$.rows[1:3]" ~max_chars:6000 in
   A.check A.int "nothing dropped" 0 dropped;
   A.check A.bool "adjacent rows are one span" true (List.length spans = 1);
   let offset, block = List.nth spans 0 in
@@ -180,7 +184,7 @@ let test_a_column_name_holding_a_colon_stays_a_name_through_the_grammar () =
   | None -> A.fail "schema refused"
   | Some schema ->
       assert_in "$.rows[*][\"Price: USD\"]  string" (lines schema);
-  let spans, dropped = J.select_paths rendered "$.rows[*][\"Price: USD\"]" ~max_chars:600 in
+  let spans, dropped = J.select_paths ~text:rendered ~path:"$.rows[*][\"Price: USD\"]" ~max_chars:600 in
   A.check A.int "nothing dropped" 0 dropped;
   A.check (A.list A.string) "the column answers"
     [ "$.rows[0][\"Price: USD\"]  \"12.50\"" ]
@@ -244,7 +248,7 @@ let test_a_table_wider_than_its_budget_ends_with_the_line_naming_the_cut () =
         last;
       assert_in (Printf.sprintf "$.rows  array(%d)" printed) (lines rendered);
       A.check A.bool "within a small multiple" true (String.length rendered < 5 * String.length body);
-      let spans, _ = J.select_paths rendered (Printf.sprintf "$.rows[%d]" (printed + 5)) ~max_chars:600 in
+      let spans, _ = J.select_paths ~text:rendered ~path:(Printf.sprintf "$.rows[%d]" (printed + 5)) ~max_chars:600 in
       A.check A.int "the row count printed is a bound, not the file's length" 0
         (List.length spans)
 

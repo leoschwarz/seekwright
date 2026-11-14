@@ -505,8 +505,8 @@ let an_answer_failure_projects_the_typed_failure _ =
       {|{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"answer","arguments":{"query":"what is eio?"}}}|}
   in
   check_bool "the tool call carries it as a tool error" true (is_error called);
-  check_string "and the same prose reaches the model"
-    "The model endpoint could not be reached (Unavailable); no answer was produced."
+  check_string "and the same prose reaches the model, kind-prefixed as every tool error is"
+    "failed: The model endpoint could not be reached (Unavailable); no answer was produced."
     (text_of called);
   let recent =
     match field "recent" (Usage.snapshot app.Server.usage) with `List l -> l | _ -> []
