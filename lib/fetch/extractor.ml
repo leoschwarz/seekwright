@@ -471,7 +471,7 @@ let json_extraction (text : string) : extract_result =
         path_addressable = true;
       }
 
-let table_extraction (text : string) (kind : string) : extract_result =
+let table_extraction ~(text : string) ~(kind : string) : extract_result =
   (* A delimited body as the table it is, or as its own text when it is not
      one. A [text/csv] body the reader cannot walk at all has not failed to be
      fetched: its bytes are the answer, so the bytes come back. A body that
@@ -479,7 +479,7 @@ let table_extraction (text : string) (kind : string) : extract_result =
      reader stopped. [normalise] never runs here either; in a quoted cell the
      whitespace is the data. *)
 
-  match Tabledoc.render_table text ~delimiter:(Tabledoc.table_delimiter kind text) with
+  match Tabledoc.render_table text ~delimiter:(Tabledoc.table_delimiter ~kind ~text) with
   | None -> { text; title = None; total_chars = Utf8.count text; path_addressable = false }
   | Some rendered ->
       {
@@ -564,7 +564,7 @@ let contains (needle : Utf8.t) (hay : Utf8.t) : bool =
     in
     go 0
 
-let select_passages (text : string) (query : string) ~max_chars :
+let select_passages ~(text : string) ~(query : string) ~max_chars :
     (int * string) list * int =
   (* Pick the passages of a full extraction that answer [query].
 

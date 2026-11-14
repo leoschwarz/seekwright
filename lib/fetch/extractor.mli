@@ -139,8 +139,8 @@ val json_extraction : string -> extract_result
 [normalise] never runs here — its whitespace rules are for prose, and in a
 JSON value the spaces are the data. *)
 
-val table_extraction : string -> string -> extract_result
-(** [table_extraction text kind] is a delimited body as the table it is, or as
+val table_extraction : text:string -> kind:string -> extract_result
+(** [table_extraction ~text ~kind] is a delimited body as the table it is, or as
 its own text when it is not one. [normalise] never runs here either; in a
 quoted cell the whitespace is the data. *)
 
@@ -152,8 +152,9 @@ the backend cannot read, and a backend swap must not leave that message
 claiming a type the new one lacks. Families render in a fixed order; a
 type no family claims is appended verbatim and sorted. *)
 
-val select_passages : string -> string -> max_chars:int -> (int * string) list * int
-(** [select_passages text query ~max_chars] picks the passages of a full
+val select_passages :
+  text:string -> query:string -> max_chars:int -> (int * string) list * int
+(** [select_passages ~text ~query ~max_chars] picks the passages of a full
 extraction that answer [query]. Returns [(spans, dropped)]: [(offset,
 text)] pairs in document order, each offset indexing the *full* extraction
 in codepoints, and the count of matching chunks the budget cut.

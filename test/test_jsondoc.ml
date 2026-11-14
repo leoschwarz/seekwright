@@ -348,13 +348,13 @@ let test_negative_indices_are_refused_with_the_alternative () =
 let test_a_leaf_is_one_span () =
   let text = rendered () in
   let needle = "$.items[0].name  \"first\"" in
-  let spans, dropped = J.select_paths text "$.items[0].name" ~max_chars:6000 in
+  let spans, dropped = J.select_paths ~text:text ~path:"$.items[0].name" ~max_chars:6000 in
   A.check (A.list (A.pair A.int A.string)) "one span"
     [ (require_offset text needle, needle) ] spans;
   A.check A.int "nothing dropped" 0 dropped
 
 let test_a_container_is_its_whole_subtree () =
-  let spans, _ = J.select_paths (rendered ()) "$.items[1]" ~max_chars:6000 in
+  let spans, _ = J.select_paths ~text:(rendered ()) ~path:"$.items[1]" ~max_chars:6000 in
   A.check A.int "one span" 1 (List.length spans);
   let text = snd (List.nth spans 0) in
   A.check A.bool "starts at the row object" true
@@ -365,25 +365,25 @@ let test_a_container_is_its_whole_subtree () =
     A.fail "took more than the subtree"
 
 let test_a_wildcard_selects_one_line_per_element () =
-  let spans, _ = J.select_paths (rendered ()) "$.items[*].name" ~max_chars:6000 in
+  let spans, _ = J.select_paths ~text:(rendered ()) ~path:"$.items[*].name" ~max_chars:6000 in
   A.check (A.list A.string) "one line per element"
     [ "$.items[0].name  \"first\""; "$.items[1].name  \"second\"" ]
     (List.map snd spans)
 
 let test_a_slice_selects_a_range_of_an_array () =
-  let spans, _ = J.select_paths (rendered ()) "$.items[0:1]" ~max_chars:6000 in
+  let spans, _ = J.select_paths ~text:(rendered ()) ~path:"$.items[0:1]" ~max_chars:6000 in
   A.check A.bool "starts at the first row" true
     (String.starts_with ~prefix:"$.items[0]  object(4)" (snd (List.nth spans 0)));
   A.check A.bool "slice ends before the second" false
     (contains ~haystack:(snd (List.nth spans 0)) ~needle:"$.items[1]")
 
 let test_an_index_segment_is_a_step_not_a_character_prefix () =
-  let spans, _ = J.select_paths (render "{\"a\": {\"b\": 1}}") "$[0]" ~max_chars:600 in
+  let spans, _ = J.select_paths ~text:(render "{\"a\": {\"b\": 1}}") ~path:"$[0]" ~max_chars:600 in
   A.check A.int "no span" 0 (List.length spans)
 
 let test_offsets_index_the_full_rendering () =
   let text = rendered () in
-  let spans, _ = J.select_paths text "$.items[*].tags" ~max_chars:6000 in
+  let spans, _ = J.select_paths ~text:text ~path:"$.items[*].tags" ~max_chars:6000 in
   List.iter
     (fun (offset, span) ->
       A.check A.string "offset indexes the rendering"
@@ -391,18 +391,18 @@ let test_offsets_index_the_full_rendering () =
     spans
 
 let test_a_path_that_matches_nothing_reports_nothing () =
-  let spans, dropped = J.select_paths (rendered ()) "$.nope" ~max_chars:6000 in
+  let spans, dropped = J.select_paths ~text:(rendered ()) ~path:"$.nope" ~max_chars:6000 in
   A.check A.int "no spans" 0 (List.length spans);
   A.check A.int "nothing dropped" 0 dropped
 
 let test_the_whole_document_is_the_root () =
-  let spans, dropped = J.select_paths (rendered ()) "$" ~max_chars:6000 in
+  let spans, dropped = J.select_paths ~text:(rendered ()) ~path:"$" ~max_chars:6000 in
   A.check A.bool "starts at the root" true
     (String.starts_with ~prefix:"$  object(3)" (snd (List.nth spans 0)));
   A.check A.int "nothing dropped" 0 dropped
 
 let test_the_budget_cuts_a_subtree_at_a_line_boundary_and_counts_the_rest () =
-  let spans, dropped = J.select_paths (rendered ()) "$.items" ~max_chars:60 in
+  let spans, dropped = J.select_paths ~text:(rendered ()) ~path:"$.items" ~max_chars:60 in
   if spans = [] then A.fail "the head of the subtree is an answer";
   List.iter
     (fun (_, t) -> A.check A.bool "span within budget" true (String.length t <= 60))
@@ -413,20 +413,20 @@ let test_the_budget_stops_at_the_first_span_that_does_not_fit () =
   (* [select_passages] stops rather than letting a smaller span queue-jump;
      both spend one key. *)
   let small = render "{\"items\": [{\"n\": 1}, {\"n\": 2}, {\"n\": 3}]}" in
-  let spans, dropped = J.select_paths small "$.items[*].n" ~max_chars:20 in
+  let spans, dropped = J.select_paths ~text:small ~path:"$.items[*].n" ~max_chars:20 in
   A.check (A.list A.string) "stops at the first" [ "$.items[0].n  1" ] (List.map snd spans);
   A.check A.int "the rest counted" 2 dropped
 
 let test_a_value_line_bigger_than_the_budget_is_counted_not_returned () =
   let text = render ("{\"a\": \"" ^ String.make 300 'x' ^ "\"}") in
-  let spans, dropped = J.select_paths text "$.a" ~max_chars:100 in
+  let spans, dropped = J.select_paths ~text:text ~path:"$.a" ~max_chars:100 in
   A.check A.int "no span" 0 (List.length spans);
   A.check A.int "counted" 1 dropped
 
 let test_a_page_that_was_never_rendered_has_no_paths_to_match () =
   (* Raw text reaching the caller is not a document with no match; the engine
      says which. *)
-  let spans, dropped = J.select_paths "{\"a\": 1}" "$.a" ~max_chars:600 in
+  let spans, dropped = J.select_paths ~text:"{\"a\": 1}" ~path:"$.a" ~max_chars:600 in
   A.check A.int "no spans" 0 (List.length spans);
   A.check A.int "nothing dropped" 0 dropped
 

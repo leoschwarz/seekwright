@@ -281,7 +281,7 @@ let choose_delimiter text =
     sniff_order;
   fst !best
 
-let table_delimiter kind text =
+let table_delimiter ~kind ~text =
   (* The delimiter this type declares, or the one this file's head supports. *)
 
   if List.mem kind tab_types then "\t" else choose_delimiter text

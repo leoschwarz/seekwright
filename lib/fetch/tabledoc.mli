@@ -42,8 +42,8 @@ is indistinguishable from prose, so a body with no Content-Type is text.
 [Jsondoc.sniffs_json] refuses [1,2,3] for the same reason and that guard
 stays green. *)
 
-val table_delimiter : string -> string -> string
-(** [table_delimiter kind text] is the delimiter this type declares, or the one
+val table_delimiter : kind:string -> text:string -> string
+(** [table_delimiter ~kind ~text] is the delimiter this type declares, or the one
 this file's head supports. A tab type states its delimiter whatever the
 body looks like, so a body full of commas does not out-vote it. For the
 rest the head of the file is parsed under the CSV grammar four ways, once

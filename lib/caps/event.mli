@@ -20,7 +20,7 @@ val make : operation:string -> outcome -> t
 
 val with_bytes : int -> t -> t
 
-val add_note : string -> string -> t -> t
+val add_note : key:string -> value:string -> t -> t
 (** Both the key and the value go through [Error.sanitize], and the list is
     capped at [max_notes], so a note cannot become the log line's length. *)
 

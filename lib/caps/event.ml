@@ -21,7 +21,7 @@ let make ~operation outcome =
 
 let with_bytes bytes t = { t with bytes = Some bytes }
 
-let add_note key value t =
+let add_note ~key ~value t =
   if List.length t.notes >= max_notes then t
   else { t with notes = (Error.sanitize key, Error.sanitize value) :: t.notes }
 

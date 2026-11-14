@@ -48,9 +48,8 @@ let readers =
           Ok ()
         with Jsondoc.Path_syntax message -> Error message);
     render_schema = Jsondoc.render_schema;
-    select_paths = (fun ~text ~path ~max_chars -> Jsondoc.select_paths text path ~max_chars);
-    select_passages =
-      (fun ~text ~query ~max_chars -> Extractor.select_passages text query ~max_chars);
+    select_paths = Jsondoc.select_paths;
+    select_passages = Extractor.select_passages;
   }
 
 let cap_of (cap : Engine.Fetch.cap) : int option =

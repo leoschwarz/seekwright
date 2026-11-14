@@ -121,9 +121,9 @@ searching half of a filter over a page in hand. A leading [$] is optional,
 because a caller reading a line of the rendering already holds a path that
 starts with it. *)
 
-val select_paths : string -> string -> max_chars:int -> (int * string) list * int
+val select_paths : text:string -> path:string -> max_chars:int -> (int * string) list * int
 (** The part of a rendered JSON document that [path] addresses.
-[select_paths rendered path ~max_chars] returns [(spans, dropped)], the
+[select_paths ~text ~path ~max_chars] returns [(spans, dropped)], the
 same shape as [select_passages]: [(offset, text)] pairs in document order,
 each offset indexing the *full* rendering in codepoints, and the count of
 sections the budget cut.

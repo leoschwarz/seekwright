@@ -86,7 +86,7 @@ let run t ~operation ?measure ?notes body =
   let event =
     match (result, notes) with
     | Ok value, Some notes ->
-        List.fold_left (fun acc (key, value) -> Event.add_note key value acc) event (notes value)
+        List.fold_left (fun acc (key, value) -> Event.add_note ~key ~value acc) event (notes value)
     | _ -> event
   in
   emit t event;

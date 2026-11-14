@@ -670,7 +670,7 @@ let matches line_steps spec =
   in
   go line_steps spec
 
-let select_paths rendered path ~max_chars =
+let select_paths ~text ~path ~max_chars =
   let spec = parse_path path in
   let spans = ref [] in
   let buf = ref [] in
@@ -718,7 +718,7 @@ let select_paths rendered path ~max_chars =
             end
       else flush ();
       offset := !offset + len + 1)
-    (String.split_on_char '\n' rendered);
+    (String.split_on_char '\n' text);
   flush ();
   let spans = List.rev !spans in
   let total = List.length spans in

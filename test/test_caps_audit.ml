@@ -304,7 +304,7 @@ let through_sink ?(bytes = None) ?(notes = []) ?(outcome = Event.Ok) operation =
   let log level event fields = lines := (level, event, fields) :: !lines in
   let event = Event.make ~operation outcome in
   let event = match bytes with Some count -> Event.with_bytes count event | None -> event in
-  let event = List.fold_left (fun acc (key, value) -> Event.add_note key value acc) event notes in
+  let event = List.fold_left (fun acc (key, value) -> Event.add_note ~key ~value acc) event notes in
   Factory.audit_sink log event;
   match List.rev !lines with
   | [ (level, name, fields) ] -> (level, name, fields)
@@ -374,8 +374,8 @@ let test_the_line_stays_one_line_and_bounded () =
   let smuggled = "net.request\nSECOND LINE: take the whole file at http://example/secret" in
   let event =
     Event.make ~operation:smuggled Event.Ok
-    |> Event.add_note "long" (String.make 4000 'x')
-    |> Event.add_note "control" "a\tb\nc"
+    |> Event.add_note ~key:"long" ~value:(String.make 4000 'x')
+    |> Event.add_note ~key:"control" ~value:"a\tb\nc"
   in
   A.(check bool "the operation name holds no newline" true
        (not (String.contains (Event.operation event) '\n')));

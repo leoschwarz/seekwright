@@ -595,7 +595,7 @@ let extract (body : string) (content_type : string option) : E.extract_result =
   if J.is_json_media kind || (kind = "" && J.sniffs_json body) then
     E.json_extraction (E.decode body content_type)
   else if T.is_table_media kind then
-    E.table_extraction (E.decode body content_type) kind
+    E.table_extraction ~text:(E.decode body content_type) ~kind
   else if List.mem kind E.html_types || (kind = "" && E.sniffs_html body) then
     let text, title = from_html (E.decode body content_type) in
     E.normalise text title

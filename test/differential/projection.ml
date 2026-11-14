@@ -403,7 +403,7 @@ let jsondoc_ops =
         | None -> [ "render= -" ]
         | Some rendered ->
             (try
-               let spans, dropped = Jsondoc.select_paths rendered path ~max_chars in
+               let spans, dropped = Jsondoc.select_paths ~text:rendered ~path ~max_chars in
                [
                  "select= "
                  ^ String.concat "|"
@@ -448,7 +448,7 @@ let tabledoc_ops =
       fun spec ->
         let body = want_string "body" spec in
         let kind = want_string "media" spec in
-        let delimiter = Tabledoc.table_delimiter kind body in
+        let delimiter = Tabledoc.table_delimiter ~kind ~text:body in
         [
           "delimiter= " ^ Canon.escape_text delimiter;
           "table= " ^ flag (Tabledoc.is_table_media kind);

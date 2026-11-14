@@ -342,7 +342,7 @@ let tabledoc_properties =
                            (Jsondoc.Name name)
                        in
                        let expected = path ^ "  " ^ Jsondoc.json_string cell in
-                       match Jsondoc.select_paths rendered path ~max_chars:1000 with
+                       match Jsondoc.select_paths ~text:rendered ~path ~max_chars:1000 with
                        | [ (_, line) ], 0 -> line = expected
                        | _ -> false)
                      cells

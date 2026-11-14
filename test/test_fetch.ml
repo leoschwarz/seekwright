@@ -281,7 +281,7 @@ let test_prefers_chunks_hitting_more_terms () =
   let one_term = chunked_para "Volatility spiked after the announcement." in
   let two_terms = chunked_para "Bitcoin volatility spiked after the announcement." in
   let text = no_term ^ "\n\n" ^ one_term ^ "\n\n" ^ two_terms in
-  let spans, dropped = E.select_passages text "bitcoin volatility" ~max_chars:6000 in
+  let spans, dropped = E.select_passages ~text:text ~query:"bitcoin volatility" ~max_chars:6000 in
   A.check A.int "dropped" 0 dropped;
   A.check A.int "one span" 1 (List.length spans);
   let offset, body = List.hd spans in
@@ -295,7 +295,7 @@ let test_budget_stops_selection_and_counts_dropped () =
   let b = chunked_para "Bitcoin miners resumed operations." in
   let c = chunked_para "Bitcoin exchanges raised their fees." in
   let text = String.concat "\n\n" [ a; gap; b; c ] in
-  let spans, dropped = E.select_passages text "bitcoin" ~max_chars:3000 in
+  let spans, dropped = E.select_passages ~text:text ~query:"bitcoin" ~max_chars:3000 in
   A.check A.int "dropped" 1 dropped;
   A.check A.int "two spans" 2 (List.length spans);
   A.check A.bool "within budget" true
@@ -305,18 +305,18 @@ let test_adjacent_selected_chunks_merge_into_one_span () =
   let a = chunked_para "Bitcoin volatility spiked." in
   let b = chunked_para "Volatility spread to the altcoins." in
   let text = a ^ "\n\n" ^ b in
-  let spans, dropped = E.select_passages text "volatility" ~max_chars:6000 in
+  let spans, dropped = E.select_passages ~text:text ~query:"volatility" ~max_chars:6000 in
   A.check A.int "dropped" 0 dropped;
   A.check (A.list (A.pair A.int A.string)) "one span" [ (0, text) ] spans
 
 let test_no_match_returns_nothing_and_no_drops () =
   let text = chunked_para "Sourdough starters need flour and patience." in
-  A.check A.int "no spans" 0 (List.length (fst (E.select_passages text "bitcoin mining rig" ~max_chars:6000)));
-  A.check A.int "no drops" 0 (snd (E.select_passages text "bitcoin mining rig" ~max_chars:6000))
+  A.check A.int "no spans" 0 (List.length (fst (E.select_passages ~text:text ~query:"bitcoin mining rig" ~max_chars:6000)));
+  A.check A.int "no drops" 0 (snd (E.select_passages ~text:text ~query:"bitcoin mining rig" ~max_chars:6000))
 
 let test_short_query_tokens_are_ignored () =
   let text = chunked_para "Sourdough starters need flour and patience." in
-  let spans, dropped = E.select_passages text "a of" ~max_chars:6000 in
+  let spans, dropped = E.select_passages ~text:text ~query:"a of" ~max_chars:6000 in
   A.check A.int "no spans" 0 (List.length spans);
   A.check A.int "no drops" 0 dropped
 

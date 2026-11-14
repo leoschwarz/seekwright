@@ -13,7 +13,7 @@ let notes_are_bounded_and_content_free _ =
   let open Mcp_caps.Event in
   let event =
     List.fold_left
-      (fun acc index -> add_note "k" (Printf.sprintf "value %d\nsecond line" index) acc)
+      (fun acc index -> add_note ~key:"k" ~value:(Printf.sprintf "value %d\nsecond line" index) acc)
       (make ~operation:"read_file" Ok)
       (List.init (max_notes + 4) Fun.id)
   in
@@ -26,7 +26,7 @@ let notes_are_bounded_and_content_free _ =
 let operation_and_keys_cannot_break_the_line _ =
   let open Mcp_caps.Event in
   let event =
-    add_note "key\nwith newline" "value" (make ~operation:"read_\nfile" Ok)
+    add_note ~key:"key\nwith newline" ~value:"value" (make ~operation:"read_\nfile" Ok)
   in
   Alcotest.(check string) "operation sanitized" "read_ file" (operation event);
   Alcotest.(check bool)

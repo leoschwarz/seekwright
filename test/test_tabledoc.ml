@@ -191,30 +191,30 @@ let test_a_tab_type_declares_its_delimiter_whatever_the_body_looks_like () =
   (* The type states the delimiter, so a body full of commas does not out-vote
      it. *)
   A.check A.string "tab declared" "\t"
-    (T.table_delimiter "text/tab-separated-values" "a,b,c\n1,2,3\n")
+    (T.table_delimiter ~kind:"text/tab-separated-values" ~text:"a,b,c\n1,2,3\n")
 
 let test_a_european_export_served_as_csv_is_read_on_semicolons () =
-  A.check A.string "semicolon" ";" (T.table_delimiter "text/csv" "a;b;c\n1;2;3\n")
+  A.check A.string "semicolon" ";" (T.table_delimiter ~kind:"text/csv" ~text:"a;b;c\n1;2;3\n")
 
 let test_a_comma_inside_a_quoted_value_does_not_move_the_delimiter () =
   (* Counting commas would be fooled here; parsing the head four ways is not. *)
-  A.check A.string "comma" "," (T.table_delimiter "text/csv" "a,b\n\"x,y,z\",2\n")
+  A.check A.string "comma" "," (T.table_delimiter ~kind:"text/csv" ~text:"a,b\n\"x,y,z\",2\n")
 
 let test_a_pipe_separated_body_is_sniffed () =
-  A.check A.string "pipe" "|" (T.table_delimiter "text/csv" "a|b|c\n1|2|3\n")
+  A.check A.string "pipe" "|" (T.table_delimiter ~kind:"text/csv" ~text:"a|b|c\n1|2|3\n")
 
 let test_a_separator_inside_a_quoted_cell_does_not_outvote_the_delimiter () =
   (* An address cell of [1 Main St; London; UK] is one cell, not four
      columns. *)
   let body = "id,address\n1,\"1 Main St; London; UK\"\n2,\"2 Oak Ave; Leeds; UK\"\n" in
-  A.check A.string "comma wins" "," (T.table_delimiter "text/csv" body);
+  A.check A.string "comma wins" "," (T.table_delimiter ~kind:"text/csv" ~text:body);
   A.check A.string "the cell is one column"
     "$.rows[0].address  \"1 Main St; London; UK\""
     (List.nth (lines (render body)) 4)
 
 let test_prose_with_no_delimiter_stays_on_commas_and_renders_one_column () =
   let text = "some prose here\nand more of it\n" in
-  A.check A.string "commas" "," (T.table_delimiter "text/csv" text);
+  A.check A.string "commas" "," (T.table_delimiter ~kind:"text/csv" ~text:text);
   A.check A.string "one column"
     "$.rows[0][\"some prose here\"]  \"and more of it\""
     (List.nth (lines (render text)) 3)
