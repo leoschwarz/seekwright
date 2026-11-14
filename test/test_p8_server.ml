@@ -482,6 +482,41 @@ let api_fetch_and_answer_statuses _ =
   in
   check_int "a refused pin is 400" 400 pinned.Server.status
 
+let an_answer_failure_projects_the_typed_failure _ =
+  (* The agent fixture's seam answers Unavailable: retrieval succeeds through the
+     stub and the one model call fails, so [Agent.answer] returns its typed
+     [Agent_failed] with the model-facing prose. Both projections map *any*
+     agent failure structurally — REST to 502, the tool call to an [isError]
+     result — and the journal class comes from the variant, so no status,
+     metric, or class anywhere reads the sentence to decide anything. *)
+  let app = make_app ~agent:true [ "serper" ] in
+  let answered =
+    Server.handle_custom app ~meth:"POST" ~path:"/api/v1/answer" ~host:(Some "localhost")
+      ~origin:None ~body:{|{"query":"what is eio?"}|}
+  in
+  check_int "an answer failure is 502" 502 answered.Server.status;
+  check_string "the prose is the failure's own, verbatim"
+    "The model endpoint could not be reached (Unavailable); no answer was produced."
+    (match field "error" (Yojson.Safe.from_string answered.Server.body) with
+    | `String m -> m
+    | _ -> "");
+  let called =
+    dispatch (mcp app)
+      {|{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"answer","arguments":{"query":"what is eio?"}}}|}
+  in
+  check_bool "the tool call carries it as a tool error" true (is_error called);
+  check_string "and the same prose reaches the model"
+    "The model endpoint could not be reached (Unavailable); no answer was produced."
+    (text_of called);
+  let recent =
+    match field "recent" (Usage.snapshot app.Server.usage) with `List l -> l | _ -> []
+  in
+  check_string "the journal class comes from the variant, not the sentence"
+    "AgentFailed"
+    (match recent with
+    | entry :: _ -> ( match field "error" entry with `String e -> e | _ -> "")
+    | [] -> "")
+
 let dashboard_routes _ =
   let off = default_app () in
   let get app path =
@@ -651,6 +686,8 @@ let () =
           A.test_case "api search round trip" `Quick api_search_round_trip;
           A.test_case "the api search status table" `Quick api_search_status_table;
           A.test_case "fetch and answer statuses" `Quick api_fetch_and_answer_statuses;
+          A.test_case "an answer failure projects the typed failure" `Quick
+            an_answer_failure_projects_the_typed_failure;
           A.test_case "the dashboard routes" `Quick dashboard_routes;
         ] );
       ( "flags and framing",
