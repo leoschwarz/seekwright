@@ -1,0 +1,229 @@
+name: CI (OCaml image)
+
+# The OCaml OCI image, built and scanned (F9.2, plans/ocaml-finalisation.md).
+# A separate workflow from ci-ocaml.yml on purpose: that one is the source gate,
+# and it must stay runnable on a host with no container engine. Nothing here
+# contacts a provider — the runtime assertions use the keyless default config and
+# one hermetic REST refusal, and SEEKWRIGHT_LIVE_TESTS is never set.
+on:
+  push:
+    branches: [main, ocaml-port]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: seekwright-ocaml:ci
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      # Actions are pinned to the commit a release tag resolved to, never the
+      # tag itself: a tag is mutable upstream (docs/reference/publishing.md).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # The version label has to equal dune-project's (version), and the
+      # Containerfile's own build-stage guard refuses a --build-arg that does
+      # not match the tree it is reading. The same three-way agreement the
+      # Python lane's test_packaging.py enforces, enforced here at build time.
+      - name: read the version from dune-project
+        run: |
+          # The same expression the Containerfile's own guard uses, so the two
+          # cannot disagree about what the tree's version is.
+          version=$(sed -n 's/^(version \(.*\))/\1/p' dune-project)
+          test -n "$version" || { echo 'dune-project carries no (version …)'; exit 1; }
+          echo "SEEKWRIGHT_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: build the image
+        run: |
+          DOCKER_BUILDKIT=1 docker build \
+            --file Containerfile.ocaml \
+            --build-arg SEEKWRIGHT_VERSION="$SEEKWRIGHT_VERSION" \
+            --tag "$IMAGE" .
+
+      # Same stance as ci.yml's scan job: ignore-unfixed stays off, because an
+      # unfixed CRITICAL/HIGH is a fact about what this build ships. The fix is a
+      # base-pin bump or a lock refresh in the same pull request.
+      #
+      # An image scan is the only scan that means anything here: trivy has no
+      # parser for opam or the committed *.opam.locked files, so an `fs` scan of
+      # this tree would read the Python and Node fixtures and nothing OCaml
+      # (measured with trivy 0.76.2: it reports test/conformance/package-lock.json
+      # and uv.lock, and no OCaml dependency). The opam graph is pinned instead by
+      # the committed lock files and the snapshot repository the Containerfile
+      # resolves them against.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ env.IMAGE }}
+          scanners: vuln
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: "false"
+
+      # The shipped user, the shipped binary, the shipped defaults. Each step is
+      # the container's contract, not the source tree's: `id -u` proves USER,
+      # --help proves the usage stance (exit 2, no --help flag), stdio proves the
+      # three tools are registered, /healthz proves the HTTP path, a refused
+      # provider name proves the REST projection is wired, and SIGTERM proves the
+      # drain exits 0.
+      - name: the shipped user is 10001
+        run: |
+          test "$(docker run --rm --entrypoint /bin/sh "$IMAGE" -c 'id -u')" = 10001
+          test "$(docker run --rm --entrypoint /bin/sh "$IMAGE" -c 'id -g')" = 10001
+
+      - name: --help is a usage error, not a help screen
+        run: |
+          # The rc= dance, not `test "$(…; echo $?)" = 2`: this job's shell has
+          # errexit on, and a failing command inside a command substitution would
+          # end the step before the comparison ever ran.
+          rc=0
+          out=$(docker run --rm "$IMAGE" --help 2>&1) || rc=$?
+          echo "$out"
+          test "$rc" = 2
+          echo "$out" | grep -q 'unknown flag --help'
+
+      - name: stdio initialize and tools/list
+        run: |
+          out=$(printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | docker run -i --rm "$IMAGE" | tr -d '\r')
+          echo "$out" | grep -q '"serverInfo"'
+          for tool in search fetch answer; do
+            echo "$out" | grep -q "\"name\":\"$tool\"" || { echo "missing tool $tool"; exit 1; }
+          done
+
+      - name: /healthz answers over HTTP
+        run: |
+          container=$(docker run -d -p 127.0.0.1:8000:8000 "$IMAGE" --http --host 0.0.0.0)
+          code=000
+          for attempt in $(seq 1 30); do
+            code=$(curl -s -o /tmp/healthz.json -w '%{http_code}' http://127.0.0.1:8000/healthz) || code=000
+            test "$code" = 200 && break
+            sleep 1
+          done
+          docker logs "$container"
+          cat /tmp/healthz.json
+          test "$code" = 200
+          grep -q '"status":"ok"' /tmp/healthz.json
+          grep -q '"providers"' /tmp/healthz.json
+          docker stop -t 20 "$container" > /dev/null
+          docker rm "$container" > /dev/null
+
+      - name: the REST projection refuses an unknown provider
+        if: always()
+        run: |
+          container=$(docker run -d -p 127.0.0.1:8001:8001 "$IMAGE" --http --host 0.0.0.0 --port 8001)
+          code=000
+          for attempt in $(seq 1 30); do
+            code=$(curl -s -o /tmp/refusal.json -w '%{http_code}' \
+              -X POST http://127.0.0.1:8001/api/v1/search \
+              -H 'content-type: application/json' \
+              -d '{"query":"anything","provider":"no-such-provider"}') || code=000
+            test "$code" = 400 && break
+            sleep 1
+          done
+          cat /tmp/refusal.json
+          test "$code" = 400
+          grep -q 'no-such-provider' /tmp/refusal.json
+          docker stop -t 20 "$container" > /dev/null
+          docker rm "$container" > /dev/null
+
+      - name: SIGTERM drains with exit 0
+        if: always()
+        run: |
+          container=$(docker run -d -p 127.0.0.1:8002:8002 "$IMAGE" --http --host 0.0.0.0 --port 8002)
+          for attempt in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8002/healthz >/dev/null && break
+            sleep 1
+          done
+          docker stop -t 20 "$container" > /dev/null
+          test "$(docker wait "$container")" = 0
+          docker rm "$container" > /dev/null
+
+      # F9.2 asks for a read-only-compatible filesystem, and the check that means
+      # is the one with nothing mounted at all: with no [dashboard] history_path
+      # and no [fetch] cache_dir the process writes nothing, so --read-only starts
+      # and serves. The same run without the flag is the default, so this is the
+      # hardening an operator can turn on without editing anything.
+      - name: it runs on a read-only root filesystem
+        if: always()
+        run: |
+          container=$(docker run -d --read-only --tmpfs /tmp \
+            -p 127.0.0.1:8003:8003 "$IMAGE" --http --host 0.0.0.0 --port 8003)
+          code=000
+          for attempt in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8003/healthz) || code=000
+            test "$code" = 200 && break
+            sleep 1
+          done
+          docker logs "$container"
+          test "$code" = 200
+          docker stop -t 20 "$container" > /dev/null
+          test "$(docker wait "$container")" = 0
+          docker rm "$container" > /dev/null
+
+      # The mount contract: SEEKWRIGHT_CONFIG names a file the image does not carry,
+      # and a volume at /var/lib/seekwright is where the two opt-in writes land.
+      # --check is the probe here, because it reads the config, reports the names it
+      # built and the cache it opened, and reaches no billed endpoint.
+      - name: a mounted config and journal work as documented
+        if: always()
+        run: |
+          mkdir -p /tmp/f92cfg
+          cat > /tmp/f92cfg/config.toml <<'TOML'
+          default_provider = "freeserp"
+
+          [providers]
+          [providers.freeserp]
+          enabled = true
+
+          [dashboard]
+          history_path = "/var/lib/seekwright/usage.jsonl"
+
+          [fetch]
+          cache_dir = "/var/lib/seekwright/cache"
+          TOML
+          docker volume create f92-state > /dev/null
+          docker run --rm -v /tmp/f92cfg:/etc/seekwright:ro \
+            -v f92-state:/var/lib/seekwright "$IMAGE" --check
+          container=$(docker run -d -v /tmp/f92cfg:/etc/seekwright:ro \
+            -v f92-state:/var/lib/seekwright \
+            -p 127.0.0.1:8004:8004 "$IMAGE" --http --host 0.0.0.0 --port 8004)
+          code=000
+          for attempt in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8004/healthz) || code=000
+            test "$code" = 200 && break
+            sleep 1
+          done
+          test "$code" = 200
+          docker stop -t 20 "$container" > /dev/null
+          test "$(docker wait "$container")" = 0
+          docker rm "$container" > /dev/null
+          # The journal file exists because the recorder opens it at startup to
+          # prove the mount is writable; no call here was one it would record.
+          docker run --rm -v f92-state:/var/lib/seekwright --entrypoint /bin/sh "$IMAGE" \
+            -c 'test -f /var/lib/seekwright/usage.jsonl && test -d /var/lib/seekwright/cache'
+          docker volume rm f92-state > /dev/null
+
+      # The scan gate only covers this layer, so the layer's own contents are an
+      # assertion: the runtime names what the build stage's ldd printed, and nothing
+      # that could compile or fetch a dependency rides along.
+      - name: the runtime layer is the binary plus its two libraries
+        if: always()
+        run: |
+          ldd=$(docker run --rm --entrypoint /bin/sh "$IMAGE" -c 'ldd /usr/local/bin/seekwright')
+          echo "$ldd"
+          echo "$ldd" | grep -q 'libgmp.so'
+          ! echo "$ldd" | grep -q 'not found'
+          test -z "$(docker run --rm --entrypoint /bin/sh "$IMAGE" \
+            -c 'for t in ocaml ocamlfind opam dune gcc as; do command -v "$t"; done')"
+          docker run --rm --entrypoint /bin/sh "$IMAGE" -c \
+            'test ! -e /src && test ! -e /opam && test ! -e /etc/seekwright && test ! -e /app'

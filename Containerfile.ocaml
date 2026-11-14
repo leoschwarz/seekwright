@@ -1,0 +1,174 @@
+# The OCaml port's image (plans/ocaml-finalisation.md §F9.2). The Python
+# artifact keeps its own Containerfile during the transition; this one builds the
+# `seekwright` executable from lib/ and bin/ and ships nothing else.
+#
+# Build from the repository root with this file's own ignore rules, because the
+# context this build needs is the opposite of the Python build's — lib/ and bin/
+# here, src/ there:
+#
+#   VERSION="$(dune build version.txt >/dev/null; cat _build/default/version.txt)"
+#   docker build -f Containerfile.ocaml \
+#     --build-arg SEEKWRIGHT_VERSION="$VERSION" \
+#     --build-arg SEEKWRIGHT_REVISION="$(git rev-parse HEAD)" \
+#     -t seekwright-ocaml:dev .
+#
+# BuildKit picks this file's own ignore rules — `Containerfile.ocaml.dockerignore`
+# — because it looks for `<dockerfile>.dockerignore` before `.dockerignore`, so no
+# flag is needed and the Python build's `.containerignore` cannot leak in. podman
+# defaults to `.containerignore`, which is the Python build's and drops lib/ and
+# bin/, so there the flag is not optional:
+# `podman build --format docker -f Containerfile.ocaml \
+#    --ignorefile Containerfile.ocaml.dockerignore …`.
+
+# Alpine, as the Python image does: the scan gate fails the image at
+# CRITICAL/HIGH, and the Debian trixie base ships util-linux/zlib/perl builds
+# carrying HIGH CVEs with no fix released. `alpine:3.22` measured 0 findings at
+# CRITICAL/HIGH with --ignore-unfixed=false, which is the record in
+# plans/infra-setup.md.
+#
+# The builder is Alpine too, not a Debian compiler image: the executable is
+# musl-linked, so a glibc builder would produce a binary this runtime layer
+# cannot exec. That is also why this stage builds its own 5.3.0 switch instead of
+# reusing the host opam switch — see the lock rewrite below.
+FROM alpine:3.22 AS build
+
+# An ARG does not cross a stage boundary, so each stage re-declares what it needs.
+ARG SEEKWRIGHT_COMPILER=5.3.0
+ARG SEEKWRIGHT_OPAM_REPOSITORY=https://opam.ocaml.org#a5eaafdc34c654a11462c864b3a55621e68e9ae3
+ARG SEEKWRIGHT_VERSION
+
+# This stage takes the toolchain the manifests' depexts name: gmp-dev for zarith
+# (reached through tls -> mirage-crypto-pk), liburing-dev and linux-headers for
+# the `uring` binding (its vendored liburing headers include `linux/swab.h`, which
+# musl does not provide — the apk `linux-headers` package does, and without it
+# uring.2.15.1 dies at include/liburing.h). Nothing here reaches the runtime
+# layer. opam's build sandbox is off rather than present: an unprivileged user
+# namespace is not available inside a build container on a default Docker/podman
+# setup, so the sandbox would fail the build rather than isolating a package.
+RUN apk add --no-cache \
+      opam git curl ca-certificates \
+      build-base bash diffutils patch m4 unzip \
+      gmp-dev pkgconfig liburing-dev linux-headers \
+    && opam --version
+
+ENV OPAMROOT=/opam \
+    OPAMROOTISOK=1 \
+    OPAMYES=1 \
+    OPAMCOLOR=never \
+    OPAMJOBS=3
+
+# The repository URL carries the opam-repository commit the committed
+# `.opam.locked` files were resolved against (plans/infra-setup.md, F9.1), so this
+# build resolves the same package set months from now, and the lock's pins stay a
+# statement about the image rather than about whatever opam.ocaml.org offers
+# today. opam 2.3.0's `init` takes no `--repo`, hence the separate set-url.
+RUN opam init --bare --disable-sandboxing -a \
+    && opam repository set-url default "${SEEKWRIGHT_OPAM_REPOSITORY}" \
+    && opam switch create default --empty \
+    && opam switch set default
+
+WORKDIR /src
+
+# Keyed on the manifests alone: the dependency layer, which is the slow part, is
+# reused unless a dependency or a lock changes. `mcp-caps.opam` is here for its own
+# sake — `seekwright.opam` depends on it, it is not published to the repository,
+# and the local definition is the only thing that makes the graph resolve at all.
+COPY dune-project mcp-caps.opam mcp-caps.opam.locked seekwright.opam seekwright.opam.locked ./
+
+# The committed locks were exported from the host's `default` switch, which opam
+# created from the distribution compiler, so they pin `ocaml-system 5.3.0` — the
+# caveat plans/infra-setup.md records about that lock. This switch builds its own
+# musl compiler, which opam knows as `ocaml-base-compiler`, so the one compiler
+# row is rewritten and `--no-depexts` skips opam's system-package name matching:
+# the apk line above installs the C libraries the `conf-*` packages probe, and
+# those packages' own build scripts then check for them, which is the stronger
+# check. Every other pin stays byte-for-byte the lock's, and the `cmp` says so:
+# rewrite the row back and the file must be identical to the committed one.
+# Without that guard a lock that names a different compiler, or a sed that
+# stopped matching, would leave the resolver free over 100 packages and the build
+# would still succeed.
+RUN for f in seekwright.opam.locked mcp-caps.opam.locked; do \
+      cp "$f" "$f.committed"; \
+      grep -q "^  \"ocaml-system\" {= \"${SEEKWRIGHT_COMPILER}\"}$" "$f" \
+        || { echo "lock rewrite: $f names no ocaml-system ${SEEKWRIGHT_COMPILER}"; exit 1; }; \
+      sed -i "s|^  \"ocaml-system\" {= \"${SEEKWRIGHT_COMPILER}\"}$|  \"ocaml-base-compiler\" {= \"${SEEKWRIGHT_COMPILER}\"}|" "$f"; \
+      sed "s|  \"ocaml-base-compiler\" {= \"${SEEKWRIGHT_COMPILER}\"}|  \"ocaml-system\" {= \"${SEEKWRIGHT_COMPILER}\"}|" "$f" > "$f.reversed"; \
+      cmp "$f.reversed" "$f.committed" \
+        || { echo "lock rewrite changed more than the compiler row in $f"; exit 1; }; \
+    done \
+    && opam install --deps-only --locked --no-depexts -y .
+
+COPY . .
+
+# The image label cannot read `dune-project`, and F9.1 made that file the one
+# version owner, so the drift check lives here rather than in review: the
+# --build-arg has to name the version the tree claims. `dune build version.txt`
+# prints that string for the release script that passes the arg.
+RUN test -n "${SEEKWRIGHT_VERSION}" \
+      || { echo "pass --build-arg SEEKWRIGHT_VERSION=<the version in dune-project>"; exit 1; }; \
+    test "$(sed -n 's/^(version \(.*\))/\1/p' dune-project)" = "${SEEKWRIGHT_VERSION}" \
+      || { echo "SEEKWRIGHT_VERSION=${SEEKWRIGHT_VERSION} is not dune-project's version"; exit 1; }; \
+    opam exec -- dune build @install \
+    && opam exec -- dune install --prefix=/opt/seekwright --bindir=/opt/seekwright/bin seekwright \
+    && cp /opt/seekwright/bin/seekwright /seekwright \
+    && strip /seekwright \
+    && ldd /seekwright
+
+FROM alpine:3.22
+
+ARG SEEKWRIGHT_REVISION
+ARG SEEKWRIGHT_COMPILER=5.3.0
+ARG SEEKWRIGHT_VERSION
+# image.version travels in through --build-arg because a LABEL cannot read a dune
+# file. Version.mcp_server is deliberately NOT the value here: that is the MCP
+# serverInfo identity (0.1.0), not the release (plans/seekwright-ocaml-port.md
+# §F9.1).
+LABEL org.opencontainers.image.title="seekwright (ocaml-port)" \
+      org.opencontainers.image.description="MCP server fronting web-search providers: paid, free-tiered and keyless (OCaml port)" \
+      org.opencontainers.image.version="${SEEKWRIGHT_VERSION}" \
+      org.opencontainers.image.source="https://github.com/leoschwarz/seekwright" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.revision="${SEEKWRIGHT_REVISION}" \
+      org.seekwright.compiler="ocaml-base-compiler ${SEEKWRIGHT_COMPILER}"
+
+# The runtime layer names, and only names, what `ldd` printed in the build stage:
+# `gmp` for zarith's C stub (Alpine spells the shared-library package `gmp`, not
+# `libgmp` — the first build of this file learned that the hard way), and the
+# trust store the `ca-certs` library reads to
+# verify provider TLS. No compiler, no opam, no package-manager state, no source
+# tree; musl itself comes from the base. `liburing` is absent on purpose — the
+# `uring` binding is linked statically, so the build stage's ldd names gmp, m and
+# libc only, and Eio's io_uring path falls back to the posix backend when the
+# kernel or seccomp refuses io_uring_setup.
+# busybox adduser on Alpine puts a system user in `nogroup` (gid 65533) rather
+# than a group of its own, so the group is made first and named — that is what
+# makes the `--chown=seekwright:seekwright` below resolve, and what lets an
+# operator mount a volume as 10001:10001. The uid is the same 10001 the Python
+# image ships, so one bind mount serves either artifact.
+RUN apk add --no-cache gmp ca-certificates \
+    && addgroup -S -g 10001 seekwright \
+    && adduser -S -D -u 10001 -G seekwright seekwright \
+    && install -d -m 0755 -o seekwright -g seekwright /var/lib/seekwright
+
+COPY --from=build --chown=seekwright:seekwright /seekwright /usr/local/bin/seekwright
+
+# The config file names providers and never holds a key, so it is not baked in:
+# bind-mount it at this path. /var/lib/seekwright is the mount point for the two
+# paths this server may write — the usage journal ([dashboard] history_path) and
+# the page cache ([fetch] cache_dir), both unset by default. Nothing else is
+# written, so the container runs under --read-only with those as its only mounts.
+ENV SEEKWRIGHT_CONFIG=/etc/seekwright/config.toml
+
+USER seekwright
+WORKDIR /var/lib/seekwright
+EXPOSE 8000
+
+# busybox wget, not curl: this base ships neither as a standalone package worth
+# adding for one probe, and a package added to satisfy a healthcheck is attack
+# surface the scan is there to keep narrow. The probe is meaningful only under
+# `--http`; under stdio it fails, which is the truth about a server with no
+# socket to probe.
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8000/healthz"]
+
+ENTRYPOINT ["seekwright"]

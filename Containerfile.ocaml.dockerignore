@@ -1,0 +1,59 @@
+# Ignore rules for Containerfile.ocaml. BuildKit picks this file up by name for
+# `docker buildx build -f Containerfile.ocaml .`; for podman pass it explicitly:
+# `--ignorefile=Containerfile.ocaml.dockerignore`. They are the mirror image of
+# .containerignore: that build ships src/ and needs no lib/, this one ships the
+# OCaml executable built from lib/ and bin/ and has no use for the Python tree.
+.git/
+.gitignore
+.github/
+.opam/
+_build/
+**/_build/
+**/_build/**
+.venv/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# The read-only Python oracle and everything that reads it.
+src/
+tests/
+tools/
+pyproject.toml
+uv.lock
+.python-version
+
+# Pages, notes and skills: prose this build cannot consume.
+docs/
+ocaml-docs/
+deploy/
+skills/
+plans/
+README.md
+README.ocaml.md
+AGENTS.md
+CLAUDE.md
+SECURITY.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+
+# Neither the OCaml @install alias nor the shipped artifact touches these: the
+# suites, the live harness, the repo instruments and the examples all stay on
+# the developer's machine, which is what keeps a published image free of
+# test-only material.
+test/
+live/
+ocaml-tools/
+examples/
+
+# The other build's files.
+Containerfile
+.containerignore
+
+.agents/
+.research/
+.eval/
+node_modules/
+**/node_modules/
+VISION.md
