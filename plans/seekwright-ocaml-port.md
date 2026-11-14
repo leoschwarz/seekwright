@@ -2636,3 +2636,117 @@ the new `Version` module and the `Config`/`Server` edges to it.
 all `Test Successful`, including the metadata suite's seven cases) and
 `dune build @doc` all exit 0. Nothing reached a provider endpoint; the
 installed-binary check is the stdio smoke above, which stops at `tools/list`.
+
+## 36. F9.2 — the OCaml image, its runtime contract, and the operator path (2026-11-14)
+
+**What landed.** `Containerfile.ocaml` (a two-stage build on `alpine:3.22` in both
+stages) and `Containerfile.ocaml.dockerignore`; a new CI job,
+`.github/workflows/ocaml-image.yml`, that builds the image, scans it, and then
+drives the running container; and the operator entry point — `README.ocaml.md`
+plus `ocaml-docs/{divergences,configuration,container,egress,live-tests,privacy,testing}.md`.
+No OCaml source, manifest or test changed: `Containerfile` (Python), `ci.yml` and
+`publish.yml` are untouched, so both artifacts keep shipping through their own
+lanes during the transition.
+
+**The artifact, measured.** Build context 18.39 kB. `/usr/local/bin/seekwright`
+is 16,539,864 bytes after `strip` (28,705,688 before): a stripped PIE, musl-
+linked, `ldd` naming `libgmp.so.10` and musl and nothing else — `liburing` is
+statically linked, which is why the runtime layer does not carry it. The image is
+37,293,789 bytes unpacked (8.97 MB base + 1.7 MB apk + 16.6 MB binary layer) and
+9,961,989 bytes as `docker save | gzip -1`. The runtime layer installs two
+packages, `gmp` and `ca-certificates`, and 18 packages in total. `dune install`
+runs with `--bindir=/opt/seekwright/bin` and only the one executable is copied
+out: no `seekwright-live`, no sources, no suites, no compiler, no opam.
+
+**Why Alpine in the builder, not a compiler image.** The artifact is musl-linked,
+so a glibc builder produces a binary this runtime cannot `exec`; the stage
+therefore builds its own 5.3.0 switch. That switch cannot take F9.1's lock as
+committed, because the lock names `ocaml-system 5.3.0` — the host's distribution
+compiler, the caveat §35 recorded. `Containerfile.ocaml` rewrites that one row to
+`ocaml-base-compiler`, refuses if the row is not there to rewrite, then rewrites
+it back and `cmp`s against the committed file: a lock that drifts, or a `sed` that
+stops matching, fails the build instead of quietly freeing the resolver over 100
+packages. The repository is pinned to the snapshot commit the locks were resolved
+against (`opam repository set-url default https://opam.ocaml.org#a5eaafdc…`,
+separate because opam 2.3.0's `init` takes no `--repo`), and `--no-depexts` skips
+opam's system-package name matching in favour of the `conf-*` probes, which are
+the stronger check. Two apk facts cost one full build each: Alpine spells the
+shared-library package `gmp`, not `libgmp`; and `uring.2.15.1` needs
+`linux-headers` under musl for `linux/swab.h`.
+
+**Version labels have one owner and a guard.** The image's
+`org.opencontainers.image.version` travels in as `--build-arg SEEKWRIGHT_VERSION`,
+because a `LABEL` cannot read a dune file, and the build stage refuses an argument
+that does not equal `dune-project`'s `(version …)` — §35's one-owner rule enforced
+at build time rather than in review. `Version.mcp_server` (0.1.0) is deliberately
+never the label: it is the MCP `serverInfo` identity. The CI job derives the same
+value with the same `sed` the guard uses, so the two cannot disagree.
+
+**Scan stance, and what it does not cover.** `trivy image --severity
+CRITICAL,HIGH --ignore-unfixed=false` reports **0 findings** on this image
+(trivy 0.76.2, alpine 3.22.8); across all severities there is one MEDIUM,
+`zlib 1.3.2-r1` / `CVE-2026-4738`, whose fix version `1.4-r0` is newer than the
+base tag carries. An image scan is the only scan that means anything here: trivy
+has no parser for opam or for `*.opam.locked`, and an `fs` scan of this checkout
+reads `test/conformance/package-lock.json` and `uv.lock` and reports no OCaml
+package — at CRITICAL/HIGH it reports seven HIGH findings in the conformance
+runner's npm fixtures. The dependency set's reproducibility control is therefore
+the lock files plus the pinned snapshot, recorded as such in
+`ocaml-docs/container.md` rather than dressed up as CVE coverage. *For whoever
+owns `ci.yml`:* its `scan` job runs `trivy fs` over `.` at CRITICAL/HIGH with
+`exit-code: 1`, and `test/conformance/package-lock.json` is tracked, so that job
+will report those seven the next time `ci.yml` runs over this tree. F9.2 does not
+edit it.
+
+**The runtime contract, asserted against the shipped image.** Each of these ran on
+this host against `seekwright-ocaml:dev` built from `254f122`, and each is a step
+in the new job: `id -u`/`id -g` are 10001 with the group made explicitly (busybox
+`adduser -S` alone would put the user in `nogroup`); `--help` is
+`seekwright: unknown flag --help` at exit 2; stdio `initialize` + `tools/list`
+returns serverInfo 0.1.0 and the three tools with the 17-name provider enum;
+`GET /healthz` answers `{"status":"ok","providers":["exa:free","parallel:free",
+"freeserp"],"default_provider":null,"uptime_s":N}`; `POST /api/v1/search` with
+`provider: no-such-provider` answers 400 naming it and listing this build's names;
+`docker stop` logs `INFO http.stopping grace_seconds=10.0` and exits 0;
+`--read-only --tmpfs /tmp` starts and serves; and a mounted `/etc/seekwright`
+config plus a `/var/lib/seekwright` volume passes `--check` and leaves the journal
+file and the cache directory behind. Stdio under the image writes only the startup
+line, and only to stderr.
+
+**Two facts the container page had to learn from running it.** `--host 0.0.0.0` is
+load-bearing *inside* the container: the default bind is loopback, so a server
+started with a bare `--http` goes `healthy` — the `HEALTHCHECK` runs in the
+container's own namespace — while every published-port request from the host is
+refused. And the journal file exists at startup rather than at first append,
+because `Usage.create` opens it to prove the mount is writable: with
+`history_path` set and no writable mount the server refuses to boot
+(`seekwright: not writable: /var/lib/seekwright/usage.jsonl (io)`, exit 1), and
+`--check` reports the same shape for an uncreatable `[fetch] cache_dir`. A call
+refused before dispatch — the 400 above — writes no journal line.
+
+**Findings this task did not fix, because they are not F9.2's files.** `--check`
+exits 1 on a keyless MCP-only deployment: `exa:free` and `parallel:free` print
+`unsupported (no connectivity probe)`, and the run prints `1 of 3 enabled
+providers ready`, even though the same config boots and serves; an operator who
+gates a deploy on `--check` needs `freeserp` or a keyed name in the set. The two
+stale disclosures §35-style recorded are still open — `lib/cli/cli_check.ml` prints
+that no third-party fetch fallback is built while `lib/factory/fetch_stack.ml`
+builds five, and `live/cases.ml` still marks those rows `Deferred "F6.1"`.
+
+**Where the operator pages live, and why not under `docs/`.** `docs/` is the
+read-only Python tree, and `tests/repo/test_docs_conventions.py` requires every
+page under `docs/` to be linked from `docs/index.md`'s `## Documents` census — so a
+`docs/ocaml/` subtree can only land by editing that census, which is outside F9.2's
+ownership. The OCaml reference material therefore sits beside `ocaml-tools/` as
+`ocaml-docs/`, linked from `README.ocaml.md`. Both gates are green with the new
+files: `uv run pytest tests/repo` 113 passed (including the pinning guard for every
+`uses:` line in `.github/workflows/*.yml`), and no line-number citation anywhere in
+the new pages.
+
+**Gate at landing.** `dune build @install`, `dune runtest --force` (81 suites, all
+`Test Successful`, 2239 cases) and `dune build @doc` all exit 0 at `254f122`. The
+image build and the container runs contacted no billed endpoint: the only network
+calls were the keyless readiness probe `--check` makes, which sends no key, and
+`--check --live` was never run. podman has still never built this file — its
+`--ignorefile` and `--format docker` requirements are documented from the
+Containerfile header, not verified here.

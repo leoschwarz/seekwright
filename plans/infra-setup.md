@@ -367,6 +367,26 @@ than rediscovering it. The equivalent install was verified instead:
 - no request left the machine: the smoke script stops before any tool call, so
   no provider endpoint was reached and no key was read.
 
+**Switch hygiene after a parallel task (2026-11-14, F9.2).** `opam switch create
+. --empty` names the switch after the *directory* it is run in, and a switch that
+already exists is re-created empty. The `f9-1-resolve` switch F9.1 probed with is
+now an empty directory (`~/.opam/f9-1-resolve/bin` holds nothing), while a shell
+still had `OPAM_SWITCH_PREFIX` pointing at it — which surfaces as
+`Library "ipaddr" not found` for packages that *are* installed in `default`,
+because dune resolved findlib through the dead prefix. Two rules follow, and both
+are what F9.2 built with:
+
+- every build shell runs `eval $(opam env --switch=default --set-switch)` (the
+  `--set-switch` is what rewrites `OPAM_SWITCH_PREFIX`), plus the GMP
+  `CPATH`/`LIBRARY_PATH`/`PKG_CONFIG_PATH` lines above;
+- after a switch disappears from under you, `dune clean` before the next build: a
+  `_build` tree that cached the dead prefix keeps failing with "library not found"
+  even once the right switch is on `PATH`.
+
+A probe switch used for a `--dry-run` should be created by name
+(`opam switch create probe --empty`), never by `.`, so it cannot collide with a
+switch another worktree is building against.
+
 **mcp-kit provenance, resolved enough to keep the pin.** The opam-repository
 entry for `mcp-kit.0.2.0` names Mathias Bourgoin (Nomadic Labs) and
 `gitlab.com/nomadic-labs/ai-harness/ocaml-mcp`; the archive it checks is that
@@ -381,4 +401,112 @@ checksum or ownership change, so the candidate stays pinned at `0.2.0` with
 the caveat recorded. An upgrade that widens the trust boundary still needs an
 upstream answer first, as the earlier note says.
 
+## F9.2 building and scanning the OCaml image on this host (2026-11-14)
 
+**Container engine: docker, not podman.** `AGENTS.md`'s container line is
+`podman build`, and podman is not installed here (`podman: command not found`).
+What was used instead: Docker Engine 29.9.2 with BuildKit (`docker buildx`
+0.38.1, `DOCKER_BUILDKIT=1`). The difference that matters for the artifact, not
+just the command:
+
+- **BuildKit selects the ignore file by dockerfile name.** `docker build -f
+  Containerfile.ocaml .` reads `Containerfile.ocaml.dockerignore` with no flag,
+  and `buildx build` has **no `--ignorefile`** flag to pass. podman's default is
+  `.containerignore`, which is the *Python* build's rules and drops `lib/`,
+  `bin/` and the manifests, so under podman the flag is mandatory and
+  `--format docker` is needed as well or the `HEALTHCHECK` instruction is
+  dropped. Both facts are in the `Containerfile.ocaml` header.
+- podman has never built this file, so the podman half of the container contract
+  is documented, not verified here.
+
+**The scan tool.** trivy 0.76.2, installed for this task at
+`/tmp/opencode/bin/trivy` (not a system package).
+
+**Base choice, measured.** `alpine:3.22` (3.22.8 at the time of writing) scanned
+0 findings at CRITICAL/HIGH with `--ignore-unfixed=false`;
+`debian:trixie-slim` scanned several HIGH findings with no fix released
+(util-linux, zlib, perl), which is the same reason the Python `Containerfile`
+chose Alpine. The builder stage is Alpine too, because the artifact is
+musl-linked and a glibc builder's binary will not exec in this runtime.
+
+**The lock rewrite the container needs, and its guard.** F9.1's locks name
+`ocaml-system 5.3.0` (this host's switch, see the caveat above). A container
+switch builds its own musl compiler, which opam calls `ocaml-base-compiler`, so
+`Containerfile.ocaml` rewrites exactly that row and then rewrites it back and
+`cmp`s against the committed file; a lock that no longer matches, or a `sed` that
+stopped matching, fails the build rather than freeing the resolver. `opam init`
+on 2.3.0 has no `--repo` flag, so the snapshot pin is a separate
+`opam repository set-url default https://opam.ocaml.org#<commit>`. `--no-depexts`
+is required: opam 2.3.0's depext pass on Alpine 3.22 declares the installed
+`gmp-dev` unavailable, while the `conf-gmp`/`conf-gmp-powm-sec` probes succeed
+once the apk line is right, which is the stronger check.
+
+**Two apk findings the dependency build produced** (each cost one full build):
+Alpine spells the runtime shared-library package `gmp`, not `libgmp`; and
+`uring.2.15.1` fails under musl without `linux-headers`, because its vendored
+liburing headers include `linux/swab.h`.
+
+**What the scan cannot cover.** `trivy fs` has no parser for opam or for the
+committed `*.opam.locked` files: measured on this tree it found two
+language-specific lockfiles — `test/conformance/package-lock.json` and `uv.lock`
+— and no OCaml package. Two consequences, both recorded in the new
+`.github/workflows/ocaml-image.yml`:
+
+- the OCaml lane scans the **built image** (the Alpine package layer), not the
+  tree, and says why in a comment rather than running a scan that reads the
+  Python and Node fixtures and calls it coverage;
+- an `fs` scan of this checkout is not a no-op to add: at CRITICAL/HIGH it
+  reports seven HIGH findings in the conformance runner's npm dependencies
+  (`@modelcontextprotocol/sdk` 1.31.0, `body-parser` 2.3.0, `undici` 7.30.0).
+  Those are test-fixture dependencies under `test/conformance/`, shipped nowhere
+  — but `ci.yml`'s existing `scan` job runs `trivy fs` over `.`, so the same
+  report will land there. Worth a look from whoever owns `ci.yml`; F9.2 does not
+  edit it.
+
+**Host CPU/RAM.** 3 cores, 7 GiB. An image build and a local `dune runtest` do
+not fit in the same window (the container's dependency stage is the long one,
+~15 min cold); sequence them, and keep `OPAMJOBS=3`.
+
+
+
+
+**The artifact, as built here.** Context 18.39 kB; the executable 16,539,864 bytes
+after `strip` (28,705,688 before); image 37,293,789 bytes unpacked, 9,961,989
+compressed. Runtime `ldd` names only `libgmp.so.10` and musl. The build's dependency stage took 870 s
+(~14.5 min) on this host with `OPAMJOBS=3`, and the whole cold build ~17 min; a warm
+rebuild after a source-only change is ~30 s, because the dependency layer is keyed
+on the two manifests and their locks alone.
+
+**Scan result on this image.** 0 at CRITICAL/HIGH with `--ignore-unfixed=false`;
+one MEDIUM at all severities (`zlib 1.3.2-r1`, `CVE-2026-4738`, fix `1.4-r0`). The
+trivy database is in this host's cache from 2026-11-14; the binary is
+`/tmp/opencode/bin/trivy`, so a later session must re-download it or its DB.
+
+**`trivy fs .` on this checkout, both stances.** Seven HIGH findings, all in
+`test/conformance/package-lock.json` (`@modelcontextprotocol/sdk` 1.31.0 ×2,
+`body-parser` 2.3.0 ×1, `undici` 7.30.0 ×4), every one with `Status: fixed` — so
+`ignore-unfixed` does not hide them, whichever way the action defaults. `ci.yml`'s
+`scan` job runs `trivy fs` over `.` at CRITICAL/HIGH with `exit-code: 1` and does
+not set `ignore-unfixed`, while its comment says the flag stays off. That is a
+ci.yml ownership question, flagged in §36 and not edited here; the OCaml image job
+scans the image only.
+
+**CI shell facts, learned the hard way.** Actions runs `run:` under `bash -e`, so
+two shapes that look obvious abort the step: a `code=$(curl …)` retry loop dies on
+the first connection-refused (write `… ) || code=000`), and
+`test "$(cmd; echo $?)" = 2` never reaches the comparison when `cmd` fails (capture
+first: `rc=0; out=$(cmd 2>&1) || rc=$?`). The action pins in `ocaml-image.yml` are
+the ones `ci.yml` and `ci-ocaml.yml` already use, and
+`tests/repo/test_ci_workflow_uses_pinned.py` sweeps every `*.yml` under
+`.github/workflows/`, so a new workflow's `uses:` lines must be 40-hex pins too.
+
+**Runtime assertions this host actually ran** (all against `seekwright-ocaml:dev`
+built at `254f122`, all passing): uid/gid 10001; `--help` → exit 2; stdio
+`initialize`/`tools/list`; `/healthz` 200; REST refusal 400; SIGTERM drain exit 0;
+`--read-only --tmpfs /tmp` serves; mounted config + volume pass `--check` and leave
+`usage.jsonl` and `cache/` (0700) on the volume; `ldd` names two libraries and the
+layer has no `ocaml`/`opam`/`dune`/`gcc`/`as`. Two behaviours worth remembering when
+debugging a container: a bare `--http` binds the container's own loopback, so the
+`HEALTHCHECK` reports `healthy` while published-port requests from the host fail;
+and a `history_path` on an unwritable mount is a boot refusal
+(`seekwright: not writable: …`), not a runtime error.
