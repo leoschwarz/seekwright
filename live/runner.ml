@@ -39,6 +39,13 @@ let no_log _level _event _fields = ()
 let clock () = Unix.gettimeofday ()
 let now () = Unix.gettimeofday ()
 
+(* An environment variable the case needs, read as presence only: a live run
+   never prints a value, and an empty one is an absence. *)
+let env_value variable =
+  match Sys.getenv_opt variable with
+  | Some value when String.length value > 0 -> Some value
+  | _ -> None
+
 (* {1 The header} *)
 
 let live_status_prose selector =
@@ -199,11 +206,63 @@ let close_stack (local : Engine.Fetch.fetcher) (fallbacks : Engine.Fetch.fetcher
   local.aclose ();
   List.iter (fun (fallback : Engine.Fetch.fetcher) -> fallback.aclose ()) fallbacks
 
-let no_fallback_check fallbacks =
-  Checks.expect
-    "no third-party fetch fallback is built, so this run cannot reach another vendor"
-    (fallbacks = [])
-    "this build constructed a fetch fallback, which one selected case must not reach"
+(* How a fetch case reaches its page. [Local_page] and [Metadata_refusal] are the
+   two this server's own reader answers; a [Vendor_route name] case goes through
+   that rung by name, which is what a caller naming [fetch(provider=...)] asks
+   for. The oracle's live suite instantiates each fallback class directly; this
+   harness goes through the application's own construction instead, so the run
+   covers the vendor grant, the key read, the request shape and the envelope
+   parse the served process uses rather than a harness-only shortcut. *)
+type dispatch =
+  | Local_page
+  | Metadata_refusal
+  | Vendor_route of string
+
+let dispatch_of_case = function
+  | Cases.Local -> Local_page
+  | Cases.Metadata -> Metadata_refusal
+  | Cases.Jina -> Vendor_route "jina"
+  | Cases.Scrappa -> Vendor_route "scrappa"
+  | Cases.Tavily -> Vendor_route "tavily"
+  | Cases.Linkup -> Vendor_route "linkup"
+
+(* [build_fetch_stack] constructs only the rungs the config lists, so a vendor
+   case declares its one rung in [fetch.fallback]. That is also the harness's
+   guarantee against spending an unplanned call: with exactly that name in the
+   ladder, no other vendor exists for this run to reach, and the ladder check
+   below is what proves it. *)
+let fetch_settings selector =
+  match dispatch_of_case selector with
+  | Vendor_route name -> { Config.default_fetch_config with fallback = Some [ name ] }
+  | _ -> Config.default_fetch_config
+
+(* The ladder this run built, by name: the sentence a failure prints, and the
+   check that keeps a vendor case from being served by someone else's API. *)
+let ladder_names fallbacks =
+  List.map (fun (fallback : Engine.Fetch.fetcher) -> fallback.Engine.Fetch.name) fallbacks
+
+let ladder_check (selector : Cases.fetch_case) fallbacks =
+  match dispatch_of_case selector with
+  | Vendor_route name ->
+      Checks.expect
+        "the ladder holds exactly the route this case named, so no other vendor can serve the run"
+        (ladder_names fallbacks = [ name ])
+        (Printf.sprintf "this build constructed: %s"
+           (String.concat ", " (ladder_names fallbacks)))
+  | _ ->
+      Checks.expect
+        "no third-party fetch fallback is built, so this run cannot reach another vendor"
+        (fallbacks = [])
+        "this build constructed a fetch fallback, which one selected case must not reach"
+
+(* A keyed fallback with no key in the environment is missing configuration, the
+   same fact an absent provider key is for a provider case: [build_fetch_stack]
+   honestly does not construct the rung. Skipping with the variable's name is
+   what keeps that from arriving as a router refusal called a failure. *)
+let missing_fetch_credential selector =
+  match Cases.needs (Cases.Fetch selector) with
+  | [] | "nothing" :: _ -> None
+  | variables -> List.find_opt (fun variable -> env_value variable = None) variables
 
 let run_fetch ~env ~sw ~case ~emit =
   let selector = Cases.Fetch case in
@@ -212,85 +271,111 @@ let run_fetch ~env ~sw ~case ~emit =
   | Cases.Deferred wave ->
       skipped emit (Printf.sprintf "not built on this port — the fallback lands with wave %s" wave)
   | Cases.Runnable -> (
-      match Config.resolve ~providers:[] () with
-      | Error message -> failed emit message
-      | Ok config -> (
-          (* Only the fetch stack is built: a fetch case dials no provider, and
-             the keyless default a config with no provider resolves to is never
-             constructed here. *)
-          match Factory.build_fetch_stack ~sw ~net:env#net ~mono_clock:env#mono_clock config with
-          | None -> failed emit "the config the harness built disables fetch"
-          | Some (Error message) -> failed emit message
-          | Some (Ok (local, fallbacks)) -> (
-              let status =
-                match
-                  Engine.Fetch.create config local ~readers:Factory.readers ~fallbacks
-                    ~log:no_log ~clock ~now ()
-                with
-                | Error message -> failed emit message
-                | Ok engine -> (
-                    match case with
-                    | Cases.Local -> (
-                        emit "step 1/1  fetch and extract a real page";
-                        emit "          url \"https://example.com/\"";
-                        match Engine.Fetch.fetch engine "https://example.com/" with
-                        | Ok page ->
-                            let checks = no_fallback_check fallbacks :: Checks.verify_fetch case page in
-                            print_checks emit checks;
-                            conclude emit checks
-                        | Error (Engine.Fetch.Refused message) ->
-                            failed emit ("the local reader refused a public page: " ^ message)
-                        | Error (Engine.Fetch.Failed message) ->
-                            failed emit ("the page could not be read: " ^ message))
-                    | Cases.Metadata -> (
-                        emit "step 1/1  the cloud metadata endpoint must be refused";
-                        emit "          url \"http://169.254.169.254/latest/meta-data/\"";
-                        match Engine.Fetch.fetch engine "http://169.254.169.254/latest/meta-data/" with
-                        | Ok _ ->
-                            let checks =
-                              [
-                                no_fallback_check fallbacks;
-                                Checks.expect
-                                  "the public-web grant refuses the cloud metadata endpoint"
-                                  false
-                                  "a page came back: the guardrail let the request out";
-                              ]
-                            in
-                            print_checks emit checks;
-                            conclude emit checks
-                        | Error (Engine.Fetch.Refused message) ->
-                            let checks =
-                              [
-                                no_fallback_check fallbacks;
-                                Checks.expect
-                                  "the URL is refused before any request leaves"
-                                  true
-                                  "";
-                                Checks.expect "the refusal carries a sentence"
-                                  (String.length (String.trim message) > 0)
-                                  "the refusal carried no sentence";
-                              ]
-                            in
-                            print_checks emit checks;
-                            conclude emit checks
-                        | Error (Engine.Fetch.Failed message) ->
-                            let checks =
-                              [
-                                Checks.expect
-                                  "the URL is refused before any request leaves"
-                                  false
-                                  ("the refusal arrived as a mid-flight failure: " ^ message);
-                              ]
-                            in
-                            print_checks emit checks;
-                            conclude emit checks)
-                    | Cases.Jina | Cases.Scrappa | Cases.Tavily | Cases.Linkup ->
-                        (* Unreachable while [build_status] defers them; kept so a
-                           later wave cannot add a runnable case with no checks. *)
-                        failed emit "this fetch case has no ported assertion in the runner")
-              in
-              close_stack local fallbacks;
-              status)))
+      match missing_fetch_credential case with
+      | Some variable ->
+          skipped emit
+            (Printf.sprintf "%s is not set: this deployment does not construct that fallback"
+               variable)
+      | None -> (
+          match Config.resolve ~providers:[] ~fetch:(fetch_settings case) () with
+          | Error message -> failed emit message
+          | Ok config -> (
+              (* Only the fetch stack is built: a fetch case dials no provider, and
+                 the keyless default a config with no provider resolves to is never
+                 constructed here. *)
+              match Factory.build_fetch_stack ~sw ~net:env#net ~mono_clock:env#mono_clock config with
+              | None -> failed emit "the config the harness built disables fetch"
+              | Some (Error message) -> failed emit message
+              | Some (Ok (local, fallbacks)) -> (
+                  match
+                    Engine.Fetch.create config local ~readers:Factory.readers ~fallbacks
+                      ~log:no_log ~clock ~now ()
+                  with
+                  | Error message -> failed emit message
+                  | Ok engine ->
+                      let status =
+                        match dispatch_of_case case with
+                        | Local_page ->
+                            emit "step 1/1  fetch and extract a real page";
+                            emit (Printf.sprintf "          url %S" Checks.fetch_url);
+                            (match Engine.Fetch.fetch engine Checks.fetch_url with
+                            | Ok page ->
+                                let checks =
+                                  ladder_check case fallbacks :: Checks.verify_fetch case page
+                                in
+                                print_checks emit checks;
+                                conclude emit checks
+                            | Error (Engine.Fetch.Refused message) ->
+                                failed emit ("the local reader refused a public page: " ^ message)
+                            | Error (Engine.Fetch.Failed message) ->
+                                failed emit ("the page could not be read: " ^ message))
+                        | Metadata_refusal ->
+                            emit "step 1/1  the cloud metadata endpoint must be refused";
+                            emit "          url \"http://169.254.169.254/latest/meta-data/\"";
+                            (match Engine.Fetch.fetch engine "http://169.254.169.254/latest/meta-data/" with
+                            | Ok _ ->
+                                let checks =
+                                  [
+                                    ladder_check case fallbacks;
+                                    Checks.expect
+                                      "the public-web grant refuses the cloud metadata endpoint"
+                                      false
+                                      "a page came back: the guardrail let the request out";
+                                  ]
+                                in
+                                print_checks emit checks;
+                                conclude emit checks
+                            | Error (Engine.Fetch.Refused message) ->
+                                let checks =
+                                  [
+                                    ladder_check case fallbacks;
+                                    Checks.expect "the URL is refused before any request leaves"
+                                      true "";
+                                    Checks.expect "the refusal carries a sentence"
+                                      (String.length (String.trim message) > 0)
+                                      "the refusal carried no sentence";
+                                  ]
+                                in
+                                print_checks emit checks;
+                                conclude emit checks
+                            | Error (Engine.Fetch.Failed message) ->
+                                let checks =
+                                  [
+                                    Checks.expect
+                                      "the URL is refused before any request leaves" false
+                                      ("the refusal arrived as a mid-flight failure: " ^ message);
+                                  ]
+                                in
+                                print_checks emit checks;
+                                conclude emit checks)
+                        | Vendor_route name ->
+                            emit "step 1/1  the named fallback route reads a real page";
+                            emit (Printf.sprintf "          provider %S, url %S" name Checks.fetch_url);
+                            (match Engine.Fetch.fetch engine ~provider:name Checks.fetch_url with
+                            | Ok page ->
+                                let checks =
+                                  ladder_check case fallbacks :: Checks.verify_fetch case page
+                                in
+                                print_checks emit checks;
+                                conclude emit checks
+                            | Error (Engine.Fetch.Refused message) ->
+                                (* The ladder check above says this deployment built
+                                   the rung, so a refusal here means the harness and
+                                   the router disagree about the route: a failure,
+                                   not a skip, and the sentence says who refused. *)
+                                failed emit
+                                  (Printf.sprintf "the route refused %s: %s" name message)
+                            | Error (Engine.Fetch.Failed message) ->
+                                (* A vendor that benches its own name answers with the
+                                   quota branch, and a rate-limited run proves nothing
+                                   about the envelope parser. *)
+                                print_checks emit
+                                  [ Checks.expect "the fallback answers with a page" false message ];
+                                if Checks.quota_limited message then inconclusive emit message
+                                else failed emit message)
+                      in
+                      close_stack local fallbacks;
+                      status))))
 
 (* {1 An agent case} *)
 
@@ -298,11 +383,6 @@ let agent_question = function
   | Model.Brief -> "What is the Gitea project, and what licence is it released under?"
   | Model.Report ->
       "How does Gitea differ from its upstream forge, and under what licence is it developed?"
-
-let env_value variable =
-  match Sys.getenv_opt variable with
-  | Some value when String.length value > 0 -> Some value
-  | _ -> None
 
 let run_agent ~env ~sw ~depth ~emit =
   let selector = Cases.Agent depth in

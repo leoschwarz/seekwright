@@ -34,11 +34,22 @@ val expect : string -> bool -> string -> check
     is what keeps a new name from arriving with a generic check. *)
 val provider_step : name:string -> step:int -> Model.search_response -> check list
 
+(** The page every fetch case reads: the oracle live suite's own
+    [https://example.com/]. [Runner]'s fetch dispatch sends exactly this URL, so
+    an arm may name it. *)
+val fetch_url : string
+
 val verify_fetch : Cases.fetch_case -> Model.fetch_response -> check list
-(** The shape assertions for a readable fetch case ([Local] today; the three
-    third-party fallbacks and Jina join it with F6.1). The cloud-metadata case
-    is asserted on the error channel by the runner, because what it proves is a
-    refusal, not a page. *)
+(** The shape assertions for a readable fetch case: [Local] and the four
+    third-party rungs [Jina], [Scrappa], [Tavily] and [Linkup], each arm the
+    assertion list the oracle's live test for that route spells. A route's
+    words are asserted only where that route owns them — the local reader parses
+    the origin's bytes, a third-party reader answers from its service's snapshot
+    — and the read a fallback does own (its status, its text, its framing parsed
+    off the body, no vendor media type shipped) is asserted for every one. The
+    cloud-metadata case is asserted on the error channel by the runner, because
+    what it proves is a refusal, not a page; an arm reaching it with a page in
+    hand is that failure. *)
 
 val verify_agent :
   depth:Model.depth -> model:string -> Model.answer_response -> check list

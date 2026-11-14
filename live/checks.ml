@@ -145,30 +145,114 @@ let provider_step ~name ~step (response : Model.search_response) =
 
 (* {1 Fetch} *)
 
+(* The page every fetch case reads, and the one the oracle's live suite reads:
+   a page whose own word is [example], small enough that a slow vendor cannot
+   time the case out, and public on purpose — a fetch case exercises the
+   public-web grant. [Runner.run_fetch] dispatches exactly this URL, so an arm
+   below may name it in an assertion. *)
+let fetch_url = "https://example.com/"
+
 let text_of (page : Model.fetch_response) = Option.value ~default:"" page.Model.text
 
+let status_is code (page : Model.fetch_response) =
+  expect "the page came back with the status the route reported"
+    (page.Model.status_code = Some code)
+    (Printf.sprintf "the response's status was %s"
+       (match page.Model.status_code with Some code -> string_of_int code | None -> "absent"))
+
+let content_type_is kind (page : Model.fetch_response) =
+  expect (Printf.sprintf "the content type is %s" kind)
+    (page.Model.content_type = Some kind)
+    (Printf.sprintf "the content type was %s"
+       (match page.Model.content_type with Some kind -> kind | None -> "absent"))
+
+let text_is_empty_no (page : Model.fetch_response) =
+  expect "the route came back with the page's text"
+    (String.length (String.trim (text_of page)) > 0)
+    "the extraction was empty: on a page this simple that means the envelope moved"
+
+let text_carries needle (page : Model.fetch_response) =
+  expect (Printf.sprintf "the extracted text carries %S" needle)
+    (contains (String.lowercase_ascii (text_of page)) needle)
+    "the extraction came back without the page's text"
+
+let no_vendor_media_type (page : Model.fetch_response) =
+  expect "no vendor media type is reported: the fallback parses its own body and answers in page text"
+    (page.Model.content_type = None)
+    (Printf.sprintf "the response reported content type %S, which is the vendor's body, not the page's"
+       (match page.Model.content_type with Some kind -> kind | None -> ""))
+
+let has_a_title (page : Model.fetch_response) =
+  expect "the page has a title"
+    (match page.Model.title with Some title -> String.length (String.trim title) > 0 | None -> false)
+    "the title was absent or empty"
+
+let asked_url url (page : Model.fetch_response) =
+  expect "the response names the URL the harness asked for"
+    (String.equal page.Model.requested_url url)
+    (Printf.sprintf "the response was for %S" page.Model.requested_url)
+
+let landed_url url (page : Model.fetch_response) =
+  expect "the response names the URL the page landed on"
+    (String.equal page.Model.url url)
+    (Printf.sprintf "the response names %S as where the page landed" page.Model.url)
+
+(* One arm per fetch case, each the assertion list the oracle's live test for
+   that route spells. The words are asserted only where the route owns them:
+   the local reader parses the origin's own bytes, so [example] is a fact about
+   this server's extraction, while [jina] answers from its own cache — the
+   service's snapshot of the origin, which this fallback does not control, and
+   which the oracle's own test refuses to assert for exactly that reason (a
+   content check there goes red when the snapshot changes, not when the
+   fallback breaks). What a fallback does own is the read: its status, that text
+   came back, that its own framing was parsed off the body, and that the
+   vendor's media type stayed inside the envelope.
+
+   The oracle also asserts [path_addressable is False] on those routes. This
+   port's response record carries no such field — [Factory]'s rung reports it
+   to the engine, which answers a [path] request on a non-addressable page with
+   the whole page plus the constraint named — so the field is pinned where it
+   exists, in [Seekwright_fetch.Fallback.windowed] and in the engine's suite,
+   and the live arm asserts the half the caller can see. *)
 let verify_fetch case (page : Model.fetch_response) =
   match case with
   | Cases.Local ->
       [
-        expect "the page came back with a 200" (page.Model.status_code = Some 200)
-          (Printf.sprintf "the response's status was %s"
-             (match page.Model.status_code with Some code -> string_of_int code | None -> "absent"));
-        expect "the content type is text/html" (page.Model.content_type = Some "text/html")
-          (Printf.sprintf "the content type was %s"
-             (match page.Model.content_type with Some kind -> kind | None -> "absent"));
-        expect "the extracted text carries the page's own word"
-          (contains (String.lowercase_ascii (text_of page)) "example")
-          "the extraction came back without the page's text";
-        expect "the response names the URL the harness asked for"
-          (String.equal page.Model.requested_url "https://example.com/")
-          (Printf.sprintf "the response was for %S" page.Model.requested_url);
+        status_is 200 page;
+        content_type_is "text/html" page;
+        text_carries "example" page;
+        asked_url fetch_url page;
       ]
-  | Cases.Metadata | Cases.Jina | Cases.Scrappa | Cases.Tavily | Cases.Linkup ->
+  | Cases.Jina ->
       [
-        expect "this case has a ported assertion"
+        status_is 200 page;
+        text_is_empty_no page;
+        expect "the reader's header block is parsed off the body, not left in the text"
+          (not (contains (text_of page) "Markdown Content:"))
+          "the raw Markdown Content: marker is still in the text: the body's shape moved";
+        has_a_title page;
+        asked_url fetch_url page;
+      ]
+  | Cases.Scrappa ->
+      [ status_is 200 page; text_carries "example" page; asked_url fetch_url page ]
+  | Cases.Tavily ->
+      [ status_is 200 page; text_is_empty_no page; no_vendor_media_type page; asked_url fetch_url page ]
+  | Cases.Linkup ->
+      [
+        status_is 200 page;
+        text_is_empty_no page;
+        landed_url fetch_url page;
+        no_vendor_media_type page;
+        asked_url fetch_url page;
+      ]
+  | Cases.Metadata ->
+      (* This arm never runs in a good run: the metadata case is asserted on the
+         error channel, because what it proves is a refusal. Reaching it with a
+         page in hand is the failure — the guardrail let the request out. *)
+      [
+        expect "the cloud-metadata case has no page to assert on"
           false
-          "no page-shape assertion is ported for this case yet: add its arm rather than a generic check";
+          "a page came back for the metadata URL: the public-web grant let the request out";
       ]
 
 (* {1 Agent} *)
