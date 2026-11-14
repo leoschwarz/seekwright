@@ -505,32 +505,28 @@ let cache_seam ~(net : _ Eio.Net.t) config (cache : Page_cache.t) =
    reports the entries the server will read rather than a guess about them. The
    [0o700] is the cache's own, because a stored page is somebody else's text
    sitting in this host's filesystem, and a directory that cannot be created or
-   opened is a refusal, not an empty report. *)
-let open_cache_grant ~sw ~mono_clock ~(fs : _ Eio.Path.t) config =
+   opened is a refusal, not an empty report. The grant itself is minted in
+   [Grants], the funnel every grant in this library comes from — including its
+   audit decoration, which is what the [?audit] argument is for. *)
+let open_cache_grant ~sw ~mono_clock ~fs ?audit config =
   let fetch = config.Config.fetch in
   match fetch.Config.cache_dir with
   | None -> Ok None
-  | Some dir -> (
-      let ceiling = Stdlib.max fetch.Config.cache_max_entry_bytes cache_read_floor in
-      match
-        Policy.with_written_root ~sw ~max_read_bytes:ceiling ~max_write_bytes:ceiling
-          ~max_entries:cache_max_entries ~parent:fs dir
-      with
-      | Error error -> Error (Caps.Error.render error)
-      | Ok decision ->
-          Ok (Some (Caps.Authority.Fs.of_confinement ~mono_clock decision)))
+  | Some dir ->
+      Result.map
+        (fun grant -> Some grant)
+        (Grants.fs_grant_of_written_root ~sw ~parent:fs ~mono_clock
+           ~max_bytes:(Stdlib.max fetch.Config.cache_max_entry_bytes cache_read_floor)
+           ~max_entries:cache_max_entries ?audit dir)
 
 (* [None] when [fetch.cache_dir] is unset — the always-false [cached] path, with
    no directory touched. *)
 let build_page_cache ~sw ~(net : _ Eio.Net.t) ~mono_clock ~now ?audit ~fs config =
-  match open_cache_grant ~sw ~mono_clock ~fs config with
+  match open_cache_grant ~sw ~mono_clock ~fs ?audit config with
   | Error message -> Error message
   | Ok None -> Ok None
   | Ok Some grant ->
       let fetch = config.Config.fetch in
-      let grant =
-        match audit with Some sink -> Caps.Authority.with_log ~sink grant | None -> grant
-      in
       let cache =
         Page_cache.create ~fs:grant
           ~max_bytes:fetch.Config.cache_max_bytes

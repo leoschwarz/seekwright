@@ -3,10 +3,13 @@
    Python's per-adapter HTTP clients: where the oracle builds a client per
    provider, this builds one bounded, audited network grant per provider.
 
-   [grant_of_decision] is the funnel. The section below it — the endpoint-scoped
-   grant an adapter or the agent's model gets, and the union grant the readiness
-   probes share — is every grant this library builds, which is why the audit
-   wrapper and [of_confinement] appear once each, here. *)
+   [grant_of_decision] is the funnel for the network grants, and
+   [fs_grant_of_written_root] the same funnel for the one filesystem grant the
+   server runs — the page cache's written root. The section below them — the
+   endpoint-scoped grant an adapter or the agent's model gets, and the union
+   grant the readiness probes share — is every grant this library builds, which
+   is why the audit decoration and each [of_confinement] appear here and nowhere
+   else. *)
 
 module Caps = Mcp_caps
 module Authority = Caps.Authority
@@ -49,17 +52,26 @@ let audit_fields (event : Caps.Event.t) : (string * Yojson.Safe.t) list =
 let audit_sink (log : Engine.log) (event : Caps.Event.t) : unit =
   log Config.Log_info "caps.operation" (audit_fields event)
 
-(* The one place this file turns a confinement decision into a serving grant: the
-   config's per-operation bound, and exactly one audit sink. Every grant the server
-   runs on is built here, so [of_confinement] and [with_log] each appear once in
-   this file — a grant that forgets the audit trail is a compile error in review,
-   not a forgotten line, and [test/test_caps_audit.ml] pins the count.
+(* The one audit decoration in this library. Both funnels below — the endpoint
+   grant a route runs on, and the written root the page cache runs on — pass
+   through here, so the audit wrapper occurs once across [lib/factory] however
+   many kinds of grant the factory learns to build, and a second funnel cannot
+   arrive without the audit trail. [test/test_caps_audit.ml] counts that total
+   over the whole library.
 
-   [?audit] is absent only for the [--check] diagnostic path, which probes a
-   deployment without serving a request; [build_app] always supplies it. *)
+   An absent [?audit] is the [--check] diagnostic path, which probes a deployment
+   without serving a request and so has no operation line to write; [build_app]
+   always supplies it. *)
+let with_audit ?audit grant =
+  match audit with Some sink -> Authority.with_log ~sink grant | None -> grant
+
+(* The one place this file turns a confinement decision into a serving grant: the
+   config's per-operation bound, and the audit trail above. Every network grant
+   the server runs on is built here, so [of_confinement] appears once in this file
+   — a grant that forgets the audit trail is a compile error in review, not a
+   forgotten line, and [test/test_caps_audit.ml] pins the count. *)
 let grant_of_decision ~mono_clock ~timeout_seconds ?audit decision =
-  let sink = Option.value ~default:(fun (_ : Caps.Event.t) -> ()) audit in
-  Authority.with_log ~sink
+  with_audit ?audit
     (Authority.with_operation_timeout
        (Eio.Time.Timeout.seconds mono_clock timeout_seconds)
        (Authority.Net.of_confinement ~mono_clock decision))
@@ -114,3 +126,27 @@ let probe_net ~sw ~net ~mono_clock ~timeout_seconds ?audit endpoints =
                   (Caps.Error.make Caps.Error.Unavailable
                      ~message:"no endpoints configured"));
           })
+
+(* {1 The one filesystem grant: the page cache's written root} *)
+
+(* A directory this server writes into is as much an authority as an endpoint it
+   dials, so the written root is minted here and nowhere else: the same
+   [with_log] decoration every network grant carries, which is what makes
+   "which tool touched the disk, and did it succeed" answerable from the same log
+   line as the network answer. [Policy.with_written_root] opens the operator's
+   directory, creating it (mode [0o700]) when it is absent, so a cache the config
+   points at that this process cannot use is a construction failure naming the
+   reason rather than a miss every day the server runs.
+
+   One [max_bytes] figure for reads and writes because they are the same body: a
+   page the cache may store has to be a page it can read back. The operation
+   bound stays the layer's own default: [fetch.timeout_seconds] bounds a network
+   read, and putting that number on a local file read borrows a vendor's latency
+   budget for the host's own disk. *)
+let fs_grant_of_written_root ~sw ~parent ~mono_clock ~max_bytes ~max_entries ?audit dir =
+  match
+    Policy.with_written_root ~sw ~max_read_bytes:max_bytes ~max_write_bytes:max_bytes
+      ~max_entries ~parent dir
+  with
+  | Ok decision -> Ok (with_audit ?audit (Authority.Fs.of_confinement ~mono_clock decision))
+  | Error error -> Error (Caps.Error.render error)
