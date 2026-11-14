@@ -1408,6 +1408,10 @@ The fetch and agent cases are ported and selectable but **not yet run live** —
 endpoint plus a model call. They remain OCaml-untested in
 `Cases.recorded_non_provider_runs`.
 
+*(Superseded for the fetch half: §38 records `fetch:local` and `fetch:metadata`
+passing on 2026-11-14 and the arms those runs read. The agent cases have still
+never run from this port.)*
+
 Gate at landing: `dune build @install`, `dune runtest --force` (58 suites, the
 harness's 19 hermetic cases included) and `dune build @doc` all exit 0. The two
 live runs above are the only provider contacts made; no billed endpoint was
@@ -2854,3 +2858,231 @@ grown — and the four `--check` pins run as `runtest` rules, not as alcotest su
 No gate step contacted a public provider or a billed endpoint: the new pins dial a
 closed loopback port, `--check --live` was never run, and `SEEKWRIGHT_LIVE_TESTS` was
 never set.
+
+## 38. F9.3 — the final verification, and what this port may be called (2026-11-14)
+
+**Spec.** `plans/ocaml-finalisation.md` §F9.3. Work on `f9-3-final`, based on
+`ocaml-port@cb122aa`. The instrument for the checklist is F0.1's matrix
+(`test/differential/matrix/`), re-read at every `dune runtest` by
+`test_differential_matrix.ml`; the checklist below is that matrix plus the gate,
+read against the tree rather than against memory.
+
+**Authorisations this task needed and got** (run mailbox, one ruling per question):
+the six keyless live selectors; `npm ci --prefix test/conformance --ignore-scripts`
+as a dev-tool fetch, with Node 22; and the stale spots outside the task's original
+ownership — `live/README.md`, `live/cases.mli`, the `behaviours.tsv` row, then the
+status flips and the hermetic fetch-arm pins too. No keyed or billed name was run.
+
+### The checklist
+
+| # | row | verdict |
+|---|---|---|
+| 1 | clean build / test / doc / install, no promotion | pass, with one load-sensitive flake named below |
+| 2 | seventeen construction paths, five fallback paths, hermetically | pass |
+| 3 | default stdio and HTTP start, three tools enumerate, keyless named search and loopback fetch over MCP, REST and CLI, no key in a fixture | pass, with two coverage gaps named |
+| 4 | official conformance and both transport transcripts | pass, re-measured on this tree |
+| 5 | keyless live tests; every other name named untested, no prose upgraded | pass for the six keyless cases; the rest stay named untested |
+| 6 | SSRF, header/body/worker bounds, concurrency, cache restart and eviction, log sentinels, negative compilation, SIGTERM drain | pass |
+| 7 | the OCI image installs, runs, scans, and carries no oracle, tests, credentials or build logs | pass on §36's evidence; its inputs are unchanged since |
+| 8 | plan, capability docs, operator guide and README state the real guarantees and exclusions | pass, after the fixes listed below |
+
+**1 — the gate.** `dune build @install && dune runtest --force && dune build
+@doc`, each exit code read from dune itself: `INSTALL_EXIT=0`, `RUNTEST_EXIT=0`,
+`DOC_EXIT=0` at `aaa4678`. 81 alcotest suites, 2244 cases, plus the pinned-rule
+diffs that are not suites (`bin/smoke`, the four `--check` report pins, the CLI
+usage pins, the corpus bench). No step contacted a provider: the only network in
+the gate is loopback.
+
+*One flake, reported rather than hidden.* The first baseline run on this host
+failed `test/corpus_html`'s rule — `bench.exe --check .` reported
+`huge-article: median 161.8ms over the ceiling of 148ms`, "1 of 32 corpus cases
+miss their recorded bar". Three direct `bench.exe --check test/corpus_html`
+re-runs and four later full gate runs report 32/32. The host has three CPUs and
+was at load 4–5.8 during the failing run. The bar is a wall-clock ceiling, so it
+is load-sensitive by construction; the case is not a parity failure and the bar
+is not being moved here.
+
+**2 — the construction and fallback paths.** `providers.tsv` carries seventeen
+rows, all `ported`, and `test_provider_registry.ml` pins seventeen built `Registry`
+rows and no deferred row. Each of the five fetch fallbacks has its own suite —
+`test_fallback_crawl4ai.ml`, `test_fallback_jina.ml`, `test_fallback_scrappa.ml`,
+`test_fallback_tavily.ml`, `test_fallback_linkup.ml` — and `test_fetch_ladder.ml`
+pins `Fetch_stack.build_fetch_stack`'s ladder, its permission gating and the
+round trip against a loopback renderer. `Cli_check.fallback_state` is what makes
+the same five rows readable in `--check` (§37).
+
+**3 — the surface as served.** `bin/smoke.expected` is a real subprocess of
+`bin/main.exe` over stdio answering `initialize` and `tools/list`; the three tool
+schemas enumerate there with the seventeen-name provider enum, and
+`bin/smoke_notes.expected` pins that the startup notes never reach the protocol
+channel. `test_boot.ml` boots the stock config through the real construction path.
+Over loopback, `test_concurrency.ml`'s "search, fetch, answer and health ticks
+share one record" runs the actual `Server.app` — config, factory grants, the three
+engines, `Server.serve_connection` — with a second listener answering every
+provider, page and model call, and asserts the `POST /api/v1/search|fetch|answer`
+bodies, the usage aggregates and one journal line per terminal call. The REST
+status table, `GET /healthz`, the dashboard routes and the host guard are
+`test_p8_server.ml`; the client verbs are `test_cli_client.ml`, whose pinned route
+per verb and status handling is checked against an injected transport. `--check`
+dials only a closed loopback port, and the fixtures hold no key:
+`live/test_live_cases.ml` asserts no sentinel secret reaches a printed line.
+
+*Two gaps named rather than papered over.* `GET /healthz` is asserted at the
+handler (`Server.handle_custom`) and in the container run §36 recorded, not from a
+socket inside `dune runtest`; and no test starts a server and runs a CLI verb
+against it. Either would be a small addition to `test/` — neither is F9.3's file
+to add under this task's ownership.
+
+**4 — conformance.** Re-run on this tree: `test/conformance/run_live_application.sh`
+against `bin/main.exe --http` on a free loopback port, Node v22.23.4, the pinned
+`@modelcontextprotocol/conformance` runner (0.2.0-alpha.11), scored fail-closed by
+`compare_application.py` against `application-classification-2026-07-28-server.json`
+— **90 applicable checks, 90 passed, 177 checks classified, gate=pass**. That is
+§16's number re-measured, not carried. Hermetically, the same evidence rides as two
+`runtest` transcript rules — the mcp-caps fixture over stdio
+(`stdio_transcript.expected`) and the application over stdio
+(`application_transcript.expected`, six `tools/call`s refused by validation or the
+SSRF guard before a socket opens) — and `test_http_transport.ml`'s
+"the same transcript answers the same way over stdio and HTTP" is the transfer
+argument the runner's missing stdio mode forces this tree to supply.
+
+**5 — live runs.** Six authorised keyless selectors, one per invocation, at
+`4b6b443` (the only uncommitted delta at run time was prose in `live/README.md`
+and `live/cases.mli` and a helper rename in `Checks`; the assertion bodies were
+the committed ones in `573ffcc`). None was rate-limited, so none is inconclusive.
+
+| date | case | commit | result |
+|---|---|---|---|
+| 2026-11-14 | `fetch:metadata` | `4b6b443` | passed, 3/3 — the metadata endpoint is refused before a request leaves; no endpoint dialed |
+| 2026-11-14 | `fetch:local` | `4b6b443` | passed, 5/5 — keyless read and extraction of one public page |
+| 2026-11-14 | `freeserp` | `4b6b443` | passed, 6/6 — keyless; second recorded run |
+| 2026-11-14 | `anysearch` | `4b6b443` | passed, 6/6 — keyless; second recorded run |
+| 2026-11-14 | `exa:free` | `4b6b443` | passed, 3/3 — keyless anonymous MCP endpoint |
+| 2026-11-14 | `parallel:free` | `4b6b443` | passed, 3/3 — keyless anonymous MCP endpoint |
+
+The status flips landed with the record, as the rule requires: `ocaml_live_tested`
+is now true for the `exa:free` and `parallel:free` `Registry` rows, and
+`Cases.recorded_non_provider_runs` names `fetch:local` and `fetch:metadata`.
+`test_provider_registry.ml` and `test_routing_sets.ml` moved to the new sets, and
+the three `--check` report pins that quoted the old `untested` line were
+regenerated from the run rather than hand-edited. `test_live_cases.ml`'s
+"live status agrees with the records" is what keeps the three sources from
+drifting apart again.
+
+Still unverified live, and still called that in prose: `fetch:scrappa`,
+`fetch:tavily`, `fetch:linkup` (keyed), `fetch:jina` (keyless but not selected),
+`agent:brief` and `agent:report` (an operator model endpoint is required), and
+every keyed provider name. `ocaml-docs/divergences.md` and
+`ocaml-docs/live-tests.md` say so in those words.
+
+Closing the §37 follow-up in the same change: `Checks.verify_fetch` now has one
+arm per fetch case, ported from the oracle live suite's own assertions, and the
+runner dispatches a named fallback route (`fetch ~provider:<name>` with that name
+alone in `fetch.fallback`) so no other vendor can serve the run, skipping a keyed
+rung whose key is absent instead of calling a router refusal a failure. The
+oracle's `path_addressable is False` assertion has no field to land on in
+`Model.fetch_response` — the port carries it on the page record, and it is pinned
+in `Seekwright_fetch.Fallback.windowed` and the engine's suite — so the live arm
+asserts the half a caller can see, and the arm's comment says why.
+`live/test_live_cases.ml` pins the five vendor arms and the metadata arm
+hermetically, so an arm that never fires fails a suite instead of letting a live
+case pass vacuously.
+
+**6 — the boundary suites.** SSRF and the private-address opt-in:
+`test_fetch_grant.ml`, plus the `fetch:metadata` refusal above. Request and
+response ceilings: `test_http_head.ml`, including a real loopback connection and
+an over-cap keep-alive head. The bounded extraction pool: `test_extract_pool.ml`
+and `test_fetch_workers.ml`. Shared state under concurrent calls:
+`test_concurrency.ml`, which also asserts no connection outlives the switch.
+Cache format, ceilings, TTL and the served-path seam: `test_page_cache.ml` and
+`test_fetch_cache.ml`. Log privacy: the two `test/log_guard/` suites
+(`log-field-sets`, `log-source-discipline`) and `test_logs.ml`. Negative
+compilation: fourteen programs under `test/should_not_compile/`, each diffed
+against its `.expected`. Drain: `test_drain.ml` (library level, both
+`Drained` and `Grace_expired`) and `test_binary_drain.ml`, which sends a real
+SIGTERM to `bin/main.exe` over a raw loopback socket and pins the 503 sentence,
+the refused reconnect and exit 0.
+
+**7 — the image.** §36's evidence stands: `git log` over `Containerfile.ocaml`,
+`Containerfile.ocaml.dockerignore`, `dune-project` and both `*.opam*` locks shows
+no change since `ccf6092` landed them, so the measured 16.5 MB stripped binary on
+the 37 MB Alpine layer, the 0 CRITICAL/HIGH trivy result, and the container
+contract run (`id` 10001, `--help` exit 2, stdio `tools/list`, `GET /healthz`, a
+400 REST refusal, `docker stop` draining to exit 0, read-only rootfs, mounted
+config and journal) all describe this tree. The image carries no oracle, tests,
+suites, plans, docs or build logs: `Containerfile.ocaml.dockerignore` drops
+`src/`, `tests/`, `tools/`, `docs/`, `test/`, `live/`, `ocaml-tools/`, `plans/`
+and `ocaml-docs/`, and `dune install --bindir` copies one executable. Not
+re-run here: an image build is an npm-free but registry-heavy network build, and
+nothing this task changed reaches the artifact beyond `--check`'s `untested` line,
+which §36's steps do not assert.
+
+**8 — the documentation sweep.** What was wrong and is now fixed:
+`ocaml-docs/configuration.md` quoted the pre-§37 probe sentence, the `no providers
+ready` sentence and the wrong exit code, and its report excerpt quoted an
+`untested` line that no longer prints for the keyless default; `ocaml-docs/testing.md`
+'s pin census named `test/check_transitional*` as a transitional disclosure and
+omitted the two probe pins; `ocaml-docs/live-tests.md` still said the fetch rows
+were `Deferred "F6.1"` and that no fetch case had run live;
+`ocaml-docs/divergences.md` carried two stale disclosures (`cli_check` and
+`live/cases.ml`) as open items and understated the live record; `live/README.md`
+and `live/cases.mli` said a fetch case skips with wave `F6.1`;
+`README.ocaml.md` called the port "not a drop-in replacement yet" with nothing
+about what has since been verified. In the matrix, `config-fields.tsv`'s nine
+`transitional` rows now name their real consumers (`Fetch_stack.build_fallback`,
+`Cli_check.fallback_state`, the `Url_override`/`Url_required` registry endpoints,
+`Exa.make_tiered`, the linkup and parallel request bodies) and are `honoured` —
+no `transitional` row survives, because no key is read-and-ignored any more;
+`behaviours.tsv` claimed "the other eight adapters" were `not-ported` while
+`providers.tsv` carried seventeen `ported`, and the REST/CLI row pointed its port
+column at pending work; `surface.tsv` had the three client verbs as
+`not-ported`. All six corrections say what the tree does, and the matrix guard
+re-reads them on every run.
+
+### What this port may be called
+
+**Production candidate**, with these exclusions disclosed prominently:
+
+- **No PDF page text.** A fetched PDF is refused by media type. This is measured,
+  not incidental: §32 records the corpus, the quality bar and why the `camlpdf`
+  route was rejected. Any wording that implies PDF parity is wrong, and "full
+  behavioural parity" is not this port's label while that exclusion stands.
+- **The extraction backend is the port's own stdlib reader**, not `trafilatura`;
+  §32's corpus bar is the quality evidence, and `[logging] library_level` and
+  `[logging] access_log` are read and refused because there is no uvicorn here.
+- **Live verification is partial by design on this host.** The keyless set —
+  `exa:free`, `parallel:free`, `freeserp`, `anysearch` — and the two fetch cases
+  above are the only names with a recorded run from this port; every keyed name
+  and every keyed fetch fallback is announced untested by `--check`, by
+  `ocaml-docs/live-tests.md` and by the harness's own `--list`.
+- **No outbound proxy**, and `Policy_net` dials the registry row's endpoint
+  directly (`ocaml-docs/egress.md`).
+
+Under `plans/ocaml-finalisation.md` §F9.3, calling this a *limited production
+release* is the maintainer's decision and requires carrying the PDF exclusion
+with the label; a product release, push or tag is not in this task's scope and
+nothing was pushed.
+
+### Findings for other owners
+
+- **An open CR to watch, not to merge.** `cr_f3e67d7f27e4` ("seekwright: fill the
+  live fetch assertions") reports a 494-file diff that *deletes* the read-only
+  Python oracle — `src/seekwright/**` (including `server.py` at 3385 lines),
+  `tests/`, `docs/`, `tools/`, `pyproject.toml`, `uv.lock` — and touches protected
+  paths (`.github/workflows/ocaml-tests.yml`, `AGENTS.md`, `Containerfile`,
+  `README.md`, `examples/`). That payload does not describe this branch: at
+  `aaa4678` the branch still tracks 47 files under `src/`, 72 under `tests/`, 20
+  under `docs/` and 5 under `tools/`, which is what the differential corpus
+  regeneration and the `tests/repo` guards read. The review thread's verdict was
+  REJECT for protected-path scope with no recorded approval. The CR store was not
+  readable from this session's tools, so it could not be answered in-thread; it
+  is reported here and in the worker report instead.
+- `.containerignore` (the Python image's) still lets the OCaml directories into
+  that build's context, so §36's measured 18.39 kB context figure is not what that
+  file's comment implies. No artifact changes either way; the file is the Python
+  lane's.
+- `GET /healthz` from a socket inside `dune runtest`, and a CLI verb run against a
+  live loopback server, are both small additions `test/` does not yet have.
+- `test/corpus_html`'s wall-clock bar is load-sensitive on a busy three-CPU host
+  (the one flake above). If it keeps costing gate runs, the bar belongs in a
+  machine-relative form, which is `test/corpus_html`'s owner's call.
