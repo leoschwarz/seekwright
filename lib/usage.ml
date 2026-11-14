@@ -295,7 +295,10 @@ type provider_totals = {
    [calls]/[errors]/[fell_back_calls]/[cost_usd] count every terminal line of that
    day, so the exclusions the latency population makes stay visible beside it.
    [samples_ms] holds only that population — successful, non-fell-back searches —
-   because a percentile is not decomposable.
+   because a percentile is not decomposable. It accumulates newest-first (cons,
+   never append: one caller line grows it, and the population is only ever read
+   sorted or summed); [fold_days] merges by prepending each bucket, so samples
+   keep that insertion order.
 
    [first_seen]/[last_seen] ship verbatim, as the journal wrote them;
    [first_at]/[last_at] are the same instants parsed, which is what orders them:
@@ -439,12 +442,15 @@ let ensure (key : string) (make : unit -> 'a) (fields : (string * 'a) list) :
     let created = make () in
     (created, fields @ [(key, created)])
 
-(* The deque's front trim. *)
-let rec drop_first (n : int) (xs : 'a list) : 'a list =
-  match (n, xs) with
-  | (0, xs) -> xs
-  | (_, []) -> []
-  | (n, _ :: xs) -> drop_first (n - 1) xs
+(* The deque's tail trim, newest-first storage: keep the first [n], which drops
+   the oldest. *)
+let take_first (n : int) (xs : 'a list) : 'a list =
+  let rec go n acc = function
+    | _ when n <= 0 -> List.rev acc
+    | [] -> List.rev acc
+    | x :: xs -> go (n - 1) (x :: acc) xs
+  in
+  go n [] xs
 
 (* Python's ``d[key] = value``: replaces in place, and appends when the key is new,
    so the first write of a fresh key is not silently dropped. The association list
@@ -483,7 +489,7 @@ let fold_days (buckets : (string * provider_day) list) : provider_day =
       merged.errors <- merged.errors + totals.errors;
       merged.fell_back_calls <- merged.fell_back_calls + totals.fell_back_calls;
       merged.cost_usd <- merged.cost_usd +. totals.cost_usd;
-      merged.samples_ms <- merged.samples_ms @ totals.samples_ms;
+      merged.samples_ms <- totals.samples_ms @ merged.samples_ms;
       (match totals.first_at with
       | Some at when at < Option.value ~default:Float.infinity merged.first_at ->
         merged.first_at <- Some at;
@@ -628,7 +634,7 @@ let apply_search (t : t) (entry : Yojson.Safe.t) (bucket : day_totals) (day : st
        and a fell-back success's is the whole ladder walk, so neither is a property
        of the provider that answered. *)
     (match error with
-    | None when not fell_back -> day_totals.samples_ms <- day_totals.samples_ms @ [ms]
+    | None when not fell_back -> day_totals.samples_ms <- ms :: day_totals.samples_ms
     | _ -> ());
     (match day_totals.first_at with
     | None ->
@@ -789,11 +795,9 @@ let fold_entry (t : t) (entry : Yojson.Safe.t) : bool =
         | "search" -> apply_search t entry bucket day ts moment ms error_str
         | "fetch" -> apply_fetch t entry bucket error_str
         | _ -> apply_answer t entry bucket ms error_str);
-        (* A bounded deque, newest kept: the list is oldest-first and the snapshot
-           shows it the other way round. *)
-        let recent = t.recent @ [entry] in
-        t.recent
-          <- drop_first (max 0 (List.length recent - t.recent_max)) recent;
+        (* A bounded deque, newest kept: stored newest-first so growth is a
+           cons, and the snapshot shows it in that same newest-first order. *)
+        t.recent <- take_first t.recent_max (entry :: t.recent);
         (match t.since with
         | None -> t.since <- Some ts
         | Some since when ts < since -> t.since <- Some ts
@@ -1209,7 +1213,7 @@ let snapshot_unlocked (t : t) : Yojson.Safe.t =
             ("providers", `List (citation_rows t));
           ] );
       ("endpoints", endpoints t);
-      ("recent", `List (List.rev t.recent));
+      ("recent", `List t.recent);
       ( "journal",
         `Assoc
           [
