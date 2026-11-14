@@ -846,3 +846,23 @@
 (test
  (name test_remote_target)
  (libraries seekwright.fetch mcp-caps eio eio_main uri alcotest fallback_fixtures))
+
+; F7: the page cache on the served path — the seam between the engine and the
+; entry format. The pages come from stub fetchers, so nothing here reaches a
+; provider or a key, and the one address-rule case asks for a loopback IP literal,
+; which [Policy_net.vet_public_host] answers from the address rule with no lookup.
+; [eio] is the fibers and the clock of the singleflight cases; the fixture's cache
+; directory is an ordinary [Filename.temp_dir], which the cache's written root
+; then creates and caps.
+(test
+ (name test_fetch_cache)
+ (libraries
+  seekwright
+  seekwright.factory
+  seekwright.fetch
+  mcp-caps
+  eio
+  eio_main
+  yojson
+  alcotest
+  test_support))
