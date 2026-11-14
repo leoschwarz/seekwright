@@ -78,6 +78,8 @@ module Server = Mcp_caps.Server
 module Tool = Mcp_caps.Tool
 open Test_support
 
+let ( let* ) = Result.bind
+
 let path_schema =
   `Assoc
     [
@@ -149,10 +151,9 @@ let build_server ~sw env ~root =
   | Error error -> Alcotest.failf "with_root %s: %s" root (Error.render error)
   | Ok confinement ->
       let grant = Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement in
-      let ( >>= ) = Result.bind in
       match
-        Registry.add Registry.empty ping ~grant:()
-        >>= (fun registry -> Registry.add registry read_source ~grant)
+        let* registry = Registry.add Registry.empty ping ~grant:() in
+        Registry.add registry read_source ~grant
       with
       | Error (Registry.Duplicate_tool name) -> Alcotest.failf "duplicate: %s" name
       | Ok registry -> (

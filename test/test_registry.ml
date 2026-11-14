@@ -1,6 +1,6 @@
 module Registry = Mcp_caps.Registry
 
-let ( >>= ) = Result.bind
+let ( let* ) = Result.bind
 
 let input_schema = `Assoc [("type", `String "object")]
 
@@ -46,8 +46,9 @@ let add_packs_the_grant _ =
 
 let duplicate_names_are_refused _ =
   match
-    Registry.add Registry.empty (make_tool ~name:"echo" ~prefix:"") ~grant:"grant-a"
-    >>= fun registry ->
+    let* registry =
+      Registry.add Registry.empty (make_tool ~name:"echo" ~prefix:"") ~grant:"grant-a"
+    in
     Registry.add registry (make_tool ~name:"echo" ~prefix:"") ~grant:"grant-b"
   with
   | Ok _ -> Alcotest.fail "a duplicate name should not register"
@@ -57,8 +58,9 @@ let duplicate_names_are_refused _ =
    Server relies on, and the case where a shared authority value would show up. *)
 let grants_do_not_leak_between_tools _ =
   match
-    Registry.add Registry.empty (make_tool ~name:"left" ~prefix:"left ") ~grant:"L"
-    >>= fun registry ->
+    let* registry =
+      Registry.add Registry.empty (make_tool ~name:"left" ~prefix:"left ") ~grant:"L"
+    in
     Registry.add registry (make_tool ~name:"right" ~prefix:"right ") ~grant:"R"
   with
   | Error _ -> Alcotest.fail "both adds should succeed"
