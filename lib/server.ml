@@ -26,7 +26,7 @@ module Registry = Caps.Registry
 module Server = Caps.Server
 module Tool = Caps.Tool
 
-let ( >>= ) = Result.bind
+let ( let* ) = Result.bind
 
 (* {1 Schemas} *)
 
@@ -335,14 +335,17 @@ let answer_tool =
     "answer"
 
 let registry app =
-  Registry.add Registry.empty search_tool ~grant:app
-  >>= (fun registry -> Registry.add registry fetch_tool ~grant:app)
-  >>= (fun registry -> Registry.add registry answer_tool ~grant:app)
+  let* registry = Registry.add Registry.empty search_tool ~grant:app in
+  let* registry = Registry.add registry fetch_tool ~grant:app in
+  Registry.add registry answer_tool ~grant:app
 
 let mcp_server app =
-  registry app
-  |> Result.map_error (fun (Registry.Duplicate_tool name) -> Server.Duplicate_tool name)
-  >>= Server.of_registry ~name:"seekwright" ~version:"0.1.0"
+  let* registry =
+    Result.map_error
+      (fun (Registry.Duplicate_tool name) -> Server.Duplicate_tool name)
+      (registry app)
+  in
+  Server.of_registry ~name:"seekwright" ~version:"0.1.0" registry
 
 (* {1 The Host guard} *)
 

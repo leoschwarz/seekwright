@@ -10,6 +10,8 @@
 module Caps = Mcp_caps
 module Fs = Caps.Authority.Fs
 
+let ( let* ) = Result.bind
+
 (* [window_text] looks at [[offset, offset + max_chars + 1]] for its cut, and one
    codepoint past that answers "more remains" without a second read. *)
 let window_lookahead = 2
@@ -378,12 +380,11 @@ let put t ~rung ~url ~(page : cached_page) =
        is as good as a miss on both read paths and the losing temporary only has
        to stop existing. *)
     let writes =
-      Fs.atomic_write t.fs ~max_bytes:t.max_entry_bytes ~path:(body_name name) ~contents:body
-    in
-    let writes =
-      Result.bind writes (fun () ->
-          Fs.atomic_write t.fs ~path:(meta_name name)
-            ~contents:(Yojson.Safe.to_string (meta_of page ~created)))
+      let* () =
+        Fs.atomic_write t.fs ~max_bytes:t.max_entry_bytes ~path:(body_name name) ~contents:body
+      in
+      Fs.atomic_write t.fs ~path:(meta_name name)
+        ~contents:(Yojson.Safe.to_string (meta_of page ~created))
     in
     match writes with
     | Error _ -> false

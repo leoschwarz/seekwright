@@ -33,7 +33,7 @@ let default_max_entries = 200
 let default_operation_timeout_seconds = 5.0
 
 let ( / ) = Eio.Path.( / )
-let ( >>= ) = Result.bind
+let ( let* ) = Result.bind
 
 (* A caller may lower a ceiling, never raise it (§4). Clamping rather than
    refusing keeps [read_file ~max_bytes:1_000_000] working on a small grant —
@@ -172,10 +172,10 @@ let read_capped flow limit =
    own, because the [~controls] argument these signatures take has no producer
    outside a grant. *)
 let read_file_body t ~max_bytes path =
-  let ( let* ) = Result.bind in
   let limit = ceiling ~grant_max:t.max_read_bytes max_bytes in
   let* target = resolve t.root path in
-  let* kind = kind_of ~follow:true ~label:path target >>= classify_kind ~path in
+  let* kind = kind_of ~follow:true ~label:path target in
+  let* kind = classify_kind ~path kind in
   match kind with
   | `Directory ->
       Error (Error.make Error.Invalid ~message:(path ^ ": that is a directory — list it, do not read it"))
@@ -196,10 +196,10 @@ let read_file_body t ~max_bytes path =
       | ex -> classify ex ~path)
 
 let list_dir_body t ~max_entries path =
-  let ( let* ) = Result.bind in
   let limit = ceiling ~grant_max:t.max_entries max_entries in
   let* target = resolve t.root path in
-  let* kind = kind_of ~follow:true ~label:path target >>= classify_kind ~path in
+  let* kind = kind_of ~follow:true ~label:path target in
+  let* kind = classify_kind ~path kind in
   match kind with
   | `Regular_file ->
       Error (Error.make Error.Invalid ~message:(path ^ ": that is a file — read it, do not list it"))
@@ -247,7 +247,6 @@ let list_dir ~controls ?max_entries t path =
 
 (* The ceilings one construction call can be given, validated the same way. *)
 let ceilings ?max_read_bytes ?max_write_bytes ?max_entries () =
-  let ( let* ) = Result.bind in
   let* max_read_bytes =
     operator_limit ~name:"max_read_bytes" ~default:default_max_read_bytes max_read_bytes
   in
@@ -313,7 +312,6 @@ let writable t path = if t.writable then Ok () else not_writable path
 (* A write ceiling is a ceiling of the same kind as a read ceiling: a caller may
    lower it, never raise it. *)
 let write_body t ~max_bytes path ~contents =
-  let ( let* ) = Result.bind in
   let* () = writable t path in
   let limit = ceiling ~grant_max:t.max_write_bytes max_bytes in
   if String.length contents > limit then
@@ -373,10 +371,10 @@ let atomic_write ~controls ?max_bytes t ~path ~contents =
    false], not a failure: it is the ordinary answer for a caller walking to the
    end of a document. *)
 let read_range_body t ~max_bytes ~offset path =
-  let ( let* ) = Result.bind in
   let limit = ceiling ~grant_max:t.max_read_bytes max_bytes in
   let* target = resolve t.root path in
-  let* kind = kind_of ~follow:true ~label:path target >>= classify_kind ~path in
+  let* kind = kind_of ~follow:true ~label:path target in
+  let* kind = classify_kind ~path kind in
   match kind with
   | `Directory ->
       Error (Error.make Error.Invalid ~message:(path ^ ": that is a directory — list it, do not read it"))
@@ -404,7 +402,6 @@ let read_range ~controls ?max_bytes t ~offset path =
    the cache keeps its own access clock in the sidecar, and this is the number a
    foreign entry (one this process did not write) is ranked by. *)
 let stat_body t path =
-  let ( let* ) = Result.bind in
   let* target = resolve t.root path in
   try
     let info = Eio.Path.stat ~follow:true target in
@@ -421,7 +418,6 @@ let stat ~controls t path =
    successfully. The confinement is [openat2] again — the [unlinkat] runs against
    the subtree handle — so a [".."] cannot remove anything outside the root. *)
 let unlink_body t path =
-  let ( let* ) = Result.bind in
   let* () = writable t path in
   let* target = resolve t.root path in
   try Ok (Eio.Path.unlink ~missing_ok:true target) with ex -> classify ex ~path

@@ -2,7 +2,7 @@ type build_error =
   | Duplicate_tool of string
   | Invalid_declaration of string
 
-let ( >>= ) = Result.bind
+let ( let* ) = Result.bind
 
 (* An MCP tool name is what a caller types, so it has to survive being echoed
    into a prompt and matched byte for byte. The character set is the conservative
@@ -85,7 +85,7 @@ let checked_tool entry =
 let add_all server tools =
   List.fold_left
     (fun built tool ->
-      built >>= fun server ->
+      let* server = built in
       match Mcp_kit.Server.add_tool server tool with
       | Ok server -> Ok server
       | Error (Mcp_kit.Server.Duplicate_tool name) -> Error (Duplicate_tool name)
@@ -94,10 +94,12 @@ let add_all server tools =
     tools
 
 let of_registry ~name ~version registry =
-  let ( let* ) = Result.bind in
   let* tools =
     List.fold_left
-      (fun built entry -> built >>= fun tools -> checked_tool entry >>= fun tool -> Ok (tools @ [ tool ]))
+      (fun built entry ->
+        let* tools = built in
+        let* tool = checked_tool entry in
+        Ok (tools @ [ tool ]))
       (Ok [])
       (Registry.entries registry)
   in

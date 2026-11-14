@@ -99,7 +99,7 @@ let max_request_header_bytes = 8_192
 let http_port = 80
 let https_port = 443
 
-let ( >>= ) = Result.bind
+let ( let* ) = Result.bind
 
 (* Raised inside the connector, whose type is a flow rather than a result, and
    turned back into an [Error.t] by the one [try] in [send]. It never escapes
@@ -172,7 +172,6 @@ let normalise_host raw =
    [x.host] to the {e later} record type and infers the argument's type from the
    use — which turns [port : int option] into [port : int] three lines later. *)
 let normalise_endpoint (entry : endpoint) =
-  let ( let* ) = Result.bind in
   let* host = normalise_host entry.host in
   let* port =
     match entry.port with
@@ -237,7 +236,6 @@ let port_of_uri uri scheme =
    here touches DNS: an unlisted host is refused before a single query leaves, so
    a grant cannot be probed by resolver traffic and a denial costs nothing. *)
 let decide_destination (t : 'tag confinement) uri =
-  let ( let* ) = Result.bind in
   let* scheme = scheme_of_uri uri in
   let* host =
     match Uri.host uri with
@@ -474,7 +472,6 @@ let policy_address policy (ip : Eio.Net.Ipaddr.v4v6) =
    The whole list is kept rather than the first answer, so the refusal can say
    how many addresses the name had — without naming any of them. *)
 let resolve (t : 'tag confinement) destination =
-  let ( let* ) = Result.bind in
   let* answers =
     try
       Ok
@@ -496,7 +493,8 @@ let resolve (t : 'tag confinement) destination =
               (Error.sanitize destination.host) destination.port))
   else
     let vetted = List.filter (policy_address t.policy) on_port in
-    if vetted = [] then
+    match vetted with
+    | [] ->
       Error
         (Error.make Error.Denied
            ~message:
@@ -504,10 +502,11 @@ let resolve (t : 'tag confinement) destination =
                 "%s resolved to %d address(es), none of which this grant may connect to (%s)"
                 (Error.sanitize destination.host) (List.length on_port)
                 (address_policy_note t.policy)))
-    else (* The [Eio] form, because that is what [Eio.Net.connect] takes: the
-            vetting and the connection name the same address, which is the whole
-            point of resolving here rather than letting the HTTP client do it. *)
-      Ok (List.hd vetted)
+    | address :: _ ->
+      (* The [Eio] form, because that is what [Eio.Net.connect] takes: the
+         vetting and the connection name the same address, which is the whole
+         point of resolving here rather than letting the HTTP client do it. *)
+      Ok address
 
 (* The target check a fetch fallback runs on a URL it is about to hand to a
    third party. A fallback's grant decides the {i vendor} it dials; the target
@@ -759,7 +758,6 @@ let check_redirect (t : 'tag confinement) response =
 (* The body of one request, inside the ceiling the operator and the caller
    agreed on. *)
 let send (t : 'tag confinement) ~destination ?max_response_bytes request vetted =
-  let ( let* ) = Result.bind in
   let limit =
     match max_response_bytes with
     | None -> t.max_response_bytes
@@ -800,7 +798,6 @@ let request ~controls ?max_response_bytes (T t) request =
     ~measure:(fun response -> Some (String.length response.body))
     ~notes:(fun response -> [("status", string_of_int response.status)])
     (fun () ->
-      let ( let* ) = Result.bind in
       let* destination = decide_destination t request.uri in
       let* vetted = resolve t destination in
       try send t ~destination ?max_response_bytes request vetted
@@ -823,7 +820,6 @@ let ensure_rng () =
               Mirage_crypto_rng_unix.use_default ()) before a network grant is built")
 
 let tls_config () =
-  let ( let* ) = Result.bind in
   let* () = ensure_rng () in
   match Ca_certs.authenticator () with
   | Error (`Msg message) ->
@@ -861,20 +857,21 @@ let response_ceiling max_response_bytes =
    anyway is what makes [with_endpoints] and [with_root] read the same way at a
    call site, which is the shape an audit is read in. *)
 let with_endpoints ~sw:_ ~net ~max_response_bytes endpoints =
-  let ( let* ) = Result.bind in
   let* max_response_bytes = response_ceiling max_response_bytes in
   let* allowed = normalise_endpoints endpoints in
   let wants_https = List.exists (fun entry -> entry.scheme = `Https) allowed in
   let* tls =
-    if wants_https then tls_config () >>= (fun config -> Ok (Some config)) else Ok None
+    if wants_https then
+      let* config = tls_config () in
+      Ok (Some config)
+    else Ok None
   in
   Ok (T { net; max_response_bytes; policy = Endpoints allowed; tls })
 
 let with_public_web ~sw:_ ~net ?(port_policy = Default_ports) ~max_response_bytes () =
-  let ( let* ) = Result.bind in
   let* max_response_bytes = response_ceiling max_response_bytes in
-  tls_config () >>= (fun tls ->
-    Ok (T { net; max_response_bytes; policy = Public_web port_policy; tls = Some tls }))
+  let* tls = tls_config () in
+  Ok (T { net; max_response_bytes; policy = Public_web port_policy; tls = Some tls })
 
 (* The other half of the address axis, and the reason [fetch.allow_private_addresses]
    has a consumer: the same HTTP(S) shape, the same port mode, the same trust
@@ -884,7 +881,6 @@ let with_public_web ~sw:_ ~net ?(port_policy = Default_ports) ~max_response_byte
     a grant is built in one mode and cannot be widened afterwards, which is what
     keeps a third-party fallback's grant public-only whatever the config says. *)
 let with_private_web ~sw:_ ~net ?(port_policy = Default_ports) ~max_response_bytes () =
-  let ( let* ) = Result.bind in
   let* max_response_bytes = response_ceiling max_response_bytes in
-  tls_config () >>= (fun tls ->
-    Ok (T { net; max_response_bytes; policy = Private_web port_policy; tls = Some tls }))
+  let* tls = tls_config () in
+  Ok (T { net; max_response_bytes; policy = Private_web port_policy; tls = Some tls })
