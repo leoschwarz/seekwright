@@ -18,9 +18,12 @@
  (name seekwright_cli)
  (public_name seekwright.cli)
  (wrapped false)
- (libraries
+(libraries
   seekwright
   seekwright.factory
+  ; [Cli_metrics] re-renders a journal timestamp, so it needs the civil-date
+  ; arithmetic the adapters use.
+  seekwright.time
   mcp-caps
   eio
   ; [Cli_serve] waits on a self-pipe fd, so it names the unix sublibrary and

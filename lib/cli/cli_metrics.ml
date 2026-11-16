@@ -1,3 +1,5 @@
+module Civil = Seekwright_time.Civil
+
 let json_field key = function
   | `Assoc fields -> ( match List.assoc_opt key fields with Some v -> v | None -> `Null)
   | _ -> `Null
@@ -30,30 +32,6 @@ let digit2 s i =
     let sub = String.sub s i 2 in
     if String.for_all (fun c -> c >= '0' && c <= '9') sub then int_of_string sub else 0
 
-(* Floor division for negative seconds: pre-epoch timestamps land in the day before. *)
-let civil_of_secs secs =
-  let days = if secs >= 0 then secs / 86_400 else (secs - 86_399) / 86_400 in
-  let day_of = secs - days * 86_400 in
-  let z = days + 719_468 in
-  let era = (if z >= 0 then z else z - 146_096) / 146_097 in
-  let doe = z - era * 146_097 in
-  let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365 in
-  let y = yoe + era * 400 in
-  let doy = doe - (365 * yoe + yoe / 4 - yoe / 100) in
-  let mp = (5 * doy + 2) / 153 in
-  let d = doy - (153 * mp + 2) / 5 + 1 in
-  let m = if mp < 10 then mp + 3 else mp - 9 in
-  let year = if m <= 2 then y + 1 else y in
-  Some (year, m, d, day_of / 3600, (day_of / 60) mod 60, day_of mod 60)
-
-let days_from_civil (y : int) (m : int) (d : int) : int =
-  let y = if m <= 2 then y - 1 else y in
-  let era = (if y >= 0 then y else y - 399) / 400 in
-  let yoe = y - (era * 400) in
-  let doy = ((153 * (m + (if m > 2 then -3 else 9))) + 2) / 5 + d - 1 in
-  let doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy in
-  (era * 146097) + doe - 719468
-
 let secs_of_utc day time offset_secs =
   let (y, m, d) =
     let y = int_of_string (String.sub day 0 4) in
@@ -61,7 +39,7 @@ let secs_of_utc day time offset_secs =
     let d = int_of_string (String.sub day 8 2) in
     (y, m, d)
   in
-  days_from_civil y m d * 86_400 + time - offset_secs
+  Civil.days_from_civil y m d * 86_400 + time - offset_secs
 
 let seen value =
   match value with
@@ -91,13 +69,8 @@ let seen value =
               let om = if String.length body >= 4 then digit2 body 2 else digit2 body 1 in
               sign * (oh * 3600 + om * 60)
           in
-          let iso =
-            match civil_of_secs (secs_of_utc day (hh * 3600 + mm * 60 + ss) offset) with
-            | Some (y, m, d, hh, mm, ss) ->
-                Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ" y m d hh mm ss
-            | None -> text
-          in
-          iso
+          Civil.iso_utc_seconds
+            (float_of_int (secs_of_utc day (hh * 3600 + mm * 60 + ss) offset))
 
 let row entry =
   [

@@ -407,7 +407,11 @@ let the_recency_windows_are_fixed_day_counts () =
 let utc_is_the_format_the_endpoint_documents () =
   check_string "the injected instant" "2023-11-14T22:13:20Z" (Linkup.format_utc fixed_now);
   check_string "the epoch" "1970-01-01T00:00:00Z" (Linkup.format_utc 0.);
-  check_string "across a leap day" "2024-02-29T00:00:00Z" (Linkup.format_utc 1_709_164_800.)
+  check_string "across a leap day" "2024-02-29T00:00:00Z" (Linkup.format_utc 1_709_164_800.);
+  (* A fixture clock can sit before the epoch, and the day floors backwards
+     there: [1969-12-31] is the answer, never [1970-01-01] with a negative
+     clock. *)
+  check_string "before the epoch" "1969-12-31T23:59:59Z" (Linkup.format_utc (-1.))
 
 let fromDate_is_the_window_from_the_adapters_own_clock () =
   List.iter

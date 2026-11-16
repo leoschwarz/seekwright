@@ -1,3 +1,5 @@
+module Civil = Seekwright_time.Civil
+
 module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
@@ -20,33 +22,10 @@ let recency_days = function
   | Model.Month -> 30
   | Model.Year -> 365
 
-(* Days since epoch, floored to handle pre-1970 dates correctly. *)
-let days_since_epoch (now : float) =
-  let seconds = Int64.of_float (floor now) in
-  let days = Int64.div seconds 86400L in
-  let days =
-    if seconds < 0L && Int64.rem seconds 86400L <> 0L then Int64.succ days else days
-  in
-  Int64.to_int days
-
-(* Howard Hinnant's civil_from_days: calendar date from day count without timezone. *)
-let civil_from_days z0 =
-  let z = z0 + 719468 in
-  let era = (if z >= 0 then z else z - 146096) / 146097 in
-  let doe = z - (era * 146097) in
-  let yoe = (doe - (doe / 1460) + (doe / 36524) - (doe / 146096)) / 365 in
-  let y = yoe + (era * 400) in
-  let doy = doe - ((365 * yoe) + (yoe / 4) - (yoe / 100)) in
-  let mp = (5 * doy + 2) / 153 in
-  let day = doy - ((153 * mp + 2) / 5) + 1 in
-  let month = if mp < 10 then mp + 3 else mp - 9 in
-  let year = if month <= 2 then y + 1 else y in
-  (year, month, day)
-
 let after_date ~(now : unit -> float) period =
-  let days = days_since_epoch (now () -. float_of_int (recency_days period * 86400)) in
-  let (year, month, day) = civil_from_days days in
-  Printf.sprintf "%04d-%02d-%02d" year month day
+  Civil.date_of_days
+    (Civil.days_of_secs
+       (Civil.whole_seconds (now () -. float_of_int (recency_days period * 86400))))
 
 (* Shared result parser for both REST and MCP payloads. *)
 let parse_results data ~limit ~text_chars =

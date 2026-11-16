@@ -1,0 +1,19 @@
+; Civil-date arithmetic, in one stdlib-only library: [seekwright.time], wrapped
+; as [Seekwright_time], the third floor under the two big libraries beside
+; [seekwright.text] and [seekwright.wire].
+;
+; It exists because the same Hinnant day-count had six copies here — [lib/usage.ml],
+; four provider adapters, and [lib/cli/cli_metrics.ml] with the arithmetic inlined
+; — and they had already drifted apart in spelling and in one sign. A module
+; inside [lib/] could not be the owner: [seekwright.providers] and [seekwright.cli]
+; link [seekwright], never the reverse, so nothing in [lib/] is reachable from an
+; adapter.
+;
+; Stdlib-only like the other two floors: no clock, no timezone, no dependency on
+; either big library. That is what keeps the recorded direction — [mcp-caps →
+; seekwright → seekwright.providers / seekwright.fetch] — with the same floor
+; under all of it. No timezone library is the recorded decision
+; (plans/seekwright-ocaml-port.md); this module is that decision, not a new one.
+(library
+ (name seekwright_time)
+ (public_name seekwright.time))

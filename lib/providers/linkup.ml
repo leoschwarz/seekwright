@@ -1,3 +1,5 @@
+module Civil = Seekwright_time.Civil
+
 module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
@@ -25,41 +27,11 @@ let age_days = function
   | Model.Month -> 30
   | Model.Year -> 365
 
-(* Days since epoch, floored to handle pre-1970 dates correctly. *)
-let days_since_epoch (now : float) =
-  let seconds = Int64.of_float (floor now) in
-  let days = Int64.div seconds 86400L in
-  let days =
-    if seconds < 0L && Int64.rem seconds 86400L <> 0L then Int64.succ days else days
-  in
-  Int64.to_int days
+(* The injected clock is what makes the vendor's date field testable. *)
+let format_utc = Civil.iso_utc_seconds
 
-(* Howard Hinnant's civil_from_days: calendar date from day count without timezone. *)
-let civil_from_days z0 =
-  let z = z0 + 719468 in
-  let era = (if z >= 0 then z else z - 146096) / 146097 in
-  let doe = z - (era * 146097) in
-  let yoe = (doe - (doe / 1460) + (doe / 36524) - (doe / 146096)) / 365 in
-  let y = yoe + (era * 400) in
-  let doy = doe - ((365 * yoe) + (yoe / 4) - (yoe / 100)) in
-  let mp = (5 * doy + 2) / 153 in
-  let day = doy - ((153 * mp + 2) / 5) + 1 in
-  let month = if mp < 10 then mp + 3 else mp - 9 in
-  let year = if month <= 2 then y + 1 else y in
-  (year, month, day)
-
-(* Injected clock allows deterministic testing of date calculations. *)
-let format_utc (epoch : float) =
-  let days = days_since_epoch epoch in
-  let seconds = Int64.of_float (floor epoch) in
-  let (year, month, day) = civil_from_days days in
-  let clock = Int64.to_int (Int64.sub seconds (Int64.mul 86400L (Int64.of_int days))) in
-  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ" year month day
-    (clock / 3600)
-    ((clock mod 3600) / 60)
-    (clock mod 60)
-
-let from_date (now : unit -> float) period = format_utc (now () -. float_of_int (age_days period * 86400))
+let from_date (now : unit -> float) period =
+  format_utc (now () -. float_of_int (age_days period * 86400))
 
 (* Upstream request body encoding: query, depth, outputType, maxResults, filters. *)
 let request_body ~depth ~output ~(from_date : string option) (q : Provider.search_query) =

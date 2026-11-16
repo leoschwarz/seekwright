@@ -1,3 +1,5 @@
+module Civil = Seekwright_time.Civil
+
 type log =
   Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
 
@@ -10,57 +12,14 @@ let runs_max = 256
 let keep_days_default = 370
 let recent_default = 100
 
-(* Days since 1970-01-01 and back: Howard Hinnant's civil-date arithmetic. *)
-let days_from_civil (y : int) (m : int) (d : int) : int =
-  let y = if m <= 2 then y - 1 else y in
-  let era = (if y >= 0 then y else y - 399) / 400 in
-  let yoe = y - (era * 400) in
-  let doy = ((153 * (m + (if m > 2 then -3 else 9))) + 2) / 5 + d - 1 in
-  let doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy in
-  (era * 146097) + doe - 719468
-
-let civil_from_days (z : int) : int * int * int =
-  let z = z + 719468 in
-  let era = (if z >= 0 then z else z - 146096) / 146097 in
-  let doe = z - (era * 146097) in
-  let yoe = (doe - (doe / 1460) + (doe / 36524) - (doe / 146096)) / 365 in
-  let y = yoe + (era * 400) in
-  let doy = doe - ((365 * yoe) + (yoe / 4) - (yoe / 100)) in
-  let mp = ((5 * doy) + 2) / 153 in
-  let d = doy - (((153 * mp) + 2) / 5) + 1 in
-  let m = if mp < 10 then mp + 3 else mp - 9 in
-  let y = if m <= 2 then y + 1 else y in
-  (y, m, d)
-
-let date_of_days (days : int) : string =
-  let (y, m, d) = civil_from_days days in
-  Printf.sprintf "%04d-%02d-%02d" y m d
-
-(* [YYYY-MM-DD] -> days since the epoch, the form the day buckets are keyed on
-   and pruned by (string comparison on that key is the prune rule). *)
-let date_of_string (date : string) : int option =
-  let digit i = match date.[i] with '0' .. '9' -> true | _ -> false in
-  if String.length date <> 10 || not (digit 0 && digit 1 && digit 2 && digit 3)
-  || date.[4] <> '-' || not (digit 5 && digit 6) || date.[7] <> '-'
-  || not (digit 8 && digit 9)
-  then None
-  else
-    Some
-      (days_from_civil
-         (int_of_string (String.sub date 0 4))
-         (int_of_string (String.sub date 5 2))
-         (int_of_string (String.sub date 8 2)))
-
-(* Floor division, so a pre-epoch instant (a journal line carrying a 1960s
-   timestamp) lands in the day {i before} rather than in 1970. *)
-let days_of_secs (secs : float) : float = Float.floor (secs /. 86400.)
-
-let utc_date (secs : float) : string = date_of_days (int_of_float (days_of_secs secs))
+let utc_date (secs : float) : string =
+  Civil.date_of_days (Civil.days_of_secs (Civil.whole_seconds secs))
 
 let civil_of (secs : float) : int * int * int * int * int * int * float =
-  let days = int_of_float (days_of_secs secs) in
-  let sod = secs -. (days_of_secs secs *. 86400.) in
-  let (y, m, d) = civil_from_days days in
+  let secs_int = Civil.whole_seconds secs in
+  let days = Civil.days_of_secs secs_int in
+  let sod = secs -. (float_of_int days *. 86400.) in
+  let (y, m, d) = Civil.civil_from_days days in
   let whole = Float.to_int sod in
   (y, m, d, whole / 3600, (whole / 60) mod 60, whole mod 60, sod -. Float.of_int whole)
 
@@ -133,7 +92,7 @@ let parse_clock (ts : string) : (float * int) option =
 let parse_utc (ts : string) : float option =
   match (digits ts 0 4, digits ts 5 2, digits ts 8 2) with
   | Some y, Some mo, Some dy ->
-    let days = float_of_int (days_from_civil y mo dy) *. 86400. in
+    let days = float_of_int (Civil.days_from_civil y mo dy) *. 86400. in
     let l = String.length ts in
     if l = 10 then Some days
     else if l < 11 || (ts.[10] <> 'T' && ts.[10] <> 't' && ts.[10] <> ' ') then None
@@ -666,10 +625,10 @@ let apply_fetch (t : t) (entry : Yojson.Safe.t) (bucket : day_totals)
 let roll (t : t) (day : string) : unit =
   if t.current_day <> Some day then begin
     t.current_day <- Some day;
-    match date_of_string (utc_date (t.now ())) with
+    match Civil.date_of_string (utc_date (t.now ())) with
     | None -> ()
     | Some today ->
-      let cutoff = date_of_days (today - t.keep_days) in
+      let cutoff = Civil.date_of_days (today - t.keep_days) in
       let keep key = key >= cutoff in
       t.days <- List.filter (fun (key, _) -> keep key) t.days;
       t.provider_days
@@ -872,10 +831,10 @@ let search_cost_usd (t : t) : float = t.search_cost_usd
 
 (* The last [window_days] UTC day names, oldest first. *)
 let window_dates (today : string) : string list =
-  match date_of_string today with
+  match Civil.date_of_string today with
   | None -> []
   | Some days ->
-    List.init window_days (fun i -> date_of_days (days - (window_days - 1 - i)))
+    List.init window_days (fun i -> Civil.date_of_days (days - (window_days - 1 - i)))
 
 (* Spend descending, with name ascending to break a tie. *)
 let by_spend (cost : 'a -> float) (pa, ta) (pb, tb) =

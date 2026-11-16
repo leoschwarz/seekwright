@@ -496,6 +496,25 @@ against each deleted copy over pre-epoch, leap-day, 2100-03-01, year 9999 and th
 Int64-vs-float floor boundary — because equivalence of six hand copies is exactly
 what this change must not lose; the script is not kept, the suites are the pin.
 
+**Landed, with one difference the plan did not predict.** The floor exports
+`days_from_civil`, `civil_from_days`, `whole_seconds` (the float-to-whole-second
+floor `Usage` and three adapters would otherwise repeat), `days_of_secs`,
+`seconds_of_day`, `date_of_days`, `date_of_string` and `iso_utc_seconds` for the
+`%Y-%m-%dT%H:%M:%SZ` form. `Usage`'s `+00:00` spellings and its microsecond rule
+stay in `Usage` — they are journal forms, not calendar arithmetic — and
+`Linkup.format_utc` stays in `linkup.mli`, aliased to the floor's stamp, because
+`test_linkup` pins that name. The differential ran the new module against every
+deleted copy over 6 million consecutive days, a date corpus (leap days,
+1900-03-01, 2100-03-01, year 9999, the epoch) and an instant corpus across the
+floor boundary: **the calendar arithmetic agreed everywhere; the day bucket did
+not.** The adapters' `days_since_epoch` branched with `Int64.succ` where
+flooring a negative count needs `pred`, so a pre-epoch instant landed on the
+wrong day *and* got a negative seconds-of-day: `format_utc -1.` answered
+`1970-01-02T-24:00:-1Z`, while its own comment claimed pre-1970 was handled. The
+canonical `days_of_secs` floors, so this commit fixes that latent bug instead of
+moving it, and `test_linkup` now carries the case the six copies failed
+(`1969-12-31T23:59:59Z`).
+
 ## R-010 — the fixture's request log
 
 **Evidence (`read`).** `Fallback_fixtures.record` does `t.requests <- t.requests @ [

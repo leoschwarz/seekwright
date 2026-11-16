@@ -19,5 +19,6 @@
  (public_name seekwright.providers)
  ; [seekwright.text] is the codepoint walk [deepseek] counts its 128-character
  ; query limit in — Python's [len] is codepoints, and a byte count would refuse
- ; a query the backend accepts.
- (libraries seekwright seekwright.text mcp-caps uri yojson))
+ ; a query the backend accepts. [seekwright.time] is the day-count the four
+ ; date-carrying adapters send as a request field.
+ (libraries seekwright seekwright.text seekwright.time mcp-caps uri yojson))
