@@ -101,12 +101,35 @@ sections are odoc navigation and are allowed; `.ml` banners are not.
 
 1. `.ml` first: the strict test and the biggest win.
 2. `.mli` second: wrong call, five slots.
-3. Keep a short per-module log of judgement calls (kept, removed, why) so the
+3. Tests (`test/`, `live/`, `examples/`): strip section banners (`(* {1 …} *)`,
+   `(* ---------- … ---------- *)`, `(* [Test…] *)`), plan citations, and
+   Python comparisons while preserving test rationale and fixture setups.
+4. Keep a short per-module log of judgement calls (kept, removed, why) so the
    owner can review them.
-4. `dune build @install @doc` after; an unresolved `{!…}` warning shows a
-   trimmed doc pointing nowhere.
-5. Do not over-cut: the target is no prose, not no comments. A silent
+5. Verification: run `dune build @install @runtest @doc`. An unresolved `{!…}`
+   warning fails doc build; whole-tree source guards fail test runs if audit
+   rules are breached.
+6. Do not over-cut: the target is no prose, not no comments. A silent
    production failure is worth a line.
+
+## Guardrails and traps
+
+- **Test assertion strings are code, not comments**: never edit string literals
+  inside `Alcotest.check`, failure formatters, or fixture payloads during a
+  comment pass.
+- **Diagnostic tests pin line numbers**: files with companion `.expected`
+  golden diagnostics (such as `test/should_not_compile/`) pin exact compiler
+  error line numbers. Maintain exact line-count invariance or update the
+  expectation files in lockstep.
+- **Whole-tree scanner invariants**: `test/log_guard/source_discipline.ml` and
+  `test/test_caps_audit.ml` scan raw source text for forbidden tokens. Comments
+  must not inadvertently introduce scanned tokens (`Printexc.`, `failwith`,
+  `Mcp_kit`, etc.) in scanned modules.
+- **Commit hygiene**: commit with `style: <scope>` (single-line lowercase).
+  Git commit descriptions are **not a graveyard for deleted comment prose** —
+  keep the commit message concise; do not paste deleted narrative into history.
+- **Atomic landing**: whole-tree comment passes should land atomically so
+  source-scanning tests remain green during `git bisect`.
 
 ## Calibration
 
