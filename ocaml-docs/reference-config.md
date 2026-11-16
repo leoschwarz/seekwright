@@ -1,0 +1,187 @@
+# Configuration reference
+
+This page is the example `test/test_config.ml` loads: the first TOML block below
+is parsed and loaded on every run, and the suite fails if it names a key this
+loader does not read or leaves out a section it reads, so what an operator copies
+from here is the text the port is tested against rather than a quote that can
+drift. Secrets come from the environment — the checklist below names every
+variable — and everything else lives in TOML at `$SEEKWRIGHT_CONFIG`, defaulting
+to `~/.config/seekwright/config.toml`. A config that enables no provider
+resolves to the keyless set, `exa:free`, `parallel:free` and `freeserp`, rather
+than failing to start, and `stdlib` is the only extraction backend this build
+carries.
+
+## The example
+
+```toml
+# Which provider serves a `search` call that names none. Optional when exactly
+# one provider is enabled -- that one becomes the default. With several enabled
+# and no default set, callers must pass `provider` explicitly -- unless every
+# enabled provider is one that cannot bill, in which case a bare `search` walks
+# that free set instead (and one enabled name that can bill restores the error).
+default_provider = "serper"
+
+# The providers this deployment may dispatch to -- the allow-list. Unset means
+# every enabled provider is permitted; once set it is a permission set, so a
+# name outside it is refused before dispatch whatever its `enabled` flag says,
+# and a name inside it is not thereby enabled. This example names every
+# provider the block below enables, which is the copy-paste-safe shape; drop
+# one to refuse it. Not the Host allowlist (`--allowed-host`).
+permitted_providers = ["serper", "linkup", "exa:free", "searxng", "algolia", "exa"]
+
+[providers.serper]
+enabled = true
+
+[providers.linkup]
+enabled = true
+output_type = "sourcedAnswer"  # or "searchResults"
+depth = "standard"             # `deep` is ~10x the cost, so it stays server-side
+cost_per_1k = 6.00             # optional: only corrects what `--check --live` reports
+
+# Anonymous Exa. Never bills, rate-limited, needs no key. A `backend:flavour`
+# name is quoted: `:` ends a bare TOML key, so `[providers.exa:free]` never
+# parses (`[providers.exa.free]` is a nested table, which is not the same thing).
+[providers."exa:free"]
+enabled = true
+url = "https://mcp.exa.ai/mcp"  # override only for a self-hosted deployment
+
+# Your own SearXNG instance. Keyless; the url is what enables it -- enabled
+# without one is a startup error, and the instance must serve format=json.
+[providers.searxng]
+enabled = true
+url = "http://searx.internal:8080"
+
+# Algolia searches one index you own, not the web. `app_id` and `index` are
+# required -- enabled without both is a startup error -- and the search API
+# key (SEEKWRIGHT_ALGOLIA_API_KEY) is required on every tier.
+[providers.algolia]
+enabled = true
+app_id = "ABC123"
+index = "products"
+# title_attr = "title"      # which record attribute carries each field;
+# url_attr = "url"          # unset falls back to common names plus DocSearch's
+# snippet_attr = "content"  # `hierarchy`, since records are schemaless
+
+# Billed Exa, which still tries the free tier first and only spends the key
+# when that fails. Requires SEEKWRIGHT_EXA_API_KEY.
+[providers.exa]
+enabled = true
+free_cooldown_seconds = 60.0   # how long to stop retrying the free tier
+
+[policy]
+max_snippet_chars = 500        # a SERP result's preview
+max_result_text_chars = 2000   # a content result's page extract, per result
+provider_timeout_seconds = 10.0
+
+[fetch]
+enabled = true
+extractor = "stdlib"          # which extraction backend reads a fetched page; this port carries only stdlib
+timeout_seconds = 15.0        # arbitrary sites are slower than paid APIs;
+                              # also the wall-clock bound on one extraction
+max_text_chars = 40000        # ~10k tokens: a whole article, not a context blowout
+min_text_chars = 200          # under this, the page counts as having no content
+max_match_chars = 6000        # budget for what a `query` or `path` fetch returns
+max_download_bytes = 8388608  # memory guardrail; raise it for huge PDFs or JSON documents
+max_redirects = 3
+allow_private_addresses = false  # true only if you mean to fetch intranet pages
+allow_images = false        # true only where a caller can read image bytes
+user_agent = "seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright)"
+# A fallback is one named entry in a ladder: the step a search or a fetch
+# walks when the step before it fails. A fetch fallback takes one of the
+# five names pinned under "Fetch" in ocaml-docs/egress.md -- `crawl4ai`,
+# `jina`, `linkup`, `scrappa` and `tavily`; a search fallback takes any
+# enabled provider name.
+# The fetch ladder, in the order it is walked when the local fetch fails or
+# comes back nearly empty: the self-hosted crawl4ai renderer (free), then
+# Scrappa's browser-backed scraper (a credit per retry). Each fallback fires at
+# most once, and only when it has what it needs -- crawl4ai a URL, Scrappa
+# SEEKWRIGHT_SCRAPPA_API_KEY, and the keyed extraction fallbacks `tavily` and
+# `linkup` the keys their search half already reads. Off unless you set it.
+fallback = ["crawl4ai", "scrappa"]
+auto_fallback = false         # walk that ladder unasked; off, so a failed or
+                              # nearly-empty read names these to `provider`
+primary = "http"            # the route an unnamed fetch leads with; a
+                            # fallback name reads through that provider and
+                            # drops the local read
+crawl4ai_url = "http://crawl4ai.internal:11235"  # the renderer fallback's base URL
+crawl4ai_token = "..."                      # its bearer token, when it runs with auth on
+crawl4ai_timeout_seconds = 60.0             # a browser render is slower than a static fetch
+
+# The disk page cache, off unless you name a directory. One page on disk per
+# (provider, URL) for the TTL, so repeated reads -- offset paging, query
+# selections, a re-fetch -- stop paying a download or a fallback credit each.
+# The directory holds page text at rest, unlike the journal: name it a volume
+# that is sized for it and treated like a cache (it is one).
+cache_dir = "/var/lib/seekwright/pages"   # unset -- off -- is every fetch a live fetch
+cache_max_bytes = 268435456               # the directory's LRU cap (256 MiB)
+cache_max_entry_bytes = 33554432          # one page above 32 MiB is never stored
+cache_ttl_seconds = 300.0                 # an entry older than this is removed on read
+
+[search]
+# Walked, in this order, when a `search` that names no provider fails on
+# default_provider. Every name must be an enabled provider -- a startup
+# error, not a silently absent fallback. The default itself may appear; it is
+# skipped as already tried. Naming a provider never reroutes.
+fallback = ["linkup", "exa:free"]
+# The ladder a `search(mode="free")` walks, in this order. Free-only: every
+# name must be a provider that cannot bill, and one that can is a startup
+# error. Unset walks every enabled free provider, keyless ones first.
+free_fallback = ["exa:free", "searxng"]
+health_interval_seconds = 60.0   # periodic best-effort ping; 0.0 disables it
+health_failure_threshold = 3     # consecutive failures before a fallback is gated
+health_cooldown_seconds = 120.0  # how long a gated fallback stays out
+
+[logging]
+level = "INFO"           # TRACE|DEBUG|INFO|SUCCESS|WARNING|ERROR|CRITICAL
+format = "text"          # "json" for a cluster; see container.md
+# library_level and access_log are uvicorn's keys. This port refuses a non-default
+# value instead of ignoring it, so the example does not set them.
+log_queries = false      # opt in to full query text and fetched URLs
+log_content = false      # opt in to what the provider returned; verbose
+
+[dashboard]
+enabled = true           # serve GET /dashboard + /dashboard/data under --http
+# Opt-in append-only usage journal (JSONL): full history across restarts.
+# Volume-mount it; nothing on the serving path ever reads it.
+# history_path = "/var/lib/seekwright/usage.jsonl"
+
+[agent]
+# Agent mode: the `answer` tool, which runs a fixed retrieval plan and then one
+# model call over what it retrieved. Off by default, because enabling it sends
+# the caller's question and the fetched page text to the endpoint below -- a
+# third party that does not exist in the two-tool path. Contract and rationale:
+# configuration.md, "Caps, agent mode, and what is not honoured".
+enabled = false
+# base_url = "https://api.deepseek.com/v1"  # OpenAI-compatible; `/chat/completions` is appended
+# model = "deepseek-v4.1-flash"             # the one model; also needs SEEKWRIGHT_AGENT_API_KEY
+timeout_seconds = 90.0        # the whole call, retrieval included
+model_timeout_seconds = 30.0  # the model request alone, inside the whole call
+max_material_chars = 24000    # total retrieved characters handed to the model (~6k tokens)
+max_output_tokens_brief = 500    # the `brief` output ceiling, sent as the endpoint's cap
+max_output_tokens_report = 2500  # the `report` output ceiling
+max_cost_usd = 0.25           # per-call abort, checked after each retrieval step
+# cost_per_1k_in = 0.00014    # dollars per 1k tokens, reporting only; unset records the
+# cost_per_1k_out = 0.00028   # model cost as unknown, never as 0.0
+```
+
+## Secrets
+
+```bash
+export SEEKWRIGHT_SCRAPPA_API_KEY=...    # `scrappa`
+export SEEKWRIGHT_SERPER_API_KEY=...     # `serper`
+export SEEKWRIGHT_LINKUP_API_KEY=...     # `linkup`
+export SEEKWRIGHT_EXA_API_KEY=...        # `exa` only -- `exa:free` never reads it
+export SEEKWRIGHT_PARALLEL_API_KEY=...   # `parallel` only -- `parallel:free` never reads it
+export SEEKWRIGHT_TAVILY_API_KEY=...     # `tavily`
+export SEEKWRIGHT_TINYFISH_API_KEY=...   # `tinyfish`
+export SEEKWRIGHT_ALGOLIA_API_KEY=...    # `algolia`, alongside `app_id` and `index`
+export SEEKWRIGHT_SEARCH1API_API_KEY=... # `search1api`
+export SEEKWRIGHT_SERPAPI_API_KEY=...    # `serpapi`
+export SEEKWRIGHT_QUERIT_API_KEY=...     # `querit`
+export SEEKWRIGHT_DEEPSEEK_API_KEY=...   # `deepseek`
+export SEEKWRIGHT_AGENT_API_KEY=...      # agent mode only: the `[agent]` model endpoint
+# Five names need no key at all: `exa:free` and `parallel:free` reach their
+# endpoints anonymously on a rate-limited free plan, `freeserp` and `anysearch`
+# are keyless whole-web SERPs, and `searxng` is keyless but requires a `url` in
+# config. `anysearch` is explicit-only: it is enabled by name or not at all.
+```

@@ -10,11 +10,12 @@ differences that reach a caller are pinned by goldens, not by prose.
 The three MCP tools and their parameters, the three `POST /api/v1/…` routes, the
 four operational routes, the three client verbs, the ten server flags, the
 seventeen provider names, every config key and the thirty-seven usage-journal
-fields are identical. `ocaml-tools/surface.ml` prints that manifest in the same
-body format `tools/surface.py` prints, `ocaml-tools/surface.expected` pins the
-full OCaml rendering, and a `runtest` rule diffs the Python-compatible body
-against the body of `docs/reference/surface.md`. Any drift in either tree fails
-`dune runtest` in both directions.
+fields are identical. `ocaml-tools/surface.ml` prints that manifest in the body format
+the freeze is written in, and `ocaml-tools/surface.expected` pins the full OCaml
+rendering: a `runtest` rule re-renders the manifest and diffs it against that golden, so
+a name that moves in this tree's code without moving its manifest fails the build.
+A Python deployment printed the same names from its own manifest; the two were
+held to one manifest, not diffed against each other at build time.
 
 ## One binary, one process
 
@@ -91,10 +92,11 @@ their dates are the live-run table in `plans/seekwright-ocaml-port.md` and in
 
 ## Egress and trust store
 
-- **No outbound proxy.** The Python deployment inherits httpx's
-  `HTTPS_PROXY`/`NO_PROXY` handling; this port dials the endpoint in its registry
-  row directly. If your egress policy requires a proxy, that is a gap to plan
-  around — see [`egress.md`](egress.md) for the endpoint list to allow.
+- **No outbound proxy.** The binary reads no `HTTPS_PROXY`, `HTTP_PROXY` or
+  `NO_PROXY`: it resolves the endpoint, vets every answer, and dials the address
+  it vetted. An egress policy that needs a proxy belongs at the network layer, in
+  front of the role — see [`egress.md`](egress.md) for the endpoint list to
+  allow, and `deploy/compose/squid/` for the reference ACLs.
 - **Trust anchors come from the OS store.** `Policy_net` builds its TLS config
   once per grant from `Ca_certs.authenticator ()`, which reads the OS store, or
   `SSL_CERT_FILE` when set. A missing store is a startup failure, not a handshake

@@ -4,10 +4,17 @@ What this process dials, and from which symbol each host comes. The rows are the
 port's own: every endpoint here is a value in `lib/providers/`,
 `lib/fetch/fallback*.ml` or `lib/factory/registry.ml`, and the same rows drive
 what `--check --live` probes and what `seekwright-live --list` prints. If you
-change an endpoint, change this page in the same commit — the Python tree keeps
-a generated copy for its own deployment (`tools/egress_lists.py` writes the
-Squid host lists under `deploy/compose/generated/`), and this page is the
-OCaml-side equivalent of that inventory.
+change an endpoint, change this page in the same commit. The generated lists
+under `deploy/compose/generated/` are not maintained by hand:
+`ocaml-tools/egress_lists.ml` renders `search-allow.txt` from the
+`Registry.rows` endpoints and `fetch-allow.txt`/`fetch-deny.txt` from
+`Config.known_fetch_fallbacks` plus the operator files in
+`deploy/compose/egress/`. The `dune runtest` rules in `ocaml-tools/dune` diff
+each committed file against a fresh render, so a provider or fallback row that
+moves without the deployment fails the suite; refresh them with
+`dune runtest ocaml-tools --auto-promote`. This page is the inventory an
+operator reads; the generated files are the input to the host firewall or
+nftables ruleset.
 
 ## Search providers
 
@@ -40,10 +47,10 @@ is built and never dispatched.
 `fetch` reads **whatever URL a caller passes**, so the outbound set for the
 primary route is the public web, not a fixed list. The guard is not a host
 allowlist: `Policy_net` resolves the name and refuses link-local, loopback,
-private, and every other RFC 6890 special-use address before a socket opens
-(`Policy_net.special_use` is the table; `[fetch] allow_private_addresses` is the
-only way to widen it, and it is off). Redirects are re-vetted, bounded by
-`[fetch] max_redirects`.
+private, multicast, broadcast, and every other RFC 6890 special-use address
+before a socket opens (`Policy_net.special_use` is the table; `[fetch]
+allow_private_addresses` is the only way to widen it, and it is off). Redirects
+are re-vetted, bounded by `[fetch] max_redirects`.
 
 The fallback rungs do dial fixed hosts:
 
@@ -66,13 +73,27 @@ retrieval plan runs through the same provider and fetch paths above.
 
 ## No proxy, and what to do about that
 
-This port has **no outbound proxy support**: it does not read `HTTPS_PROXY`,
-`HTTP_PROXY` or `NO_PROXY`, and `Policy_net` connects to the resolved address of
-the endpoint in the registry row. (The Python deployment inherits httpx's proxy
-handling, so this is a real difference — see
-[`divergences.md`](divergences.md).) On a network that insists on a proxy, run
-the proxy at the network layer (a transparent Squid, or an nftables redirect)
-rather than expecting the process to know about it, and allow the hosts above.
+This process has **no outbound proxy support**: it reads no `HTTPS_PROXY`,
+`HTTP_PROXY` or `NO_PROXY`, and it connects to the address its own lookup
+vetted — `Policy_net` keeps every answer, refuses the ones the policy does not
+allow, and hands the vetted address to the connection. The bundle in
+`deploy/compose/` therefore ships direct egress: two services on ordinary bridge
+networks, with nothing between them and the internet.
+
+That moves two policies out of the bundle and onto the host firewall or nftables
+ruleset: the sink deny list (callback services, upload sinks, tunnel listeners,
+the `metadata.*` names) and the lenient-versus-strict `fetch` choice; there is
+no `EGRESS_FETCH_POLICY` to set. Feed the ruleset
+`deploy/compose/generated/fetch-deny.txt` for the denials, and either
+`search-allow.txt`/`fetch-allow.txt` for a strict allow-list or the deny file
+alone for the lenient shape.
+
+On a network that insists on a proxy, run the proxy at the network layer (a
+transparent Squid, or an nftables redirect) rather than expecting the process to
+know about it, and allow the hosts above. The reference ACLs for one in front of
+a role are still in `deploy/compose/squid/`: `search-allow.conf` for the search
+role, `fetch-lenient.conf` and `fetch-strict.conf` for the fetch role, each
+reading the generated lists. They are not part of the shipped bundle.
 
 ## Trust store
 

@@ -1,9 +1,9 @@
 # The OCaml image
 
-One `Containerfile.ocaml`, one image, one binary. The Python artifact keeps its
-own `Containerfile` during the transition; the two share the operational
-conventions an operator already knows — UID 10001, `SEEKWRIGHT_CONFIG`, a busybox
-`HEALTHCHECK` on `/healthz` — so one bind mount and one probe config serve both.
+One `Containerfile.ocaml`, one image, one binary. The operational conventions
+are unchanged — UID 10001, `SEEKWRIGHT_CONFIG`, a busybox `HEALTHCHECK` on
+`/healthz` — so a bind mount and probe config written for an earlier deployment
+still fit.
 
 ## Building it
 
@@ -19,15 +19,15 @@ DOCKER_BUILDKIT=1 docker build \
 BuildKit selects **`Containerfile.ocaml.dockerignore`** automatically, because it
 looks for `<dockerfile>.dockerignore` before `.dockerignore`. That matters here
 more than usual: the context this build needs is `lib/`, `bin/`, the two `.opam`
-manifests with their locks, and the dune files — while the Python build's
-`.containerignore` drops exactly those, and this one drops `src/` in return. The
-suites (`test/`, `live/`), the repo instruments (`ocaml-tools/`) and every prose
-tree stay outside the context, so nothing test-only can reach a published image.
+manifests with their locks, and the dune files; everything else stays out of it.
+The suites (`test/`, `live/`), the repo instruments (`ocaml-tools/`) and every
+prose tree are excluded, so nothing test-only can reach a published image.
 The context this build sends is **18 kB** (measured:
 `transferring context: 18.39kB`), against the checkout's full size.
 
-podman needs the flag spelled out, because its default ignore file is
-`.containerignore` — the Python build's:
+podman needs the flag spelled out: its default ignore file is `.containerignore`,
+which this repository does not carry, so nothing else would keep the test trees
+out of the context:
 
 ```bash
 podman build --format docker -f Containerfile.ocaml \
@@ -222,9 +222,8 @@ Two limits of that scan are worth knowing before you rely on it:
   and the busybox utilities — which is where CVE findings live in an image like
   this one, and where the whole report came from.
 - It does **not** cover the OCaml dependency graph. trivy has no parser for opam
-  or for the committed `*.opam.locked` files; measured with trivy 0.76.2, an
-  `fs` scan of this checkout reads `test/conformance/package-lock.json` and
-  `uv.lock` and reports no OCaml package at all. The reproducibility control for
+  or for the committed `*.opam.locked` files; a measured `fs` scan of this
+  checkout reports no OCaml package at all. The reproducibility control for
   the dependency set is therefore the lock files plus the pinned repository
   snapshot, which is also why an upgrade lands as a lock refresh in one commit.
 

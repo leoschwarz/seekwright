@@ -1,10 +1,10 @@
 # Live tests (OCaml port)
 
 The live harness is a separate binary, `seekwright-live`, built by
-`dune build @install` to `_build/install/default/bin/seekwright-live`. It is the
-port of `tests/live/test_live.py`'s assertions, and it is **not** in the container
-image: the image ships the server binary only, so live verification runs from a
-build tree or a CI job, never on a serving host.
+`dune build @install` to `_build/install/default/bin/seekwright-live`. It
+carries the ported assertions of the Python live suite, and it is **not** in the
+container image: the image ships the server binary only, so live verification
+runs from a build tree or a CI job, never on a serving host.
 
 The full contract — selectors, construction, what is printed, exit codes, how a
 pass is recorded — is `live/README.md`. This page is the operator's half.

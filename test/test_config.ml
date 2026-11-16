@@ -1,4 +1,4 @@
-(* Configuration, ported case for case from tests/test_config.py.
+(* Configuration, ported case for case from the Python suite.
 
    The Python suite is the shape of this one: its classes are these suites, its
    [def test_...] are these cases, and its [parametrize] decorators are the case
@@ -13,9 +13,9 @@
    [toml] parser types its arrays, so a ladder mixing a string and a number is
    refused as malformed TOML rather than as a bad list; and an integer past
    [Int64.max] is refused where Python carries arbitrary precision. All three
-   are refusals on both sides: a 102-file differential run against
-   [src/seekwright/config.py] in this checkout — every case dumped field by field
-   from both trees — agreed byte for byte on 99 of them and flagged only these. *)
+   are refusals on both sides: a 102-file differential run against the Python
+   loader in this checkout — every case dumped field by field from both trees —
+   agreed byte for byte on 99 of them and flagged only these. *)
 
 module Config = Seekwright.Config
 module A = Alcotest
@@ -86,8 +86,8 @@ let cut_at needle haystack =
   | Some at -> String.sub haystack 0 at
   | None -> haystack
 
-(* A fenced block of a given language following a heading, from the runbook and
-   the config reference. *)
+(* A fenced block of a given language following a heading, from the two operator
+   pages this port owns. *)
 let fenced_block path heading language =
   let text = read path in
   let after_heading =
@@ -655,11 +655,14 @@ let test_the_removed_knowledge_section_is_rejected () =
   let path = write_config "[providers.serper]\nenabled = true\n\n[knowledge]\nenabled = true\n" in
   refuses_with "knowledge" (Config.load (Some path))
 
-let configuration_doc = "../docs/reference/configuration.md"
-let deploying_doc = "../docs/reference/deploying.md"
+(* Both pages are this port's own: the example and the role blocks are the text
+   an operator reads and the text this suite loads, so a page that falls behind
+   the loader fails here rather than being quoted into this file. *)
+let configuration_doc = "../ocaml-docs/reference-config.md"
+let deploying_doc = "../ocaml-docs/deploying.md"
 
-(* The first TOML block of the configuration reference: the example an operator
-   copies, so it is parsed and loaded here rather than quoted into this file. *)
+(* The first TOML block of the port's configuration page: the example an
+   operator copies, so it is parsed and loaded here rather than quoted. *)
 let documented_example () =
   let text = read configuration_doc in
   match find_sub ~haystack:text ~needle:"```toml" () with
@@ -668,22 +671,14 @@ let documented_example () =
       let start = at + String.length "```toml" in
       cut_at "```" (String.sub text start (String.length text - start))
 
-(* The reference page belongs to the Python tree, whose default backend is
-   "trafilatura"; this port carries only "stdlib", so the example's one
-   extractor line is translated before the load. Every other key is the
-   documented text unchanged, which is what this case is about. *)
-let port_example text =
-  let from = "extractor = \"trafilatura\"" and into = "extractor = \"stdlib\"" in
-  match find_sub ~haystack:text ~needle:from () with
-  | None -> A.failf "%s's example no longer names the extractor" configuration_doc
-  | Some at ->
-      String.sub text 0 at ^ into
-      ^ String.sub text (at + String.length from)
-          (String.length text - at - String.length from)
-
 let test_the_documented_example_loads () =
   clear_keys ();
-  let cfg = expect (load (port_example (documented_example ()))) in
+  let example = documented_example () in
+  (* The example is the port's own file now, so it has to name the backend this
+     build carries; nothing rewrites it on the way to the loader. *)
+  if not (contains ~haystack:example ~needle:"extractor = \"stdlib\"") then
+    A.failf "%s's example does not name this port's extractor" configuration_doc;
+  let cfg = expect (load example) in
   let enabled = Config.enabled_providers cfg in
   if enabled = [] then A.failf "the documented example enables nothing";
   (match cfg.Config.default_provider with
@@ -1490,12 +1485,11 @@ let test_literal_lookalikes_are_left_alone () =
       A.(check int) "the value after the comment" 3 cfg.Config.policy.max_snippet_chars
   | Error message -> A.fail message
 
-(* The frozen names, written out rather than recomputed: these are the rows of
-   tools/value_sets.json the port has to agree with, and a name that moves in the
-   Python tree fails here before it can pass as a silent config change. The
-   extractor row is the one deliberate narrowing: [trafilatura] is absent because
-   this build has no such backend, so a config that names it is refused at load
-   rather than at construction. *)
+(* The frozen names, written out rather than recomputed: these are the rows the
+   port's vocabulary declares, and a name that moves fails here before it can
+   pass as a silent config change. The extractor row is the one deliberate
+   narrowing: [trafilatura] is absent because this build has no such backend, so
+   a config that names it is refused at load rather than at construction. *)
 let test_the_frozen_vocabularies () =
   A.(
     check strings "known providers"

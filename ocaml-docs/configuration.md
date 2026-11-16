@@ -7,9 +7,9 @@ config, no runtime reload, no per-call credential.
 The frozen list of every key, in its table, is printed by
 `ocaml-tools/surface.ml` and pinned by `ocaml-tools/surface.expected`: **49
 section keys over 6 tables, 12 per-provider keys, 9 top-level keys**. That
-golden is diffed against the Python tree's `docs/reference/surface.md` body by a
-`runtest` rule, so the two deployments cannot drift apart silently. This page
-explains what the keys *do*; the golden is what they *are*.
+golden is this port's own: a `runtest` rule re-renders it from the library and diffs the
+result against that file, so a key that moves in the code without moving the manifest
+fails the build. This page explains what the keys *do*; the golden is what they *are*.
 
 ## Where the file lives
 
@@ -110,7 +110,7 @@ them to a non-default value is refused at load:
 - `logging.access_log` — the same reason for uvicorn's per-request line.
 
 The rest of `[logging]` (`level`, `format`, `log_content`, `log_queries`) works
-as the Python tree documents: logs go to **stderr** only, and stdout is the
+as a Python deployment's did: logs go to **stderr** only, and stdout is the
 JSON-RPC channel under stdio.
 
 `[fetch] cache_dir` and `[dashboard] history_path` are the only two keys that
@@ -182,8 +182,9 @@ discarded rides its own `search.cap` log event rather than the response.
 `base_url` and `model` in config and `SEEKWRIGHT_AGENT_API_KEY` in the
 environment; the retrieval plan is fixed and the model never chooses what gets
 searched, so the per-call ceiling (`max_cost_usd`, the `max_output_tokens_*` and
-`max_material_chars` figures) is arithmetic, not accounting. Its contract is the
-Python tree's `docs/reference/agent-mode.md`, which this port implements.
+`max_material_chars` figures) is arithmetic, not accounting. Its contract is
+agent mode's own rules — the fixed plan, the citation requirement and the budget
+arithmetic above — all of which this port implements.
 
 
 ## Client verbs
