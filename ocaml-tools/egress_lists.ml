@@ -77,9 +77,7 @@ let is_label label =
 
 let is_host_line line =
   let body =
-    if String.starts_with ~prefix:"." line then
-      String.sub line 1 (String.length line - 1)
-    else line
+    if String.starts_with ~prefix:"." line then String.sub line 1 (String.length line - 1) else line
   in
   match String.split_on_char '.' body with
   | _apex :: _tld :: _ as labels -> List.for_all is_label labels
@@ -89,9 +87,7 @@ let is_fallback_name name =
   let length = String.length name in
   length > 0
   && (match name.[0] with 'a' .. 'z' -> true | _ -> false)
-  && String.for_all
-       (function 'a' .. 'z' | '0' .. '9' | '_' | '-' -> true | _ -> false)
-       name
+  && String.for_all (function 'a' .. 'z' | '0' .. '9' | '_' | '-' -> true | _ -> false) name
 
 (* A line answering for a fallback whose host is this deployment's:
    [fallback=<name> <host>] names the host, and a bare [fallback=<name>] says the
@@ -126,25 +122,22 @@ let operator_list path =
                 | None -> hosts
                 | Some host ->
                     if not (is_host_line host) then
-                      die "%s:%d: %S after `fallback=%s` is not a host line" path number host
-                        name;
+                      die "%s:%d: %S after `fallback=%s` is not a host line" path number host name;
                     StringSet.add host hosts
               in
               (hosts, StringSet.add name answers, number)
           | None ->
-              if not (is_host_line line) then
-                die "%s:%d: %S is not a host line" path number line;
+              if not (is_host_line line) then die "%s:%d: %S is not a host line" path number line;
               (StringSet.add line hosts, answers, number))
-      (StringSet.empty, StringSet.empty, 0) lines
+      (StringSet.empty, StringSet.empty, 0)
+      lines
   in
   (hosts, answers)
 
 let fallback_hosts () =
   List.filter_map
     (fun (row : Config.fetch_fallback) ->
-      Option.map
-        (fun endpoint -> host_of ~what:row.name (Uri.of_string endpoint))
-        row.endpoint)
+      Option.map (fun endpoint -> host_of ~what:row.name (Uri.of_string endpoint)) row.endpoint)
     Config.known_fetch_fallbacks
 
 (* The hosts a strict fetch policy must allow: the operator's own list, checked
@@ -155,11 +148,12 @@ let fetch_allow_hosts path =
   let hosts, answers = operator_list path in
   let dialled = fallback_hosts () in
   let missing =
-    List.sort_uniq String.compare
-      (List.filter (fun host -> not (StringSet.mem host hosts)) dialled)
+    List.sort_uniq String.compare (List.filter (fun host -> not (StringSet.mem host hosts)) dialled)
   in
   if missing <> [] then
-    die "%s names no fallback host: a strict policy that omits %s breaks `fetch` rather than narrowing it"
+    die
+      "%s names no fallback host: a strict policy that omits %s breaks `fetch` rather than \
+       narrowing it"
       path (String.concat ", " missing);
   let configured =
     List.filter_map
@@ -169,13 +163,17 @@ let fetch_allow_hosts path =
   in
   let unanswered = List.filter (fun name -> not (StringSet.mem name answers)) configured in
   if unanswered <> [] then
-    die "%s says nothing about %s, whose host no constant names: write `fallback=<name> <host>` for the host this deployment dials, or `fallback=<name>` to say it runs none"
+    die
+      "%s says nothing about %s, whose host no constant names: write `fallback=<name> <host>` for \
+       the host this deployment dials, or `fallback=<name>` to say it runs none"
       path (String.concat ", " unanswered);
   let unfounded =
     List.filter (fun name -> not (List.mem name configured)) (StringSet.elements answers)
   in
   if unfounded <> [] then
-    die "%s answers for %s, which names its own host in a constant or is no fallback this ladder walks"
+    die
+      "%s answers for %s, which names its own host in a constant or is no fallback this ladder \
+       walks"
       path (String.concat ", " unfounded);
   StringSet.elements hosts
 
@@ -192,8 +190,7 @@ let fetch_deny_hosts path =
 
 let () =
   let usage =
-    "usage: egress_lists.exe search-allow | fetch-allow OPERATOR-FILE | fetch-deny \
-     OPERATOR-FILE"
+    "usage: egress_lists.exe search-allow | fetch-allow OPERATOR-FILE | fetch-deny OPERATOR-FILE"
   in
   match Array.to_list Sys.argv with
   | _ :: [ "search-allow" ] -> List.iter print_endline (search_hosts ())

@@ -4,8 +4,8 @@ val zwsp : string
 (** U+200B ZERO WIDTH SPACE, the single character inserted after opening delimiters. *)
 
 val text_fields : string list
-(** The wire-model fields carrying provider-originated text: [title],
-    [snippet], [text] and [answer]. *)
+(** The wire-model fields carrying provider-originated text: [title], [snippet], [text] and
+    [answer]. *)
 
 val is_text_field : string -> bool
 (** [is_text_field name] is [true] when [name] is in {!text_fields}. *)

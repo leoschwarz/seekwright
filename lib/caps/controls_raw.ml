@@ -15,8 +15,8 @@ let emit t event = match t.log with None -> () | Some sink -> sink event
 (* Refusal sentence names budget count, never arguments: content leak prevention. *)
 let spent_message operation budget =
   Printf.sprintf
-    "%s: refused — the operation budget of %d is spent (a budget is spent by the code that \
-     created it, so this is the caller's ceiling, not the grant's)"
+    "%s: refused — the operation budget of %d is spent (a budget is spent by the code that created \
+     it, so this is the caller's ceiling, not the grant's)"
     operation (Budget.limit budget)
 
 let outcome = function Ok _ -> Event.Ok | Error error -> Event.Failed (Error.kind error)
@@ -46,9 +46,7 @@ let run t ~operation ?measure ?notes body =
   let event =
     match (result, measure) with
     | Ok value, Some measure -> (
-        match measure value with
-        | None -> event
-        | Some bytes -> Event.with_bytes bytes event)
+        match measure value with None -> event | Some bytes -> Event.with_bytes bytes event)
     | _ -> event
   in
   let event =

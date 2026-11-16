@@ -66,9 +66,6 @@ let run_http ~env ~sw ~log ~app ~server ~host ~port ~close
      cancellation an unprotected finally is itself cancelled, and [close] never
      runs. *)
   let run_with_stop stop =
-    Fun.protect ~finally:(fun () -> Eio.Cancel.protect (fun () -> close ()))
-      (serve ~stop)
+    Fun.protect ~finally:(fun () -> Eio.Cancel.protect (fun () -> close ())) (serve ~stop)
   in
-  match stop with
-  | Some stop -> run_with_stop stop
-  | None -> run_with_signals ()
+  match stop with Some stop -> run_with_stop stop | None -> run_with_signals ()

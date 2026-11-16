@@ -2,7 +2,7 @@ module Registry = Mcp_caps.Registry
 
 let ( let* ) = Result.bind
 
-let input_schema = `Assoc [("type", `String "object")]
+let input_schema = `Assoc [ ("type", `String "object") ]
 
 (* The grant is an ordinary string here so a test can see which grant a call
    actually ran under; a real tool's grant is an abstract Authority value. *)
@@ -10,11 +10,10 @@ let make_tool ~name ~prefix =
   Mcp_caps.Tool.make ~input_schema
     ~decode:(fun json ->
       match json with
-      | `Assoc [("message", `String message)] -> Ok message
-      | `Assoc [("undecodable", `String _)] -> Error "undecodable input"
+      | `Assoc [ ("message", `String message) ] -> Ok message
+      | `Assoc [ ("undecodable", `String _) ] -> Error "undecodable input"
       | _ -> Error "message must be a string")
-    ~run:(fun grant message ->
-      Ok (Mcp_caps.Tool.Output.text (prefix ^ grant ^ ":" ^ message)))
+    ~run:(fun grant message -> Ok (Mcp_caps.Tool.Output.text (prefix ^ grant ^ ":" ^ message)))
     name
 
 let only_tool registry =
@@ -30,7 +29,7 @@ let call registry name json =
       | Ok output -> Mcp_caps.Tool.Output.text_of output
       | Error error -> Alcotest.failf "%s failed: %s" name (Mcp_caps.Error.render error))
 
-let message text = `Assoc [("message", `String text)]
+let message text = `Assoc [ ("message", `String text) ]
 
 let empty_registry _ =
   Alcotest.(check int) "no entries" 0 (List.length (Registry.entries Registry.empty))
@@ -41,7 +40,8 @@ let add_packs_the_grant _ =
   | Ok registry ->
       Alcotest.(check int) "one entry" 1 (List.length (Registry.entries registry));
       Alcotest.(check string) "named" "echo" (Registry.entry_name (only_tool registry));
-      Alcotest.(check string) "ran under its own grant" "grant-a:hi"
+      Alcotest.(check string)
+        "ran under its own grant" "grant-a:hi"
         (call registry "echo" (message "hi"))
 
 let duplicate_names_are_refused _ =
@@ -67,26 +67,21 @@ let grants_do_not_leak_between_tools _ =
   | Ok registry ->
       (* interleaved, so an entry reading a mutable grant would be caught *)
       Alcotest.(check string) "left first" "left L:one" (call registry "left" (message "one"));
-      Alcotest.(check string) "right first" "right R:one"
-        (call registry "right" (message "one"));
+      Alcotest.(check string) "right first" "right R:one" (call registry "right" (message "one"));
       Alcotest.(check string) "left second" "left L:two" (call registry "left" (message "two"));
-      Alcotest.(check string) "right second" "right R:two"
-        (call registry "right" (message "two"))
+      Alcotest.(check string) "right second" "right R:two" (call registry "right" (message "two"))
 
 (* The input schema has already passed by the time decode runs, so a decoder
    refusal is a tool result, never a transport failure. *)
 let decoder_failure_is_an_invalid_error _ =
-  match
-    Registry.add Registry.empty (make_tool ~name:"echo" ~prefix:"") ~grant:"grant-a"
-  with
+  match Registry.add Registry.empty (make_tool ~name:"echo" ~prefix:"") ~grant:"grant-a" with
   | Error _ -> Alcotest.fail "add should succeed"
   | Ok registry -> (
-      match
-        Registry.entry_call (only_tool registry) (`Assoc [("undecodable", `String "x")])
-      with
+      match Registry.entry_call (only_tool registry) (`Assoc [ ("undecodable", `String "x") ]) with
       | Ok _ -> Alcotest.fail "the decoder should have refused"
       | Error error ->
-          Alcotest.(check bool) "kind is Invalid" true
+          Alcotest.(check bool)
+            "kind is Invalid" true
             (Mcp_caps.Error.kind error = Mcp_caps.Error.Invalid))
 
 let () =

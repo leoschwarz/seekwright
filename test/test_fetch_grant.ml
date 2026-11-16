@@ -42,7 +42,8 @@ let fixture_body =
   "<!DOCTYPE html><html><head><title>Priv</title></head><body><p>" ^ marker ^ "</p></body></html>"
 
 let fixture _conn _request _body =
-  Cohttp_eio.Server.respond_string ~headers:(Http.Header.of_list [ ("content-type", "text/html") ])
+  Cohttp_eio.Server.respond_string
+    ~headers:(Http.Header.of_list [ ("content-type", "text/html") ])
     ~status:`OK ~body:fixture_body ()
 
 let error_message (error : F.error) : string =
@@ -61,9 +62,7 @@ let engine_error_message (error : Engine.Fetch.fetch_error) : string =
 let with_web_fetcher ~(private_web : bool) f =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  let socket =
-    Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -73,9 +72,9 @@ let with_web_fetcher ~(private_web : bool) f =
   let stop, fill_stop = Eio.Promise.create () in
   let stopped, fill_stopped = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
-    Fun.protect
-      ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-      (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
+      Fun.protect
+        ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+        (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
   Fun.protect
     ~finally:(fun () ->
       Eio.Promise.resolve fill_stop ();
@@ -86,13 +85,12 @@ let with_web_fetcher ~(private_web : bool) f =
         web ~sw ~net:env#net ~port_policy:Policy.Any_port
           ~max_response_bytes:Policy.default_max_response_bytes ()
       with
-      | Error error -> Alcotest.failf "with_%s_web: %s"
-          (if private_web then "private" else "public")
-          (Error.render error)
+      | Error error ->
+          Alcotest.failf "with_%s_web: %s"
+            (if private_web then "private" else "public")
+            (Error.render error)
       | Ok decision ->
-          let net =
-            Authority.Net.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) decision
-          in
+          let net = Authority.Net.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) decision in
           let fetcher = F.make ~net ~extractor () in
           f fetcher port)
 
@@ -103,21 +101,24 @@ let refusal_message fetcher url =
 
 let public_web_refuses_loopback () =
   with_web_fetcher ~private_web:false (fun fetcher port ->
-    match F.fetch fetcher (Printf.sprintf "http://127.0.0.1:%d/" port) ~offset:0 ~max_chars:None with
-    | Ok page ->
-        Alcotest.failf "the public-web grant served a loopback page (%d chars)"
-          (String.length page.F.text)
-    | Error error ->
-        Test_support.includes "the public-web refusal names the address rule"
-          "none of which this grant may connect to" (error_message error))
+      match
+        F.fetch fetcher (Printf.sprintf "http://127.0.0.1:%d/" port) ~offset:0 ~max_chars:None
+      with
+      | Ok page ->
+          Alcotest.failf "the public-web grant served a loopback page (%d chars)"
+            (String.length page.F.text)
+      | Error error ->
+          Test_support.includes "the public-web refusal names the address rule"
+            "none of which this grant may connect to" (error_message error))
 
 let private_web_serves_loopback () =
   with_web_fetcher ~private_web:true (fun fetcher port ->
-    match F.fetch fetcher (Printf.sprintf "http://127.0.0.1:%d/" port) ~offset:0 ~max_chars:None with
-    | Error error -> Alcotest.failf "the private-web grant refused the fixture: %s"
-        (error_message error)
-    | Ok page ->
-        Test_support.includes "the private-web grant served the page" marker page.F.text)
+      match
+        F.fetch fetcher (Printf.sprintf "http://127.0.0.1:%d/" port) ~offset:0 ~max_chars:None
+      with
+      | Error error ->
+          Alcotest.failf "the private-web grant refused the fixture: %s" (error_message error)
+      | Ok page -> Test_support.includes "the private-web grant served the page" marker page.F.text)
 
 let private_web_does_not_filter_loopback () =
   (* The widening is real at the address and port axes, not just in the
@@ -125,36 +126,35 @@ let private_web_does_not_filter_loopback () =
      in the kernel, not in the policy. (Port 1 answers [ECONNREFUSED]
      instantly on loopback, so this case reaches no network.) *)
   with_web_fetcher ~private_web:true (fun fetcher _port ->
-    match refusal_message fetcher "http://127.0.0.1:1/" with
-    | None ->
-        (* Something really is listening on loopback:1 — not this test's
+      match refusal_message fetcher "http://127.0.0.1:1/" with
+      | None ->
+          (* Something really is listening on loopback:1 — not this test's
            doing, and not a policy pass either; treat it as an allowed
            destination, which is what the widening promises. *)
-        ()
-    | Some message ->
-        Test_support.excludes "loopback passed the address rule" "may connect to" message
-        ;
-        Test_support.excludes "loopback passed the port rule" "usable on port" message)
+          ()
+      | Some message ->
+          Test_support.excludes "loopback passed the address rule" "may connect to" message;
+          Test_support.excludes "loopback passed the port rule" "usable on port" message)
 
 let private_web_keeps_the_guardrail_addresses () =
   with_web_fetcher ~private_web:true (fun fetcher _port ->
-    List.iter
-      (fun (label, url) ->
-        match refusal_message fetcher url with
-        | None -> Alcotest.failf "the private-web grant allowed %s (%s)" label url
-        | Some message ->
-            Test_support.includes (Printf.sprintf "%s refused" label)
-              "none of which this grant may connect to" message
-            ;
-            (* The sentence names the right policy: an operator who approved
+      List.iter
+        (fun (label, url) ->
+          match refusal_message fetcher url with
+          | None -> Alcotest.failf "the private-web grant allowed %s (%s)" label url
+          | Some message ->
+              Test_support.includes
+                (Printf.sprintf "%s refused" label)
+                "none of which this grant may connect to" message;
+              (* The sentence names the right policy: an operator who approved
                intranet reads must not be told about a policy they never set. *)
-            Test_support.includes "the refusal names the private-web rule" "the private-web policy"
-              message)
-      [
-        ("multicast", "http://224.0.0.1/");
-        ("broadcast", "http://255.255.255.255/");
-        ("unspecified", "http://0.0.0.0/");
-      ])
+              Test_support.includes "the refusal names the private-web rule"
+                "the private-web policy" message)
+        [
+          ("multicast", "http://224.0.0.1/");
+          ("broadcast", "http://255.255.255.255/");
+          ("unspecified", "http://0.0.0.0/");
+        ])
 
 let private_web_keeps_the_port_axis () =
   (* The port mode is a separate axis from the address rule: the default port
@@ -163,7 +163,8 @@ let private_web_keeps_the_port_axis () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   match
-    Policy.with_private_web ~sw ~net:env#net ~max_response_bytes:Policy.default_max_response_bytes ()
+    Policy.with_private_web ~sw ~net:env#net ~max_response_bytes:Policy.default_max_response_bytes
+      ()
   with
   | Error error -> Alcotest.failf "with_private_web: %s" (Error.render error)
   | Ok decision -> (
@@ -180,20 +181,21 @@ let private_web_keeps_the_port_axis () =
 let config_with_switch (switch : bool) : Config.t =
   {
     Config.default with
-    Config.fetch = { Config.default.Config.fetch with allow_private_addresses = switch }
+    Config.fetch = { Config.default.Config.fetch with allow_private_addresses = switch };
   }
 
 let served_reader (switch : bool) env sw =
-  match Factory.build_fetch_stack ~sw ~net:(env#net) ~mono_clock:(Eio.Stdenv.mono_clock env)
-          (config_with_switch switch) with
+  match
+    Factory.build_fetch_stack ~sw ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env)
+      (config_with_switch switch)
+  with
   | None -> Alcotest.fail "fetch is enabled by default; the stack must build"
   | Some (Error message) -> Alcotest.failf "build_fetch_stack: %s" message
   | Some (Ok (local, fallbacks)) ->
       (* The fixture's config names no [fetch.fallback], so the ladder is empty
          and this suite reads only the primary route. What a built ladder looks
          like is [test_fetch_ladder]'s. *)
-      Test_support.check_int "the default config names no fallback" 0 (List.length fallbacks)
-      ;
+      Test_support.check_int "the default config names no fallback" 0 (List.length fallbacks);
       local
 
 let stack_off_refuses_loopback () =
@@ -202,8 +204,9 @@ let stack_off_refuses_loopback () =
   let local = served_reader false env sw in
   (* The switch is off: the reader the stack hands the engine runs on the
      public-web grant, and a loopback connect is refused by the grant. *)
-  match local.Engine.Fetch.fetch ~url:"http://127.0.0.1:8080/" ~offset:0
-          ~max_chars:Engine.Fetch.Default with
+  match
+    local.Engine.Fetch.fetch ~url:"http://127.0.0.1:8080/" ~offset:0 ~max_chars:Engine.Fetch.Default
+  with
   | Ok page ->
       Alcotest.failf "the default switch let the served reader reach loopback (%d chars)"
         (String.length page.F.text)
@@ -214,9 +217,7 @@ let stack_off_refuses_loopback () =
 let stack_on_serves_loopback () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  let socket =
-    Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -226,9 +227,9 @@ let stack_on_serves_loopback () =
   let stop, fill_stop = Eio.Promise.create () in
   let stopped, fill_stopped = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
-    Fun.protect
-      ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-      (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
+      Fun.protect
+        ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+        (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
   Fun.protect
     ~finally:(fun () ->
       Eio.Promise.resolve fill_stop ();
@@ -236,8 +237,9 @@ let stack_on_serves_loopback () =
     (fun () ->
       let local = served_reader true env sw in
       match
-        local.Engine.Fetch.fetch ~url:(Printf.sprintf "http://127.0.0.1:%d/" port) ~offset:0
-          ~max_chars:Engine.Fetch.Default
+        local.Engine.Fetch.fetch
+          ~url:(Printf.sprintf "http://127.0.0.1:%d/" port)
+          ~offset:0 ~max_chars:Engine.Fetch.Default
       with
       | Error error ->
           Alcotest.failf "the switch let the served reader refuse its own fixture: %s"
@@ -250,9 +252,7 @@ let stack_on_serves_loopback () =
    constructed once across the library, not once per file, and each needle is
    asserted against the file that owns the code it names. *)
 let factory_impls =
-  List.filter
-    (fun (name, _) -> Filename.check_suffix name ".ml")
-    (Test_support.factory_sources ())
+  List.filter (fun (name, _) -> Filename.check_suffix name ".ml") (Test_support.factory_sources ())
 
 let source_of name =
   match List.assoc_opt name factory_impls with
@@ -273,46 +273,46 @@ let endpoint_source = "lib/factory/grants.ml"
 let widening_is_constructed_once () =
   (* the private-web variant appears exactly once in the library, and only in
      the branch that reads the operator's key *)
-  Test_support.check_int "one private-web construction" 1
-    (count_in_impls "Policy.with_private_web")
-  ;
+  Test_support.check_int "one private-web construction" 1 (count_in_impls "Policy.with_private_web");
   Test_support.check_int "one public-web construction (the other half of the same branch)" 1
-    (count_in_impls "Policy.with_public_web")
-  ;
+    (count_in_impls "Policy.with_public_web");
   Test_support.includes "the variant is chosen from the config key"
-    "if fetch.Config.allow_private_addresses then Policy.with_private_web" (source_of stack_source)
-  ;
+    "if fetch.Config.allow_private_addresses then Policy.with_private_web" (source_of stack_source);
   (* every non-web grant in the factory — providers, probes, agent — goes
      through with_endpoints, which has no private-web form to be given *)
   Test_support.includes "endpoint grants still exist" "Policy.with_endpoints"
-    (source_of endpoint_source)
-  ;
+    (source_of endpoint_source);
   (* the disclosure the switch has to make in --check output *)
   let check_src = Test_support.read_file "../lib/cli/cli_check.ml" in
-  Test_support.includes "--check says when the local reader is built with the private-web grant"
-    "private-web grant" check_src
+  Test_support.source_includes
+    "--check says when the local reader is built with the private-web grant" "private-web grant"
+    check_src
 
 let () =
   Mirage_crypto_rng_unix.use_default ();
   Alcotest.run "fetch-grant"
     [
-      ("the two web variants through the fetcher",
-       [
-         Alcotest.test_case "public-web refuses a loopback connect" `Quick
-           public_web_refuses_loopback
-       ; Alcotest.test_case "private-web serves a loopback page" `Quick private_web_serves_loopback
-       ; Alcotest.test_case "private-web filters no loopback address or port" `Quick
-           private_web_does_not_filter_loopback
-       ; Alcotest.test_case "private-web keeps the guardrail addresses out" `Quick
-           private_web_keeps_the_guardrail_addresses
-       ; Alcotest.test_case "private-web keeps the port axis" `Quick private_web_keeps_the_port_axis
-       ]);
-      ("the stack builder",
-       [
-         Alcotest.test_case "the default switch keeps the served reader public-only" `Quick
-           stack_off_refuses_loopback
-       ; Alcotest.test_case "the switch on builds the served reader private-web" `Quick
-           stack_on_serves_loopback
-       ]);
-      ("source pins", [ Alcotest.test_case "the widening is constructed once" `Quick widening_is_constructed_once ]);
+      ( "the two web variants through the fetcher",
+        [
+          Alcotest.test_case "public-web refuses a loopback connect" `Quick
+            public_web_refuses_loopback;
+          Alcotest.test_case "private-web serves a loopback page" `Quick private_web_serves_loopback;
+          Alcotest.test_case "private-web filters no loopback address or port" `Quick
+            private_web_does_not_filter_loopback;
+          Alcotest.test_case "private-web keeps the guardrail addresses out" `Quick
+            private_web_keeps_the_guardrail_addresses;
+          Alcotest.test_case "private-web keeps the port axis" `Quick
+            private_web_keeps_the_port_axis;
+        ] );
+      ( "the stack builder",
+        [
+          Alcotest.test_case "the default switch keeps the served reader public-only" `Quick
+            stack_off_refuses_loopback;
+          Alcotest.test_case "the switch on builds the served reader private-web" `Quick
+            stack_on_serves_loopback;
+        ] );
+      ( "source pins",
+        [
+          Alcotest.test_case "the widening is constructed once" `Quick widening_is_constructed_once;
+        ] );
     ]

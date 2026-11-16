@@ -1,9 +1,6 @@
 (** Fetching a URL safely, behind the Net authority grant. *)
 
-type fetched_image = Seekwright_wire.Page.image = {
-  media_type : string;
-  body : string;
-}
+type fetched_image = Seekwright_wire.Page.image = { media_type : string; body : string }
 
 type fetched_page = Seekwright_wire.Page.page = {
   url : string;
@@ -17,14 +14,9 @@ type fetched_page = Seekwright_wire.Page.page = {
   image : fetched_image option;
 }
 
-type refusal =
-  | Url_blocked of string
-  | Redirect_blocked of string
-  | Blocked of string
+type refusal = Url_blocked of string | Redirect_blocked of string | Blocked of string
 
-type error =
-  | Refusal of refusal
-  | Failed of string
+type error = Refusal of refusal | Failed of string
 
 type t
 
@@ -35,10 +27,9 @@ val fetch :
   offset:int ->
   max_chars:int option ->
   (fetched_page, error) result
-(** [fetch t url ~offset ~max_chars] fetches, extracts and windows to
-    the slice (offset, offset + max_chars) in codepoints. [max_chars = None] means the
-    fetcher's own configured default; {!total_chars} always reports the full
-    extraction, whatever the window. *)
+(** [fetch t url ~offset ~max_chars] fetches, extracts and windows to the slice (offset, offset +
+    max_chars) in codepoints. [max_chars = None] means the fetcher's own configured default;
+    {!total_chars} always reports the full extraction, whatever the window. *)
 
 val default_user_agent : string
 

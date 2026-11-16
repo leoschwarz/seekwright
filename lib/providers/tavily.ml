@@ -234,9 +234,7 @@ let request_body ~(country : string option) (q : Provider.search_query) =
     else fields
   in
   let fields =
-    match country with
-    | Some country -> fields @ [ ("country", `String country) ]
-    | None -> fields
+    match country with Some country -> fields @ [ ("country", `String country) ] | None -> fields
   in
   let fields =
     match q.Model.language with
@@ -268,10 +266,7 @@ let parse ~text_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   (* The limit slices the upstream list before anything is dropped, so a record
      that fails to parse still spends one of the slots. *)
@@ -316,9 +311,7 @@ let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let search ~cost_per_1k ~text_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
   let ( let* ) = Result.bind in
-  let country =
-    match q.Model.country with Some code -> country_param code | None -> None
-  in
+  let country = match q.Model.country with Some code -> country_param code | None -> None in
   let request =
     {
       Caps.Authority.Net.meth = `POST;

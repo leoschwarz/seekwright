@@ -4,10 +4,7 @@
 
 module Flags = Cli_flags
 
-let parse argv =
-  match Flags.parse argv with
-  | Ok opts -> Ok opts
-  | Error message -> Error message
+let parse argv = match Flags.parse argv with Ok opts -> Ok opts | Error message -> Error message
 
 let usage argv =
   match Flags.parse argv with
@@ -32,7 +29,9 @@ let test_check_live () =
   | Error m -> Alcotest.failf "--check --live: %s" m
 
 let test_http_with_bind_flags () =
-  match parse [ "--http"; "--host"; "0.0.0.0"; "--port"; "8080"; "--allowed-host"; "kb.example" ] with
+  match
+    parse [ "--http"; "--host"; "0.0.0.0"; "--port"; "8080"; "--allowed-host"; "kb.example" ]
+  with
   | Ok opts ->
       Alcotest.(check (option string)) "host" (Some "0.0.0.0") opts.Flags.host;
       Alcotest.(check (option int)) "port" (Some 8080) opts.Flags.port;
@@ -42,7 +41,8 @@ let test_http_with_bind_flags () =
 let test_allowed_host_repeats () =
   match parse [ "--http"; "--allowed-host"; "a.example"; "--allowed-host"; "b.example" ] with
   | Ok opts ->
-      Alcotest.(check (list string)) "both kept" [ "a.example"; "b.example" ] opts.Flags.allowed_hosts
+      Alcotest.(check (list string))
+        "both kept" [ "a.example"; "b.example" ] opts.Flags.allowed_hosts
   | Error m -> Alcotest.failf "repeated --allowed-host: %s" m
 
 let test_log_overrides () =
@@ -67,7 +67,8 @@ let test_metrics_combinations () =
     (fun argv ->
       Alcotest.(check string)
         (String.concat " " argv)
-        "--metrics reports and exits; it cannot be combined with --check, --live, --http, --host, --port or --allowed-host"
+        "--metrics reports and exits; it cannot be combined with --check, --live, --http, --host, \
+         --port or --allowed-host"
         (usage argv))
     [
       [ "--metrics"; "--check" ];
@@ -79,29 +80,27 @@ let test_metrics_combinations () =
     ]
 
 let test_json_needs_metrics () =
-  Alcotest.(check string) "--json alone"
-    "--json only makes sense together with --metrics"
-    (usage [ "--json" ])
+  Alcotest.(check string)
+    "--json alone" "--json only makes sense together with --metrics" (usage [ "--json" ])
 
 let test_live_needs_check () =
-  Alcotest.(check string) "--live alone"
-    "--live only makes sense together with --check"
-    (usage [ "--live" ])
+  Alcotest.(check string)
+    "--live alone" "--live only makes sense together with --check" (usage [ "--live" ])
 
 let test_bind_flags_need_http () =
   List.iter
     (fun argv ->
-      Alcotest.(check string) (String.concat " " argv)
-        "--host, --port and --allowed-host only make sense together with --http"
-        (usage argv))
+      Alcotest.(check string)
+        (String.concat " " argv)
+        "--host, --port and --allowed-host only make sense together with --http" (usage argv))
     [ [ "--host"; "h" ]; [ "--port"; "8080" ]; [ "--allowed-host"; "x" ] ]
 
 let test_unknown_flag () =
   Alcotest.(check string) "unknown long flag" "unknown flag --nonsense" (usage [ "--nonsense" ])
 
 let test_unexpected_positional () =
-  Alcotest.(check string) "positional to the server verb" "unexpected argument search"
-    (usage [ "search" ])
+  Alcotest.(check string)
+    "positional to the server verb" "unexpected argument search" (usage [ "search" ])
 
 let test_flag_needs_value () =
   List.iter
@@ -109,15 +108,19 @@ let test_flag_needs_value () =
     [ "--host"; "--port"; "--allowed-host"; "--log-level"; "--log-format" ]
 
 let test_port_must_be_a_port () =
-  Alcotest.(check string) "not a number" "--port needs a port number"
+  Alcotest.(check string)
+    "not a number" "--port needs a port number"
     (usage [ "--http"; "--port"; "eighty" ]);
-  Alcotest.(check string) "out of range" "--port needs a port number"
+  Alcotest.(check string)
+    "out of range" "--port needs a port number"
     (usage [ "--http"; "--port"; "70000" ])
 
 let test_log_values () =
-  Alcotest.(check string) "log level" "--log-level needs TRACE..CRITICAL"
+  Alcotest.(check string)
+    "log level" "--log-level needs TRACE..CRITICAL"
     (usage [ "--log-level"; "LOUD" ]);
-  Alcotest.(check string) "log format" "--log-format needs text or json"
+  Alcotest.(check string)
+    "log format" "--log-format needs text or json"
     (usage [ "--log-format"; "yaml" ])
 
 (* A config built in memory: [Config.load] reads a file, and the refusals are
@@ -140,48 +143,48 @@ let with_config text f =
       Sys.remove path;
       Alcotest.failf "the fixture config did not load: %s" message
 
-let opts = Cli_flags.
-  {
-    check = false;
-    live = false;
-    metrics = false;
-    json = false;
-    http = false;
-    host = None;
-    port = None;
-    allowed_hosts = [];
-    log_level = None;
-    log_format = None;
-  }
+let opts =
+  Cli_flags.
+    {
+      check = false;
+      live = false;
+      metrics = false;
+      json = false;
+      http = false;
+      host = None;
+      port = None;
+      allowed_hosts = [];
+      log_level = None;
+      log_format = None;
+    }
 
 let test_missing_api_key_names_the_variable () =
-  with_config
-    {|
+  with_config {|
 [providers]
 [providers.exa]
 enabled = true
-|}
-    (fun config ->
+|} (fun config ->
       match Cli_flags.startup_refusal config opts with
       | Error message ->
-          Alcotest.(check bool) "names the provider and its variable" true
+          Alcotest.(check bool)
+            "names the provider and its variable" true
             (try
-               ignore (Str.search_forward (Str.regexp_string "exa (SEEKWRIGHT_EXA_API_KEY)") message 0);
+               ignore
+                 (Str.search_forward (Str.regexp_string "exa (SEEKWRIGHT_EXA_API_KEY)") message 0);
                true
              with Not_found -> false)
       | Ok () -> Alcotest.fail "startup was allowed without the key")
 
 let test_unbuildable_fetch_primary_refused () =
-  with_config
-    {|
+  with_config {|
 [fetch]
 enabled = true
 primary = "tavily"
-|}
-    (fun config ->
+|} (fun config ->
       match Cli_flags.startup_refusal config opts with
       | Error message ->
-          Alcotest.(check bool) "names the route and the way out" true
+          Alcotest.(check bool)
+            "names the route and the way out" true
             (try
                ignore (Str.search_forward (Str.regexp_string "seekwright --check") message 0);
                true
@@ -189,17 +192,19 @@ primary = "tavily"
       | Ok () -> Alcotest.fail "startup was allowed on an unbuildable primary")
 
 let test_incomplete_agent_refused () =
-  with_config
-    {|
+  with_config {|
 [agent]
 enabled = true
-|}
-    (fun config ->
+|} (fun config ->
       match Cli_flags.startup_refusal config opts with
       | Error message ->
-          Alcotest.(check bool) "names what is missing" true
+          Alcotest.(check bool)
+            "names what is missing" true
             (try
-               ignore (Str.search_forward (Str.regexp_string "agent mode is enabled but missing") message 0);
+               ignore
+                 (Str.search_forward
+                    (Str.regexp_string "agent mode is enabled but missing")
+                    message 0);
                true
              with Not_found -> false)
       | Ok () -> Alcotest.fail "startup was allowed with agent mode half-configured")
@@ -235,8 +240,10 @@ let () =
         ] );
       ( "startup refusals",
         [
-          Alcotest.test_case "missing key names its variable" `Quick test_missing_api_key_names_the_variable;
-          Alcotest.test_case "unbuildable fetch.primary" `Quick test_unbuildable_fetch_primary_refused;
+          Alcotest.test_case "missing key names its variable" `Quick
+            test_missing_api_key_names_the_variable;
+          Alcotest.test_case "unbuildable fetch.primary" `Quick
+            test_unbuildable_fetch_primary_refused;
           Alcotest.test_case "incomplete agent mode" `Quick test_incomplete_agent_refused;
         ] );
     ]

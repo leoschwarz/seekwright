@@ -38,9 +38,7 @@ module Policy_net = Mcp_caps.Policy_net
 open Test_support
 
 let kind_testable =
-  Alcotest.testable
-    (fun ppf kind -> Format.pp_print_string ppf (Error.kind_to_string kind))
-    ( = )
+  Alcotest.testable (fun ppf kind -> Format.pp_print_string ppf (Error.kind_to_string kind)) ( = )
 
 (* [Alcotest.fail]'s optional [~here] means it cannot be passed to [kasprintf]
    directly: the wrapper is what keeps a failure message one [failf] call away. *)
@@ -49,9 +47,13 @@ let failf format = Format.kasprintf (fun message -> Alcotest.fail message) forma
 (* Several operations through one {e grant} is what a per-operation bound and a
    caller's budget are about; [repeat n f] says the count instead of hiding it in
    a unit list. *)
-let repeat n f = for _ = 1 to n do f () done
+let repeat n f =
+  for _ = 1 to n do
+    f ()
+  done
 
-let show_address address = Format.asprintf "%a" Eio.Net.Sockaddr.pp (address :> [< Eio.Net.Sockaddr.stream ])
+let show_address address =
+  Format.asprintf "%a" Eio.Net.Sockaddr.pp (address :> [< Eio.Net.Sockaddr.stream ])
 
 let address_testable =
   Alcotest.testable (fun ppf address -> Format.pp_print_string ppf (show_address address)) ( = )
@@ -125,9 +127,7 @@ let fixture env (_switch, _peer) request body =
   let headers = Http.Request.headers request in
   let resource = Http.Request.resource request in
   let path =
-    match String.index_opt resource '?' with
-    | Some i -> String.sub resource 0 i
-    | None -> resource
+    match String.index_opt resource '?' with Some i -> String.sub resource 0 i | None -> resource
   in
   let host = Option.value ~default:"" (Http.Header.get headers "host") in
   (* The body is drained whatever the route is, so [body_bytes] says what the
@@ -154,8 +154,7 @@ let fixture env (_switch, _peer) request body =
   in
   match path with
   | "/ok" -> Cohttp_eio.Server.respond_string ~status:`OK ~body:"the answer is 42\n" ()
-  | "/echo" ->
-      Cohttp_eio.Server.respond_string ~status:`OK ~body:body_text ()
+  | "/echo" -> Cohttp_eio.Server.respond_string ~status:`OK ~body:body_text ()
   | "/headers" ->
       let echoed =
         List.map
@@ -195,9 +194,7 @@ let with_fixture f =
   Eio.Switch.run @@ fun sw ->
   Atomic.set seen [];
   let server = Cohttp_eio.Server.make ~callback:(fixture env) () in
-  let socket =
-    Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -207,12 +204,9 @@ let with_fixture f =
   let stop, fill_stop = Eio.Promise.create () in
   let stopped, fill_stopped = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
-    Fun.protect
-      ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-      (fun () ->
-        Cohttp_eio.Server.run ~stop
-          ~on_error:(fun exn -> push faults exn)
-          socket server));
+      Fun.protect
+        ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+        (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun exn -> push faults exn) socket server));
   Fun.protect
     ~finally:(fun () ->
       Eio.Promise.resolve fill_stop ();
@@ -221,8 +215,8 @@ let with_fixture f =
   match List.filter (fun exn -> not (expected_fault exn)) (Atomic.get faults) with
   | [] -> ()
   | exns ->
-    failf "the fixture reported faults no case asked for: %s"
-      (String.concat "; " (List.map Printexc.to_string exns))
+      failf "the fixture reported faults no case asked for: %s"
+        (String.concat "; " (List.map Printexc.to_string exns))
 
 (* Raised instead of connecting, carrying the address the grant asked for. *)
 exception Simulated of Eio.Net.Sockaddr.stream
@@ -260,7 +254,7 @@ module Scripted_net = struct
     | Some addresses ->
         List.map
           (fun address ->
-            (`Tcp (Eio.Net.Ipaddr.of_raw (Ipaddr.to_octets (Ipaddr.of_string_exn address)), port)))
+            `Tcp (Eio.Net.Ipaddr.of_raw (Ipaddr.to_octets (Ipaddr.of_string_exn address)), port))
           addresses
     | None -> []
 
@@ -268,9 +262,7 @@ module Scripted_net = struct
 end
 
 let scripted_net ?(answers = []) () =
-  let state =
-    { Scripted_net.answers; queries = Atomic.make []; connects = Atomic.make [] }
-  in
+  let state = { Scripted_net.answers; queries = Atomic.make []; connects = Atomic.make [] } in
   (state, Eio.Resource.T (state, Eio.Net.Pi.network (module Scripted_net)))
 
 (* The same address in [Eio.Net]'s form, which is what the grant passes to
@@ -291,7 +283,8 @@ let with_endpoints ~net ~sw ?(max_response_bytes = Policy.default_max_response_b
   | Error error -> failf "with_endpoints: %s" (Error.render error)
   | Ok decision -> f decision
 
-let with_public_web ?port_policy ~net ~sw ?(max_response_bytes = Policy.default_max_response_bytes) f =
+let with_public_web ?port_policy ~net ~sw ?(max_response_bytes = Policy.default_max_response_bytes)
+    f =
   match Policy.with_public_web ?port_policy ~sw ~net ~max_response_bytes () with
   | Error error -> failf "with_public_web: %s" (Error.render error)
   | Ok decision -> f decision
@@ -304,7 +297,9 @@ let check_kind expected error =
   Alcotest.(check kind_testable) (Error.render error) expected (Error.kind error)
 
 let check_one_line error =
-  Alcotest.(check bool) ("the message is one line: " ^ Error.render error) true
+  Alcotest.(check bool)
+    ("the message is one line: " ^ Error.render error)
+    true
     (String.for_all (fun char -> Char.code char <> 10 && Char.code char <> 13) (Error.render error))
 
 (* Scheme, host and {e effective} port are pinned (§5), and the "allowed" rows
@@ -313,65 +308,92 @@ let check_one_line error =
 
 type expectation = Allowed | Denied | Invalid
 
-type row = {
-  name : string;
-  entry : Policy.endpoint;
-  target : int -> string;
-  expect : expectation;
-}
+type row = { name : string; entry : Policy.endpoint; target : int -> string; expect : expectation }
 
 let http_to host path port = Printf.sprintf "http://%s:%d%s" host port path
 
 let allowlist_rows : row list =
   [
-    { name = "the listed endpoint"; entry = endpoint "127.0.0.1";
-      target = http_to "127.0.0.1" "/ok"; expect = Allowed };
-    { name = "another name for the same machine"; entry = endpoint "127.0.0.1";
-      target = http_to "localhost" "/ok"; expect = Denied };
-    { name = "the other scheme"; entry = endpoint ~scheme:`Https "127.0.0.1";
-      target = http_to "127.0.0.1" "/ok"; expect = Denied };
-    { name = "a port the list does not name"; entry = endpoint "127.0.0.1";
-      target = http_to "127.0.0.1" "/ok"; expect = Denied } (* the caller's port is
+    {
+      name = "the listed endpoint";
+      entry = endpoint "127.0.0.1";
+      target = http_to "127.0.0.1" "/ok";
+      expect = Allowed;
+    };
+    {
+      name = "another name for the same machine";
+      entry = endpoint "127.0.0.1";
+      target = http_to "localhost" "/ok";
+      expect = Denied;
+    };
+    {
+      name = "the other scheme";
+      entry = endpoint ~scheme:`Https "127.0.0.1";
+      target = http_to "127.0.0.1" "/ok";
+      expect = Denied;
+    };
+    {
+      name = "a port the list does not name";
+      entry = endpoint "127.0.0.1";
+      target = http_to "127.0.0.1" "/ok";
+      expect = Denied;
+    }
+    (* the caller's port is
         the one the {e entry} names, changed below by [check_row] *);
-    { name = "a name nobody listed"; entry = endpoint "127.0.0.1";
-      target = http_to "elsewhere.test" "/ok"; expect = Denied };
-    { name = "userinfo in the URI"; entry = endpoint "127.0.0.1";
-      target = (fun port -> Printf.sprintf "http://user:pw@127.0.0.1:%d/ok" port); expect = Invalid };
-    { name = "a scheme that is not http"; entry = endpoint "127.0.0.1";
-      target = (fun _port -> "file:///etc/passwd"); expect = Invalid };
-    { name = "no host at all"; entry = endpoint "127.0.0.1";
-      target = (fun _port -> "http:///ok"); expect = Invalid };
+    {
+      name = "a name nobody listed";
+      entry = endpoint "127.0.0.1";
+      target = http_to "elsewhere.test" "/ok";
+      expect = Denied;
+    };
+    {
+      name = "userinfo in the URI";
+      entry = endpoint "127.0.0.1";
+      target = (fun port -> Printf.sprintf "http://user:pw@127.0.0.1:%d/ok" port);
+      expect = Invalid;
+    };
+    {
+      name = "a scheme that is not http";
+      entry = endpoint "127.0.0.1";
+      target = (fun _port -> "file:///etc/passwd");
+      expect = Invalid;
+    };
+    {
+      name = "no host at all";
+      entry = endpoint "127.0.0.1";
+      target = (fun _port -> "http:///ok");
+      expect = Invalid;
+    };
   ]
 
 (* One row, with the entry's port set to the fixture's: the row that asks for a
    port the list does not name gets a request two ports away instead. *)
 let check_row env sw port row =
-  let entry_port =
-    match row.name with
-    | "a port the list does not name" -> port + 1
-    | _ -> port
-  in
+  let entry_port = match row.name with "a port the list does not name" -> port + 1 | _ -> port in
   let entry = { row.entry with port = Some entry_port } in
   with_endpoints ~net:env#net ~sw [ entry ] (fun decision ->
-    let grant = grant_of ~env decision in
-    match request grant (row.target port) with
-    | Ok response ->
-        if row.expect <> Allowed then
-          failf "%s: allowed (status %d), expected %s" row.name response.status
-            (match row.expect with Denied -> "denied" | Invalid -> "invalid" | Allowed -> "allowed")
-        else begin
-          Alcotest.(check int) (row.name ^ ": status") 200 response.status;
-          Alcotest.(check string) (row.name ^ ": body") "the answer is 42\n" response.body
-        end
-    | Error error ->
-        (match row.expect with
-        | Allowed -> failf "%s: refused: %s" row.name (Error.render error)
-        | Denied -> check_kind Error.Denied error
-        | Invalid -> check_kind Error.Invalid error);
-        check_one_line error)
+      let grant = grant_of ~env decision in
+      match request grant (row.target port) with
+      | Ok response ->
+          if row.expect <> Allowed then
+            failf "%s: allowed (status %d), expected %s" row.name response.status
+              (match row.expect with
+              | Denied -> "denied"
+              | Invalid -> "invalid"
+              | Allowed -> "allowed")
+          else begin
+            Alcotest.(check int) (row.name ^ ": status") 200 response.status;
+            Alcotest.(check string) (row.name ^ ": body") "the answer is 42\n" response.body
+          end
+      | Error error ->
+          (match row.expect with
+          | Allowed -> failf "%s: refused: %s" row.name (Error.render error)
+          | Denied -> check_kind Error.Denied error
+          | Invalid -> check_kind Error.Invalid error);
+          check_one_line error)
 
-let allowlist_table () = with_fixture (fun env sw port ->
-  List.iter (fun row -> check_row env sw port row) allowlist_rows)
+let allowlist_table () =
+  with_fixture (fun env sw port -> List.iter (fun row -> check_row env sw port row) allowlist_rows)
 
 (* The same endpoint written two ways is one endpoint; a duplicate is a startup
    mistake an operator wants told about, not a first-match rule. *)
@@ -386,15 +408,21 @@ let construction_refusals () =
         check_one_line error
   in
   check "an empty endpoint list" [] Error.Invalid;
-  check "the same host twice, in two cases" [ endpoint "api.test"; endpoint "API.test" ] Error.Invalid;
+  check "the same host twice, in two cases"
+    [ endpoint "api.test"; endpoint "API.test" ]
+    Error.Invalid;
   check "the default port spelled out beside the shorthand"
     [ endpoint ~scheme:`Https "api.test"; endpoint ~scheme:`Https ~port:443 "api.test" ]
     Error.Invalid;
   check "port zero" [ endpoint ~port:0 "api.test" ] Error.Invalid;
   check "a port past the end of the range" [ endpoint ~port:65_536 "api.test" ] Error.Invalid;
   check "a host that is neither a name nor an address" [ endpoint "not a host" ] Error.Invalid;
-  check "a non-positive response ceiling" ~max_response_bytes:0 [ endpoint "api.test" ] Error.Invalid;
-  check "an absurd response ceiling" ~max_response_bytes:max_int [ endpoint "api.test" ] Error.Invalid
+  check "a non-positive response ceiling" ~max_response_bytes:0
+    [ endpoint "api.test" ]
+    Error.Invalid;
+  check "an absurd response ceiling" ~max_response_bytes:max_int
+    [ endpoint "api.test" ]
+    Error.Invalid
 
 (* An http-only grant speaks no https, and the scheme half of the pinned endpoint
    is what says so — before anything is looked up. *)
@@ -402,36 +430,40 @@ let scheme_is_pinned () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let state, net = scripted_net ~answers:[ ("api.test", [ "93.184.216.34" ]) ] () in
-  with_endpoints ~net ~sw [ endpoint ~scheme:`Https "api.test" ] (fun decision ->
-    let grant = grant_of ~env decision in
-    (match request grant "http://api.test/search" with
-     | Error error ->
-         check_kind Error.Denied error;
-         (* The scheme is part of the pinned endpoint, so the refusal lands
+  with_endpoints ~net ~sw
+    [ endpoint ~scheme:`Https "api.test" ]
+    (fun decision ->
+      let grant = grant_of ~env decision in
+      match request grant "http://api.test/search" with
+      | Error error ->
+          check_kind Error.Denied error;
+          (* The scheme is part of the pinned endpoint, so the refusal lands
             before the name is looked up. *)
-         Alcotest.(check (list (pair string string))) "no resolver query" []
-           (Atomic.get state.queries);
-         Alcotest.(check (list address_testable)) "no connection" []
-           (Atomic.get state.connects)
-     | Ok _ -> failf "an http request answered an https endpoint"
-     | exception Simulated address ->
-         failf "an http request reached an https endpoint at %s" (show_address address)))
+          Alcotest.(check (list (pair string string)))
+            "no resolver query" [] (Atomic.get state.queries);
+          Alcotest.(check (list address_testable)) "no connection" [] (Atomic.get state.connects)
+      | Ok _ -> failf "an http request answered an https endpoint"
+      | exception Simulated address ->
+          failf "an http request reached an https endpoint at %s" (show_address address))
 
 let unlisted_name_asks_nothing () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let state, net = scripted_net ~answers:[ ("api.test", [ "93.184.216.34" ]) ] () in
-  with_endpoints ~net ~sw [ endpoint "api.test" ] (fun decision ->
-    let grant = grant_of ~env decision in
-    match request grant "http://elsewhere.test/x" with
-    | Error error ->
-        check_kind Error.Denied error;
-        check_one_line error;
-        (* The refusal is worth what it costs: nothing. No query, no socket. *)
-        Alcotest.(check (list (pair string string))) "no resolver query" [] (Atomic.get state.queries);
-        Alcotest.(check (list address_testable)) "no connection" [] (Atomic.get state.connects)
-    | Ok _ -> failf "an unlisted name was served"
-    | exception Simulated address -> failf "an unlisted name reached %s" (show_address address))
+  with_endpoints ~net ~sw
+    [ endpoint "api.test" ]
+    (fun decision ->
+      let grant = grant_of ~env decision in
+      match request grant "http://elsewhere.test/x" with
+      | Error error ->
+          check_kind Error.Denied error;
+          check_one_line error;
+          (* The refusal is worth what it costs: nothing. No query, no socket. *)
+          Alcotest.(check (list (pair string string)))
+            "no resolver query" [] (Atomic.get state.queries);
+          Alcotest.(check (list address_testable)) "no connection" [] (Atomic.get state.connects)
+      | Ok _ -> failf "an unlisted name was served"
+      | exception Simulated address -> failf "an unlisted name reached %s" (show_address address))
 
 type address_case = { answer : string; may_connect : bool }
 
@@ -490,23 +522,24 @@ let public_web_address_table () =
       Eio.Switch.run @@ fun sw ->
       let state, net = scripted_net ~answers:[ ("api.test", [ testCase.answer ]) ] () in
       with_public_web ~net ~sw (fun decision ->
-        let grant = grant_of ~env decision in
-        match request grant "http://api.test/x" with
-        | exception Simulated address ->
-            if not testCase.may_connect then
-              failf "%s: %s was allowed, to %s" name testCase.answer (show_address address);
-            Alcotest.(check (list address_testable)) name
-              [ `Tcp (eio_address testCase.answer, 80) ]
-              (Atomic.get state.connects)
-        | Error error ->
-            if testCase.may_connect then
-              failf "%s: %s was refused: %s" name testCase.answer (Error.render error);
-            check_kind Error.Denied error;
-            check_one_line error;
-            Alcotest.(check (list address_testable)) (name ^ ": no connection") []
-              (Atomic.get state.connects)
-        | Ok response ->
-            failf "%s: %s was served a response (status %d)" name testCase.answer response.status))
+          let grant = grant_of ~env decision in
+          match request grant "http://api.test/x" with
+          | exception Simulated address ->
+              if not testCase.may_connect then
+                failf "%s: %s was allowed, to %s" name testCase.answer (show_address address);
+              Alcotest.(check (list address_testable))
+                name
+                [ `Tcp (eio_address testCase.answer, 80) ]
+                (Atomic.get state.connects)
+          | Error error ->
+              if testCase.may_connect then
+                failf "%s: %s was refused: %s" name testCase.answer (Error.render error);
+              check_kind Error.Denied error;
+              check_one_line error;
+              Alcotest.(check (list address_testable))
+                (name ^ ": no connection") [] (Atomic.get state.connects)
+          | Ok response ->
+              failf "%s: %s was served a response (status %d)" name testCase.answer response.status))
     address_rows
 
 (* The same smuggled forms as IP-literal URLs, which is the shape §5 is about:
@@ -529,16 +562,16 @@ let public_web_refuses_smuggled_ip_literals () =
       Eio.Switch.run @@ fun sw ->
       let state, net = scripted_net ~answers:[ (literal, [ literal ]) ] () in
       with_public_web ~net ~sw (fun decision ->
-        let grant = grant_of ~env decision in
-        match request grant (Printf.sprintf "http://[%s]/" literal) with
-        | Error error ->
-            check_kind Error.Denied error;
-            check_one_line error;
-            Alcotest.(check (list address_testable)) (name ^ ": no connection") []
-              (Atomic.get state.connects)
-        | Ok response -> failf "%s: %s was served (status %d)" name literal response.status
-        | exception Simulated address ->
-            failf "%s: %s was allowed, to %s" name literal (show_address address)))
+          let grant = grant_of ~env decision in
+          match request grant (Printf.sprintf "http://[%s]/" literal) with
+          | Error error ->
+              check_kind Error.Denied error;
+              check_one_line error;
+              Alcotest.(check (list address_testable))
+                (name ^ ": no connection") [] (Atomic.get state.connects)
+          | Ok response -> failf "%s: %s was served (status %d)" name literal response.status
+          | exception Simulated address ->
+              failf "%s: %s was allowed, to %s" name literal (show_address address)))
     literals;
   (* The literal that really is public passes the same single check, so the rows
      above prove a refusal of the smuggled forms rather than of IPv6 at all. *)
@@ -547,13 +580,15 @@ let public_web_refuses_smuggled_ip_literals () =
   let literal = "2001:4860:4860::8888" in
   let _state, net = scripted_net ~answers:[ (literal, [ literal ]) ] () in
   with_public_web ~net ~sw (fun decision ->
-    let grant = grant_of ~env decision in
-    match request grant (Printf.sprintf "http://[%s]/" literal) with
-    | exception Simulated address ->
-        Alcotest.(check address_testable) "the public literal" (`Tcp (eio_address literal, 80))
-          address
-    | Error error -> failf "a public literal was refused: %s" (Error.render error)
-    | Ok response -> failf "a public literal was served (status %d)" response.status)
+      let grant = grant_of ~env decision in
+      match request grant (Printf.sprintf "http://[%s]/" literal) with
+      | exception Simulated address ->
+          Alcotest.(check address_testable)
+            "the public literal"
+            (`Tcp (eio_address literal, 80))
+            address
+      | Error error -> failf "a public literal was refused: %s" (Error.render error)
+      | Ok response -> failf "a public literal was served (status %d)" response.status)
 
 (* The default port mode is one rule: the scheme's default port, and an explicit
    port is [with_endpoints]' or [Any_port]'s business. *)
@@ -562,14 +597,15 @@ let public_web_refuses_other_ports () =
   Eio.Switch.run @@ fun sw ->
   let state, net = scripted_net ~answers:[ ("api.test", [ "93.184.216.34" ]) ] () in
   with_public_web ~net ~sw (fun decision ->
-    let grant = grant_of ~env decision in
-    match request grant "http://api.test:8080/x" with
-    | Error error ->
-        check_kind Error.Denied error;
-        (* Refused on the port, so the name was never looked up. *)
-        Alcotest.(check (list (pair string string))) "no resolver query" [] (Atomic.get state.queries)
-    | Ok _ -> failf "a non-default port was served"
-    | exception Simulated address -> failf "connected to %s" (show_address address))
+      let grant = grant_of ~env decision in
+      match request grant "http://api.test:8080/x" with
+      | Error error ->
+          check_kind Error.Denied error;
+          (* Refused on the port, so the name was never looked up. *)
+          Alcotest.(check (list (pair string string)))
+            "no resolver query" [] (Atomic.get state.queries)
+      | Ok _ -> failf "a non-default port was served"
+      | exception Simulated address -> failf "connected to %s" (show_address address))
 
 (* [Any_port] is the seekwright mode: any port 1..65535 on a public destination,
    while the address rule is untouched. :8443 is accepted (the oracle's own
@@ -581,24 +617,28 @@ let public_web_any_port () =
     Eio.Switch.run @@ fun sw ->
     let state, net = scripted_net ~answers () in
     with_public_web ~port_policy:Policy.Any_port ~net ~sw (fun decision ->
-      let grant = grant_of ~env decision in
-      let outcome =
-        match request grant uri with
-        | exception Simulated address -> Ok address
-        | Error error -> Error error
-        | Ok response ->
-            Error
-              (Error.make Error.Failed
-                 ~message:(Printf.sprintf "served a response (status %d)" response.status))
-      in
-      (outcome, Atomic.get state.connects))
+        let grant = grant_of ~env decision in
+        let outcome =
+          match request grant uri with
+          | exception Simulated address -> Ok address
+          | Error error -> Error error
+          | Ok response ->
+              Error
+                (Error.make Error.Failed
+                   ~message:(Printf.sprintf "served a response (status %d)" response.status))
+        in
+        (outcome, Atomic.get state.connects))
   in
   (match run "http://api.test:8443/x" with
   | Ok address, connects ->
-      Alcotest.(check address_testable) "the 8443 port is connected to"
-        (`Tcp (eio_address "93.184.216.34", 8443)) address;
-      Alcotest.(check (list address_testable)) "and it is the only connection"
-        [ `Tcp (eio_address "93.184.216.34", 8443) ] connects
+      Alcotest.(check address_testable)
+        "the 8443 port is connected to"
+        (`Tcp (eio_address "93.184.216.34", 8443))
+        address;
+      Alcotest.(check (list address_testable))
+        "and it is the only connection"
+        [ `Tcp (eio_address "93.184.216.34", 8443) ]
+        connects
   | Error error, _ -> failf "a public host on :8443 was refused: %s" (Error.render error));
   List.iter
     (fun (uri, name) ->
@@ -622,24 +662,29 @@ let public_web_any_port () =
 let connect_uses_the_vetted_answer () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  let state, net =
-    scripted_net ~answers:[ ("api.test", [ "93.184.216.34"; "127.0.0.1" ]) ] ()
-  in
-  with_endpoints ~net ~sw [ endpoint "api.test" ] (fun decision ->
-    let grant = grant_of ~env decision in
-    (match request grant "http://api.test/search?q=x" with
-    | exception Simulated address ->
-        Alcotest.(check address_testable) "the address the grant asked to connect to"
-          (`Tcp (eio_address "93.184.216.34", 80)) address;
-        Alcotest.(check (list address_testable)) "and that is the only connection it tried"
-          [ `Tcp (eio_address "93.184.216.34", 80) ]
-          (Atomic.get state.connects)
-    | Ok response -> failf "reached a peer (status %d)" response.status
-    | Error error -> failf "refused: %s" (Error.render error));
-    (* One lookup for one request: the connector cohttp is given ignores the URI,
+  let state, net = scripted_net ~answers:[ ("api.test", [ "93.184.216.34"; "127.0.0.1" ]) ] () in
+  with_endpoints ~net ~sw
+    [ endpoint "api.test" ]
+    (fun decision ->
+      let grant = grant_of ~env decision in
+      (match request grant "http://api.test/search?q=x" with
+      | exception Simulated address ->
+          Alcotest.(check address_testable)
+            "the address the grant asked to connect to"
+            (`Tcp (eio_address "93.184.216.34", 80))
+            address;
+          Alcotest.(check (list address_testable))
+            "and that is the only connection it tried"
+            [ `Tcp (eio_address "93.184.216.34", 80) ]
+            (Atomic.get state.connects)
+      | Ok response -> failf "reached a peer (status %d)" response.status
+      | Error error -> failf "refused: %s" (Error.render error));
+      (* One lookup for one request: the connector cohttp is given ignores the URI,
        so there is no second lookup to race with the first. *)
-    Alcotest.(check (list (pair string string))) "one resolver query" [ ("api.test", "80") ]
-      (Atomic.get state.queries))
+      Alcotest.(check (list (pair string string)))
+        "one resolver query"
+        [ ("api.test", "80") ]
+        (Atomic.get state.queries))
 
 (* The asymmetry the two constructors exist for: [with_endpoints] pins {e names},
    so a listed name that resolves to a private address is reachable — which is how
@@ -649,15 +694,18 @@ let listed_names_may_reach_private_addresses () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let state, net = scripted_net ~answers:[ ("searxng.internal", [ "10.0.0.7" ]) ] () in
-  with_endpoints ~net ~sw [ endpoint ~port:8080 "searxng.internal" ] (fun decision ->
-    let grant = grant_of ~env decision in
-    (match request grant "http://searxng.internal:8080/" with
-    | exception Simulated _ -> ()
-    | Error error -> failf "a listed private endpoint was refused: %s" (Error.render error)
-    | Ok response -> failf "reached a peer (status %d)" response.status);
-    Alcotest.(check (list address_testable)) "the listed private address"
-      [ `Tcp (eio_address "10.0.0.7", 8080) ]
-      (Atomic.get state.connects))
+  with_endpoints ~net ~sw
+    [ endpoint ~port:8080 "searxng.internal" ]
+    (fun decision ->
+      let grant = grant_of ~env decision in
+      (match request grant "http://searxng.internal:8080/" with
+      | exception Simulated _ -> ()
+      | Error error -> failf "a listed private endpoint was refused: %s" (Error.render error)
+      | Ok response -> failf "reached a peer (status %d)" response.status);
+      Alcotest.(check (list address_testable))
+        "the listed private address"
+        [ `Tcp (eio_address "10.0.0.7", 8080) ]
+        (Atomic.get state.connects))
 
 (* A listed name whose {e every} answer is refused by nothing: an endpoint list
    vetoes nothing about addresses, so all answers are connectable. This is the
@@ -666,13 +714,16 @@ let every_answer_of_a_listed_name_is_connectable () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let state, net = scripted_net ~answers:[ ("api.test", [ "169.254.169.254" ]) ] () in
-  with_endpoints ~net ~sw [ endpoint "api.test" ] (fun decision ->
-    let grant = grant_of ~env decision in
-    match request grant "http://api.test/" with
-    | exception Simulated _ -> ()
-    | Error error -> failf "a listed name's answer was refused: %s" (Error.render error)
-    | Ok response -> failf "reached a peer (status %d)" response.status);
-  Alcotest.(check (list address_testable)) "the metadata address, because the operator named the host"
+  with_endpoints ~net ~sw
+    [ endpoint "api.test" ]
+    (fun decision ->
+      let grant = grant_of ~env decision in
+      match request grant "http://api.test/" with
+      | exception Simulated _ -> ()
+      | Error error -> failf "a listed name's answer was refused: %s" (Error.render error)
+      | Ok response -> failf "reached a peer (status %d)" response.status);
+  Alcotest.(check (list address_testable))
+    "the metadata address, because the operator named the host"
     [ `Tcp (eio_address "169.254.169.254", 80) ]
     (Atomic.get state.connects)
 
@@ -699,9 +750,10 @@ let vet_public_host_cases () =
   (match vet [ ("split.test", [ "93.184.216.34"; "10.0.0.7"; "127.0.0.1" ]) ] "split.test" with
   | Error error, connects, _ ->
       check_kind Error.Denied error;
-      Alcotest.(check string) "the oracle's sentence, naming the sorted blocked address"
-        "split.test resolves to a non-public address (10.0.0.7); fetching private, loopback \
-         and link-local addresses is disabled"
+      Alcotest.(check string)
+        "the oracle's sentence, naming the sorted blocked address"
+        "split.test resolves to a non-public address (10.0.0.7); fetching private, loopback and \
+         link-local addresses is disabled"
         (Error.message error);
       Alcotest.(check (list address_testable)) "a refusal connects to nothing" [] connects
   | Ok (), _, _ -> failf "a mixed A/AAAA answer passed the vet");
@@ -712,8 +764,8 @@ let vet_public_host_cases () =
       match vet answers name with
       | Error error, _, _ ->
           check_kind Error.Unavailable error;
-          Alcotest.(check string) "could not resolve" ("could not resolve " ^ name)
-            (Error.message error)
+          Alcotest.(check string)
+            "could not resolve" ("could not resolve " ^ name) (Error.message error)
       | Ok (), _, _ -> failf "%s passed the vet" name)
     [ ("gone.test", []); ("missing.test", [ ("other.test", [ "93.184.216.34" ]) ]) ];
   (* IP literals meet the same table, with no lookup at all — getaddrinfo would
@@ -724,33 +776,41 @@ let vet_public_host_cases () =
       Alcotest.(check (list (pair string string))) "an IP literal queries nothing" [] queries;
       Alcotest.(check (list address_testable)) "and connects to nothing" [] connects;
       match outcome with
-      | Ok () ->
-          if expected <> "" then failf "%s passed the vet" literal
+      | Ok () -> if expected <> "" then failf "%s passed the vet" literal
       | Error error ->
           check_kind Error.Denied error;
-          Alcotest.(check string) "the oracle's literal sentence"
-            (Printf.sprintf "%s is not a public address" literal) (Error.message error))
-    [ ("93.184.216.34", ""); ("127.0.0.1", "refused"); ("169.254.169.254", "refused");
-      ("100.64.0.1", "refused") ]
+          Alcotest.(check string)
+            "the oracle's literal sentence"
+            (Printf.sprintf "%s is not a public address" literal)
+            (Error.message error))
+    [
+      ("93.184.216.34", "");
+      ("127.0.0.1", "refused");
+      ("169.254.169.254", "refused");
+      ("100.64.0.1", "refused");
+    ]
 
 let response_ceiling () =
   with_fixture (fun env sw port ->
-    let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
-    with_endpoints ~net:env#net ~sw ~max_response_bytes:4096 [ endpoint ~port "127.0.0.1" ]
-    @@ (fun decision ->
+      let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
+      with_endpoints ~net:env#net ~sw ~max_response_bytes:4096 [ endpoint ~port "127.0.0.1" ]
+      @@ fun decision ->
       let grant = grant_of ~env decision in
       (* The grant's own ceiling, on a chunked body with no [Content-Length] to
          trust (§5). *)
       (match request grant (uri "/big") with
-      | Ok response -> failf "served %d bytes through a 4096-byte ceiling" (String.length response.body)
+      | Ok response ->
+          failf "served %d bytes through a 4096-byte ceiling" (String.length response.body)
       | Error error ->
           check_kind Error.Denied error;
           check_one_line error;
-          Alcotest.(check bool) "the sentence names the ceiling, not the page" true
+          Alcotest.(check bool)
+            "the sentence names the ceiling, not the page" true
             (contains ~haystack:(Error.message error) ~needle:"4096"));
       (* A caller may lower it. *)
       (match request ~max_response_bytes:256 grant (uri "/big") with
-      | Ok response -> failf "a 256-byte caller ceiling served %d bytes" (String.length response.body)
+      | Ok response ->
+          failf "a 256-byte caller ceiling served %d bytes" (String.length response.body)
       | Error error -> check_kind Error.Denied error);
       (* A caller may not raise it: asking for a megabyte still meets 4096. *)
       (match request ~max_response_bytes:1_048_576 grant (uri "/big") with
@@ -758,162 +818,193 @@ let response_ceiling () =
       | Error error -> check_kind Error.Denied error);
       (* And a ceiling that fits the body reads the whole chunked stream. *)
       with_endpoints ~net:env#net ~sw ~max_response_bytes:65_536 [ endpoint ~port "127.0.0.1" ]
-      @@ (fun wide ->
-        let wide_grant = grant_of ~env wide in
-        match request wide_grant (uri "/big") with
-        | Ok response ->
-            Alcotest.(check int) "the whole chunked stream" 65_536 (String.length response.body)
-        | Error error -> failf "a fitting ceiling refused: %s" (Error.render error))))
+      @@ fun wide ->
+      let wide_grant = grant_of ~env wide in
+      match request wide_grant (uri "/big") with
+      | Ok response ->
+          Alcotest.(check int) "the whole chunked stream" 65_536 (String.length response.body)
+      | Error error -> failf "a fitting ceiling refused: %s" (Error.render error))
 
 let redirects () =
   with_fixture (fun env sw port ->
-    let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
-    with_endpoints ~net:env#net ~sw [ endpoint ~port "127.0.0.1" ] (fun decision ->
-      let grant = grant_of ~env decision in
-      (match request grant (uri "/redirect-elsewhere") with
-      | Error error ->
-          check_kind Error.Denied error;
-          check_one_line error;
-          Alcotest.(check bool) "the sentence names the target's host" true
-            (contains ~haystack:(Error.message error) ~needle:"elsewhere.test")
-      | Ok response -> failf "an off-list Location was returned as status %d" response.status
-      | exception Simulated address -> failf "an off-list Location was connected to: %s"
-          (show_address address));
-      (let mark = requests () in
-       match request grant (uri "/redirect-here") with
-      | Ok response ->
-          Alcotest.(check int) "a listed redirect stays a 302" 302 response.status;
-          (* Nothing was followed: the fixture saw the one request only. *)
-          Alcotest.(check (list string)) "and nothing was followed" [ "/redirect-here" ]
-            (paths_since mark)
-      | Error error -> failf "a listed redirect was refused: %s" (Error.render error)
-      | exception Simulated address -> failf "a redirect was connected to: %s" (show_address address));
-      (match request grant (uri "/redirect-alias") with
-      | Error error -> check_kind Error.Denied error
-      | Ok response -> failf "a redirect to an unlisted name was allowed (status %d)" response.status
-      | exception Simulated _ -> failf "a redirect was connected to");
-      match request grant (uri "/redirect-relative") with
-      | Ok response -> Alcotest.(check int) "a relative Location stays a 302" 302 response.status
-      | Error error -> failf "a relative Location was refused: %s" (Error.render error)
-      | exception Simulated _ -> failf "a relative Location was connected to"))
+      let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
+      with_endpoints ~net:env#net ~sw
+        [ endpoint ~port "127.0.0.1" ]
+        (fun decision ->
+          let grant = grant_of ~env decision in
+          (match request grant (uri "/redirect-elsewhere") with
+          | Error error ->
+              check_kind Error.Denied error;
+              check_one_line error;
+              Alcotest.(check bool)
+                "the sentence names the target's host" true
+                (contains ~haystack:(Error.message error) ~needle:"elsewhere.test")
+          | Ok response -> failf "an off-list Location was returned as status %d" response.status
+          | exception Simulated address ->
+              failf "an off-list Location was connected to: %s" (show_address address));
+          (let mark = requests () in
+           match request grant (uri "/redirect-here") with
+           | Ok response ->
+               Alcotest.(check int) "a listed redirect stays a 302" 302 response.status;
+               (* Nothing was followed: the fixture saw the one request only. *)
+               Alcotest.(check (list string))
+                 "and nothing was followed" [ "/redirect-here" ] (paths_since mark)
+           | Error error -> failf "a listed redirect was refused: %s" (Error.render error)
+           | exception Simulated address ->
+               failf "a redirect was connected to: %s" (show_address address));
+          (match request grant (uri "/redirect-alias") with
+          | Error error -> check_kind Error.Denied error
+          | Ok response ->
+              failf "a redirect to an unlisted name was allowed (status %d)" response.status
+          | exception Simulated _ -> failf "a redirect was connected to");
+          match request grant (uri "/redirect-relative") with
+          | Ok response ->
+              Alcotest.(check int) "a relative Location stays a 302" 302 response.status
+          | Error error -> failf "a relative Location was refused: %s" (Error.render error)
+          | exception Simulated _ -> failf "a relative Location was connected to"))
 
 let request_headers () =
   with_fixture (fun env sw port ->
-    let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
-    with_endpoints ~net:env#net ~sw [ endpoint ~port "127.0.0.1" ] (fun decision ->
-      let grant = grant_of ~env decision in
-      (* The headers that decide which virtual host is served, where one request
+      let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
+      with_endpoints ~net:env#net ~sw
+        [ endpoint ~port "127.0.0.1" ]
+        (fun decision ->
+          let grant = grant_of ~env decision in
+          (* The headers that decide which virtual host is served, where one request
          ends, and what happens to the connection are the authority's (§5). *)
-      List.iter
-        (fun name ->
-          match request ~headers:[ (name, "anything") ] grant (uri "/ok") with
-          | Ok _ -> failf "a caller set the %s header and it was sent" name
-          | Error error -> check_kind Error.Invalid error)
-        [ "host"; "Host"; "content-length"; "transfer-encoding"; "connection"; "upgrade" ];
-      (* A name or value that could split a request is refused, and the refusal
+          List.iter
+            (fun name ->
+              match request ~headers:[ (name, "anything") ] grant (uri "/ok") with
+              | Ok _ -> failf "a caller set the %s header and it was sent" name
+              | Error error -> check_kind Error.Invalid error)
+            [ "host"; "Host"; "content-length"; "transfer-encoding"; "connection"; "upgrade" ];
+          (* A name or value that could split a request is refused, and the refusal
          does not quote the value. *)
-      (match request ~headers:[ ("x-tool", "a\r\nX: b") ] grant (uri "/ok") with
-      | Ok _ -> failf "a header value with CRLF was sent"
-      | Error error ->
-          check_kind Error.Invalid error;
-          Alcotest.(check bool) "the message does not quote the value" false
-            (contains ~haystack:(Error.message error) ~needle:"X: b"));
-      (match request ~headers:[ ("bad name", "x") ] grant (uri "/ok") with
-      | Ok _ -> failf "a header name with a space was sent"
-      | Error error -> check_kind Error.Invalid error);
-      (* The Host the fixture sees is the authority's, not the caller's. *)
-      (match request ~headers:[ ("x-tool", "seekwright-test") ] grant (uri "/headers") with
-      | Ok response ->
-          Alcotest.(check string) "the Host header the fixture received"
-            (Printf.sprintf "host=127.0.0.1:%d" port)
-            (List.nth (String.split_on_char '\n' response.body) 0);
-          Alcotest.(check string) "and the caller's own header arrived" "x-tool=seekwright-test"
-            (List.nth (String.split_on_char '\n' response.body) 1)
-      | Error error -> failf "the header echo failed: %s" (Error.render error));
-      (* A method and a body the caller chose, delivered. *)
-      let mark = requests () in
-      match request ~meth:`POST ~body:(Bytes.to_string (Bytes.make 4096 'x')) grant (uri "/echo") with
-      | Ok response ->
-          Alcotest.(check string) "the body round-tripped" (Bytes.to_string (Bytes.make 4096 'x'))
-            response.body;
-          Alcotest.(check (list string)) "with the path the caller named" [ "/echo" ]
-            (paths_since mark);
-          (* What the fixture {e saw} is the other half of the round trip: the
+          (match request ~headers:[ ("x-tool", "a\r\nX: b") ] grant (uri "/ok") with
+          | Ok _ -> failf "a header value with CRLF was sent"
+          | Error error ->
+              check_kind Error.Invalid error;
+              Alcotest.(check bool)
+                "the message does not quote the value" false
+                (contains ~haystack:(Error.message error) ~needle:"X: b"));
+          (match request ~headers:[ ("bad name", "x") ] grant (uri "/ok") with
+          | Ok _ -> failf "a header name with a space was sent"
+          | Error error -> check_kind Error.Invalid error);
+          (* The Host the fixture sees is the authority's, not the caller's. *)
+          (match request ~headers:[ ("x-tool", "seekwright-test") ] grant (uri "/headers") with
+          | Ok response ->
+              Alcotest.(check string)
+                "the Host header the fixture received"
+                (Printf.sprintf "host=127.0.0.1:%d" port)
+                (List.nth (String.split_on_char '\n' response.body) 0);
+              Alcotest.(check string)
+                "and the caller's own header arrived" "x-tool=seekwright-test"
+                (List.nth (String.split_on_char '\n' response.body) 1)
+          | Error error -> failf "the header echo failed: %s" (Error.render error));
+          (* A method and a body the caller chose, delivered. *)
+          let mark = requests () in
+          match
+            request ~meth:`POST ~body:(Bytes.to_string (Bytes.make 4096 'x')) grant (uri "/echo")
+          with
+          | Ok response -> (
+              Alcotest.(check string)
+                "the body round-tripped"
+                (Bytes.to_string (Bytes.make 4096 'x'))
+                response.body;
+              Alcotest.(check (list string))
+                "with the path the caller named" [ "/echo" ] (paths_since mark);
+              (* What the fixture {e saw} is the other half of the round trip: the
              method and body the caller chose, and the [Host] the authority wrote
              rather than one the caller supplied. *)
-          (match Atomic.get seen with
-          | entry :: _ ->
-              Alcotest.(check string) "the method the fixture saw" "POST" entry.method_;
-              Alcotest.(check int) "the request body the fixture saw" 4096 entry.body_bytes;
-              Alcotest.(check string) "the Host the authority sent"
-                (Printf.sprintf "127.0.0.1:%d" port) entry.host
-          | [] -> failf "the fixture recorded no request")
-      | Error error -> failf "the POST echo failed: %s" (Error.render error)))
+              match Atomic.get seen with
+              | entry :: _ ->
+                  Alcotest.(check string) "the method the fixture saw" "POST" entry.method_;
+                  Alcotest.(check int) "the request body the fixture saw" 4096 entry.body_bytes;
+                  Alcotest.(check string)
+                    "the Host the authority sent"
+                    (Printf.sprintf "127.0.0.1:%d" port)
+                    entry.host
+              | [] -> failf "the fixture recorded no request")
+          | Error error -> failf "the POST echo failed: %s" (Error.render error)))
 
 (* A request body over the authority's own bound is refused before it is sent. *)
 let request_body_bound () =
   with_fixture (fun env sw port ->
-    with_endpoints ~net:env#net ~sw [ endpoint ~port "127.0.0.1" ] (fun decision ->
-      let grant = grant_of ~env decision in
-      match request ~meth:`POST ~body:(Bytes.to_string (Bytes.make 1_000_000 'x'))
-              grant (Printf.sprintf "http://127.0.0.1:%d/echo" port)
-      with
-      | Ok _ -> failf "a megabyte request body was sent"
-      | Error error ->
-          check_kind Error.Invalid error;
-          (* Refused before the socket, so the fixture saw nothing. *)
-          Alcotest.(check int) "the fixture was not called" 0 (List.length (Atomic.get seen))))
+      with_endpoints ~net:env#net ~sw
+        [ endpoint ~port "127.0.0.1" ]
+        (fun decision ->
+          let grant = grant_of ~env decision in
+          match
+            request ~meth:`POST
+              ~body:(Bytes.to_string (Bytes.make 1_000_000 'x'))
+              grant
+              (Printf.sprintf "http://127.0.0.1:%d/echo" port)
+          with
+          | Ok _ -> failf "a megabyte request body was sent"
+          | Error error ->
+              check_kind Error.Invalid error;
+              (* Refused before the socket, so the fixture saw nothing. *)
+              Alcotest.(check int) "the fixture was not called" 0 (List.length (Atomic.get seen))))
 
 let timeout_trip () =
   with_fixture (fun env sw port ->
-    with_endpoints ~net:env#net ~sw [ endpoint ~port "127.0.0.1" ] (fun decision ->
-      let clock = Eio.Stdenv.mono_clock env in
-      let grant =
-        Authority.with_operation_timeout
-          (Eio.Time.Timeout.seconds clock (slow_seconds /. 10.0))
-          (grant_of ~env decision)
-      in
-      match request grant (Printf.sprintf "http://127.0.0.1:%d/slow" port) with
-      | Ok response -> failf "a %f second operation finished with status %d" slow_seconds response.status
-      | Error error ->
-          check_kind Error.Timeout error;
-          check_one_line error))
+      with_endpoints ~net:env#net ~sw
+        [ endpoint ~port "127.0.0.1" ]
+        (fun decision ->
+          let clock = Eio.Stdenv.mono_clock env in
+          let grant =
+            Authority.with_operation_timeout
+              (Eio.Time.Timeout.seconds clock (slow_seconds /. 10.0))
+              (grant_of ~env decision)
+          in
+          match request grant (Printf.sprintf "http://127.0.0.1:%d/slow" port) with
+          | Ok response ->
+              failf "a %f second operation finished with status %d" slow_seconds response.status
+          | Error error ->
+              check_kind Error.Timeout error;
+              check_one_line error))
 
 (* §6's claim that the bound is per {e operation}: several calls through one grant
    each get their own, so a fast sequence is not cut short by a shared deadline. *)
 let timeout_is_per_operation () =
   with_fixture (fun env sw port ->
-    with_endpoints ~net:env#net ~sw [ endpoint ~port "127.0.0.1" ] (fun decision ->
-      let clock = Eio.Stdenv.mono_clock env in
-      let grant =
-        Authority.with_operation_timeout
-          (Eio.Time.Timeout.seconds clock 0.5)
-          (grant_of ~env decision)
-      in
-      repeat 3 (fun () ->
-        match request grant (Printf.sprintf "http://127.0.0.1:%d/ok" port) with
-        | Ok response -> Alcotest.(check int) "served" 200 response.status
-        | Error error -> failf "a repeated operation failed: %s" (Error.render error))))
+      with_endpoints ~net:env#net ~sw
+        [ endpoint ~port "127.0.0.1" ]
+        (fun decision ->
+          let clock = Eio.Stdenv.mono_clock env in
+          let grant =
+            Authority.with_operation_timeout
+              (Eio.Time.Timeout.seconds clock 0.5)
+              (grant_of ~env decision)
+          in
+          repeat 3 (fun () ->
+              match request grant (Printf.sprintf "http://127.0.0.1:%d/ok" port) with
+              | Ok response -> Alcotest.(check int) "served" 200 response.status
+              | Error error -> failf "a repeated operation failed: %s" (Error.render error))))
 
 (* A caller-owned counter, spent once per operation; the refusal does no I/O,
    which is what makes the budget observable at the far end (§6). *)
 let operation_budget () =
   with_fixture (fun env sw port ->
-    with_endpoints ~net:env#net ~sw [ endpoint ~port "127.0.0.1" ] (fun decision ->
-      let budget = Budget.make 2 in
-      let grant = Authority.with_operation_budget budget (grant_of ~env decision) in
-      let served = ref 0 in
-      let refused = ref 0 in
-      repeat 4 (fun () ->
-        match request grant (Printf.sprintf "http://127.0.0.1:%d/ok" port) with
-        | Ok _ -> incr served
-        | Error error ->
-            check_kind Error.Denied error;
-            incr refused);
-      Alcotest.(check int) "two operations were served" 2 !served;
-      Alcotest.(check int) "two were refused by the budget" 2 !refused;
-      Alcotest.(check int) "the counter does not go below zero" 0 (Budget.remaining budget);
-      Alcotest.(check int) "the fixture was called exactly twice" 2 (List.length (Atomic.get seen))))
+      with_endpoints ~net:env#net ~sw
+        [ endpoint ~port "127.0.0.1" ]
+        (fun decision ->
+          let budget = Budget.make 2 in
+          let grant = Authority.with_operation_budget budget (grant_of ~env decision) in
+          let served = ref 0 in
+          let refused = ref 0 in
+          repeat 4 (fun () ->
+              match request grant (Printf.sprintf "http://127.0.0.1:%d/ok" port) with
+              | Ok _ -> incr served
+              | Error error ->
+                  check_kind Error.Denied error;
+                  incr refused);
+          Alcotest.(check int) "two operations were served" 2 !served;
+          Alcotest.(check int) "two were refused by the budget" 2 !refused;
+          Alcotest.(check int) "the counter does not go below zero" 0 (Budget.remaining budget);
+          Alcotest.(check int)
+            "the fixture was called exactly twice" 2
+            (List.length (Atomic.get seen))))
 
 (* A grant shared by two fibers spends one budget atomically: N fibers cannot all
    pass the same check. *)
@@ -921,19 +1012,21 @@ let budget_is_atomic () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
   let state, net = scripted_net ~answers:[ ("api.test", [ "93.184.216.34" ]) ] () in
-  with_endpoints ~net ~sw [ endpoint "api.test" ] (fun decision ->
-    let budget = Budget.make 3 in
-    let grant = Authority.with_operation_budget budget (grant_of ~env decision) in
-    let taken = Atomic.make 0 in
-    let attempt () =
-      match request grant "http://api.test/" with
-      | exception Simulated _ -> Atomic.incr taken
-      | Ok _ -> failf "the scripted network handed out a socket"
-      | Error _ -> ()
-    in
-    Eio.Fiber.both (fun () -> repeat 4 attempt) (fun () -> repeat 4 attempt);
-    Alcotest.(check int) "eight calls, three operations' worth of budget" 3 (Atomic.get taken);
-    ignore state)
+  with_endpoints ~net ~sw
+    [ endpoint "api.test" ]
+    (fun decision ->
+      let budget = Budget.make 3 in
+      let grant = Authority.with_operation_budget budget (grant_of ~env decision) in
+      let taken = Atomic.make 0 in
+      let attempt () =
+        match request grant "http://api.test/" with
+        | exception Simulated _ -> Atomic.incr taken
+        | Ok _ -> failf "the scripted network handed out a socket"
+        | Error _ -> ()
+      in
+      Eio.Fiber.both (fun () -> repeat 4 attempt) (fun () -> repeat 4 attempt);
+      Alcotest.(check int) "eight calls, three operations' worth of budget" 3 (Atomic.get taken);
+      ignore state)
 
 (* §6's claim is that a deployment can log {e every} authority operation without
    a page, a body or a header reaching the log, so the assertions worth making are
@@ -941,44 +1034,52 @@ let budget_is_atomic () =
 
 let audit_events () =
   with_fixture (fun env sw port ->
-    let events = Atomic.make [] in
-    let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
-    with_endpoints ~net:env#net ~sw [ endpoint ~port "127.0.0.1" ] (fun decision ->
-      let grant =
-        Authority.with_log ~sink:(fun event -> push events event)
-          (grant_of ~env decision)
-      in
-      ignore (request grant (uri "/ok") : (_, _) result);
-      ignore (request ~max_response_bytes:64 grant (uri "/big") : (_, _) result);
-      ignore (request grant "http://elsewhere.test/" : (_, _) result);
-      let logged = List.rev (Atomic.get events) in
-      Alcotest.(check int) "one event per operation" 3 (List.length logged);
-      List.iter
-        (fun event ->
-          Alcotest.(check string) "the operation is a constant name, not the URL" "net.request"
-            (Event.operation event);
-          let line = Event.render event in
-          Alcotest.(check bool) ("the line is one line: " ^ line) true
-            (String.for_all (fun char -> Char.code char <> 10 && Char.code char <> 13) line);
+      let events = Atomic.make [] in
+      let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
+      with_endpoints ~net:env#net ~sw
+        [ endpoint ~port "127.0.0.1" ]
+        (fun decision ->
+          let grant =
+            Authority.with_log ~sink:(fun event -> push events event) (grant_of ~env decision)
+          in
+          ignore (request grant (uri "/ok") : (_, _) result);
+          ignore (request ~max_response_bytes:64 grant (uri "/big") : (_, _) result);
+          ignore (request grant "http://elsewhere.test/" : (_, _) result);
+          let logged = List.rev (Atomic.get events) in
+          Alcotest.(check int) "one event per operation" 3 (List.length logged);
           List.iter
-            (fun needle ->
-              Alcotest.(check bool) (Printf.sprintf "%S is not in the audit line: %s" needle line)
-                false (contains ~haystack:line ~needle:needle))
-            [ "/ok"; "/big"; "127.0.0.1"; "localhost"; "elsewhere"; "answer"; "http"; "42" ])
-        logged;
-      match logged with
-      | [ served; capped; refused ] ->
-          Alcotest.(check bool) "a served request reports Ok" true
-            (Event.outcome served = Event.Ok);
-          Alcotest.(check (option int)) "with the size of what moved, not what moved"
-            (Some 17) (Event.bytes served);
-          Alcotest.(check bool) "and the status as an operator-chosen note" true
-            (List.exists (fun note -> note = ("status", "200")) (Event.notes served));
-          Alcotest.(check bool) "a refused body reports the denial" true
-            (Event.outcome capped = Event.Failed Error.Denied);
-          Alcotest.(check bool) "an unlisted host reports Denied too" true
-            (Event.outcome refused = Event.Failed Error.Denied)
-      | _ -> failf "expected three events"))
+            (fun event ->
+              Alcotest.(check string)
+                "the operation is a constant name, not the URL" "net.request"
+                (Event.operation event);
+              let line = Event.render event in
+              Alcotest.(check bool)
+                ("the line is one line: " ^ line) true
+                (String.for_all (fun char -> Char.code char <> 10 && Char.code char <> 13) line);
+              List.iter
+                (fun needle ->
+                  Alcotest.(check bool)
+                    (Printf.sprintf "%S is not in the audit line: %s" needle line)
+                    false (contains ~haystack:line ~needle))
+                [ "/ok"; "/big"; "127.0.0.1"; "localhost"; "elsewhere"; "answer"; "http"; "42" ])
+            logged;
+          match logged with
+          | [ served; capped; refused ] ->
+              Alcotest.(check bool)
+                "a served request reports Ok" true
+                (Event.outcome served = Event.Ok);
+              Alcotest.(check (option int))
+                "with the size of what moved, not what moved" (Some 17) (Event.bytes served);
+              Alcotest.(check bool)
+                "and the status as an operator-chosen note" true
+                (List.exists (fun note -> note = ("status", "200")) (Event.notes served));
+              Alcotest.(check bool)
+                "a refused body reports the denial" true
+                (Event.outcome capped = Event.Failed Error.Denied);
+              Alcotest.(check bool)
+                "an unlisted host reports Denied too" true
+                (Event.outcome refused = Event.Failed Error.Denied)
+          | _ -> failf "expected three events"))
 
 (* An https endpoint against a cleartext server: the handshake fails rather than
    the connection being downgraded, and no request reaches the server. The
@@ -986,8 +1087,8 @@ let audit_events () =
    really on the wire. *)
 let https_is_not_downgraded () =
   with_fixture (fun env sw port ->
-    with_endpoints ~net:env#net ~sw [ endpoint ~scheme:`Https ~port "127.0.0.1" ]
-    @@ (fun decision ->
+      with_endpoints ~net:env#net ~sw [ endpoint ~scheme:`Https ~port "127.0.0.1" ]
+      @@ fun decision ->
       (* A short bound of its own: the fixture is an HTTP server, so it waits
          for a request line that a TLS client will never send, and the handshake
          stalls rather than being refused. Both shapes are the guarantee this
@@ -999,18 +1100,22 @@ let https_is_not_downgraded () =
           (grant_of ~env decision)
       in
       match request grant (Printf.sprintf "https://127.0.0.1:%d/ok" port) with
-      | Ok response -> failf "a cleartext server answered an https grant (status %d)" response.status
+      | Ok response ->
+          failf "a cleartext server answered an https grant (status %d)" response.status
       | Error error ->
           (match Error.kind error with
           | Error.Failed | Error.Timeout -> ()
           | kind ->
-              failf "the handshake failed as %s: %s" (Error.kind_to_string kind) (Error.render error));
+              failf "the handshake failed as %s: %s" (Error.kind_to_string kind)
+                (Error.render error));
           check_one_line error;
           (* The point of the case: no HTTP request was ever sent, so a grant
              that speaks https cannot be talked down to cleartext. *)
-          Alcotest.(check int) "the cleartext server saw no request" 0 (List.length (Atomic.get seen))
-      | exception Simulated address -> failf "the https grant never connected: %s"
-          (show_address address)))
+          Alcotest.(check int)
+            "the cleartext server saw no request" 0
+            (List.length (Atomic.get seen))
+      | exception Simulated address ->
+          failf "the https grant never connected: %s" (show_address address))
 
 (* A grant that speaks https has to {e get} a trust store, and if the application
    never installed a random generator, construction fails with the sentence that
@@ -1019,8 +1124,10 @@ let https_is_not_downgraded () =
 let https_grants_are_built_with_tls () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  match Policy.with_endpoints ~sw ~net:env#net ~max_response_bytes:1024
-          [ endpoint ~scheme:`Https "api.test" ] with
+  match
+    Policy.with_endpoints ~sw ~net:env#net ~max_response_bytes:1024
+      [ endpoint ~scheme:`Https "api.test" ]
+  with
   | Ok _ -> ()
   | Error error -> failf "an https grant failed to build: %s" (Error.render error)
 
@@ -1028,52 +1135,49 @@ let () =
   Alcotest.run "mcp-caps-authority-net"
     [
       ( "endpoint allowlist",
-          [
-            Alcotest.test_case "the scheme/host/port table" `Quick allowlist_table;
-            Alcotest.test_case "construction refusals" `Quick construction_refusals;
-            Alcotest.test_case "an http grant speaks no https" `Quick scheme_is_pinned;
-          ] );
+        [
+          Alcotest.test_case "the scheme/host/port table" `Quick allowlist_table;
+          Alcotest.test_case "construction refusals" `Quick construction_refusals;
+          Alcotest.test_case "an http grant speaks no https" `Quick scheme_is_pinned;
+        ] );
       ( "resolver and address policy",
-          [
-            Alcotest.test_case "an unlisted name asks no DNS question" `Quick unlisted_name_asks_nothing;
-            Alcotest.test_case "the public-web address table" `Quick public_web_address_table;
-            Alcotest.test_case "smuggled addresses in IPv6 literals" `Quick
-              public_web_refuses_smuggled_ip_literals;
-            Alcotest.test_case "the public-web grant uses the scheme's port" `Quick
-              public_web_refuses_other_ports;
-            Alcotest.test_case "the any-port mode, on a public destination" `Quick
-              public_web_any_port;
-            Alcotest.test_case "connect uses the vetted answer" `Quick connect_uses_the_vetted_answer;
-            Alcotest.test_case "a listed name may reach a private address" `Quick
-              listed_names_may_reach_private_addresses;
-            Alcotest.test_case "every answer of a listed name is connectable" `Quick
-              every_answer_of_a_listed_name_is_connectable;
-            Alcotest.test_case "the fetch fallback target vet" `Quick vet_public_host_cases;
-          ] );
+        [
+          Alcotest.test_case "an unlisted name asks no DNS question" `Quick
+            unlisted_name_asks_nothing;
+          Alcotest.test_case "the public-web address table" `Quick public_web_address_table;
+          Alcotest.test_case "smuggled addresses in IPv6 literals" `Quick
+            public_web_refuses_smuggled_ip_literals;
+          Alcotest.test_case "the public-web grant uses the scheme's port" `Quick
+            public_web_refuses_other_ports;
+          Alcotest.test_case "the any-port mode, on a public destination" `Quick public_web_any_port;
+          Alcotest.test_case "connect uses the vetted answer" `Quick connect_uses_the_vetted_answer;
+          Alcotest.test_case "a listed name may reach a private address" `Quick
+            listed_names_may_reach_private_addresses;
+          Alcotest.test_case "every answer of a listed name is connectable" `Quick
+            every_answer_of_a_listed_name_is_connectable;
+          Alcotest.test_case "the fetch fallback target vet" `Quick vet_public_host_cases;
+        ] );
       ( "response bounds",
-          [
-            Alcotest.test_case "the response ceiling, on a chunked body" `Quick response_ceiling;
-          ] );
-      ( "redirects",
-          [ Alcotest.test_case "never followed, off-list refused" `Quick redirects ] );
+        [ Alcotest.test_case "the response ceiling, on a chunked body" `Quick response_ceiling ] );
+      ("redirects", [ Alcotest.test_case "never followed, off-list refused" `Quick redirects ]);
       ( "request validation",
-          [
-            Alcotest.test_case "owned headers, injection, method and body" `Quick request_headers;
-            Alcotest.test_case "a request body over the bound is refused" `Quick request_body_bound;
-          ] );
+        [
+          Alcotest.test_case "owned headers, injection, method and body" `Quick request_headers;
+          Alcotest.test_case "a request body over the bound is refused" `Quick request_body_bound;
+        ] );
       ( "bounds and audit",
-          [
-            Alcotest.test_case "a waiting operation hits its time bound" `Quick timeout_trip;
-            Alcotest.test_case "the bound is per operation" `Quick timeout_is_per_operation;
-            Alcotest.test_case "a caller's operation budget" `Quick operation_budget;
-            Alcotest.test_case "the budget is atomic across fibers" `Quick budget_is_atomic;
-            Alcotest.test_case "one bounded audit line per operation" `Quick audit_events;
-          ] );
+        [
+          Alcotest.test_case "a waiting operation hits its time bound" `Quick timeout_trip;
+          Alcotest.test_case "the bound is per operation" `Quick timeout_is_per_operation;
+          Alcotest.test_case "a caller's operation budget" `Quick operation_budget;
+          Alcotest.test_case "the budget is atomic across fibers" `Quick budget_is_atomic;
+          Alcotest.test_case "one bounded audit line per operation" `Quick audit_events;
+        ] );
       ( "https",
-          [
-            Alcotest.test_case "an https grant is not answered in cleartext" `Quick
-              https_is_not_downgraded;
-            Alcotest.test_case "an https grant builds with a trust store" `Quick
-              https_grants_are_built_with_tls;
-          ] );
+        [
+          Alcotest.test_case "an https grant is not answered in cleartext" `Quick
+            https_is_not_downgraded;
+          Alcotest.test_case "an https grant builds with a trust store" `Quick
+            https_grants_are_built_with_tls;
+        ] );
     ]

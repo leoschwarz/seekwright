@@ -29,8 +29,7 @@ let free_port () =
       | Unix.ADDR_INET (_, port) -> port
       | Unix.ADDR_UNIX _ -> A.fail "the scratch socket is not TCP")
 
-let sockaddr port =
-  Unix.ADDR_INET (Unix.inet_addr_loopback, port)
+let sockaddr port = Unix.ADDR_INET (Unix.inet_addr_loopback, port)
 
 let write_all fd text =
   let bytes = Bytes.of_string text in
@@ -64,30 +63,19 @@ let drain_config = "drain.toml"
 
 let spawn port =
   let env =
-    Unix.environment ()
-    |> Array.to_list
+    Unix.environment () |> Array.to_list
     |> List.filter (fun entry ->
-           not (String.length entry >= 18
-               && String.sub entry 0 18 = "SEEKWRIGHT_CONFIG="))
+        not (String.length entry >= 18 && String.sub entry 0 18 = "SEEKWRIGHT_CONFIG="))
     |> Array.of_list
   in
   let env = Array.append env [| "SEEKWRIGHT_CONFIG=" ^ drain_config |] in
   let argv =
-    [|
-      "../bin/main.exe";
-      "--http";
-      "--host";
-      "127.0.0.1";
-      "--port";
-      string_of_int port;
-    |]
+    [| "../bin/main.exe"; "--http"; "--host"; "127.0.0.1"; "--port"; string_of_int port |]
   in
   let dev_null = Unix.openfile "/dev/null" [ Unix.O_RDWR ] 0 in
   Fun.protect
     ~finally:(fun () -> Unix.close dev_null)
-    (fun () ->
-      Unix.create_process_env "../bin/main.exe" argv env dev_null dev_null
-        dev_null)
+    (fun () -> Unix.create_process_env "../bin/main.exe" argv env dev_null dev_null dev_null)
 
 let connect_when_listening ~deadline port =
   let rec go () =
@@ -96,8 +84,7 @@ let connect_when_listening ~deadline port =
     | () -> socket
     | exception Unix.Unix_error _ ->
         Unix.close socket;
-        if Unix.gettimeofday () > deadline then
-          A.fail "the server never started listening"
+        if Unix.gettimeofday () > deadline then A.fail "the server never started listening"
         else begin
           sleep 0.02;
           go ()
@@ -114,8 +101,7 @@ let wait_until_refused ~deadline port =
            head reader sees EOF and answers nothing, so this probe never
            becomes work the drain has to wait for. *)
         Unix.close socket;
-        if Unix.gettimeofday () > deadline then
-          A.fail "the listener kept accepting after SIGTERM"
+        if Unix.gettimeofday () > deadline then A.fail "the listener kept accepting after SIGTERM"
         else begin
           sleep 0.02;
           go ()
@@ -148,8 +134,7 @@ let sigterm_drains_and_exits_zero () =
   let exited = ref false in
   Fun.protect
     ~finally:(fun () ->
-      if not !exited then
-        try Unix.kill pid Sys.sigkill with Unix.Unix_error _ -> ())
+      if not !exited then try Unix.kill pid Sys.sigkill with Unix.Unix_error _ -> ())
     (fun () ->
       let deadline = Unix.gettimeofday () +. 5.0 in
       let socket = connect_when_listening ~deadline port in
@@ -158,9 +143,12 @@ let sigterm_drains_and_exits_zero () =
         (fun () ->
           let head =
             Printf.sprintf
-              "POST /api/v1/search HTTP/1.1\r\nHost: 127.0.0.1:%d\r\n\
-               Content-Type: application/json\r\nContent-Length: %d\r\n\
-               Connection: close\r\n\r\n"
+              "POST /api/v1/search HTTP/1.1\r\n\
+               Host: 127.0.0.1:%d\r\n\
+               Content-Type: application/json\r\n\
+               Content-Length: %d\r\n\
+               Connection: close\r\n\
+               \r\n"
               port (String.length body)
           in
           write_all socket head;
@@ -177,19 +165,18 @@ let sigterm_drains_and_exits_zero () =
           write_all socket (String.sub body split (String.length body - split));
           let response = read_all socket in
           includes "the in-flight call is refused with 503" " 503 " response;
-          includes "the refusal is the stopping sentence"
-            "The server is stopping; retry shortly." response;
+          includes "the refusal is the stopping sentence" "The server is stopping; retry shortly."
+            response;
           let status = wait_for_exit ~deadline:(Unix.gettimeofday () +. 5.0) pid in
           exited := true;
-          A.(check bool) "a requested stop is exit status 0" true
-            (status = Unix.WEXITED 0)))
+          A.(check bool) "a requested stop is exit status 0" true (status = Unix.WEXITED 0)))
 
 let () =
   A.run "binary_drain"
     [
       ( "signals",
         [
-          A.test_case "SIGTERM refuses new work, drains the in-flight call and exits 0"
-            `Quick sigterm_drains_and_exits_zero;
+          A.test_case "SIGTERM refuses new work, drains the in-flight call and exits 0" `Quick
+            sigterm_drains_and_exits_zero;
         ] );
     ]

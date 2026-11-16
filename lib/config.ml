@@ -119,9 +119,7 @@ let default_user_agent = Version.user_agent
 
 let default_config_path = "~/.config/seekwright/config.toml"
 
-type output_kind =
-  | Sourced_answer
-  | Search_results
+type output_kind = Sourced_answer | Search_results
 
 let show_output_kind = function
   | Sourced_answer -> "sourcedAnswer"
@@ -152,13 +150,9 @@ let show_log_level = function
 let log_levels =
   [ Log_trace; Log_debug; Log_info; Log_success; Log_warning; Log_error; Log_critical ]
 
-type log_format =
-  | Log_text
-  | Log_json
+type log_format = Log_text | Log_json
 
-let show_log_format = function
-  | Log_text -> "text"
-  | Log_json -> "json"
+let show_log_format = function Log_text -> "text" | Log_json -> "json"
 
 let log_formats = [ Log_text; Log_json ]
 
@@ -258,89 +252,90 @@ type t = {
    section added to {!t} belongs here too: the documentation guard in [test/]
    reads this list, so a section that no operator page documents fails a run
    rather than going undocumented. *)
-let section_names =
-  [ "providers"; "policy"; "fetch"; "search"; "logging"; "dashboard"; "agent" ]
+let section_names = [ "providers"; "policy"; "fetch"; "search"; "logging"; "dashboard"; "agent" ]
 
-let default_provider_config = {
-  enabled = true;
-  cost_per_1k = None;
-  depth = "standard";
-  output_type = Sourced_answer;
-  mode = "fast";
-  url = None;
-  free_cooldown_seconds = 60.0;
-  app_id = None;
-  index = None;
-  title_attr = None;
-  url_attr = None;
-  snippet_attr = None;
-}
+let default_provider_config =
+  {
+    enabled = true;
+    cost_per_1k = None;
+    depth = "standard";
+    output_type = Sourced_answer;
+    mode = "fast";
+    url = None;
+    free_cooldown_seconds = 60.0;
+    app_id = None;
+    index = None;
+    title_attr = None;
+    url_attr = None;
+    snippet_attr = None;
+  }
 
-let default_policy_config = {
-  max_snippet_chars = 500;
-  max_result_text_chars = 2000;
-  provider_timeout_seconds = 10.0;
-}
+let default_policy_config =
+  { max_snippet_chars = 500; max_result_text_chars = 2000; provider_timeout_seconds = 10.0 }
 
-let default_fetch_config = {
-  enabled = true;
-  extractor = "stdlib";
-  timeout_seconds = 15.0;
-  max_download_bytes = 8_388_608;
-  max_text_chars = 40_000;
-  min_text_chars = 200;
-  max_match_chars = 6000;
-  max_redirects = 3;
-  allow_private_addresses = false;
-  allow_images = false;
-  user_agent = default_user_agent;
-  fallback = None;
-  auto_fallback = false;
-  primary = "http";
-  cost_per_1k = None;
-  crawl4ai_url = None;
-  crawl4ai_token = None;
-  crawl4ai_timeout_seconds = 60.0;
-  cache_dir = None;
-  cache_max_bytes = 268_435_456;
-  cache_max_entry_bytes = 33_554_432;
-  cache_ttl_seconds = 300.0;
-}
+let default_fetch_config =
+  {
+    enabled = true;
+    extractor = "stdlib";
+    timeout_seconds = 15.0;
+    max_download_bytes = 8_388_608;
+    max_text_chars = 40_000;
+    min_text_chars = 200;
+    max_match_chars = 6000;
+    max_redirects = 3;
+    allow_private_addresses = false;
+    allow_images = false;
+    user_agent = default_user_agent;
+    fallback = None;
+    auto_fallback = false;
+    primary = "http";
+    cost_per_1k = None;
+    crawl4ai_url = None;
+    crawl4ai_token = None;
+    crawl4ai_timeout_seconds = 60.0;
+    cache_dir = None;
+    cache_max_bytes = 268_435_456;
+    cache_max_entry_bytes = 33_554_432;
+    cache_ttl_seconds = 300.0;
+  }
 
-let default_search_config = {
-  fallback = None;
-  free_fallback = None;
-  health_interval_seconds = 60.0;
-  health_failure_threshold = 3;
-  health_cooldown_seconds = 120.0;
-}
+let default_search_config =
+  {
+    fallback = None;
+    free_fallback = None;
+    health_interval_seconds = 60.0;
+    health_failure_threshold = 3;
+    health_cooldown_seconds = 120.0;
+  }
 
 (* Agent mode's [max_cost_usd] is on by default: an operator who writes no
    [agent] block still gets the early exit for a mispriced provider. An explicit
    [null] in the file is the way to leave the structural bound as the only
    ceiling. *)
-let default_agent_config = {
-  enabled = false;
-  base_url = None;
-  model = None;
-  timeout_seconds = 90.0;
-  model_timeout_seconds = 30.0;
-  max_material_chars = 24000;
-  max_output_tokens_brief = 500;
-  max_output_tokens_report = 2500;
-  max_cost_usd = Some 0.25;
-  cost_per_1k_in = None;
-  cost_per_1k_out = None;
-}
+let default_agent_config =
+  {
+    enabled = false;
+    base_url = None;
+    model = None;
+    timeout_seconds = 90.0;
+    model_timeout_seconds = 30.0;
+    max_material_chars = 24000;
+    max_output_tokens_brief = 500;
+    max_output_tokens_report = 2500;
+    max_cost_usd = Some 0.25;
+    cost_per_1k_in = None;
+    cost_per_1k_out = None;
+  }
 
-let default_logging_config = {
-  level = Log_info;
-  format = Log_text;
-  library_level = Log_warning;
-  access_log = false;
-  log_queries = false;
-  log_content = false;
-}
+let default_logging_config =
+  {
+    level = Log_info;
+    format = Log_text;
+    library_level = Log_warning;
+    access_log = false;
+    log_queries = false;
+    log_content = false;
+  }
 
 let default_dashboard_config = { enabled = true; history_path = None }
 
@@ -357,19 +352,14 @@ let or_list names =
 let enabled_names (providers : (name * provider_config) list) =
   List.sort String.compare
     (List.filter_map
-       (fun (name, (config : provider_config)) ->
-         if config.enabled then Some name else None)
+       (fun (name, (config : provider_config)) -> if config.enabled then Some name else None)
        providers)
 
-let present = function
-  | Some value when value <> "" -> true
-  | _ -> false
+let present = function Some value when value <> "" -> true | _ -> false
 
 (* Unset [permitted_providers] is permissive. *)
 let is_permitted config name =
-  match config.permitted_providers with
-  | None -> true
-  | Some names -> List.mem name names
+  match config.permitted_providers with None -> true | Some names -> List.mem name names
 
 let provider config name = List.assoc_opt name config.providers
 
@@ -389,16 +379,12 @@ let default_route_is_free_only config =
 (* The variable is named for the backend segment before any ':'. *)
 let api_key_env_var name =
   let backend =
-    match String.index_opt name ':' with
-    | Some index -> String.sub name 0 index
-    | None -> name
+    match String.index_opt name ':' with Some index -> String.sub name 0 index | None -> name
   in
   "SEEKWRIGHT_" ^ String.uppercase_ascii backend ^ "_API_KEY"
 
 let env name =
-  match Sys.getenv_opt name with
-  | Some value when value <> "" -> Some value
-  | _ -> None
+  match Sys.getenv_opt name with Some value when value <> "" -> Some value | _ -> None
 
 let api_key name = env (api_key_env_var name)
 
@@ -410,8 +396,7 @@ let missing_api_keys config =
     (enabled_providers config)
 
 let missing_agent_settings config =
-  if not config.agent.enabled
-  then []
+  if not config.agent.enabled then []
   else
     List.filter_map
       (fun (name, value) -> if present value then None else Some name)
@@ -424,9 +409,7 @@ let missing_agent_settings config =
 (* Names in [names] that are not in [vocabulary], de-duplicated and sorted: what
    each "unknown name(s) ..." sentence prints. *)
 let unknown_in names vocabulary =
-  names
-  |> List.filter (fun name -> not (List.mem name vocabulary))
-  |> List.sort_uniq String.compare
+  names |> List.filter (fun name -> not (List.mem name vocabulary)) |> List.sort_uniq String.compare
 
 (* [; it is now "exa:free"] for every name an earlier build shipped; empty when
    nothing was renamed. *)
@@ -439,12 +422,9 @@ let renamed_hint unknown =
         | None -> None)
       unknown
   in
-  match hints with
-  | [] -> ""
-  | hints -> "; " ^ String.concat "; " hints
+  match hints with [] -> "" | hints -> "; " ^ String.concat "; " hints
 
-let has_duplicates names =
-  List.length (List.sort_uniq String.compare names) <> List.length names
+let has_duplicates names = List.length (List.sort_uniq String.compare names) <> List.length names
 
 let validate_provider_names names =
   match unknown_in names known_providers with
@@ -465,55 +445,50 @@ let validate_fetch_fallbacks registry fallbacks =
     | Some row -> row.billable
     | None -> false
   in
-  if fallbacks = []
-  then Ok ()
-  else if has_duplicates fallbacks
-  then
-    Error
-      "fetch.fallback names a fallback more than once; each fallback gets one attempt per fetch"
+  if fallbacks = [] then Ok ()
+  else if has_duplicates fallbacks then
+    Error "fetch.fallback names a fallback more than once; each fallback gets one attempt per fetch"
   else
     match unknown_in fallbacks registry_names with
     | unknown when unknown <> [] ->
         Error
           (Printf.sprintf "fetch.fallback names unknown fallback(s) %s; supported: %s"
-            (join unknown) (join registry_names))
-    | _ ->
-      let priced = fallbacks |> List.filter billable |> List.sort String.compare in
-      (* At most one billable rung, and it must be the ladder's last name. *)
-      let priced_too_late =
-        Printf.sprintf
-          "fetch.fallback: %s can bill and belongs last, so a page reaches every free fallback \
-           before a credit is spent" (join priced)
-      in
-      match (List.rev fallbacks, priced) with
-      | _, [] -> Ok ()
-      | _, _ :: _ :: _ -> Error priced_too_late
-      | last :: _, [only] -> if last = only then Ok () else Error priced_too_late
-      | [], _ -> Ok ()
+             (join unknown) (join registry_names))
+    | _ -> (
+        let priced = fallbacks |> List.filter billable |> List.sort String.compare in
+        (* At most one billable rung, and it must be the ladder's last name. *)
+        let priced_too_late =
+          Printf.sprintf
+            "fetch.fallback: %s can bill and belongs last, so a page reaches every free fallback \
+             before a credit is spent"
+            (join priced)
+        in
+        match (List.rev fallbacks, priced) with
+        | _, [] -> Ok ()
+        | _, _ :: _ :: _ -> Error priced_too_late
+        | last :: _, [ only ] -> if last = only then Ok () else Error priced_too_late
+        | [], _ -> Ok ())
 
 let validate_fetch_primary registry primary =
   let registry_names = List.map (fun (row : fetch_fallback) -> row.name) registry in
-  if primary = "http" || List.mem primary registry_names
-  then Ok ()
+  if primary = "http" || List.mem primary registry_names then Ok ()
   else
     Error
       (Printf.sprintf "fetch.primary names unknown route %s; supported: http, %s" (quote primary)
          (join registry_names))
 
 let validate_fetch_extractor extractor =
-  if List.mem extractor known_extractors
-  then Ok ()
+  if List.mem extractor known_extractors then Ok ()
   else
     Error
       (Printf.sprintf "fetch.extractor names unknown extractor %s; supported: %s" (quote extractor)
          (join known_extractors))
 
 let validate_search_fallbacks fallbacks =
-  if fallbacks = []
-  then Ok ()
-  else if has_duplicates fallbacks
-  then
-    Error "search.fallback names a provider more than once; each fallback gets one attempt per search"
+  if fallbacks = [] then Ok ()
+  else if has_duplicates fallbacks then
+    Error
+      "search.fallback names a provider more than once; each fallback gets one attempt per search"
   else
     match unknown_in fallbacks known_providers with
     | [] -> Ok ()
@@ -524,10 +499,8 @@ let validate_search_fallbacks fallbacks =
 
 (* Free ladder rule: no fallback that can bill. *)
 let validate_search_free_fallbacks fallbacks =
-  if fallbacks = []
-  then Ok ()
-  else if has_duplicates fallbacks
-  then
+  if fallbacks = [] then Ok ()
+  else if has_duplicates fallbacks then
     Error
       "search.free_fallback names a provider more than once; each fallback gets one attempt per \
        free search"
@@ -537,22 +510,21 @@ let validate_search_free_fallbacks fallbacks =
         Error
           (Printf.sprintf "search.free_fallback names unknown provider(s) %s%s; supported: %s"
              (join unknown) (renamed_hint unknown) (join known_providers))
-    | _ ->
-      (match unknown_in fallbacks free_providers with
-      | [] -> Ok ()
-      | paid ->
-          Error
-            (Printf.sprintf
-               "search.free_fallback names %s, which can bill; a free-only search walks only %s"
-               (join paid) (join free_providers)))
+    | _ -> (
+        match unknown_in fallbacks free_providers with
+        | [] -> Ok ()
+        | paid ->
+            Error
+              (Printf.sprintf
+                 "search.free_fallback names %s, which can bill; a free-only search walks only %s"
+                 (join paid) (join free_providers)))
 
 (* A list containing ["*"] normalises to None (permissive). *)
 let validate_permitted_providers declared =
   let vocabulary = List.sort String.compare (known_providers @ permitted_fetch_names) in
-  if List.mem "*" declared
-  then Ok None
-  else if has_duplicates declared
-  then Error "permitted_providers names a provider more than once; each name gets one entry"
+  if List.mem "*" declared then Ok None
+  else if has_duplicates declared then
+    Error "permitted_providers names a provider more than once; each name gets one entry"
   else
     match unknown_in declared vocabulary with
     | [] -> Ok (Some declared)
@@ -575,13 +547,13 @@ let validate_provider_prerequisites providers =
   match enabled_provider providers "searxng" with
   | Some config when not (present config.url) ->
       Error "provider 'searxng' is enabled but no url is configured; it has no public default"
-  | _ ->
-    (match enabled_provider providers "algolia" with
-    | Some config when not (present config.app_id && present config.index) ->
-        Error
-          "provider 'algolia' is enabled but app_id and index are required; it searches one \
-           operator-named index"
-    | _ -> Ok ())
+  | _ -> (
+      match enabled_provider providers "algolia" with
+      | Some config when not (present config.app_id && present config.index) ->
+          Error
+            "provider 'algolia' is enabled but app_id and index are required; it searches one \
+             operator-named index"
+      | _ -> Ok ())
 
 (* Every rung of a search ladder has to be able to run; the default itself may
    appear, and is skipped as already tried at walk time. *)
@@ -589,15 +561,13 @@ let ladder_is_enabled field fallbacks enabled =
   List.fold_left
     (fun result name ->
       let* () = result in
-      if List.mem name enabled
-      then Ok ()
+      if List.mem name enabled then Ok ()
       else
         Error
           (Printf.sprintf "%s names %s, which is not an enabled provider (enabled: %s)" field
              (quote name)
              (join (if enabled = [] then [ "none" ] else enabled))))
-    (Ok ())
-    fallbacks
+    (Ok ()) fallbacks
 
 let validate_fetch_section fetch =
   let* () = validate_fetch_extractor fetch.extractor in
@@ -612,17 +582,16 @@ let validate_search_section search =
 
 (* library_level and access_log are uvicorn-specific; non-default values are refused. *)
 let validate_logging_on_this_port logging =
-  if logging.library_level <> default_logging_config.library_level
-  then
+  if logging.library_level <> default_logging_config.library_level then
     Error
       "logging.library_level is not honoured on this port: there is no uvicorn here, so no \
        third-party logger has a level to hold down (remove the key; the default loads and does \
        nothing)"
   else if logging.access_log <> default_logging_config.access_log then
     Error
-      "logging.access_log is not honoured on this port: there is no uvicorn here, so there is \
-       no per-request access log to switch on or off (remove the key; the default loads and \
-       does nothing)"
+      "logging.access_log is not honoured on this port: there is no uvicorn here, so there is no \
+       per-request access log to switch on or off (remove the key; the default loads and does \
+       nothing)"
   else Ok ()
 
 let resolve ?(providers = []) ?default_provider ?permitted_providers
@@ -660,39 +629,35 @@ let resolve ?(providers = []) ?default_provider ?permitted_providers
     ladder_is_enabled "search.fallback" (Option.value ~default:[] search.fallback) enabled
   in
   let* () =
-    ladder_is_enabled "search.free_fallback"
-      (Option.value ~default:[] search.free_fallback)
-      enabled
+    ladder_is_enabled "search.free_fallback" (Option.value ~default:[] search.free_fallback) enabled
   in
   let* permitted_providers =
     match permitted_providers with
     | None -> Ok None
     | Some declared -> validate_permitted_providers declared
   in
-  Ok {
-    providers;
-    default_provider;
-    permitted_providers;
-    policy;
-    fetch;
-    search;
-    agent;
-    logging;
-    dashboard;
-    providers_defaulted;
-  }
+  Ok
+    {
+      providers;
+      default_provider;
+      permitted_providers;
+      policy;
+      fetch;
+      search;
+      agent;
+      logging;
+      dashboard;
+      providers_defaulted;
+    }
 
 let default =
-  match resolve () with
-  | Ok config -> config
-  | Error fault -> failwith ("Config.default: " ^ fault)
+  match resolve () with Ok config -> config | Error fault -> failwith ("Config.default: " ^ fault)
 
 (* Strip outer quotes added by [Toml.Types.Table.Key.to_string] for non-bare keys. *)
 let key_name key =
   let spelling = T.Table.Key.to_string key in
   let last = String.length spelling - 1 in
-  if last > 0 && spelling.[0] = '"' && spelling.[last] = '"'
-  then String.sub spelling 1 (last - 1)
+  if last > 0 && spelling.[0] = '"' && spelling.[last] = '"' then String.sub spelling 1 (last - 1)
   else spelling
 
 let bindings table = T.Table.fold (fun key value acc -> (key_name key, value) :: acc) table []
@@ -756,11 +721,8 @@ let drop_separators s =
   let ok = ref true in
   String.iteri
     (fun i ch ->
-      if ch <> '_'
-      then Buffer.add_char buffer ch
-      else if
-        i > 0 && i + 1 < String.length s && is_digit s.[i - 1] && is_digit s.[i + 1]
-      then ()
+      if ch <> '_' then Buffer.add_char buffer ch
+      else if i > 0 && i + 1 < String.length s && is_digit s.[i - 1] && is_digit s.[i + 1] then ()
       else ok := false)
     s;
   if !ok then Some (Buffer.contents buffer) else None
@@ -768,20 +730,27 @@ let drop_separators s =
 let lower = String.map Char.lowercase_ascii
 
 let bool_words =
-  [ ("true", true); ("t", true); ("yes", true); ("y", true); ("on", true); ("1", true)
-  ; ("false", false); ("f", false); ("no", false); ("n", false); ("off", false)
-  ; ("0", false) ]
+  [
+    ("true", true);
+    ("t", true);
+    ("yes", true);
+    ("y", true);
+    ("on", true);
+    ("1", true);
+    ("false", false);
+    ("f", false);
+    ("no", false);
+    ("n", false);
+    ("off", false);
+    ("0", false);
+  ]
 
 let bool_from_string s = List.assoc_opt (lower s) bool_words
 
 (* [0] and [1], and no other number: pydantic reads a boolean out of an integer
    or a float only when the value is exactly one of those two. *)
 let bool_from_number value =
-  if Float.equal value 0.0
-  then Some false
-  else if Float.equal value 1.0
-  then Some true
-  else None
+  if Float.equal value 0.0 then Some false else if Float.equal value 1.0 then Some true else None
 
 (* A whole number written in decimal, with an optional fraction of nothing but
    zeros: ["1.000"] is [1], while ["1.001"], ["1e2"] and ["1."] are not
@@ -793,50 +762,42 @@ let int_from_string s =
   let zeros text = text <> "" && String.for_all (fun ch -> ch = '0') text in
   let signed sign digits =
     match digits with
-    | Some digits when digits_only digits ->
-        Option.map (( * ) sign) (int_of_string_opt digits)
+    | Some digits when digits_only digits -> Option.map (( * ) sign) (int_of_string_opt digits)
     | _ -> None
   in
   let text = trim s in
   let sign, body =
-    if text = ""
-    then (1, "")
-    else if text.[0] = '+'
-    then (1, String.sub text 1 (String.length text - 1))
-    else if text.[0] = '-'
-    then (-1, String.sub text 1 (String.length text - 1))
+    if text = "" then (1, "")
+    else if text.[0] = '+' then (1, String.sub text 1 (String.length text - 1))
+    else if text.[0] = '-' then (-1, String.sub text 1 (String.length text - 1))
     else (1, text)
   in
   match String.index_opt body '.' with
   | None -> signed sign (drop_separators body)
-  | Some at ->
+  | Some at -> (
       let whole = String.sub body 0 at in
       let fraction = String.sub body (at + 1) (String.length body - at - 1) in
-      if not (zeros fraction)
-      then None
+      if not (zeros fraction) then None
       else
         match drop_separators whole with
         | Some "" -> None
         | Some digits -> signed sign (Some digits)
-        | None -> None
+        | None -> None)
 
 let float_from_string s =
   let text = trim s in
   let negative, body =
-    if text <> "" && (text.[0] = '+' || text.[0] = '-')
-    then (text.[0] = '-', String.sub text 1 (String.length text - 1))
+    if text <> "" && (text.[0] = '+' || text.[0] = '-') then
+      (text.[0] = '-', String.sub text 1 (String.length text - 1))
     else (false, text)
   in
   match lower body with
   | "nan" -> Some Float.nan
   | "inf" | "infinity" -> Some (if negative then Float.neg infinity else infinity)
-  | _ ->
-      if String.exists (fun ch -> ch = 'x' || ch = 'X') text
-      then None
-      else (
-        match drop_separators body with
-        | Some digits -> float_of_string_opt digits
-        | None -> None)
+  | _ -> (
+      if String.exists (fun ch -> ch = 'x' || ch = 'X') text then None
+      else
+        match drop_separators body with Some digits -> float_of_string_opt digits | None -> None)
 
 let unknown_keys loc keys =
   String.concat "; " (List.map (fun key -> unknown_key loc key) (List.sort String.compare keys))
@@ -858,18 +819,14 @@ let bool_field get loc key default =
   match get key with
   | None -> Ok default
   | Some (T.TBool value) -> Ok value
-  | Some (T.TInt number as value) ->
-      (match bool_from_number (float_of_int number) with
+  | Some (T.TInt number as value) -> (
+      match bool_from_number (float_of_int number) with
       | Some flag -> Ok flag
       | None -> refuse loc key value)
-  | Some (T.TFloat number as value) ->
-      (match bool_from_number number with
-      | Some flag -> Ok flag
-      | None -> refuse loc key value)
-  | Some (T.TString text as value) ->
-      (match bool_from_string text with
-      | Some flag -> Ok flag
-      | None -> refuse loc key value)
+  | Some (T.TFloat number as value) -> (
+      match bool_from_number number with Some flag -> Ok flag | None -> refuse loc key value)
+  | Some (T.TString text as value) -> (
+      match bool_from_string text with Some flag -> Ok flag | None -> refuse loc key value)
   | Some value -> refuse loc key value
 
 let float_of_value value =
@@ -883,16 +840,16 @@ let float_of_value value =
 let float_field get loc key default =
   match get key with
   | None -> Ok default
-  | Some value ->
-      (match float_of_value value with
+  | Some value -> (
+      match float_of_value value with
       | Some number -> Ok number
       | None -> Error (type_error loc key "a number" value))
 
 let float_opt_field get loc key =
   match get key with
   | None -> Ok None
-  | Some value ->
-      (match float_of_value value with
+  | Some value -> (
+      match float_of_value value with
       | Some number -> Ok (Some number)
       | None -> Error (type_error loc key "a number" value))
 
@@ -901,15 +858,15 @@ let int_field get loc key default =
   | None -> Ok default
   | Some (T.TInt value) -> Ok value
   | Some (T.TFloat value) ->
-      if Float.equal value (Float.floor value) && Float.abs value < 1e18
-      then Ok (int_of_float value)
+      if Float.equal value (Float.floor value) && Float.abs value < 1e18 then
+        Ok (int_of_float value)
       else
         Error
           (Printf.sprintf "%s: expected an integer, found a number with a fractional part"
              (dotted loc key))
   | Some (T.TBool value) -> Ok (if value then 1 else 0)
-  | Some (T.TString text as given) ->
-      (match int_from_string text with
+  | Some (T.TString text as given) -> (
+      match int_from_string text with
       | Some value -> Ok value
       | None -> Error (type_error loc key "an integer" given))
   | Some value -> Error (type_error loc key "an integer" value)
@@ -935,8 +892,8 @@ let names_of = function
 let names_opt_field get loc key =
   match get key with
   | None -> Ok None
-  | Some value ->
-      (match names_of value with
+  | Some value -> (
+      match names_of value with
       | Some names -> Ok (Some names)
       | None -> Error (type_error loc key "a list of names" value))
 
@@ -946,13 +903,14 @@ let names_opt_field get loc key =
 let choice_field get loc key default show choices =
   match get key with
   | None -> Ok default
-  | Some (T.TString value) ->
-      (match List.find_opt (fun choice -> show choice = value) choices with
+  | Some (T.TString value) -> (
+      match List.find_opt (fun choice -> show choice = value) choices with
       | Some choice -> Ok choice
       | None ->
           Error
             (Printf.sprintf "%s: input should be %s, not %s" (dotted loc key)
-               (or_list (List.map show choices)) (quote value)))
+               (or_list (List.map show choices))
+               (quote value)))
   | Some value -> Error (type_error loc key "one of the accepted names" value)
 
 (* A section that may be absent whole. [get] has already recorded the key, so an
@@ -965,34 +923,35 @@ let subsection get name default decode =
 
 let decode_provider_config loc table =
   section loc table (fun get ->
-    let* enabled = bool_field get loc "enabled" true in
-    let* cost_per_1k = float_opt_field get loc "cost_per_1k" in
-    let* depth = string_field get loc "depth" "standard" in
-    let* output_type =
-      choice_field get loc "output_type" Sourced_answer show_output_kind output_kinds
-    in
-    let* mode = string_field get loc "mode" "fast" in
-    let* url = string_opt_field get loc "url" in
-    let* free_cooldown_seconds = float_field get loc "free_cooldown_seconds" 60.0 in
-    let* app_id = string_opt_field get loc "app_id" in
-    let* index = string_opt_field get loc "index" in
-    let* title_attr = string_opt_field get loc "title_attr" in
-    let* url_attr = string_opt_field get loc "url_attr" in
-    let* snippet_attr = string_opt_field get loc "snippet_attr" in
-    Ok {
-      enabled;
-      cost_per_1k;
-      depth;
-      output_type;
-      mode;
-      url;
-      free_cooldown_seconds;
-      app_id;
-      index;
-      title_attr;
-      url_attr;
-      snippet_attr;
-    })
+      let* enabled = bool_field get loc "enabled" true in
+      let* cost_per_1k = float_opt_field get loc "cost_per_1k" in
+      let* depth = string_field get loc "depth" "standard" in
+      let* output_type =
+        choice_field get loc "output_type" Sourced_answer show_output_kind output_kinds
+      in
+      let* mode = string_field get loc "mode" "fast" in
+      let* url = string_opt_field get loc "url" in
+      let* free_cooldown_seconds = float_field get loc "free_cooldown_seconds" 60.0 in
+      let* app_id = string_opt_field get loc "app_id" in
+      let* index = string_opt_field get loc "index" in
+      let* title_attr = string_opt_field get loc "title_attr" in
+      let* url_attr = string_opt_field get loc "url_attr" in
+      let* snippet_attr = string_opt_field get loc "snippet_attr" in
+      Ok
+        {
+          enabled;
+          cost_per_1k;
+          depth;
+          output_type;
+          mode;
+          url;
+          free_cooldown_seconds;
+          app_id;
+          index;
+          title_attr;
+          url_attr;
+          snippet_attr;
+        })
 
 (* A [[providers]] table, or a quoted [[providers."backend:flavour"]] one: the
    [:] ends a bare TOML key, which is why the quoting is not optional. *)
@@ -1014,139 +973,144 @@ let decode_providers get =
 
 let decode_policy_config loc table =
   section loc table (fun get ->
-    let* max_snippet_chars = int_field get loc "max_snippet_chars" 500 in
-    let* max_result_text_chars = int_field get loc "max_result_text_chars" 2000 in
-    let* provider_timeout_seconds = float_field get loc "provider_timeout_seconds" 10.0 in
-    Ok { max_snippet_chars; max_result_text_chars; provider_timeout_seconds })
+      let* max_snippet_chars = int_field get loc "max_snippet_chars" 500 in
+      let* max_result_text_chars = int_field get loc "max_result_text_chars" 2000 in
+      let* provider_timeout_seconds = float_field get loc "provider_timeout_seconds" 10.0 in
+      Ok { max_snippet_chars; max_result_text_chars; provider_timeout_seconds })
 
 let decode_fetch_config loc table =
   section loc table (fun get ->
-    let* enabled = bool_field get loc "enabled" true in
-    let* extractor = string_field get loc "extractor" "stdlib" in
-    let* timeout_seconds = float_field get loc "timeout_seconds" 15.0 in
-    let* max_download_bytes = int_field get loc "max_download_bytes" 8_388_608 in
-    let* max_text_chars = int_field get loc "max_text_chars" 40_000 in
-    let* min_text_chars = int_field get loc "min_text_chars" 200 in
-    let* max_match_chars = int_field get loc "max_match_chars" 6000 in
-    let* max_redirects = int_field get loc "max_redirects" 3 in
-    let* allow_private_addresses = bool_field get loc "allow_private_addresses" false in
-    let* allow_images = bool_field get loc "allow_images" false in
-    let* user_agent = string_field get loc "user_agent" default_user_agent in
-    let* fallback = names_opt_field get loc "fallback" in
-    let* auto_fallback = bool_field get loc "auto_fallback" false in
-    let* primary = string_field get loc "primary" "http" in
-    let* cost_per_1k = float_opt_field get loc "cost_per_1k" in
-    let* crawl4ai_url = string_opt_field get loc "crawl4ai_url" in
-    let* crawl4ai_token = string_opt_field get loc "crawl4ai_token" in
-    let* crawl4ai_timeout_seconds = float_field get loc "crawl4ai_timeout_seconds" 60.0 in
-    let* cache_dir = string_opt_field get loc "cache_dir" in
-    let* cache_max_bytes = int_field get loc "cache_max_bytes" 268_435_456 in
-    let* cache_max_entry_bytes = int_field get loc "cache_max_entry_bytes" 33_554_432 in
-    let* cache_ttl_seconds = float_field get loc "cache_ttl_seconds" 300.0 in
-    Ok {
-      enabled;
-      extractor;
-      timeout_seconds;
-      max_download_bytes;
-      max_text_chars;
-      min_text_chars;
-      max_match_chars;
-      max_redirects;
-      allow_private_addresses;
-      allow_images;
-      user_agent;
-      fallback;
-      auto_fallback;
-      primary;
-      cost_per_1k;
-      crawl4ai_url;
-      crawl4ai_token;
-      crawl4ai_timeout_seconds;
-      cache_dir;
-      cache_max_bytes;
-      cache_max_entry_bytes;
-      cache_ttl_seconds;
-    })
+      let* enabled = bool_field get loc "enabled" true in
+      let* extractor = string_field get loc "extractor" "stdlib" in
+      let* timeout_seconds = float_field get loc "timeout_seconds" 15.0 in
+      let* max_download_bytes = int_field get loc "max_download_bytes" 8_388_608 in
+      let* max_text_chars = int_field get loc "max_text_chars" 40_000 in
+      let* min_text_chars = int_field get loc "min_text_chars" 200 in
+      let* max_match_chars = int_field get loc "max_match_chars" 6000 in
+      let* max_redirects = int_field get loc "max_redirects" 3 in
+      let* allow_private_addresses = bool_field get loc "allow_private_addresses" false in
+      let* allow_images = bool_field get loc "allow_images" false in
+      let* user_agent = string_field get loc "user_agent" default_user_agent in
+      let* fallback = names_opt_field get loc "fallback" in
+      let* auto_fallback = bool_field get loc "auto_fallback" false in
+      let* primary = string_field get loc "primary" "http" in
+      let* cost_per_1k = float_opt_field get loc "cost_per_1k" in
+      let* crawl4ai_url = string_opt_field get loc "crawl4ai_url" in
+      let* crawl4ai_token = string_opt_field get loc "crawl4ai_token" in
+      let* crawl4ai_timeout_seconds = float_field get loc "crawl4ai_timeout_seconds" 60.0 in
+      let* cache_dir = string_opt_field get loc "cache_dir" in
+      let* cache_max_bytes = int_field get loc "cache_max_bytes" 268_435_456 in
+      let* cache_max_entry_bytes = int_field get loc "cache_max_entry_bytes" 33_554_432 in
+      let* cache_ttl_seconds = float_field get loc "cache_ttl_seconds" 300.0 in
+      Ok
+        {
+          enabled;
+          extractor;
+          timeout_seconds;
+          max_download_bytes;
+          max_text_chars;
+          min_text_chars;
+          max_match_chars;
+          max_redirects;
+          allow_private_addresses;
+          allow_images;
+          user_agent;
+          fallback;
+          auto_fallback;
+          primary;
+          cost_per_1k;
+          crawl4ai_url;
+          crawl4ai_token;
+          crawl4ai_timeout_seconds;
+          cache_dir;
+          cache_max_bytes;
+          cache_max_entry_bytes;
+          cache_ttl_seconds;
+        })
 
 let decode_search_config loc table =
   section loc table (fun get ->
-    let* fallback = names_opt_field get loc "fallback" in
-    let* free_fallback = names_opt_field get loc "free_fallback" in
-    let* health_interval_seconds = float_field get loc "health_interval_seconds" 60.0 in
-    let* health_failure_threshold = int_field get loc "health_failure_threshold" 3 in
-    let* health_cooldown_seconds = float_field get loc "health_cooldown_seconds" 120.0 in
-    Ok {
-      fallback;
-      free_fallback;
-      health_interval_seconds;
-      health_failure_threshold;
-      health_cooldown_seconds;
-    })
+      let* fallback = names_opt_field get loc "fallback" in
+      let* free_fallback = names_opt_field get loc "free_fallback" in
+      let* health_interval_seconds = float_field get loc "health_interval_seconds" 60.0 in
+      let* health_failure_threshold = int_field get loc "health_failure_threshold" 3 in
+      let* health_cooldown_seconds = float_field get loc "health_cooldown_seconds" 120.0 in
+      Ok
+        {
+          fallback;
+          free_fallback;
+          health_interval_seconds;
+          health_failure_threshold;
+          health_cooldown_seconds;
+        })
 
 let decode_agent_config loc table =
   section loc table (fun get ->
-    let* enabled = bool_field get loc "enabled" false in
-    let* base_url = string_opt_field get loc "base_url" in
-    let* model = string_opt_field get loc "model" in
-    let* timeout_seconds = float_field get loc "timeout_seconds" 90.0 in
-    let* model_timeout_seconds = float_field get loc "model_timeout_seconds" 30.0 in
-    let* max_material_chars = int_field get loc "max_material_chars" 24000 in
-    let* max_output_tokens_brief = int_field get loc "max_output_tokens_brief" 500 in
-    let* max_output_tokens_report = int_field get loc "max_output_tokens_report" 2500 in
-    let* max_cost_usd = float_opt_field get loc "max_cost_usd" in
-    let* cost_per_1k_in = float_opt_field get loc "cost_per_1k_in" in
-    let* cost_per_1k_out = float_opt_field get loc "cost_per_1k_out" in
-    Ok {
-      enabled;
-      base_url;
-      model;
-      timeout_seconds;
-      model_timeout_seconds;
-      max_material_chars;
-      max_output_tokens_brief;
-      max_output_tokens_report;
-      (* TOML has no [null], so the ceiling the default carries is what an absent
+      let* enabled = bool_field get loc "enabled" false in
+      let* base_url = string_opt_field get loc "base_url" in
+      let* model = string_opt_field get loc "model" in
+      let* timeout_seconds = float_field get loc "timeout_seconds" 90.0 in
+      let* model_timeout_seconds = float_field get loc "model_timeout_seconds" 30.0 in
+      let* max_material_chars = int_field get loc "max_material_chars" 24000 in
+      let* max_output_tokens_brief = int_field get loc "max_output_tokens_brief" 500 in
+      let* max_output_tokens_report = int_field get loc "max_output_tokens_report" 2500 in
+      let* max_cost_usd = float_opt_field get loc "max_cost_usd" in
+      let* cost_per_1k_in = float_opt_field get loc "cost_per_1k_in" in
+      let* cost_per_1k_out = float_opt_field get loc "cost_per_1k_out" in
+      Ok
+        {
+          enabled;
+          base_url;
+          model;
+          timeout_seconds;
+          model_timeout_seconds;
+          max_material_chars;
+          max_output_tokens_brief;
+          max_output_tokens_report;
+          (* TOML has no [null], so the ceiling the default carries is what an absent
          key means; [max_cost_usd = "none"] is not a spelling this file accepts.
          An operator who wants the structural bound as the only ceiling leaves
          the key out and reads the default — P8's [--check] prints it. *)
-      max_cost_usd = (match max_cost_usd with None -> Some 0.25 | Some value -> Some value);
-      cost_per_1k_in;
-      cost_per_1k_out;
-    })
+          max_cost_usd = (match max_cost_usd with None -> Some 0.25 | Some value -> Some value);
+          cost_per_1k_in;
+          cost_per_1k_out;
+        })
 
 let decode_logging_config loc table =
   section loc table (fun get ->
-    let* level = choice_field get loc "level" Log_info show_log_level log_levels in
-    let* format = choice_field get loc "format" Log_text show_log_format log_formats in
-    let* library_level =
-      choice_field get loc "library_level" Log_warning show_log_level log_levels
-    in
-    let* access_log = bool_field get loc "access_log" false in
-    let* log_queries = bool_field get loc "log_queries" false in
-    let* log_content = bool_field get loc "log_content" false in
-    Ok { level; format; library_level; access_log; log_queries; log_content })
+      let* level = choice_field get loc "level" Log_info show_log_level log_levels in
+      let* format = choice_field get loc "format" Log_text show_log_format log_formats in
+      let* library_level =
+        choice_field get loc "library_level" Log_warning show_log_level log_levels
+      in
+      let* access_log = bool_field get loc "access_log" false in
+      let* log_queries = bool_field get loc "log_queries" false in
+      let* log_content = bool_field get loc "log_content" false in
+      Ok { level; format; library_level; access_log; log_queries; log_content })
 
 let decode_dashboard_config loc table =
   section loc table (fun get ->
-    let* enabled = bool_field get loc "enabled" true in
-    let* history_path = string_opt_field get loc "history_path" in
-    Ok { enabled; history_path })
+      let* enabled = bool_field get loc "enabled" true in
+      let* history_path = string_opt_field get loc "history_path" in
+      Ok { enabled; history_path })
 
 (* [providers_defaulted] is a report, never a key: it is not in the vocabulary
    the decoder reads, so a file that writes it is refused as an unknown key. *)
 let decode_table table =
   section "" table (fun get ->
-    let* providers = decode_providers get in
-    let* default_provider = string_opt_field get "" "default_provider" in
-    let* permitted_providers = names_opt_field get "" "permitted_providers" in
-    let* policy = subsection get "policy" default_policy_config decode_policy_config in
-    let* fetch = subsection get "fetch" default_fetch_config decode_fetch_config in
-    let* search = subsection get "search" default_search_config decode_search_config in
-    let* agent = subsection get "agent" default_agent_config decode_agent_config in
-    let* logging = subsection get "logging" default_logging_config decode_logging_config in
-    let* dashboard = subsection get "dashboard" default_dashboard_config decode_dashboard_config in
-    resolve ~providers ?default_provider ?permitted_providers ~policy ~fetch ~search ~agent ~logging
-      ~dashboard ())
+      let* providers = decode_providers get in
+      let* default_provider = string_opt_field get "" "default_provider" in
+      let* permitted_providers = names_opt_field get "" "permitted_providers" in
+      let* policy = subsection get "policy" default_policy_config decode_policy_config in
+      let* fetch = subsection get "fetch" default_fetch_config decode_fetch_config in
+      let* search = subsection get "search" default_search_config decode_search_config in
+      let* agent = subsection get "agent" default_agent_config decode_agent_config in
+      let* logging = subsection get "logging" default_logging_config decode_logging_config in
+      let* dashboard =
+        subsection get "dashboard" default_dashboard_config decode_dashboard_config
+      in
+      resolve ~providers ?default_provider ?permitted_providers ~policy ~fetch ~search ~agent
+        ~logging ~dashboard ())
 
 let expanduser path =
   match (path, Sys.getenv_opt "HOME") with
@@ -1159,8 +1123,8 @@ let config_path path =
   let named =
     match path with
     | Some value when value <> "" -> Some value
-    | _ ->
-        (match Sys.getenv_opt "SEEKWRIGHT_CONFIG" with
+    | _ -> (
+        match Sys.getenv_opt "SEEKWRIGHT_CONFIG" with
         | Some value when value <> "" -> Some value
         | _ -> None)
   in
@@ -1171,8 +1135,9 @@ let is_file path =
 
 let read_file path =
   let channel = open_in_bin path in
-  Fun.protect ~finally:(fun () -> close_in_noerr channel) (fun () ->
-    really_input_string channel (in_channel_length channel))
+  Fun.protect
+    ~finally:(fun () -> close_in_noerr channel)
+    (fun () -> really_input_string channel (in_channel_length channel))
 
 let example_config =
   {|[providers."exa:free"]
@@ -1194,8 +1159,7 @@ let keyless_hint table =
    A signed non-decimal integer ([+0x10]) is invalid TOML and left for the parser
    to reject. *)
 let value_terminator ch =
-  ch = ' ' || ch = '\t' || ch = '\n' || ch = '\r' || ch = ',' || ch = ']' || ch = '}'
-  || ch = '#'
+  ch = ' ' || ch = '\t' || ch = '\n' || ch = '\r' || ch = ',' || ch = ']' || ch = '}' || ch = '#'
 
 let hex_digit ch = is_digit ch || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')
 
@@ -1206,10 +1170,8 @@ let hex_digit ch = is_digit ch || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <
    decimal instead of being left for the parser to refuse. *)
 let digits_value base digits =
   let digit_value ch =
-    if ch >= '0' && ch <= '9'
-    then Char.code ch - Char.code '0'
-    else if ch >= 'a' && ch <= 'f'
-    then Char.code ch - Char.code 'a' + 10
+    if ch >= '0' && ch <= '9' then Char.code ch - Char.code '0'
+    else if ch >= 'a' && ch <= 'f' then Char.code ch - Char.code 'a' + 10
     else Char.code ch - Char.code 'A' + 10
   in
   let base = Int64.of_int base in
@@ -1218,11 +1180,9 @@ let digits_value base digits =
   let fits = ref true in
   String.iter
     (fun ch ->
-      if !fits
-      then
+      if !fits then
         let d = Int64.of_int (digit_value ch) in
-        if Int64.compare !value (Int64.div (Int64.sub limit d) base) > 0
-        then fits := false
+        if Int64.compare !value (Int64.div (Int64.sub limit d) base) > 0 then fits := false
         else value := Int64.add (Int64.mul !value base) d)
     digits;
   if !fits then Some (Int64.to_int !value) else None
@@ -1235,25 +1195,22 @@ let digits_value base digits =
 let non_decimal_literal text i =
   let n = String.length text in
   let digit, base =
-    if i + 1 >= n || text.[i] <> '0'
-    then (fun _ -> false), 0
+    if i + 1 >= n || text.[i] <> '0' then ((fun _ -> false), 0)
     else
       match text.[i + 1] with
-      | 'x' -> hex_digit, 16
-      | 'o' -> (fun ch -> ch >= '0' && ch <= '7'), 8
-      | 'b' -> (fun ch -> ch = '0' || ch = '1'), 2
-      | _ -> (fun _ -> false), 0
+      | 'x' -> (hex_digit, 16)
+      | 'o' -> ((fun ch -> ch >= '0' && ch <= '7'), 8)
+      | 'b' -> ((fun ch -> ch = '0' || ch = '1'), 2)
+      | _ -> ((fun _ -> false), 0)
   in
-  if base = 0
-  then None
+  if base = 0 then None
   else begin
     let j = ref (i + 2) in
     let digits = Buffer.create 8 in
     let prev_digit = ref false in
     let valid = ref true in
     while !j < n && (digit text.[!j] || text.[!j] = '_') do
-      if text.[!j] = '_'
-      then begin
+      if text.[!j] = '_' then begin
         if not !prev_digit then valid := false;
         prev_digit := false
       end
@@ -1263,10 +1220,8 @@ let non_decimal_literal text i =
       end;
       incr j
     done;
-    if (not !valid) || Buffer.length digits = 0 || not !prev_digit
-    then None
-    else if !j < n && not (value_terminator text.[!j])
-    then None
+    if (not !valid) || Buffer.length digits = 0 || not !prev_digit then None
+    else if !j < n && not (value_terminator text.[!j]) then None
     else
       match digits_value base (Buffer.contents digits) with
       | Some value -> Some (string_of_int value, !j)
@@ -1281,18 +1236,15 @@ let inf_nan_literal text i =
   let signed = i < n && (text.[i] = '+' || text.[i] = '-') in
   let body = if signed then i + 1 else i in
   let word =
-    if body + 3 <= n && String.sub text body 3 = "inf"
-    then Some "inf"
-    else if body + 3 <= n && String.sub text body 3 = "nan"
-    then Some "nan"
+    if body + 3 <= n && String.sub text body 3 = "inf" then Some "inf"
+    else if body + 3 <= n && String.sub text body 3 = "nan" then Some "nan"
     else None
   in
   match word with
   | None -> None
   | Some _ ->
       let stop = body + 3 in
-      if stop < n && not (value_terminator text.[stop])
-      then None
+      if stop < n && not (value_terminator text.[stop]) then None
       else Some ("\"" ^ String.sub text i (stop - i) ^ "\"", stop)
 
 let translate_toml_literals text =
@@ -1314,20 +1266,18 @@ let translate_toml_literals text =
     i := !i + width;
     let closed = ref false in
     while (not !closed) && !i < n do
-      if quote = '"' && text.[!i] = '\\' && !i + 1 < n
-      then begin
+      if quote = '"' && text.[!i] = '\\' && !i + 1 < n then begin
         copy ();
         copy ()
       end
-      else if triple && !i + 2 < n && text.[!i] = quote && text.[!i + 1] = quote
-              && text.[!i + 2] = quote
+      else if
+        triple && !i + 2 < n && text.[!i] = quote && text.[!i + 1] = quote && text.[!i + 2] = quote
       then begin
         Buffer.add_substring out text !i 3;
         i := !i + 3;
         closed := true
       end
-      else if (not triple) && text.[!i] = quote
-      then begin
+      else if (not triple) && text.[!i] = quote then begin
         copy ();
         closed := true
       end
@@ -1336,25 +1286,22 @@ let translate_toml_literals text =
   in
   while !i < n do
     let ch = text.[!i] in
-    if !in_header
-    then begin
+    if !in_header then begin
       if ch = ']' then in_header := false;
       if ch = '\n' then line_start := true
       else if ch <> ' ' && ch <> '\t' && ch <> '\r' then line_start := false;
       copy ()
     end
-    else if ch = '#'
-    then while !i < n && text.[!i] <> '\n' do
-      copy ()
-    done
-    else if ch = '\n'
-    then begin
+    else if ch = '#' then
+      while !i < n && text.[!i] <> '\n' do
+        copy ()
+      done
+    else if ch = '\n' then begin
       if !squares = 0 && !braces = 0 then expect_value := false;
       line_start := true;
       copy ()
     end
-    else if ch = ' ' || ch = '\t' || ch = '\r'
-    then copy ()
+    else if ch = ' ' || ch = '\t' || ch = '\r' then copy ()
     else begin
       let was_line_start = !line_start in
       line_start := false;
@@ -1372,8 +1319,7 @@ let translate_toml_literals text =
           expect_value := true
       | '[' ->
           copy ();
-          if was_line_start && !squares = 0 && !braces = 0
-          then in_header := true
+          if was_line_start && !squares = 0 && !braces = 0 then in_header := true
           else begin
             incr squares;
             expect_value := true
@@ -1394,8 +1340,7 @@ let translate_toml_literals text =
           copy ();
           expect_value := !squares > 0 && !braces = 0
       | _ ->
-          if !expect_value
-          then (
+          if !expect_value then (
             match
               match non_decimal_literal text !i with
               | Some literal -> Some literal
@@ -1420,21 +1365,20 @@ let translate_toml_literals text =
 let load path =
   let candidate = config_path path in
   let* text =
-    if not (is_file candidate)
-    then Ok None
+    if not (is_file candidate) then Ok None
     else
-      (try Ok (Some (read_file candidate))
-       with Sys_error message ->
-         Error (Printf.sprintf "seekwright: cannot read %s: %s" candidate message))
+      try Ok (Some (read_file candidate))
+      with Sys_error message ->
+        Error (Printf.sprintf "seekwright: cannot read %s: %s" candidate message)
   in
   match text with
   | None -> resolve ()
-  | Some text ->
-      (match Toml.Parser.from_string (translate_toml_literals text) with
+  | Some text -> (
+      match Toml.Parser.from_string (translate_toml_literals text) with
       | `Error (message, _) ->
           Error (Printf.sprintf "seekwright: invalid TOML in %s: %s" candidate message)
-      | `Ok table ->
-          (match decode_table table with
+      | `Ok table -> (
+          match decode_table table with
           | Ok config -> Ok config
           | Error fault ->
               Error

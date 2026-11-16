@@ -30,14 +30,18 @@ let test_a_long_text_is_cut_at_a_paragraph_break () =
   let core = String.sub window 0 (String.length window - String.length "\n\n[...]") in
   A.check A.bool "prefix of the text" true (String.starts_with ~prefix:core text);
   A.check A.bool "cut landed on a paragraph boundary" true
-    (match core with "" -> false | c -> c.[String.length c - 1] >= '0' && c.[String.length c - 1] <= '9')
+    (match core with
+    | "" -> false
+    | c -> c.[String.length c - 1] >= '0' && c.[String.length c - 1] <= '9')
 
 let test_the_marker_is_not_counted_in_the_offsets () =
   let text = paged 40 in
   let window, _ = F.window_text text ~offset:0 ~max_chars:200 in
   let core = String.sub window 0 (String.length window - String.length "\n\n[...]") in
   let rest = String.sub text (String.length core) (String.length text - String.length core) in
-  A.check A.string "the cut is the paragraph break it found" ("\n\n" ^ String.sub rest 2 (String.length rest - 2)) rest
+  A.check A.string "the cut is the paragraph break it found"
+    ("\n\n" ^ String.sub rest 2 (String.length rest - 2))
+    rest
 
 let test_an_offset_slices_mid_document () =
   let text = paged 40 in
@@ -84,7 +88,7 @@ let assert_url_refused ?needle f =
   match f () with
   | Error msg -> (
       match needle with
-      | Some needle when not (contains ~haystack:msg ~needle:needle) ->
+      | Some needle when not (contains ~haystack:msg ~needle) ->
           A.failf "message %S lacks %S" msg needle ()
       | _ -> ())
   | Ok url -> A.failf "expected a refusal, got %S" url
@@ -101,14 +105,13 @@ let test_non_http_schemes_are_refused () =
 
 let test_credentials_are_refused_not_stripped () =
   assert_url_refused ~needle:"credentials" (fun () ->
-    F.validate_url "http://user:secret@example.com/")
+      F.validate_url "http://user:secret@example.com/")
 
 let test_missing_host_is_refused () =
   assert_url_refused ~needle:"no host" (fun () -> F.validate_url "http:///path-only")
 
 let test_ordinary_url_passes_and_keeps_its_query () =
-  A.check A.string "unchanged" "https://e.com/a?b=1"
-    (expect_url "https://e.com/a?b=1")
+  A.check A.string "unchanged" "https://e.com/a?b=1" (expect_url "https://e.com/a?b=1")
 
 let test_fragment_is_dropped () =
   A.check A.string "fragment gone" "https://e.com/a" (expect_url "https://e.com/a#frag")
@@ -140,8 +143,7 @@ let test_url_trim_is_unicode_whitespace () =
    these and reparses it, which is why the check runs on the raw netloc. *)
 let test_bracketed_ipv6_forms_the_oracle_refuses () =
   let expect_refusal url =
-    A.check (A.result A.string A.string) url
-      (Error "unparseable URL: Invalid IPv6 URL")
+    A.check (A.result A.string A.string) url (Error "unparseable URL: Invalid IPv6 URL")
       (F.validate_url url)
   in
   List.iter expect_refusal
@@ -156,8 +158,7 @@ let test_bracketed_ipv6_forms_the_oracle_refuses () =
   List.iter
     (fun url ->
       A.check (A.result A.string A.string) url
-        (Error "unparseable URL: IPvFuture address is invalid")
-        (F.validate_url url))
+        (Error "unparseable URL: IPvFuture address is invalid") (F.validate_url url))
     [ "http://[v.abc]/"; "http://[v1.]/" ];
   A.check (A.result A.string A.string) "an unparseable literal"
     (Error "unparseable URL: 'zz::1' does not appear to be an IPv4 or IPv6 address")
@@ -182,8 +183,7 @@ let test_bracketed_ipv6_forms_the_oracle_accepts () =
       "http://[::ffff:127.0.0.1]/";
     ];
   (* The port rules do not change because the host is bracketed. *)
-  A.check (A.result A.string A.string) "port zero"
-    (Error "port 0 is not fetchable")
+  A.check (A.result A.string A.string) "port zero" (Error "port 0 is not fetchable")
     (F.validate_url "http://[::1]:0/");
   A.check (A.result A.string A.string) "port above the range"
     (Error "invalid port: 65536 is not a port in 1-65535")
@@ -194,8 +194,7 @@ let test_the_signature_table_names_exactly_the_admitted_types () =
     [ "image/png"; "image/jpeg"; "image/gif"; "image/webp" ]
 
 let test_each_signature_sniffs_as_its_type () =
-  A.check (A.option A.string) "png" (Some "image/png")
-    (F.sniff_image_type "\x89PNG\r\n\x1a\nrest");
+  A.check (A.option A.string) "png" (Some "image/png") (F.sniff_image_type "\x89PNG\r\n\x1a\nrest");
   A.check (A.option A.string) "jpeg" (Some "image/jpeg") (F.sniff_image_type "\xff\xd8\xff\xe0");
   A.check (A.option A.string) "gif87a" (Some "image/gif") (F.sniff_image_type "GIF87a......");
   A.check (A.option A.string) "gif89a" (Some "image/gif") (F.sniff_image_type "GIF89a......");
@@ -217,8 +216,7 @@ let test_charset_is_parsed () =
   A.check (A.option A.string) "absent" None (E.charset_of (Some "text/html"))
 
 let test_is_supported_reads_the_json_suffix () =
-  A.check A.bool "geo+json" true
-    (E.is_supported [ "application/json" ] "application/geo+json");
+  A.check A.bool "geo+json" true (E.is_supported [ "application/json" ] "application/geo+json");
   A.check A.bool "xml suffix is not json" false
     (E.is_supported [ "application/json" ] "application/atom+xml")
 
@@ -238,7 +236,10 @@ let test_sniffs_html () =
   A.check A.bool "not html" false (E.sniffs_html "just text")
 
 let test_declared_charset_is_preferred () =
-  let body = "caf\xe9" (* latin-1 *) in
+  let body =
+    "caf\xe9"
+    (* latin-1 *)
+  in
   A.check A.string "latin-1 decoded" "café" (E.decode body (Some "text/html; charset=iso-8859-1"))
 
 let test_undecodable_bytes_do_not_raise () =
@@ -266,13 +267,14 @@ let test_prefers_chunks_hitting_more_terms () =
   let one_term = chunked_para "Volatility spiked after the announcement." in
   let two_terms = chunked_para "Bitcoin volatility spiked after the announcement." in
   let text = no_term ^ "\n\n" ^ one_term ^ "\n\n" ^ two_terms in
-  let spans, dropped = E.select_passages ~text:text ~query:"bitcoin volatility" ~max_chars:6000 in
+  let spans, dropped = E.select_passages ~text ~query:"bitcoin volatility" ~max_chars:6000 in
   A.check A.int "dropped" 0 dropped;
   A.check A.int "one span" 1 (List.length spans);
   let offset, body = List.hd spans in
   A.check A.int "offset" (String.length no_term + 2) offset;
   A.check A.string "the span is the text at its offset"
-    (String.sub text offset (String.length text - offset)) body
+    (String.sub text offset (String.length text - offset))
+    body
 
 let test_budget_stops_selection_and_counts_dropped () =
   let a = chunked_para "Bitcoin volatility spiked after the announcement." in
@@ -280,7 +282,7 @@ let test_budget_stops_selection_and_counts_dropped () =
   let b = chunked_para "Bitcoin miners resumed operations." in
   let c = chunked_para "Bitcoin exchanges raised their fees." in
   let text = String.concat "\n\n" [ a; gap; b; c ] in
-  let spans, dropped = E.select_passages ~text:text ~query:"bitcoin" ~max_chars:3000 in
+  let spans, dropped = E.select_passages ~text ~query:"bitcoin" ~max_chars:3000 in
   A.check A.int "dropped" 1 dropped;
   A.check A.int "two spans" 2 (List.length spans);
   A.check A.bool "within budget" true
@@ -290,36 +292,50 @@ let test_adjacent_selected_chunks_merge_into_one_span () =
   let a = chunked_para "Bitcoin volatility spiked." in
   let b = chunked_para "Volatility spread to the altcoins." in
   let text = a ^ "\n\n" ^ b in
-  let spans, dropped = E.select_passages ~text:text ~query:"volatility" ~max_chars:6000 in
+  let spans, dropped = E.select_passages ~text ~query:"volatility" ~max_chars:6000 in
   A.check A.int "dropped" 0 dropped;
   A.check (A.list (A.pair A.int A.string)) "one span" [ (0, text) ] spans
 
 let test_no_match_returns_nothing_and_no_drops () =
   let text = chunked_para "Sourdough starters need flour and patience." in
-  A.check A.int "no spans" 0 (List.length (fst (E.select_passages ~text:text ~query:"bitcoin mining rig" ~max_chars:6000)));
-  A.check A.int "no drops" 0 (snd (E.select_passages ~text:text ~query:"bitcoin mining rig" ~max_chars:6000))
+  A.check A.int "no spans" 0
+    (List.length (fst (E.select_passages ~text ~query:"bitcoin mining rig" ~max_chars:6000)));
+  A.check A.int "no drops" 0
+    (snd (E.select_passages ~text ~query:"bitcoin mining rig" ~max_chars:6000))
 
 let test_short_query_tokens_are_ignored () =
   let text = chunked_para "Sourdough starters need flour and patience." in
-  let spans, dropped = E.select_passages ~text:text ~query:"a of" ~max_chars:6000 in
+  let spans, dropped = E.select_passages ~text ~query:"a of" ~max_chars:6000 in
   A.check A.int "no spans" 0 (List.length spans);
   A.check A.int "no drops" 0 dropped
 
-let article ?(body = String.concat "" (List.init 10 (fun _ -> "This is the real content of the page. "))) () =
-  "<!DOCTYPE html>\n<html><head><title>The Title</title></head>\n<body>\n  <nav>Home About Contact Login</nav>\n  <script>var tracking = 1;</script>\n  <style>body { color: red }</style>\n  <article>\n    <h1>A Heading</h1>\n    <p>"
-  ^ body
-  ^ "</p>\n    <p>A second paragraph with an &amp; entity in it.</p>\n  </article>\n  <footer>Copyright 2026 Some Company</footer>\n</body></html>"
+let article
+    ?(body = String.concat "" (List.init 10 (fun _ -> "This is the real content of the page. "))) ()
+    =
+  "<!DOCTYPE html>\n\
+   <html><head><title>The Title</title></head>\n\
+   <body>\n\
+  \  <nav>Home About Contact Login</nav>\n\
+  \  <script>var tracking = 1;</script>\n\
+  \  <style>body { color: red }</style>\n\
+  \  <article>\n\
+  \    <h1>A Heading</h1>\n\
+  \    <p>" ^ body
+  ^ "</p>\n\
+    \    <p>A second paragraph with an &amp; entity in it.</p>\n\
+    \  </article>\n\
+    \  <footer>Copyright 2026 Some Company</footer>\n\
+     </body></html>"
 
 let test_it_names_itself_and_claims_no_pdf () =
   A.check A.string "name" "stdlib" S.name;
-  A.check A.bool "no pdf" false
-    (E.is_supported S.supported_types "application/pdf");
-  A.check A.string "phrase" "HTML, plain text, JSON and CSV"
-    (E.describe_types S.supported_types)
+  A.check A.bool "no pdf" false (E.is_supported S.supported_types "application/pdf");
+  A.check A.string "phrase" "HTML, plain text, JSON and CSV" (E.describe_types S.supported_types)
 
 let test_the_article_survives_and_its_chrome_does_not () =
   let r = S.extract (article ()) (Some "text/html") in
-  A.check A.bool "content kept" true (contains ~haystack:r.E.text ~needle:"real content of the page");
+  A.check A.bool "content kept" true
+    (contains ~haystack:r.E.text ~needle:"real content of the page");
   A.check A.bool "nav dropped" false (contains ~haystack:r.E.text ~needle:"Home About Contact");
   A.check A.bool "footer dropped" false (contains ~haystack:r.E.text ~needle:"Copyright 2026");
   A.check A.bool "script dropped" false (contains ~haystack:r.E.text ~needle:"var tracking");
@@ -359,7 +375,8 @@ let test_an_icon_sprite_does_not_rename_the_page () =
 
 let test_a_title_inside_a_graphic_is_never_the_page_name () =
   let body =
-    "<html><body><svg><g><svg><title>Icon A</title></svg><title>Icon B</title></svg><p>body</p></body></html>"
+    "<html><body><svg><g><svg><title>Icon A</title></svg><title>Icon \
+     B</title></svg><p>body</p></body></html>"
   in
   A.check (A.option A.string) "no title" None (S.extract body (Some "text/html")).E.title
 
@@ -412,7 +429,9 @@ let test_unextractable_types_raise () =
     [ "application/pdf"; "image/png"; "application/octet-stream" ]
 
 let test_a_json_body_becomes_structure_a_path_can_address () =
-  let r = S.extract "{\"title\": \"A page\", \"lines\": [\"one\", \"two\"]}" (Some "application/json") in
+  let r =
+    S.extract "{\"title\": \"A page\", \"lines\": [\"one\", \"two\"]}" (Some "application/json")
+  in
   A.check A.bool "addressable" true r.E.path_addressable;
   A.check A.bool "path printed" true (contains ~haystack:r.E.text ~needle:"$.lines[0]")
 
@@ -457,8 +476,7 @@ let () =
           A.test_case "an ordinary port passes" `Quick test_an_ordinary_port_passes;
           A.test_case "scheme lowercased, empty path is root" `Quick
             test_the_scheme_is_lowercased_and_an_empty_path_becomes_root;
-          A.test_case "url trim is unicode whitespace" `Quick
-            test_url_trim_is_unicode_whitespace;
+          A.test_case "url trim is unicode whitespace" `Quick test_url_trim_is_unicode_whitespace;
           A.test_case "broken bracketed ipv6 forms are refused" `Quick
             test_bracketed_ipv6_forms_the_oracle_refuses;
           A.test_case "valid bracketed ipv6 forms are accepted" `Quick
@@ -468,7 +486,8 @@ let () =
         [
           A.test_case "the signature table names the admitted types" `Quick
             test_the_signature_table_names_exactly_the_admitted_types;
-          A.test_case "each signature sniffs as its type" `Quick test_each_signature_sniffs_as_its_type;
+          A.test_case "each signature sniffs as its type" `Quick
+            test_each_signature_sniffs_as_its_type;
           A.test_case "resolved cap" `Quick test_resolved_cap;
         ] );
       ( "plumbing",
@@ -479,7 +498,8 @@ let () =
           A.test_case "describe_types renders families in order" `Quick
             test_describe_types_renders_the_families_in_order;
           A.test_case "sniffs html" `Quick test_sniffs_html;
-          A.test_case "decode prefers the declared charset" `Quick test_declared_charset_is_preferred;
+          A.test_case "decode prefers the declared charset" `Quick
+            test_declared_charset_is_preferred;
           A.test_case "undecodable bytes do not raise" `Quick test_undecodable_bytes_do_not_raise;
           A.test_case "unknown codec falls back" `Quick
             test_a_declared_charset_no_codec_names_falls_back;
@@ -493,7 +513,8 @@ let () =
             test_prefers_chunks_hitting_more_terms;
           A.test_case "budget stops selection and counts dropped" `Quick
             test_budget_stops_selection_and_counts_dropped;
-          A.test_case "adjacent chunks merge" `Quick test_adjacent_selected_chunks_merge_into_one_span;
+          A.test_case "adjacent chunks merge" `Quick
+            test_adjacent_selected_chunks_merge_into_one_span;
           A.test_case "no match returns nothing" `Quick test_no_match_returns_nothing_and_no_drops;
           A.test_case "short query tokens are ignored" `Quick test_short_query_tokens_are_ignored;
         ] );

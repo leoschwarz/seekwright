@@ -2,7 +2,8 @@
 
 module Json = Yojson.Safe
 
-let article_plain = {|<!DOCTYPE html>
+let article_plain =
+  {|<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -38,7 +39,8 @@ let article_plain = {|<!DOCTYPE html>
 </html>
 |}
 
-let article_no_title = {|<!DOCTYPE html>
+let article_no_title =
+  {|<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><script>document.documentElement.className = 'js';</script></head>
 <body>
@@ -53,7 +55,8 @@ let article_no_title = {|<!DOCTYPE html>
 </html>
 |}
 
-let article_jsonld = {|<!DOCTYPE html>
+let article_jsonld =
+  {|<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -87,117 +90,170 @@ let nav_heavy_docs =
     List.init 18 (fun i ->
         Printf.sprintf "<li><a href=\"#s%d\">Section %d</a></li>" (i + 1) (i + 1))
   in
-  "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
-   <title>Section 12 — Mooring lines — Harbour manual</title>\n</head>\n<body>\n\
-   " ^ "<div class=\"breadcrumb\"><a href=\"/\">Manual home</a> / \
-   <a href=\"/chapter-3\">Chapter 3</a> / <a href=\"/chapter-3/mooring\">Mooring</a> \
-   / Section 12</div>\n<div class=\"sidebar\"><ul>"
-  ^ String.concat "\n" nav_links
-  ^ "</ul></div>\n<div class=\"toc\"><ul>"
-  ^ String.concat "\n" toc
-  ^ "</ul></div>\n<div class=\"content\">\n<h1>Section 12 — Mooring lines</h1>\n\
-   <p>A mooring line is only as good as the splice that ends it, and the manual \
-   insists on a long splice because a short one hardens where it bends.</p>\n\
-   <p>Line diameters are set by the length of the vessel and by the height of \
-   the quay, not by the weather of the day, which is why a list of diameters \
-   belongs in a printed chapter rather than in a sign on the wall.</p>\n\
-   <p>The chapter closes with the three knots a deckhand is expected to tie \
-   with one hand, in the order the examiner asks for them.</p>\n</div>\n\
-   <div class=\"pager\"><a href=\"/chapter-3/mooring/s11\">Previous: Section \
-   11</a> <a href=\"/chapter-3/mooring/s13\">Next: Section 13</a></div>\n\
-   <div class=\"helpful\">Was this section helpful? Yes No</div>\n</body>\n</html>\n"
+  "<!DOCTYPE html>\n\
+   <html lang=\"en\">\n\
+   <head>\n\
+   <meta charset=\"utf-8\">\n\
+   <title>Section 12 — Mooring lines — Harbour manual</title>\n\
+   </head>\n\
+   <body>\n"
+  ^ "<div class=\"breadcrumb\"><a href=\"/\">Manual home</a> / <a href=\"/chapter-3\">Chapter \
+     3</a> / <a href=\"/chapter-3/mooring\">Mooring</a> / Section 12</div>\n\
+     <div class=\"sidebar\"><ul>" ^ String.concat "\n" nav_links
+  ^ "</ul></div>\n<div class=\"toc\"><ul>" ^ String.concat "\n" toc
+  ^ "</ul></div>\n\
+     <div class=\"content\">\n\
+     <h1>Section 12 — Mooring lines</h1>\n\
+     <p>A mooring line is only as good as the splice that ends it, and the manual insists on a \
+     long splice because a short one hardens where it bends.</p>\n\
+     <p>Line diameters are set by the length of the vessel and by the height of the quay, not by \
+     the weather of the day, which is why a list of diameters belongs in a printed chapter rather \
+     than in a sign on the wall.</p>\n\
+     <p>The chapter closes with the three knots a deckhand is expected to tie with one hand, in \
+     the order the examiner asks for them.</p>\n\
+     </div>\n\
+     <div class=\"pager\"><a href=\"/chapter-3/mooring/s11\">Previous: Section 11</a> <a \
+     href=\"/chapter-3/mooring/s13\">Next: Section 13</a></div>\n\
+     <div class=\"helpful\">Was this section helpful? Yes No</div>\n\
+     </body>\n\
+     </html>\n"
 
 let nav_heavy_portal =
   let headlines n prefix =
     List.init n (fun i ->
-        Printf.sprintf "<li><a href=\"/n/%d\">%s %d: what the harbour board decided this week</a></li>"
-          (i + 1) prefix (i + 1))
+        Printf.sprintf
+          "<li><a href=\"/n/%d\">%s %d: what the harbour board decided this week</a></li>" (i + 1)
+          prefix (i + 1))
   in
-  "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n\
-   <title>Harbour Bulletin — today in the port</title>\n</head>\n<body>\n\
-   <header><nav><a href=\"/\">Home</a> <a href=\"/port\">Port</a> <a href=\"/weather\">Weather</a> <a href=\"/jobs\">Jobs</a> <a href=\"/login\">Sign in</a></nav></header>\n\
-   <div class=\"subscribe\">Subscribe for 4 a month and read every harbour story on this site without a banner in the way.</div>\n\
+  "<!DOCTYPE html>\n\
+   <html lang=\"en\">\n\
+   <head>\n\
+   <meta charset=\"utf-8\">\n\
+   <title>Harbour Bulletin — today in the port</title>\n\
+   </head>\n\
+   <body>\n\
+   <header><nav><a href=\"/\">Home</a> <a href=\"/port\">Port</a> <a href=\"/weather\">Weather</a> \
+   <a href=\"/jobs\">Jobs</a> <a href=\"/login\">Sign in</a></nav></header>\n\
+   <div class=\"subscribe\">Subscribe for 4 a month and read every harbour story on this site \
+   without a banner in the way.</div>\n\
    <div class=\"lead\"><h1>One short story under a lot of furniture</h1>\n\
-   <p>The east pier will close for three days at the end of the month so the \
-   fender timbers can be replaced, and the tenders will use the slipway.</p></div>\n\
+   <p>The east pier will close for three days at the end of the month so the fender timbers can be \
+   replaced, and the tenders will use the slipway.</p></div>\n\
    <div class=\"column\"><h2>Most read</h2><ul>"
   ^ String.concat "\n" (headlines 20 "Most read item")
   ^ "</ul></div>\n<div class=\"column\"><h2>Port noticeboard</h2><ul>"
   ^ String.concat "\n" (headlines 20 "Noticeboard item")
-  ^ "</ul></div>\n<div class=\"promo\"><h2>Jobs at the port</h2><p>We are hiring a \
-   dredger engineer and a harbour office clerk. Send a letter.</p></div>\n\
-   <div class=\"footer-links\"><a href=\"/terms\">Terms</a> <a href=\"/privacy\">Privacy</a> \
-   <a href=\"/contact\">Contact</a> <a href=\"/ads\">Advertising</a></div>\n\
-   <footer>Copyright 2026 Harbour Bulletin. All rights reserved.</footer>\n</body>\n</html>\n"
+  ^ "</ul></div>\n\
+     <div class=\"promo\"><h2>Jobs at the port</h2><p>We are hiring a dredger engineer and a \
+     harbour office clerk. Send a letter.</p></div>\n\
+     <div class=\"footer-links\"><a href=\"/terms\">Terms</a> <a href=\"/privacy\">Privacy</a> <a \
+     href=\"/contact\">Contact</a> <a href=\"/ads\">Advertising</a></div>\n\
+     <footer>Copyright 2026 Harbour Bulletin. All rights reserved.</footer>\n\
+     </body>\n\
+     </html>\n"
 
 let malformed_unclosed =
-  "<!DOCTYPE html>\n<html>\n<head><title>Unclosed markup — Harbour Bulletin</title>\n\
-   <body>\n<div id=shell>\n<article>\n<h1>The pier that was never closed\n</h1>\n\
-   <p>Real markup written by a template that ran out of budget: a paragraph that \
-   is never closed, a list item that is never closed, and a div left open when \
-   the document ends.\n<ul>\n<li>A first item, unclosed\n<li>A second item, also \
-   unclosed\n</ul>\n<p>The paragraph after the list is still the article, and a \
-   reader of this page cannot tell that the template was careless.\n</article>\n\
+  "<!DOCTYPE html>\n\
+   <html>\n\
+   <head><title>Unclosed markup — Harbour Bulletin</title>\n\
+   <body>\n\
+   <div id=shell>\n\
+   <article>\n\
+   <h1>The pier that was never closed\n\
+   </h1>\n\
+   <p>Real markup written by a template that ran out of budget: a paragraph that is never closed, \
+   a list item that is never closed, and a div left open when the document ends.\n\
+   <ul>\n\
+   <li>A first item, unclosed\n\
+   <li>A second item, also unclosed\n\
+   </ul>\n\
+   <p>The paragraph after the list is still the article, and a reader of this page cannot tell \
+   that the template was careless.\n\
+   </article>\n\
    </div>\n"
 
 let malformed_angle_text =
-  "<!DOCTYPE html>\n<html><head><title>Angle brackets in prose — Harbour Bulletin</title></head>\n\
-   <body><article>\n<h1>Angle brackets in prose</h1>\n\
-   <p>If a < b and b < c then the signal lamp is the only honest comparison on \
-   this page. A bare < that opens nothing is data, and the sentence has to \
-   survive it.</p>\n\
-   <p>A stray > in the middle of a sentence is ordinary prose, and 5 > 3 needs \
-   no entity to be readable.</p>\n\
+  "<!DOCTYPE html>\n\
+   <html><head><title>Angle brackets in prose — Harbour Bulletin</title></head>\n\
+   <body><article>\n\
+   <h1>Angle brackets in prose</h1>\n\
+   <p>If a < b and b < c then the signal lamp is the only honest comparison on this page. A bare < \
+   that opens nothing is data, and the sentence has to survive it.</p>\n\
+   <p>A stray > in the middle of a sentence is ordinary prose, and 5 > 3 needs no entity to be \
+   readable.</p>\n\
    <p>An empty tag pair: <b></b> between words.</p>\n\
    <p>A tag closed with a space: <em >emphasis closed with a space</em >.</p>\n\
    </article></body></html>\n"
 
 let malformed_misnested =
-  "<!DOCTYPE html>\n<html><head><title>Mis-nested markup — Harbour Bulletin</title></head>\n\
-   <body>\n<article>\n<h1>Mis-nested markup</h1>\n\
-   <p>The emphasis crossed over: <b>bold starts <i>and italic starts inside it \
-   but bold ends first</b></i>, which is what a 1998 page looked like and what a \
-   parser still has to answer for.</p>\n\
-   <TABLE>\n<TR><TD>one<TD>two\n<TR><TD>three<TD>four\n</TABLE>\n\
+  "<!DOCTYPE html>\n\
+   <html><head><title>Mis-nested markup — Harbour Bulletin</title></head>\n\
+   <body>\n\
+   <article>\n\
+   <h1>Mis-nested markup</h1>\n\
+   <p>The emphasis crossed over: <b>bold starts <i>and italic starts inside it but bold ends \
+   first</b></i>, which is what a 1998 page looked like and what a parser still has to answer \
+   for.</p>\n\
+   <TABLE>\n\
+   <TR><TD>one<TD>two\n\
+   <TR><TD>three<TD>four\n\
+   </TABLE>\n\
    <P>An uppercase paragraph with a <BR/> break and a <BR> second break.</P>\n\
    <P>An element closed too early: <span>text<span>again</span>closed</span>.</p>\n\
-   </article>\n</body></html>\n"
+   </article>\n\
+   </body></html>\n"
 
 let malformed_attributes =
   (* Attribute runs are where a hand-written tokenizer earns its keep: a [>]
      inside a quoted value, an unquoted value, a boolean attribute with no
      value, and a quote never closed. *)
-  "<!DOCTYPE html>\n<html><head><title>Attribute shapes — Harbour Bulletin</title></head>\n\
-   <body>\n<article>\n<h1>Attribute shapes</h1>\n\
-   <p data-note=\"a > inside a quoted value must not end the tag\">Text kept by a \
-   quoted attribute that holds a closing bracket.</p>\n\
+  "<!DOCTYPE html>\n\
+   <html><head><title>Attribute shapes — Harbour Bulletin</title></head>\n\
+   <body>\n\
+   <article>\n\
+   <h1>Attribute shapes</h1>\n\
+   <p data-note=\"a > inside a quoted value must not end the tag\">Text kept by a quoted attribute \
+   that holds a closing bracket.</p>\n\
    <p data-note=a >Text kept by an unquoted attribute value.</p>\n\
    <input type=checkbox checked>\n\
    <a href=\"x.html\" title=\"kept\">A link whose text must survive</a>\n\
-   <p>An attribute value never closed: <span data-x=\"the quote is never \
-   closed and the rest of this line is still a page\n\
+   <p>An attribute value never closed: <span data-x=\"the quote is never closed and the rest of \
+   this line is still a page\n\
    <p>Text after an unterminated attribute, which the parser has to recover from.</p>\n\
    </article></body></html>\n"
 
 let malformed_comments =
-  "<!DOCTYPE html>\n<html><head><title>Comments — Harbour Bulletin</title>\n\
+  "<!DOCTYPE html>\n\
+   <html><head><title>Comments — Harbour Bulletin</title>\n\
    <!-- a comment that holds </div> and </script> as text -->\n\
    <!--[if lt IE 9]><p>Old browsers get this paragraph: SHOULD NOT APPEAR</p><![endif]-->\n\
    <style>/* a style rule with </p> inside it: SHOULD NOT APPEAR */</style>\n\
-   </head>\n<body>\n<article>\n<h1>Comments and conditional comments</h1>\n\
-   <p>None of the markup inside a comment is page text, including a comment that \
-   looks like a tag or an old browser-conditional block.</p>\n\
-   <p>Second paragraph, after a comment that never closes at the end of the \
-   document.</p>\n</article>\n<!-- this comment is never closed\n"
+   </head>\n\
+   <body>\n\
+   <article>\n\
+   <h1>Comments and conditional comments</h1>\n\
+   <p>None of the markup inside a comment is page text, including a comment that looks like a tag \
+   or an old browser-conditional block.</p>\n\
+   <p>Second paragraph, after a comment that never closes at the end of the document.</p>\n\
+   </article>\n\
+   <!-- this comment is never closed\n"
 
 let malformed_script_cdata =
-  "<!DOCTYPE html>\n<html><head>\n<title>Script bodies — Harbour Bulletin</title>\n\
-   <script>\nvar markup = \"<p>SHOULD NOT APPEAR a paragraph inside a script \
-   string</p>\";\nif (a < b && c > d) { console.log('</div>'); }\nvar tail = \"-->\";\n\
-   </script>\n<style>a[href^=\"data-\"]::after { content: \"SHOULD NOT APPEAR\"; }\
-   </style>\n</head>\n<body>\n<article>\n<h1>Script bodies are data</h1>\n\
-   <p>The article has to survive a script body that contains angle brackets, a \
-   fake closing tag, and a comment terminator.</p>\n\
+  "<!DOCTYPE html>\n\
+   <html><head>\n\
+   <title>Script bodies — Harbour Bulletin</title>\n\
+   <script>\n\
+   var markup = \"<p>SHOULD NOT APPEAR a paragraph inside a script string</p>\";\n\
+   if (a < b && c > d) { console.log('</div>'); }\n\
+   var tail = \"-->\";\n\
+   </script>\n\
+   <style>a[href^=\"data-\"]::after { content: \"SHOULD NOT APPEAR\"; }</style>\n\
+   </head>\n\
+   <body>\n\
+   <article>\n\
+   <h1>Script bodies are data</h1>\n\
+   <p>The article has to survive a script body that contains angle brackets, a fake closing tag, \
+   and a comment terminator.</p>\n\
    </article></body></html>\n"
 
 let malformed_deep_nesting n =
@@ -207,15 +263,15 @@ let malformed_deep_nesting n =
      nesting and never reaches the text. *)
   let opens = String.concat "" (List.init n (fun _ -> "<div>")) in
   let closes = String.concat "" (List.init n (fun _ -> "</div>")) in
-  "<!DOCTYPE html>\n<html><head><title>Deep nesting — Harbour Bulletin</title></head>\n\
-   <body>" ^ opens
-  ^ "<article><h1>Text at the bottom of a deep pit</h1>\n\
-     <p>The paragraph under " ^ string_of_int n
-     ^ " nested divs has to come back, and the divs around it have to stay \
-     invisible.</p></article>" ^ closes ^ "</body></html>\n"
+  "<!DOCTYPE html>\n<html><head><title>Deep nesting — Harbour Bulletin</title></head>\n<body>"
+  ^ opens ^ "<article><h1>Text at the bottom of a deep pit</h1>\n<p>The paragraph under "
+  ^ string_of_int n
+  ^ " nested divs has to come back, and the divs around it have to stay invisible.</p></article>"
+  ^ closes ^ "</body></html>\n"
 
 let encoding_utf8_bom =
-  "\xef\xbb\xbf" ^ {|<!DOCTYPE html>
+  "\xef\xbb\xbf"
+  ^ {|<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><title>A page with a byte-order mark</title></head>
 <body>
@@ -233,17 +289,17 @@ let encoding_utf8_bom =
    undefined. Every one of them has to arrive as the character the codec says,
    not as the byte. *)
 let encoding_cp1252 =
-  "<!DOCTYPE html>\r\n<html><head><meta charset=\"windows-1252\">\r\n\
+  "<!DOCTYPE html>\r\n\
+   <html><head><meta charset=\"windows-1252\">\r\n\
    <title>D\xe9j\xe0 vu \x92 au quai \x93nord\x94</title></head>\r\n\
    <body><article>\r\n\
    <h1>D\xe9j\xe0 vu au quai nord</h1>\r\n\
-   <p>Le tarif est de \x804,50 pour un aller simple \x97 et de \x807,20 pour un \
-   aller-retour, si le bateau attend.</p>\r\n\
-   <p>Noms propres: Z\xfcrich, Goethestra\xdfe, \xd1u\xe1rez, fa\xE7ade, \
-   \x93Anhang\x94.</p>\r\n\
+   <p>Le tarif est de \x804,50 pour un aller simple \x97 et de \x807,20 pour un aller-retour, si \
+   le bateau attend.</p>\r\n\
+   <p>Noms propres: Z\xfcrich, Goethestra\xdfe, \xd1u\xe1rez, fa\xE7ade, \x93Anhang\x94.</p>\r\n\
    <p>Und eine Zeile auf Deutsch: die F\xe4hre f\xe4hrt alle zwanzig Minuten.</p>\r\n\
-   <p>A byte the codec leaves undefined: \x81 sits in this sentence, and the \
-   page is still readable around it.</p>\r\n\
+   <p>A byte the codec leaves undefined: \x81 sits in this sentence, and the page is still \
+   readable around it.</p>\r\n\
    </article></body></html>\r\n"
 
 (* The bytes are Windows-1252; the header says nothing. A reader that honours
@@ -253,42 +309,43 @@ let encoding_cp1252 =
 let encoding_latin1_undeclared =
   String.concat ""
     [
-      "<!DOCTYPE html>\n<html><head><title>Mojibake, honestly measured</title>\
-       </head>\n<body><article>\n<h1>Mojibake, honestly measured</h1>\n<p>";
-      "D\xe9j\xe0 vu au quai nord: le tarif est de \x804,50 pour un aller \
-       simple, et la f\xe9e du quai dit bonjour.";
-      "</p>\n<p>The French above is written in Windows-1252 bytes while the \
-       header names no charset, so a decoder that trusts the header reads it as \
-       UTF-8 and pays for the mistake character by character.</p>\n\
-       <p>The English paragraph below is unaffected: the east pier keeps its \
-       06:12 departure whatever the header says.</p>\n\
+      "<!DOCTYPE html>\n\
+       <html><head><title>Mojibake, honestly measured</title></head>\n\
+       <body><article>\n\
+       <h1>Mojibake, honestly measured</h1>\n\
+       <p>";
+      "D\xe9j\xe0 vu au quai nord: le tarif est de \x804,50 pour un aller simple, et la f\xe9e du \
+       quai dit bonjour.";
+      "</p>\n\
+       <p>The French above is written in Windows-1252 bytes while the header names no charset, so \
+       a decoder that trusts the header reads it as UTF-8 and pays for the mistake character by \
+       character.</p>\n\
+       <p>The English paragraph below is unaffected: the east pier keeps its 06:12 departure \
+       whatever the header says.</p>\n\
        </article></body></html>\n";
     ]
 
 (* Declared UTF-8, and bytes that are not: a lone continuation byte, a truncated
    sequence, and an overlong-looking one. *)
 let encoding_undecodable =
-  "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Undecodable \
-   bytes</title></head><body><article>\n<h1>Undecodable bytes inside a declared \
-   UTF-8 page</h1>\n\
-   <p>A lone continuation byte: \xb7 in the middle of a sentence about the \
-   north pier.</p>\n\
+  "<!DOCTYPE html>\n\
+   <html><head><meta charset=\"utf-8\"><title>Undecodable bytes</title></head><body><article>\n\
+   <h1>Undecodable bytes inside a declared UTF-8 page</h1>\n\
+   <p>A lone continuation byte: \xb7 in the middle of a sentence about the north pier.</p>\n\
    <p>A truncated sequence: \xc3\xa9 is fine, \xc3\x28 is not.</p>\n\
-   <p>Text that must survive anyway: the harbour office opens at nine and \
-   closes at five.</p>\n\
+   <p>Text that must survive anyway: the harbour office opens at nine and closes at five.</p>\n\
    </article></body></html>\n"
 
 let entities_soup =
-  "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Entities — \
-   Harbour Bulletin</title></head><body>\n\
-   <article>\n<h1>Entities, including the ones a page gets wrong</h1>\n\
-   <p>Named and numeric: &amp; &lt; &gt; &quot; &copy; &mdash; &ndash; &hellip; \
-   &nbsp; &euro; &pound; &sect; and the numeric forms &#8212; &#x2014; &#65; \
-   &#x41;.</p>\n\
-   <p>Legacy forms with no semicolon: &amp &copy &nbsp at the end of a clause \
-   &amp</p>\n\
-   <p>Names the table does not have: &notarealname; stays as written, and \
-   &notit leaves its tail behind.</p>\n\
+  "<!DOCTYPE html>\n\
+   <html><head><meta charset=\"utf-8\"><title>Entities — Harbour Bulletin</title></head><body>\n\
+   <article>\n\
+   <h1>Entities, including the ones a page gets wrong</h1>\n\
+   <p>Named and numeric: &amp; &lt; &gt; &quot; &copy; &mdash; &ndash; &hellip; &nbsp; &euro; \
+   &pound; &sect; and the numeric forms &#8212; &#x2014; &#65; &#x41;.</p>\n\
+   <p>Legacy forms with no semicolon: &amp &copy &nbsp at the end of a clause &amp</p>\n\
+   <p>Names the table does not have: &notarealname; stays as written, and &notit leaves its tail \
+   behind.</p>\n\
    <p>A bare ampersand in prose: Tom & Jerry waited for the 06:12.</p>\n\
    <p>A numeric reference outside the range: &#1114112; and &#0;.</p>\n\
    </article></body></html>\n"
@@ -349,24 +406,25 @@ let form_login =
 |}
 
 let table_reference =
-  "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Tide table — \
-   Harbour Bulletin</title></head><body>\n\
+  "<!DOCTYPE html>\n\
+   <html><head><meta charset=\"utf-8\"><title>Tide table — Harbour Bulletin</title></head><body>\n\
    <h1>Tide table for the week</h1>\n\
-   <table>\n<thead><tr><th>Day</th><th>High water</th><th>Height</th></tr>\
-   </thead>\n<tbody>\n"
+   <table>\n\
+   <thead><tr><th>Day</th><th>High water</th><th>Height</th></tr></thead>\n\
+   <tbody>\n"
   ^ String.concat "\n"
       (List.mapi
          (fun i d ->
-           Printf.sprintf "<tr><td>%s</td><td>%02d:%02d</td><td>%.1f m</td></tr>"
-             d (5 + i) ((i * 17) mod 60) (2.5 +. float_of_int i /. 2.0))
-         [
-           "Monday"; "Tuesday"; "Wednesday"; "Thursday"; "Friday"; "Saturday";
-           "Sunday";
-         ])
-  ^ "\n</tbody>\n<tfoot><tr><td>Mean spring</td><td colspan=\"2\">3.4 m</td></tr>\
-     </tfoot>\n</table>\n\
-     <p>Heights are chart datum. The harbour master adds half a metre in a \
-     north-westerly.</p>\n</body></html>\n"
+           Printf.sprintf "<tr><td>%s</td><td>%02d:%02d</td><td>%.1f m</td></tr>" d (5 + i)
+             (i * 17 mod 60)
+             (2.5 +. (float_of_int i /. 2.0)))
+         [ "Monday"; "Tuesday"; "Wednesday"; "Thursday"; "Friday"; "Saturday"; "Sunday" ])
+  ^ "\n\
+     </tbody>\n\
+     <tfoot><tr><td>Mean spring</td><td colspan=\"2\">3.4 m</td></tr></tfoot>\n\
+     </table>\n\
+     <p>Heights are chart datum. The harbour master adds half a metre in a north-westerly.</p>\n\
+     </body></html>\n"
 
 let list_hybrid =
   {|<!DOCTYPE html>
@@ -412,40 +470,41 @@ let huge_generated words =
      with no long page measures nothing about cost. *)
   let paragraph i =
     Printf.sprintf
-      "<p>Paragraph %d of the harbour survey. The crossing between the two piers \
-       takes between eleven and nineteen minutes depending on the tide and on how \
-       long the boom takes to come down, and the difference matters most to the \
-       people who are already standing on the west pier when the boat leaves the \
-       east one.</p>\n"
+      "<p>Paragraph %d of the harbour survey. The crossing between the two piers takes between \
+       eleven and nineteen minutes depending on the tide and on how long the boom takes to come \
+       down, and the difference matters most to the people who are already standing on the west \
+       pier when the boat leaves the east one.</p>\n"
       (i + 1)
   in
   let n = words / 30 in
-  "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>The full harbour \
-   survey — Harbour Bulletin</title></head>\n<body>\n\
+  "<!DOCTYPE html>\n\
+   <html><head><meta charset=\"utf-8\"><title>The full harbour survey — Harbour \
+   Bulletin</title></head>\n\
+   <body>\n\
    <header><nav><a href=\"/\">Home</a> <a href=\"/port\">Port</a></nav></header>\n\
-   <article>\n<h1>The full harbour survey</h1>\n"
+   <article>\n\
+   <h1>The full harbour survey</h1>\n"
   ^ String.concat "" (List.init n paragraph)
-  ^ "</article>\n<footer>Copyright 2026 Harbour Bulletin.</footer>\n</body>\n\
-     </html>\n"
+  ^ "</article>\n<footer>Copyright 2026 Harbour Bulletin.</footer>\n</body>\n</html>\n"
 
 let shared_blocks copies =
   (* The HTML shape of the oracle's shared-stream PDF: markup that is not shared
      by reference the way a PDF object is, but whose effect is the same — the
      output multiplies while the page's own answer stays one paragraph long. *)
   let block =
-    "<div class=\"promo\"><h2>Harbour Bulletin newsletter</h2><p>Every harbour \
-     story by email, twice a week, with the tide table and the noticeboard \
-     attached as a plain text file a reader can print.</p><ul><li><a \
-     href=\"/signup\">Subscribe</a></li><li><a href=\"/sample\">Read a sample \
-     issue</a></li><li><a href=\"/archive\">Back issues</a></li></ul></div>\n"
+    "<div class=\"promo\"><h2>Harbour Bulletin newsletter</h2><p>Every harbour story by email, \
+     twice a week, with the tide table and the noticeboard attached as a plain text file a reader \
+     can print.</p><ul><li><a href=\"/signup\">Subscribe</a></li><li><a href=\"/sample\">Read a \
+     sample issue</a></li><li><a href=\"/archive\">Back issues</a></li></ul></div>\n"
   in
-  "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>One answer, many \
-   promo blocks</title></head>\n<body>\n"
+  "<!DOCTYPE html>\n\
+   <html><head><meta charset=\"utf-8\"><title>One answer, many promo blocks</title></head>\n\
+   <body>\n"
   ^ String.concat "" (List.init copies (fun _ -> block))
   ^ "<article><h1>One answer between the promo blocks</h1>\n\
-     <p>The answer this page has is one sentence long: the west pier ramp will \
-     be repaved in March, and the tenders keep the 07:30 window while it \
-     happens.</p></article>\n</body></html>\n"
+     <p>The answer this page has is one sentence long: the west pier ramp will be repaved in \
+     March, and the tenders keep the 07:30 window while it happens.</p></article>\n\
+     </body></html>\n"
 
 let pdf_build objects =
   let out = Buffer.create 8192 in
@@ -454,8 +513,7 @@ let pdf_build objects =
   List.iteri
     (fun i body ->
       offsets := Buffer.length out :: !offsets;
-      Buffer.add_string out
-        (Printf.sprintf "%d 0 obj\n%s\nendobj\n" (i + 1) body))
+      Buffer.add_string out (Printf.sprintf "%d 0 obj\n%s\nendobj\n" (i + 1) body))
     objects;
   let startxref = Buffer.length out in
   Buffer.add_string out (Printf.sprintf "xref\n0 %d\n" (List.length objects + 1));
@@ -465,16 +523,14 @@ let pdf_build objects =
     (List.rev !offsets);
   Buffer.add_string out
     (Printf.sprintf "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF"
-       (List.length objects + 1) startxref);
+       (List.length objects + 1)
+       startxref);
   Buffer.contents out
 
 let pdf_stream ?(extra = "") body =
-  Printf.sprintf "<< /Length %d%s >>\nstream\n%s\nendstream"
-    (String.length body) extra body
+  Printf.sprintf "<< /Length %d%s >>\nstream\n%s\nendstream" (String.length body) extra body
 
-let pdf_font =
-  "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding \
-   /WinAnsiEncoding >>"
+let pdf_font = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"
 
 let pdf_minimal =
   let text = "The PDF body text says the east pier opens at six twelve" in
@@ -482,8 +538,8 @@ let pdf_minimal =
     [
       "<< /Type /Catalog /Pages 2 0 R >>";
       "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R \
-       /Resources << /Font << /F1 5 0 R >> >> >>";
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << \
+       /F1 5 0 R >> >> >>";
       pdf_stream (Printf.sprintf "BT /F1 12 Tf 20 350 Td (%s) Tj ET" text);
       pdf_font;
     ]
@@ -495,11 +551,11 @@ let pdf_two_pages =
     [
       "<< /Type /Catalog /Pages 2 0 R >>";
       "<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>";
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R \
-       /Resources << /Font << /F1 6 0 R >> >> >>";
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << \
+       /F1 6 0 R >> >> >>";
       pdf_stream (Printf.sprintf "BT /F1 12 Tf 20 350 Td (%s) Tj ET" s1);
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 6 0 R \
-       /Resources << /Font << /F1 7 0 R >> >> >>";
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 6 0 R /Resources << /Font << \
+       /F1 7 0 R >> >> >>";
       pdf_stream (Printf.sprintf "BT /F1 12 Tf 20 350 Td (%s) Tj ET" s2);
       pdf_font;
       pdf_font;
@@ -510,15 +566,15 @@ let pdf_kerned_tj =
      dropping the numbers, which is the difference between a text extractor and
      a byte dumper. *)
   let stream =
-    "BT /F1 12 Tf 20 350 Td [(The) -20 (kerned) -30 (line) 15 (is) -10 (only) \
-     -25 (readable) 20 (when) -18 (the) -12 (pieces) -30 (are) 10 (joined)] TJ ET"
+    "BT /F1 12 Tf 20 350 Td [(The) -20 (kerned) -30 (line) 15 (is) -10 (only) -25 (readable) 20 \
+     (when) -18 (the) -12 (pieces) -30 (are) 10 (joined)] TJ ET"
   in
   pdf_build
     [
       "<< /Type /Catalog /Pages 2 0 R >>";
       "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R \
-       /Resources << /Font << /F1 5 0 R >> >> >>";
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << \
+       /F1 5 0 R >> >> >>";
       pdf_stream stream;
       pdf_font;
     ]
@@ -528,14 +584,8 @@ let pdf_shared_stream pages =
      every page. The file stays small; the parse work is [pages] times one page's
      work. A byte cap cannot see that multiplication, and this is the fixture a
      PDF backend has to answer inside [fetch.timeout_seconds] or refuse. *)
-  let line =
-    "(the quick brown fox jumps over the lazy dog) Tj\n1 0 0 1 0 14 Tm\n"
-  in
-  let stream =
-    "BT /F1 12 Tf "
-    ^ String.concat "" (List.init 4000 (fun _ -> line))
-    ^ "ET"
-  in
+  let line = "(the quick brown fox jumps over the lazy dog) Tj\n1 0 0 1 0 14 Tm\n" in
+  let stream = "BT /F1 12 Tf " ^ String.concat "" (List.init 4000 (fun _ -> line)) ^ "ET" in
   (* Objects: 1 catalog, 2 page tree, 3 the shared content stream, 4 the shared
      resources, 5 the font, then one page object per page. *)
   let content_id = 3 in
@@ -543,23 +593,21 @@ let pdf_shared_stream pages =
   let font_id = 5 in
   let first_page = 6 in
   let kids =
-    String.concat " "
-      (List.init pages (fun i -> Printf.sprintf "%d 0 R" (first_page + i)))
+    String.concat " " (List.init pages (fun i -> Printf.sprintf "%d 0 R" (first_page + i)))
   in
   let page _ =
     Printf.sprintf
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents %d 0 R \
-       /Resources %d 0 R >>"
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents %d 0 R /Resources %d 0 R >>"
       content_id resources_id
   in
   pdf_build
     ([
-        "<< /Type /Catalog /Pages 2 0 R >>";
-        Printf.sprintf "<< /Type /Pages /Kids [%s] /Count %d >>" kids pages;
-        pdf_stream stream;
-        Printf.sprintf "<< /Font << /F1 %d 0 R >> >>" font_id;
-        pdf_font;
-      ]
+       "<< /Type /Catalog /Pages 2 0 R >>";
+       Printf.sprintf "<< /Type /Pages /Kids [%s] /Count %d >>" kids pages;
+       pdf_stream stream;
+       Printf.sprintf "<< /Font << /F1 %d 0 R >> >>" font_id;
+       pdf_font;
+     ]
     @ List.init pages page)
 
 let pdf_truncated =
@@ -585,8 +633,8 @@ let pdf_xref_stream =
     [
       "<< /Type /Catalog /Pages 2 0 R >>";
       "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
-      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R \
-       /Resources << /Font << /F1 5 0 R >> >> >>";
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 400] /Contents 4 0 R /Resources << /Font << \
+       /F1 5 0 R >> >> >>";
       pdf_stream text_stream;
       pdf_font;
     ]
@@ -597,8 +645,7 @@ let pdf_xref_stream =
   List.iteri
     (fun i body ->
       offsets := Buffer.length out :: !offsets;
-      Buffer.add_string out
-        (Printf.sprintf "%d 0 obj\n%s\nendobj\n" (i + 1) body))
+      Buffer.add_string out (Printf.sprintf "%d 0 obj\n%s\nendobj\n" (i + 1) body))
     body;
   let xref_offset = Buffer.length out in
   (* A /Type/XRef stream with W = [1 4 2] entries: type 0 free, type 1 with an
@@ -620,15 +667,15 @@ let pdf_xref_stream =
     String.make 1 byte ^ four a ^ two 0
   in
   let stream_data =
-    entry 0 0 0
-    ^ String.concat ""
-        (List.mapi
-           (fun _ off -> entry 1 off 0)
-           (List.rev !offsets))
+    entry 0 0 0 ^ String.concat "" (List.mapi (fun _ off -> entry 1 off 0) (List.rev !offsets))
   in
   Buffer.add_string out
-    (Printf.sprintf "6 0 obj\n<< /Type /XRef /Size 7 /W [1 4 2] /Root 1 0 R \
-                     /Length %d >>\nstream\n%s\nendstream\n"
+    (Printf.sprintf
+       "6 0 obj\n\
+        << /Type /XRef /Size 7 /W [1 4 2] /Root 1 0 R /Length %d >>\n\
+        stream\n\
+        %s\n\
+        endstream\n"
        (String.length stream_data) stream_data);
   Buffer.add_string out (Printf.sprintf "startxref\n%d\n%%%%EOF" xref_offset);
   Buffer.contents out
@@ -646,10 +693,9 @@ type case = {
   unicode : string list;
   expect : string;
   body : string;
-      (** The fixture's bytes, filled in from [bodies] below: a fixture and the
-          case that describes it are written by the same record, so the manifest
-          cannot describe a file this program no longer writes. *)
-
+      (** The fixture's bytes, filled in from [bodies] below: a fixture and the case that describes
+          it are written by the same record, so the manifest cannot describe a file this program no
+          longer writes. *)
   bar_essential_min : int;
   bar_boiler_max : int;
   bar_title_ok : bool;
@@ -689,7 +735,7 @@ let cases : case list =
         ];
       title = Some "Harbour ferry timetable changes on Monday — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 5;
       bar_boiler_max = 7;
@@ -697,9 +743,9 @@ let cases : case list =
       bar_unicode_ok = true;
       bar_max_ms = 25;
       note =
-        "An ordinary article. Its nav, header and footer are in elements the \
-         stdlib backend skips, so the measurable furniture is the alert bar, the \
-         related-links block and the cookie banner.";
+        "An ordinary article. Its nav, header and footer are in elements the stdlib backend skips, \
+         so the measurable furniture is the alert bar, the related-links block and the cookie \
+         banner.";
     };
     {
       id = "article-no-title";
@@ -729,9 +775,9 @@ let cases : case list =
       bar_unicode_ok = true;
       bar_max_ms = 25;
       note =
-        "No <title> element at all. The oracle's stdlib backend reports no \
-         title; the bar asks only that the case not be a refusal, and the row \
-         records whether the port answers with the heading.";
+        "No <title> element at all. The oracle's stdlib backend reports no title; the bar asks \
+         only that the case not be a refusal, and the row records whether the port answers with \
+         the heading.";
     };
     {
       id = "article-jsonld";
@@ -747,13 +793,13 @@ let cases : case list =
           "rerouted to the south pontoon";
           "public meeting in the lifeboat shed";
         ];
-      boilerplate = ["SHOULD NOT APPEAR"];
+      boilerplate = [ "SHOULD NOT APPEAR" ];
       (* Both backends answer with the document's own [title] tag, site suffix
          and all; the JSON-LD headline is what they put in the *body*. So this
          case pins the tag as the title and the headline as an essential phrase. *)
       title = Some "Dock repairs: what closes and when — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 4;
       bar_boiler_max = 1;
@@ -761,8 +807,8 @@ let cases : case list =
       bar_unicode_ok = true;
       bar_max_ms = 25;
       note =
-        "A machine copy of the article in JSON-LD, and stylesheet strings: the \
-         one case where a leak is not a matter of taste.";
+        "A machine copy of the article in JSON-LD, and stylesheet strings: the one case where a \
+         leak is not a matter of taste.";
     };
     {
       id = "nav-heavy-docs";
@@ -788,7 +834,7 @@ let cases : case list =
         ];
       title = Some "Section 12 — Mooring lines — Harbour manual";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 3;
       bar_boiler_max = 6;
@@ -796,8 +842,8 @@ let cases : case list =
       bar_unicode_ok = true;
       bar_max_ms = 27;
       note =
-        "A documentation page: 78 links and a breadcrumb trail around three \
-         paragraphs, none of the furniture in an element the skip list names.";
+        "A documentation page: 78 links and a breadcrumb trail around three paragraphs, none of \
+         the furniture in an element the skip list names.";
     };
     {
       id = "nav-heavy-portal";
@@ -823,15 +869,14 @@ let cases : case list =
         ];
       title = Some "Harbour Bulletin — today in the port";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 2;
       bar_boiler_max = 7;
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 26;
-      note = "A portal front page: two link columns of 20 items each around one \
-             short story.";
+      note = "A portal front page: two link columns of 20 items each around one short story.";
     };
     {
       id = "malformed-unclosed";
@@ -851,15 +896,14 @@ let cases : case list =
       boilerplate = [];
       title = Some "Unclosed markup — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 5;
       bar_boiler_max = 0;
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "The most common malformation there is, and the one a page cannot \
-              be refused for.";
+      note = "The most common malformation there is, and the one a page cannot be refused for.";
     };
     {
       id = "malformed-angle-text";
@@ -878,15 +922,16 @@ let cases : case list =
       boilerplate = [];
       title = Some "Angle brackets in prose — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["—"; "<"; ">"];
+      unicode = [ "—"; "<"; ">" ];
       expect = "text";
       bar_essential_min = 4;
       bar_boiler_max = 0;
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "A parser that treats every < as the start of a tag loses a \
-              paragraph here and reports nothing about it.";
+      note =
+        "A parser that treats every < as the start of a tag loses a paragraph here and reports \
+         nothing about it.";
     };
     {
       id = "malformed-misnested";
@@ -907,15 +952,14 @@ let cases : case list =
       boilerplate = [];
       title = Some "Mis-nested markup — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 6;
       bar_boiler_max = 0;
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "Crossed emphasis, implicit table closes, and the uppercase forms a \
-              1998 page wrote.";
+      note = "Crossed emphasis, implicit table closes, and the uppercase forms a 1998 page wrote.";
     };
     {
       id = "malformed-attributes";
@@ -934,7 +978,7 @@ let cases : case list =
       boilerplate = [];
       title = Some "Attribute shapes — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 4;
       bar_boiler_max = 0;
@@ -942,9 +986,9 @@ let cases : case list =
       bar_unicode_ok = true;
       bar_max_ms = 25;
       note =
-        "The attribute run is where a hand-written tokenizer earns its keep. The \
-         unterminated quote at the end of a line is the one case where no \
-         parser can recover the same way twice, so its phrase is not in the bar.";
+        "The attribute run is where a hand-written tokenizer earns its keep. The unterminated \
+         quote at the end of a line is the one case where no parser can recover the same way \
+         twice, so its phrase is not in the bar.";
     };
     {
       id = "malformed-comments";
@@ -959,7 +1003,7 @@ let cases : case list =
           "None of the markup inside a comment is page text";
           "Second paragraph, after a comment that never closes";
         ];
-      boilerplate = ["SHOULD NOT APPEAR"];
+      boilerplate = [ "SHOULD NOT APPEAR" ];
       title = Some "Comments — Harbour Bulletin";
       title_rule = "exact";
       unicode = [];
@@ -969,8 +1013,9 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "A comment that holds markup, an old-IE conditional, and a comment \
-              left open at end of file.";
+      note =
+        "A comment that holds markup, an old-IE conditional, and a comment left open at end of \
+         file.";
     };
     {
       id = "malformed-script-cdata";
@@ -979,12 +1024,8 @@ let cases : case list =
       kind = "html";
       category = "malformed";
       body = "";
-      essential =
-        [
-          "Script bodies are data";
-          "a script body that contains angle brackets";
-        ];
-      boilerplate = ["SHOULD NOT APPEAR"; "console.log"];
+      essential = [ "Script bodies are data"; "a script body that contains angle brackets" ];
+      boilerplate = [ "SHOULD NOT APPEAR"; "console.log" ];
       title = Some "Script bodies — Harbour Bulletin";
       title_rule = "exact";
       unicode = [];
@@ -994,8 +1035,9 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "Script and style bodies that hold markup-looking text, a fake \
-              closing tag, and a comment terminator.";
+      note =
+        "Script and style bodies that hold markup-looking text, a fake closing tag, and a comment \
+         terminator.";
     };
     {
       id = "malformed-deep-nesting";
@@ -1004,7 +1046,7 @@ let cases : case list =
       kind = "html";
       category = "adversarial";
       body = "";
-      essential = ["Text at the bottom of a deep pit"; "nested divs has to come back"];
+      essential = [ "Text at the bottom of a deep pit"; "nested divs has to come back" ];
       boilerplate = [];
       title = Some "Deep nesting — Harbour Bulletin";
       title_rule = "exact";
@@ -1015,9 +1057,9 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 43;
-      note = "Adversarial nesting: 2000 unclosed divs with the answer at the \
-              bottom. The bar is a loose ceiling that catches a parser that \
-              goes quadratic or runs out of stack at this depth.";
+      note =
+        "Adversarial nesting: 2000 unclosed divs with the answer at the bottom. The bar is a loose \
+         ceiling that catches a parser that goes quadratic or runs out of stack at this depth.";
     };
     {
       id = "encoding-utf8-bom";
@@ -1035,7 +1077,7 @@ let cases : case list =
       boilerplate = [];
       title = Some "A page with a byte-order mark";
       title_rule = "exact";
-      unicode = ["café"];
+      unicode = [ "café" ];
       expect = "text";
       bar_essential_min = 3;
       bar_boiler_max = 0;
@@ -1043,8 +1085,8 @@ let cases : case list =
       bar_unicode_ok = true;
       bar_max_ms = 25;
       note =
-        "The bar is two of three: the paragraph that explains the mark contains \
-         U+FEFF in its own wording, which is the case, not a failure to find it.";
+        "The bar is two of three: the paragraph that explains the mark contains U+FEFF in its own \
+         wording, which is the case, not a failure to find it.";
     };
     {
       id = "encoding-cp1252";
@@ -1063,15 +1105,16 @@ let cases : case list =
       boilerplate = [];
       title = Some "Déjà vu ’ au quai “nord”";
       title_rule = "exact";
-      unicode = ["é"; "€"; "—"; "“"; "”"; "×"; "ß"; "Ñ"; "ç"];
+      unicode = [ "é"; "€"; "—"; "“"; "”"; "×"; "ß"; "Ñ"; "ç" ];
       expect = "text";
       bar_essential_min = 4;
       bar_boiler_max = 0;
       bar_title_ok = false;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "Raw Windows-1252 bytes with the charset declared, including the \
-              euro byte and one of the five bytes the codec leaves undefined.";
+      note =
+        "Raw Windows-1252 bytes with the charset declared, including the euro byte and one of the \
+         five bytes the codec leaves undefined.";
     };
     {
       id = "encoding-latin1-undeclared";
@@ -1096,9 +1139,9 @@ let cases : case list =
       bar_unicode_ok = true;
       bar_max_ms = 25;
       note =
-        "Windows-1252 bytes, no charset in the header. Both oracle backends \
-         decode by the header and read mojibake, so the bar asks for the English \
-         half and the row records the replacement count.";
+        "Windows-1252 bytes, no charset in the header. Both oracle backends decode by the header \
+         and read mojibake, so the bar asks for the English half and the row records the \
+         replacement count.";
     };
     {
       id = "encoding-undecodable";
@@ -1116,15 +1159,16 @@ let cases : case list =
       boilerplate = [];
       title = Some "Undecodable bytes";
       title_rule = "exact";
-      unicode = ["\u{FFFD}"];
+      unicode = [ "\u{FFFD}" ];
       expect = "text";
       bar_essential_min = 3;
       bar_boiler_max = 0;
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "Bad bytes inside a declared UTF-8 page: the page survives, and the \
-              replacement count is the row that differs between backends.";
+      note =
+        "Bad bytes inside a declared UTF-8 page: the page survives, and the replacement count is \
+         the row that differs between backends.";
     };
     {
       id = "entities-soup";
@@ -1143,17 +1187,17 @@ let cases : case list =
       boilerplate = [];
       title = Some "Entities — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["&"; "“"; "€"; "£"; "§"; "—"; "…"];
+      unicode = [ "&"; "“"; "€"; "£"; "§"; "—"; "…" ];
       expect = "text";
       bar_essential_min = 4;
       bar_boiler_max = 0;
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "Every reference form a page actually writes, plus the ones it gets \
-              wrong: an unknown name, a bare ampersand, and out-of-range \
-              numerics. Both implementations have to answer the same way, which \
-              is what makes the differential row worth having.";
+      note =
+        "Every reference form a page actually writes, plus the ones it gets wrong: an unknown \
+         name, a bare ampersand, and out-of-range numerics. Both implementations have to answer \
+         the same way, which is what makes the differential row worth having.";
     };
     {
       id = "unicode-multiscript";
@@ -1175,26 +1219,16 @@ let cases : case list =
       boilerplate = [];
       title = Some "Mixed scripts — harbour";
       title_rule = "exact";
-      unicode =
-        [
-          "Ä";
-          "ф";
-          "北埠頭";
-          "العبارة";
-          "המעבורה";
-          "⛴";
-          "→";
-          "«quoted»";
-          "„german“";
-        ];
+      unicode = [ "Ä"; "ф"; "北埠頭"; "العبارة"; "המעבורה"; "⛴"; "→"; "«quoted»"; "„german“" ];
       expect = "text";
       bar_essential_min = 7;
       bar_boiler_max = 0;
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "Eight scripts in one page, with combining marks and the special \
-              spaces a caller can mistake for a paragraph break.";
+      note =
+        "Eight scripts in one page, with combining marks and the special spaces a caller can \
+         mistake for a paragraph break.";
     };
     {
       id = "js-shell";
@@ -1204,7 +1238,7 @@ let cases : case list =
       category = "shell";
       body = "";
       essential = [];
-      boilerplate = ["SHOULD NOT APPEAR"];
+      boilerplate = [ "SHOULD NOT APPEAR" ];
       title = Some "Harbour live";
       title_rule = "exact";
       unicode = [];
@@ -1214,9 +1248,9 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "A rendered shell: an empty root element and JSON in a script tag. \
-              The honest extraction is empty, and the engine turns that into a \
-              notice.";
+      note =
+        "A rendered shell: an empty root element and JSON in a script tag. The honest extraction \
+         is empty, and the engine turns that into a notice.";
     };
     {
       id = "form-login";
@@ -1225,8 +1259,8 @@ let cases : case list =
       kind = "html";
       category = "documented-loss";
       body = "";
-      essential = ["No account? The harbour office issues one to anyone"];
-      boilerplate = ["Sign in to read the harbour ledger"];
+      essential = [ "No account? The harbour office issues one to anyone" ];
+      boilerplate = [ "Sign in to read the harbour ledger" ];
       title = Some "Sign in — Harbour Bulletin";
       title_rule = "exact";
       unicode = [];
@@ -1236,8 +1270,9 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "The cost of the skip list, recorded rather than hidden: an article \
-              inside a <form> goes with the form, and the caller gets a refusal.";
+      note =
+        "The cost of the skip list, recorded rather than hidden: an article inside a <form> goes \
+         with the form, and the caller gets a refusal.";
     };
     {
       id = "table-reference";
@@ -1246,11 +1281,11 @@ let cases : case list =
       kind = "html";
       category = "structure";
       body = "";
-      essential = ["Tide table for the week"; "Monday"; "High water"; "Mean spring"];
+      essential = [ "Tide table for the week"; "Monday"; "High water"; "Mean spring" ];
       boilerplate = [];
       title = Some "Tide table — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 4;
       bar_boiler_max = 0;
@@ -1298,7 +1333,7 @@ let cases : case list =
           "Only the article is the answer";
           "the part a graphic title must not become";
         ];
-      boilerplate = ["Anchor icon"; "Ferry icon"; "Nested label"];
+      boilerplate = [ "Anchor icon"; "Ferry icon"; "Nested label" ];
       title = Some "Icons — Harbour Bulletin";
       title_rule = "exact";
       unicode = [];
@@ -1308,8 +1343,8 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "An inline icon sheet that nests a graphic inside a graphic and \
-              repeats the title element.";
+      note =
+        "An inline icon sheet that nests a graphic inside a graphic and repeats the title element.";
     };
     {
       id = "huge-article";
@@ -1325,18 +1360,19 @@ let cases : case list =
           "Paragraph 300 of the harbour survey";
           "Paragraph 600 of the harbour survey";
         ];
-      boilerplate = ["Home"; "Port"; "Copyright 2026 Harbour Bulletin."];
+      boilerplate = [ "Home"; "Port"; "Copyright 2026 Harbour Bulletin." ];
       title = Some "The full harbour survey — Harbour Bulletin";
       title_rule = "exact";
-      unicode = ["—"];
+      unicode = [ "—" ];
       expect = "text";
       bar_essential_min = 4;
       bar_boiler_max = 3;
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 148;
-      note = "Cost case: 18 000 words, with the answer spread across the page so \
-              a truncating or quadratic reader shows up in the row.";
+      note =
+        "Cost case: 18 000 words, with the answer spread across the page so a truncating or \
+         quadratic reader shows up in the row.";
     };
     {
       id = "shared-blocks";
@@ -1345,13 +1381,9 @@ let cases : case list =
       kind = "html";
       category = "shared";
       body = "";
-      essential = ["One answer between the promo blocks"; "the west pier ramp will be repaved in March"];
-      boilerplate =
-        [
-          "Harbour Bulletin newsletter";
-          "Read a sample issue";
-          "Back issues</a>";
-        ];
+      essential =
+        [ "One answer between the promo blocks"; "the west pier ramp will be repaved in March" ];
+      boilerplate = [ "Harbour Bulletin newsletter"; "Read a sample issue"; "Back issues</a>" ];
       title = Some "One answer, many promo blocks";
       title_rule = "exact";
       unicode = [];
@@ -1361,9 +1393,10 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 46;
-      note = "The HTML shape of the oracle's shared-stream PDF: 120 copies of one \
-              promo block, so the extraction's volume is a multiple of the \
-              answer's while the page's own content stays one paragraph.";
+      note =
+        "The HTML shape of the oracle's shared-stream PDF: 120 copies of one promo block, so the \
+         extraction's volume is a multiple of the answer's while the page's own content stays one \
+         paragraph.";
     };
     {
       id = "pdf-minimal";
@@ -1372,7 +1405,7 @@ let cases : case list =
       kind = "pdf";
       category = "pdf";
       body = "";
-      essential = ["The PDF body text says the east pier opens at six twelve"];
+      essential = [ "The PDF body text says the east pier opens at six twelve" ];
       boilerplate = [];
       title = None;
       title_rule = "none";
@@ -1383,10 +1416,10 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "A one-page PDF with a real xref table, written out by hand, the \
-              oracle's own fixture shape. The oracle's trafilatura backend reads \
-              it; this port refuses it by media type. The PDF decision lives in \
-              plans/seekwright-ocaml-port.md.";
+      note =
+        "A one-page PDF with a real xref table, written out by hand, the oracle's own fixture \
+         shape. The oracle's trafilatura backend reads it; this port refuses it by media type. The \
+         PDF decision lives in plans/seekwright-ocaml-port.md.";
     };
     {
       id = "pdf-two-pages";
@@ -1419,7 +1452,7 @@ let cases : case list =
       kind = "pdf";
       category = "pdf";
       body = "";
-      essential = ["The kerned line is only readable when the pieces are joined"];
+      essential = [ "The kerned line is only readable when the pieces are joined" ];
       boilerplate = [];
       title = None;
       title_rule = "none";
@@ -1430,8 +1463,7 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "Text set as a kerned TJ array, which separates a text extractor \
-              from a byte dumper.";
+      note = "Text set as a kerned TJ array, which separates a text extractor from a byte dumper.";
     };
     {
       id = "pdf-shared-stream";
@@ -1451,10 +1483,10 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "The oracle's grinder: one large content stream referenced by every \
-              page, so parse work scales with the page count while the file \
-              stays far under the download cap. Any PDF backend added to this \
-              port has to answer inside fetch.timeout_seconds or refuse.";
+      note =
+        "The oracle's grinder: one large content stream referenced by every page, so parse work \
+         scales with the page count while the file stays far under the download cap. Any PDF \
+         backend added to this port has to answer inside fetch.timeout_seconds or refuse.";
     };
     {
       id = "pdf-truncated";
@@ -1474,8 +1506,9 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "Cut in half: the objects are there, the xref table is not. The one \
-              outcome that is never defensible is success with no text.";
+      note =
+        "Cut in half: the objects are there, the xref table is not. The one outcome that is never \
+         defensible is success with no text.";
     };
     {
       id = "pdf-xref-stream";
@@ -1484,7 +1517,7 @@ let cases : case list =
       kind = "pdf";
       category = "pdf";
       body = "";
-      essential = ["An xref stream document written without compression"];
+      essential = [ "An xref stream document written without compression" ];
       boilerplate = [];
       title = None;
       title_rule = "none";
@@ -1495,9 +1528,10 @@ let cases : case list =
       bar_title_ok = true;
       bar_unicode_ok = true;
       bar_max_ms = 25;
-      note = "A PDF 1.5 document whose cross-reference is a stream object, the \
-              shape modern writers produce, written without a compression filter \
-              so the fixture tests structure rather than a decoder.";
+      note =
+        "A PDF 1.5 document whose cross-reference is a stream object, the shape modern writers \
+         produce, written without a compression filter so the fixture tests structure rather than \
+         a decoder.";
     };
     {
       id = "pdf-not-a-pdf";
@@ -1569,50 +1603,44 @@ let cases = List.map (fun c -> with_bodies c bodies) cases
 let manifest_json () =
   Json.pretty_to_string
     (`Assoc
-      [
-        ("corpus", `String "f6-2-extraction");
-        ("version", `Int 1);
-        ( "generator",
-          `String "ocaml-tools/extract_bench/gen_fixtures.ml" );
-        ("license", `String "Apache-2.0");
-        ( "note",
-          `String
-            "Every fixture is generated by the named program: it is written for \
-             this repository rather than collected, which is what makes the \
-             corpus shippable and re-runnable. Regenerate with [dune exec \
-             ocaml-tools/extract_bench/gen_fixtures.exe -- --write <dir>]." );
-        ( "cases",
-          `List
-            (List.map
-               (fun c ->
-                 `Assoc
-                   [
-                     ("id", `String c.id);
-                     ("file", `String c.file);
-                     ( "content_type",
-                       match c.content_type with
-                       | Some s -> `String s
-                       | None -> `Null );
-                     ("kind", `String c.kind);
-                     ("category", `String c.category);
-                     ( "essential",
-                       `List (List.map (fun s -> `String s) c.essential) );
-                     ( "boilerplate",
-                       `List (List.map (fun s -> `String s) c.boilerplate) );
-                     ( "title",
-                       match c.title with Some s -> `String s | None -> `Null );
-                     ("title_rule", `String c.title_rule);
-                     ("unicode", `List (List.map (fun s -> `String s) c.unicode));
-                     ("expect", `String c.expect);
-                     ("bar_essential_min", `Int c.bar_essential_min);
-                     ("bar_boiler_max", `Int c.bar_boiler_max);
-                     ("bar_title_ok", `Bool c.bar_title_ok);
-                     ("bar_unicode_ok", `Bool c.bar_unicode_ok);
-                     ("bar_max_ms", `Int c.bar_max_ms);
-                     ("note", `String c.note);
-                   ])
-               cases) );
-      ])
+       [
+         ("corpus", `String "f6-2-extraction");
+         ("version", `Int 1);
+         ("generator", `String "ocaml-tools/extract_bench/gen_fixtures.ml");
+         ("license", `String "Apache-2.0");
+         ( "note",
+           `String
+             "Every fixture is generated by the named program: it is written for this repository \
+              rather than collected, which is what makes the corpus shippable and re-runnable. \
+              Regenerate with [dune exec ocaml-tools/extract_bench/gen_fixtures.exe -- --write \
+              <dir>]." );
+         ( "cases",
+           `List
+             (List.map
+                (fun c ->
+                  `Assoc
+                    [
+                      ("id", `String c.id);
+                      ("file", `String c.file);
+                      ( "content_type",
+                        match c.content_type with Some s -> `String s | None -> `Null );
+                      ("kind", `String c.kind);
+                      ("category", `String c.category);
+                      ("essential", `List (List.map (fun s -> `String s) c.essential));
+                      ("boilerplate", `List (List.map (fun s -> `String s) c.boilerplate));
+                      ("title", match c.title with Some s -> `String s | None -> `Null);
+                      ("title_rule", `String c.title_rule);
+                      ("unicode", `List (List.map (fun s -> `String s) c.unicode));
+                      ("expect", `String c.expect);
+                      ("bar_essential_min", `Int c.bar_essential_min);
+                      ("bar_boiler_max", `Int c.bar_boiler_max);
+                      ("bar_title_ok", `Bool c.bar_title_ok);
+                      ("bar_unicode_ok", `Bool c.bar_unicode_ok);
+                      ("bar_max_ms", `Int c.bar_max_ms);
+                      ("note", `String c.note);
+                    ])
+                cases) );
+       ])
   ^ "\n"
 
 let write_file dir name (bytes : string) =
@@ -1622,12 +1650,12 @@ let write_file dir name (bytes : string) =
     (fun () -> output_substring oc bytes 0 (String.length bytes))
 
 let read_file path =
-  if Sys.file_exists path then
+  if Sys.file_exists path then (
     let ic = open_in_bin path in
     let n = in_channel_length ic in
     let s = really_input_string ic n in
     close_in ic;
-    Some s
+    Some s)
   else None
 
 let usage () =
@@ -1647,7 +1675,13 @@ let write_corpus dir =
 let check_corpus dir =
   let fixtures = Filename.concat dir "fixtures" in
   let fails = ref 0 in
-  let fail fmt = Format.kasprintf (fun s -> incr fails; prerr_endline s) fmt in
+  let fail fmt =
+    Format.kasprintf
+      (fun s ->
+        incr fails;
+        prerr_endline s)
+      fmt
+  in
   List.iter
     (fun c ->
       let path = Filename.concat fixtures c.file in
@@ -1655,20 +1689,21 @@ let check_corpus dir =
       | None -> fail "%s: missing fixture %s" c.id path
       | Some got ->
           if got <> c.body then
-            fail "%s: %s is %d bytes and gen_fixtures writes %d: the fixture no \
-                   longer matches its generator" c.id c.file
-              (String.length got) (String.length c.body))
+            fail
+              "%s: %s is %d bytes and gen_fixtures writes %d: the fixture no longer matches its \
+               generator"
+              c.id c.file (String.length got) (String.length c.body))
     cases;
   (match read_file (Filename.concat dir "cases.json") with
   | None -> fail "missing cases.json in %s" dir
   | Some got ->
-      if got <> manifest_json () then
-        fail "cases.json no longer matches the generated manifest");
+      if got <> manifest_json () then fail "cases.json no longer matches the generated manifest");
   if !fails > 0 then (
     prerr_endline
       (Printf.sprintf
-         "%d corpus file(s) out of date: regenerate with [gen_fixtures --write \
-          %s] and commit the result" !fails dir);
+         "%d corpus file(s) out of date: regenerate with [gen_fixtures --write %s] and commit the \
+          result"
+         !fails dir);
     exit 1)
 
 let () =

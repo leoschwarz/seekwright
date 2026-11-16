@@ -35,9 +35,8 @@ let is_valid_utf8 text =
           match continuation (index + 1) (index + needed) (byte land (0x7F lsr (needed + 1))) with
           | None -> false
           | Some codepoint ->
-              codepoint >= minimum
-              && codepoint <= 0x10FFFF
-              && not (codepoint >= 0xD800 && codepoint <= 0xDFFF)
+              codepoint >= minimum && codepoint <= 0x10FFFF
+              && (not (codepoint >= 0xD800 && codepoint <= 0xDFFF))
               && go (index + needed + 1)
   in
   go 0
@@ -53,8 +52,7 @@ let bounded _ =
   let long = String.make (Mcp_caps.Error.max_message_bytes + 900) 'a' in
   let sanitized = Mcp_caps.Error.sanitize long in
   Alcotest.(check bool)
-    "cut, not kept"
-    true
+    "cut, not kept" true
     (String.length sanitized > Mcp_caps.Error.max_message_bytes
     && String.length sanitized <= Mcp_caps.Error.max_message_bytes + 3
     && is_valid_utf8 (truncated_prefix sanitized))
@@ -64,7 +62,7 @@ let utf8_cut_is_never_mid_sequence _ =
      Each input is over the cap, so [sanitize] has to choose a cut inside
      multibyte text: 300 × "é" cuts in a 2-byte character, "あ" in a 3-byte one,
      and "abé" changes the alignment. *)
-  let is_lead char = (Char.code char land 0xC0) = 0xC0 in
+  let is_lead char = Char.code char land 0xC0 = 0xC0 in
   let repeat text count = String.concat "" (List.init count (fun _ -> text)) in
   List.iter
     (fun text ->
@@ -73,12 +71,10 @@ let utf8_cut_is_never_mid_sequence _ =
       Alcotest.(check bool) "the cut happened" true (String.length prefix < String.length text);
       Alcotest.(check bool) "the prefix is valid UTF-8" true (is_valid_utf8 prefix);
       Alcotest.(check bool)
-        "the byte before the ellipsis is not a lead byte"
-        false
+        "the byte before the ellipsis is not a lead byte" false
         (is_lead prefix.[String.length prefix - 1]);
       Alcotest.(check bool)
-        "stays within the cap"
-        true
+        "stays within the cap" true
         (String.length sanitized <= Mcp_caps.Error.max_message_bytes + 3))
     [ repeat "é" 300; repeat "あ" 300; repeat "abé" 600 ]
 
@@ -113,8 +109,7 @@ let () =
         [
           Alcotest.test_case "a message is one line" `Quick one_line;
           Alcotest.test_case "a message is bounded" `Quick bounded;
-          Alcotest.test_case "a cut cannot split a character" `Quick
-            utf8_cut_is_never_mid_sequence;
+          Alcotest.test_case "a cut cannot split a character" `Quick utf8_cut_is_never_mid_sequence;
           Alcotest.test_case "sanitize is idempotent" `Quick idempotent;
           Alcotest.test_case "kinds are stable" `Quick kinds_are_stable;
         ] );

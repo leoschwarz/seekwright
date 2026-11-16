@@ -26,14 +26,13 @@ let chars s =
   let n = ref 0 and i = ref 0 in
   while !i < String.length s do
     let c = Char.code s.[!i] in
-    i := !i + (if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4);
+    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
     incr n
   done;
   !n
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -100,11 +99,7 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ()
   (provider, fun () -> Option.get !sent)
 
 let refusal kind ~message =
-  let net =
-    {
-      Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message));
-    }
-  in
+  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
   Serpapi.make ~key:test_key ~net ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
@@ -118,16 +113,13 @@ let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_
    [request.url.params]. *)
 let params (request : Caps.Authority.Net.request) = Uri.query request.uri
 
-let param (request : Caps.Authority.Net.request) name =
-  Uri.get_query_param request.uri name
+let param (request : Caps.Authority.Net.request) name = Uri.get_query_param request.uri name
 
-let has_param request name =
-  List.exists (fun (key, _) -> key = name) (params request)
+let has_param request name = List.exists (fun (key, _) -> key = name) (params request)
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Serpapi.parse ~snippet_chars data ~limit
 
-let record fields =
-  `Assoc (("title", `String "t") :: ("link", `String "https://x") :: fields)
+let record fields = `Assoc (("title", `String "t") :: ("link", `String "https://x") :: fields)
 
 let organic items = `Assoc [ ("organic_results", `List items) ]
 
@@ -139,8 +131,7 @@ let the_fixture_yields_both_records () =
   check_string "the second url" "https://time.com/4768860/is-coffee-good-for-you/"
     (List.nth hits 1).result.url
 
-let the_limit_is_honoured () =
-  check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
+let the_limit_is_honoured () = check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
 
 let the_snippet_is_kept_and_never_text () =
   (* A SERP backend fills snippet, never text. *)
@@ -160,8 +151,7 @@ let the_length_the_cap_discarded_is_recorded () =
   let hit = List.hd hits in
   let uncapped = Option.get hit.uncapped_chars in
   check_int "the whole snippet was longer than the cap" 110 uncapped;
-  check_bool "and longer than what shipped" true
-    (uncapped > chars (Option.get hit.result.snippet));
+  check_bool "and longer than what shipped" true (uncapped > chars (Option.get hit.result.snippet));
   (* Private, so a caller can never see it: the response carries the clipped
      snippet, never a measurement of the clip. *)
   excludes "absent from the wire model" "uncapped"
@@ -184,11 +174,16 @@ let the_display_date_is_kept_only_when_a_string () =
 
 let records_without_a_link_are_dropped () =
   check_int "no link" 0
-    (List.length (parse (`Assoc [ ("organic_results", `List [ `Assoc [ ("title", `String "No link here") ] ]) ])))
+    (List.length
+       (parse
+          (`Assoc [ ("organic_results", `List [ `Assoc [ ("title", `String "No link here") ] ]) ])))
 
 let records_without_a_title_are_dropped () =
   check_int "no title" 0
-    (List.length (parse (`Assoc [ ("organic_results", `List [ `Assoc [ ("link", `String "https://example.com") ] ]) ])))
+    (List.length
+       (parse
+          (`Assoc
+             [ ("organic_results", `List [ `Assoc [ ("link", `String "https://example.com") ] ]) ])))
 
 let a_record_that_is_not_an_object_is_skipped () =
   check_int "the string is dropped, the object survives" 1
@@ -226,7 +221,9 @@ let a_non_string_date_is_dropped_and_the_call_succeeds () =
     (fun (what, value) ->
       let body = Yojson.Safe.to_string (organic [ record [ ("date", value) ] ]) in
       let outcome, _ = search_of ~body ~query:(query ~text:"q" ~max_results:1 ()) () in
-      check_int (Printf.sprintf "the call succeeded through %s" what) 1 (List.length outcome.results);
+      check_int
+        (Printf.sprintf "the call succeeded through %s" what)
+        1 (List.length outcome.results);
       check_opt_string what None (List.hd outcome.results).result.published_date)
     non_strings
 
@@ -235,18 +232,19 @@ let a_non_string_snippet_is_dropped_and_the_call_succeeds () =
     (fun (what, value) ->
       let body = Yojson.Safe.to_string (organic [ record [ ("snippet", value) ] ]) in
       let outcome, _ = search_of ~body ~query:(query ~text:"q" ~max_results:1 ()) () in
-      check_int (Printf.sprintf "the call succeeded through %s" what) 1 (List.length outcome.results);
+      check_int
+        (Printf.sprintf "the call succeeded through %s" what)
+        1 (List.length outcome.results);
       check_opt_string what None (List.hd outcome.results).result.snippet)
     non_strings
 
 let a_string_snippet_still_reaches_the_model () =
   (* The guard must not change behaviour for a well-formed payload. *)
   let outcome, _ = search_of ~query:(query ~text:"q" ~max_results:1 ()) () in
-  check_opt_string
-    "the snippet"
+  check_opt_string "the snippet"
     (Some
-       "Coffee is a brewed drink prepared from roasted coffee beans, the seeds \
-        of berries of certain flowering plants.")
+       "Coffee is a brewed drink prepared from roasted coffee beans, the seeds of berries of \
+        certain flowering plants.")
     (List.hd outcome.results).result.snippet
 
 (* Every constraint rides a documented parameter — [site:] operators in [q],
@@ -259,8 +257,7 @@ let gets_to_the_documented_endpoint () =
   let _, request = search_of () in
   check_bool "the method" true (request.Caps.Authority.Net.meth = `GET);
   let uri = request.Caps.Authority.Net.uri in
-  check_bool "the endpoint" true
-    (Uri.host uri = Some "serpapi.com" && Uri.path uri = "/search");
+  check_bool "the endpoint" true (Uri.host uri = Some "serpapi.com" && Uri.path uri = "/search");
   check_bool "no Authorization header" true
     (List.assoc_opt "Authorization" request.Caps.Authority.Net.headers = None)
 
@@ -279,12 +276,11 @@ let the_domain_filters_fold_into_the_query () =
   let _, request =
     search_of
       ~query:
-        (query ~text:"coffee" ~include_domains:[ "sqlite.org" ]
-           ~exclude_domains:[ "spam.example" ] ())
+        (query ~text:"coffee" ~include_domains:[ "sqlite.org" ] ~exclude_domains:[ "spam.example" ]
+           ())
       ()
   in
-  check_opt_string "q carries the operators"
-    (Some "coffee site:sqlite.org -site:spam.example")
+  check_opt_string "q carries the operators" (Some "coffee site:sqlite.org -site:spam.example")
     (param request "q")
 
 let the_country_rides_gl () =
@@ -306,8 +302,7 @@ let the_recency_maps_onto_tbs () =
     (fun (period, code) ->
       let _, request = search_of ~query:(query ~text:"coffee" ~recency:period ()) () in
       check_opt_string (Printf.sprintf "tbs=%s" code) (Some code) (param request "tbs"))
-    [ (Model.Day, "qdr:d"); (Model.Week, "qdr:w"); (Model.Month, "qdr:m");
-      (Model.Year, "qdr:y") ];
+    [ (Model.Day, "qdr:d"); (Model.Week, "qdr:w"); (Model.Month, "qdr:m"); (Model.Year, "qdr:y") ];
   let _, request = search_of () in
   check_bool "unasked, no tbs" false (has_param request "tbs")
 
@@ -332,14 +327,13 @@ let never_a_shape_or_billing_field () =
     search_of
       ~query:
         (query ~text:"coffee" ~max_results:20 ~include_domains:[ "sqlite.org" ]
-           ~exclude_domains:[ "spam.example" ] ~language:"en" ~recency:Model.Day
-           ~country:"de" ~safe_search:true ())
+           ~exclude_domains:[ "spam.example" ] ~language:"en" ~recency:Model.Day ~country:"de"
+           ~safe_search:true ())
       ()
   in
   List.iter
     (fun field ->
-      check_bool (Printf.sprintf "no %s in the query string" field) false
-        (has_param request field))
+      check_bool (Printf.sprintf "no %s in the query string" field) false (has_param request field))
     [ "output"; "json_restrictor"; "device"; "start"; "num"; "timeout" ]
 
 let the_notice_stays_none_for_every_shape_of_ask () =
@@ -352,9 +346,8 @@ let the_notice_stays_none_for_every_shape_of_ask () =
   let outcome, _ =
     search_of
       ~query:
-        (query ~text:"coffee" ~include_domains:[ "sqlite.org" ]
-           ~exclude_domains:[ "spam.example" ] ~language:"de" ~country:"fr"
-           ~recency:Model.Week ~safe_search:true ())
+        (query ~text:"coffee" ~include_domains:[ "sqlite.org" ] ~exclude_domains:[ "spam.example" ]
+           ~language:"de" ~country:"fr" ~recency:Model.Week ~safe_search:true ())
       ()
   in
   check_opt_string "fully constrained" None outcome.notice
@@ -369,8 +362,7 @@ let the_key_does_reach_the_endpoint () =
   (* The documented shape, asserted directly, so the redaction cases below are
      not passing vacuously on a URL that never carried the key. *)
   let _, request = search_of ~query:(query ~text:"q" ()) () in
-  check_string
-    "the whole URL, parameter order included"
+  check_string "the whole URL, parameter order included"
     "https://serpapi.com/search?api_key=test-key&q=q&engine=google"
     (Uri.to_string request.Caps.Authority.Net.uri)
 
@@ -389,12 +381,13 @@ let no_failure_path_echoes_the_key () =
     [
       (* The grant's own wording stands in for the httpx exception, and it
          quotes the URL the request was built from. *)
-      ("timeout", refusal Caps.Error.Timeout
-         ~message:"timed out connecting to https://serpapi.com/search?api_key=test-key&q=q");
-      ("connect", refusal Caps.Error.Denied
-         ~message:"connection refused from https://serpapi.com/search?api_key=test-key&q=q");
-      ( "malformed_json",
-        fst (dial ~body:"<html>" ()) );
+      ( "timeout",
+        refusal Caps.Error.Timeout
+          ~message:"timed out connecting to https://serpapi.com/search?api_key=test-key&q=q" );
+      ( "connect",
+        refusal Caps.Error.Denied
+          ~message:"connection refused from https://serpapi.com/search?api_key=test-key&q=q" );
+      ("malformed_json", fst (dial ~body:"<html>" ()));
     ]
 
 let the_failure_messages_stay_constant () =
@@ -437,9 +430,7 @@ let the_result_reports_its_cost () =
   check_opt_number "the free plan costs nothing" (Some 0.) outcome.cost_usd
 
 let a_paid_plan_corrects_the_cost () =
-  let outcome, _ =
-    search_of ~cost_per_1k:1.0 ~query:(query ~text:"q" ~max_results:5 ()) ()
-  in
+  let outcome, _ = search_of ~cost_per_1k:1.0 ~query:(query ~text:"q" ~max_results:5 ()) () in
   check_opt_number "and the figure tracks it" (Some 0.001) outcome.cost_usd
 
 let the_default_price_is_the_rows_figure () =
@@ -467,78 +458,75 @@ let the_endpoint_is_the_one_the_grant_allows () =
     (contains ~haystack:(Uri.to_string request.Caps.Authority.Net.uri) ~needle:test_key)
 
 let () =
-  A.
-    (run "seekwright/serpapi"
-       [
-         ( "parsing",
-             [
-               test_case "the fixture yields both records" `Quick the_fixture_yields_both_records;
-               test_case "the limit is honoured" `Quick the_limit_is_honoured;
-               test_case "the snippet is kept and never text" `Quick the_snippet_is_kept_and_never_text;
-               test_case "the snippet is truncated" `Quick the_snippet_is_truncated;
-               test_case "the length the cap discarded is recorded" `Quick
-                 the_length_the_cap_discarded_is_recorded;
-               test_case "a short snippet reports its own length" `Quick
-                 a_short_snippet_reports_its_own_length;
-               test_case "the display date is kept only when a string" `Quick
-                 the_display_date_is_kept_only_when_a_string;
-               test_case "records without a link are dropped" `Quick records_without_a_link_are_dropped;
-               test_case "records without a title are dropped" `Quick
-                 records_without_a_title_are_dropped;
-               test_case "a record that is not an object is skipped" `Quick
-                 a_record_that_is_not_an_object_is_skipped;
-               test_case "missing organic_results is empty, not an error" `Quick
-                 missing_organic_results_is_empty_not_an_error;
-               test_case "the other element families are dropped" `Quick
-                 the_other_element_families_are_dropped;
-             ] );
-         ( "the upstream field guards",
-             [
-               test_case "a non-string date is dropped and the call succeeds" `Quick
-                 a_non_string_date_is_dropped_and_the_call_succeeds;
-               test_case "a non-string snippet is dropped and the call succeeds" `Quick
-                 a_non_string_snippet_is_dropped_and_the_call_succeeds;
-               test_case "a string snippet still reaches the model" `Quick
-                 a_string_snippet_still_reaches_the_model;
-             ] );
-         ( "the request",
-             [
-               test_case "GET to the documented endpoint" `Quick gets_to_the_documented_endpoint;
-               test_case "the key rides in the query string" `Quick
-                 the_key_rides_in_the_query_string;
-               test_case "the query and engine are sent" `Quick the_query_and_engine_are_sent;
-               test_case "the domain filters fold into the query" `Quick
-                 the_domain_filters_fold_into_the_query;
-               test_case "the country rides gl, absent without one" `Quick the_country_rides_gl;
-               test_case "the language is lowercased on the wire" `Quick
-                 the_language_is_lowercased_on_the_wire;
-               test_case "the recency maps onto tbs" `Quick the_recency_maps_onto_tbs;
-               test_case "safe-search maps onto safe, absent when unset" `Quick
-                 safe_search_maps_onto_safe;
-               test_case "never a shape or billing field" `Quick never_a_shape_or_billing_field;
-               test_case "the notice stays none for every shape of ask" `Quick
-                 the_notice_stays_none_for_every_shape_of_ask;
-             ] );
-         ( "the key in the query string",
-             [
-               test_case "the key does reach the endpoint" `Quick the_key_does_reach_the_endpoint;
-               test_case "no failure path echoes the key" `Quick no_failure_path_echoes_the_key;
-               test_case "the failure messages stay constant" `Quick
-                 the_failure_messages_stay_constant;
-             ] );
-         ( "the failures this adapter owns",
-             [
-               test_case "payment and rate limit are quota" `Quick payment_and_rate_limit_are_quota;
-             ] );
-         ( "cost and endpoint",
-             [
-               test_case "cost does not scale with result count" `Quick
-                 cost_does_not_scale_with_result_count;
-               test_case "the result reports its cost" `Quick the_result_reports_its_cost;
-               test_case "a paid plan corrects the cost" `Quick a_paid_plan_corrects_the_cost;
-               test_case "the default price is the row's figure" `Quick
-                 the_default_price_is_the_rows_figure;
-               test_case "the endpoint is the one the grant allows" `Quick
-                 the_endpoint_is_the_one_the_grant_allows;
-             ] );
-       ])
+  A.(
+    run "seekwright/serpapi"
+      [
+        ( "parsing",
+          [
+            test_case "the fixture yields both records" `Quick the_fixture_yields_both_records;
+            test_case "the limit is honoured" `Quick the_limit_is_honoured;
+            test_case "the snippet is kept and never text" `Quick the_snippet_is_kept_and_never_text;
+            test_case "the snippet is truncated" `Quick the_snippet_is_truncated;
+            test_case "the length the cap discarded is recorded" `Quick
+              the_length_the_cap_discarded_is_recorded;
+            test_case "a short snippet reports its own length" `Quick
+              a_short_snippet_reports_its_own_length;
+            test_case "the display date is kept only when a string" `Quick
+              the_display_date_is_kept_only_when_a_string;
+            test_case "records without a link are dropped" `Quick records_without_a_link_are_dropped;
+            test_case "records without a title are dropped" `Quick
+              records_without_a_title_are_dropped;
+            test_case "a record that is not an object is skipped" `Quick
+              a_record_that_is_not_an_object_is_skipped;
+            test_case "missing organic_results is empty, not an error" `Quick
+              missing_organic_results_is_empty_not_an_error;
+            test_case "the other element families are dropped" `Quick
+              the_other_element_families_are_dropped;
+          ] );
+        ( "the upstream field guards",
+          [
+            test_case "a non-string date is dropped and the call succeeds" `Quick
+              a_non_string_date_is_dropped_and_the_call_succeeds;
+            test_case "a non-string snippet is dropped and the call succeeds" `Quick
+              a_non_string_snippet_is_dropped_and_the_call_succeeds;
+            test_case "a string snippet still reaches the model" `Quick
+              a_string_snippet_still_reaches_the_model;
+          ] );
+        ( "the request",
+          [
+            test_case "GET to the documented endpoint" `Quick gets_to_the_documented_endpoint;
+            test_case "the key rides in the query string" `Quick the_key_rides_in_the_query_string;
+            test_case "the query and engine are sent" `Quick the_query_and_engine_are_sent;
+            test_case "the domain filters fold into the query" `Quick
+              the_domain_filters_fold_into_the_query;
+            test_case "the country rides gl, absent without one" `Quick the_country_rides_gl;
+            test_case "the language is lowercased on the wire" `Quick
+              the_language_is_lowercased_on_the_wire;
+            test_case "the recency maps onto tbs" `Quick the_recency_maps_onto_tbs;
+            test_case "safe-search maps onto safe, absent when unset" `Quick
+              safe_search_maps_onto_safe;
+            test_case "never a shape or billing field" `Quick never_a_shape_or_billing_field;
+            test_case "the notice stays none for every shape of ask" `Quick
+              the_notice_stays_none_for_every_shape_of_ask;
+          ] );
+        ( "the key in the query string",
+          [
+            test_case "the key does reach the endpoint" `Quick the_key_does_reach_the_endpoint;
+            test_case "no failure path echoes the key" `Quick no_failure_path_echoes_the_key;
+            test_case "the failure messages stay constant" `Quick the_failure_messages_stay_constant;
+          ] );
+        ( "the failures this adapter owns",
+          [ test_case "payment and rate limit are quota" `Quick payment_and_rate_limit_are_quota ]
+        );
+        ( "cost and endpoint",
+          [
+            test_case "cost does not scale with result count" `Quick
+              cost_does_not_scale_with_result_count;
+            test_case "the result reports its cost" `Quick the_result_reports_its_cost;
+            test_case "a paid plan corrects the cost" `Quick a_paid_plan_corrects_the_cost;
+            test_case "the default price is the row's figure" `Quick
+              the_default_price_is_the_rows_figure;
+            test_case "the endpoint is the one the grant allows" `Quick
+              the_endpoint_is_the_one_the_grant_allows;
+          ] );
+      ])

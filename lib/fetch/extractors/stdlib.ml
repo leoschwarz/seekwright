@@ -8,8 +8,21 @@ module U = Seekwright_text.Utf8
 
 let skip_tags =
   [
-    "script"; "style"; "noscript"; "template"; "svg"; "math"; "canvas"; "nav";
-    "header"; "footer"; "aside"; "form"; "fieldset"; "select"; "option";
+    "script";
+    "style";
+    "noscript";
+    "template";
+    "svg";
+    "math";
+    "canvas";
+    "nav";
+    "header";
+    "footer";
+    "aside";
+    "form";
+    "fieldset";
+    "select";
+    "option";
     "button";
   ]
 
@@ -26,10 +39,35 @@ let graphic_tags = [ "svg"; "math" ]
 
 let block_tags =
   [
-    "p"; "div"; "section"; "article"; "main"; "figure"; "figcaption";
-    "blockquote"; "pre"; "h1"; "h2"; "h3"; "h4"; "h5"; "h6"; "ul"; "ol"; "dl";
-    "table"; "thead"; "tbody"; "tfoot"; "tr"; "caption"; "details"; "summary";
-    "address"; "hr"; "body";
+    "p";
+    "div";
+    "section";
+    "article";
+    "main";
+    "figure";
+    "figcaption";
+    "blockquote";
+    "pre";
+    "h1";
+    "h2";
+    "h3";
+    "h4";
+    "h5";
+    "h6";
+    "ul";
+    "ol";
+    "dl";
+    "table";
+    "thead";
+    "tbody";
+    "tfoot";
+    "tr";
+    "caption";
+    "details";
+    "summary";
+    "address";
+    "hr";
+    "body";
   ]
 
 (* A table cell needs a word boundary between values; a row does not, since
@@ -45,56 +83,188 @@ let cell_tags = [ "td"; "th"; "dt"; "dd" ]
 
 let legacy_entities =
   [
-    ("amp", 38); ("lt", 60); ("gt", 62); ("quot", 34); ("nbsp", 160);
-    ("iexcl", 161); ("cent", 162); ("pound", 163); ("curren", 164); ("yen", 165);
-    ("brvbar", 166); ("sect", 167); ("uml", 168); ("copy", 169); ("ordf", 170);
-    ("laquo", 171); ("not", 172); ("shy", 173); ("reg", 174); ("macr", 175);
-    ("deg", 176); ("plusmn", 177); ("sup2", 178); ("sup3", 179); ("acute", 180);
-    ("micro", 181); ("para", 182); ("middot", 183); ("cedil", 184); ("sup1", 185);
-    ("ordm", 186); ("raquo", 187); ("frac14", 188); ("frac12", 189);
-    ("frac34", 190); ("iquest", 191); ("times", 215); ("divide", 247);
-    ("Agrave", 192); ("Aacute", 193); ("Acirc", 194); ("Atilde", 195);
-    ("Auml", 196); ("Aring", 197); ("AElig", 198); ("Ccedil", 199);
-    ("Egrave", 200); ("Eacute", 201); ("Ecirc", 202); ("Euml", 203);
-    ("Igrave", 204); ("Iacute", 205); ("Icirc", 206); ("Iuml", 207);
-    ("ETH", 208); ("Ntilde", 209); ("Ograve", 210); ("Oacute", 211);
-    ("Ocirc", 212); ("Otilde", 213); ("Ouml", 214); ("Oslash", 216);
-    ("Ugrave", 217); ("Uacute", 218); ("Ucirc", 219); ("Uuml", 220);
-    ("Yacute", 221); ("THORN", 222); ("szlig", 223); ("agrave", 224);
-    ("aacute", 225); ("acirc", 226); ("atilde", 227); ("auml", 228);
-    ("aring", 229); ("aelig", 230); ("ccedil", 231); ("egrave", 232);
-    ("eacute", 233); ("ecirc", 234); ("euml", 235); ("igrave", 236);
-    ("iacute", 237); ("icirc", 238); ("iuml", 239); ("ntilde", 241);
-    ("ograve", 242); ("oacute", 243); ("ocirc", 244); ("otilde", 245);
-    ("ouml", 246); ("oslash", 248); ("ugrave", 249); ("uacute", 250);
-    ("ucirc", 251); ("uuml", 252); ("yacute", 253); ("yuml", 255);
+    ("amp", 38);
+    ("lt", 60);
+    ("gt", 62);
+    ("quot", 34);
+    ("nbsp", 160);
+    ("iexcl", 161);
+    ("cent", 162);
+    ("pound", 163);
+    ("curren", 164);
+    ("yen", 165);
+    ("brvbar", 166);
+    ("sect", 167);
+    ("uml", 168);
+    ("copy", 169);
+    ("ordf", 170);
+    ("laquo", 171);
+    ("not", 172);
+    ("shy", 173);
+    ("reg", 174);
+    ("macr", 175);
+    ("deg", 176);
+    ("plusmn", 177);
+    ("sup2", 178);
+    ("sup3", 179);
+    ("acute", 180);
+    ("micro", 181);
+    ("para", 182);
+    ("middot", 183);
+    ("cedil", 184);
+    ("sup1", 185);
+    ("ordm", 186);
+    ("raquo", 187);
+    ("frac14", 188);
+    ("frac12", 189);
+    ("frac34", 190);
+    ("iquest", 191);
+    ("times", 215);
+    ("divide", 247);
+    ("Agrave", 192);
+    ("Aacute", 193);
+    ("Acirc", 194);
+    ("Atilde", 195);
+    ("Auml", 196);
+    ("Aring", 197);
+    ("AElig", 198);
+    ("Ccedil", 199);
+    ("Egrave", 200);
+    ("Eacute", 201);
+    ("Ecirc", 202);
+    ("Euml", 203);
+    ("Igrave", 204);
+    ("Iacute", 205);
+    ("Icirc", 206);
+    ("Iuml", 207);
+    ("ETH", 208);
+    ("Ntilde", 209);
+    ("Ograve", 210);
+    ("Oacute", 211);
+    ("Ocirc", 212);
+    ("Otilde", 213);
+    ("Ouml", 214);
+    ("Oslash", 216);
+    ("Ugrave", 217);
+    ("Uacute", 218);
+    ("Ucirc", 219);
+    ("Uuml", 220);
+    ("Yacute", 221);
+    ("THORN", 222);
+    ("szlig", 223);
+    ("agrave", 224);
+    ("aacute", 225);
+    ("acirc", 226);
+    ("atilde", 227);
+    ("auml", 228);
+    ("aring", 229);
+    ("aelig", 230);
+    ("ccedil", 231);
+    ("egrave", 232);
+    ("eacute", 233);
+    ("ecirc", 234);
+    ("euml", 235);
+    ("igrave", 236);
+    ("iacute", 237);
+    ("icirc", 238);
+    ("iuml", 239);
+    ("ntilde", 241);
+    ("ograve", 242);
+    ("oacute", 243);
+    ("ocirc", 244);
+    ("otilde", 245);
+    ("ouml", 246);
+    ("oslash", 248);
+    ("ugrave", 249);
+    ("uacute", 250);
+    ("ucirc", 251);
+    ("uuml", 252);
+    ("yacute", 253);
+    ("yuml", 255);
   ]
 
 let extended_entities =
   [
-    ("ensp", 8194); ("emsp", 8195); ("thinsp", 8201); ("zwnj", 8204);
-    ("zwj", 8205); ("lrm", 8206); ("rlm", 8207); ("ndash", 8211);
-    ("mdash", 8212); ("lsquo", 8216); ("rsquo", 8217); ("sbquo", 8218);
-    ("ldquo", 8220); ("rdquo", 8221); ("bdquo", 8222); ("dagger", 8224);
-    ("Dagger", 8225); ("bull", 8226); ("hellip", 8230); ("permil", 8240);
-    ("prime", 8242); ("Prime", 8243); ("lsaquo", 8249); ("rsaquo", 8250);
-    ("oline", 8254); ("frasl", 8260); ("euro", 8364); ("trade", 8482);
-    ("OElig", 338); ("oelig", 339); ("Scaron", 352); ("scaron", 353);
-    ("Yuml", 376); ("fnof", 402); ("minus", 8722); ("lowast", 8727);
-    ("radic", 8730); ("prop", 8733); ("infin", 8734); ("ang", 8736);
-    ("and", 8743); ("or", 8744); ("cap", 8745); ("cup", 8746); ("int", 8747);
-    ("there4", 8756); ("sim", 8764); ("cong", 8773); ("asymp", 8776);
-    ("ne", 8800); ("equiv", 8801); ("le", 8804); ("ge", 8805); ("sub", 8834);
-    ("sup", 8835); ("nsub", 8836); ("sube", 8838); ("supe", 8839);
-    ("oplus", 8853); ("otimes", 8855); ("perp", 8869); ("sdot", 8901);
-    ("lceil", 8968); ("rceil", 8969); ("lfloor", 8970); ("rfloor", 8971);
-    ("loz", 9674); ("spades", 9824); ("clubs", 9827); ("hearts", 9829);
+    ("ensp", 8194);
+    ("emsp", 8195);
+    ("thinsp", 8201);
+    ("zwnj", 8204);
+    ("zwj", 8205);
+    ("lrm", 8206);
+    ("rlm", 8207);
+    ("ndash", 8211);
+    ("mdash", 8212);
+    ("lsquo", 8216);
+    ("rsquo", 8217);
+    ("sbquo", 8218);
+    ("ldquo", 8220);
+    ("rdquo", 8221);
+    ("bdquo", 8222);
+    ("dagger", 8224);
+    ("Dagger", 8225);
+    ("bull", 8226);
+    ("hellip", 8230);
+    ("permil", 8240);
+    ("prime", 8242);
+    ("Prime", 8243);
+    ("lsaquo", 8249);
+    ("rsaquo", 8250);
+    ("oline", 8254);
+    ("frasl", 8260);
+    ("euro", 8364);
+    ("trade", 8482);
+    ("OElig", 338);
+    ("oelig", 339);
+    ("Scaron", 352);
+    ("scaron", 353);
+    ("Yuml", 376);
+    ("fnof", 402);
+    ("minus", 8722);
+    ("lowast", 8727);
+    ("radic", 8730);
+    ("prop", 8733);
+    ("infin", 8734);
+    ("ang", 8736);
+    ("and", 8743);
+    ("or", 8744);
+    ("cap", 8745);
+    ("cup", 8746);
+    ("int", 8747);
+    ("there4", 8756);
+    ("sim", 8764);
+    ("cong", 8773);
+    ("asymp", 8776);
+    ("ne", 8800);
+    ("equiv", 8801);
+    ("le", 8804);
+    ("ge", 8805);
+    ("sub", 8834);
+    ("sup", 8835);
+    ("nsub", 8836);
+    ("sube", 8838);
+    ("supe", 8839);
+    ("oplus", 8853);
+    ("otimes", 8855);
+    ("perp", 8869);
+    ("sdot", 8901);
+    ("lceil", 8968);
+    ("rceil", 8969);
+    ("lfloor", 8970);
+    ("rfloor", 8971);
+    ("loz", 9674);
+    ("spades", 9824);
+    ("clubs", 9827);
+    ("hearts", 9829);
     ("diams", 9830);
     (* The uppercase forms the table carries — semicolon required, as in
        [html.entities.html5]. *)
-
-    ("AMP", 38); ("LT", 60); ("GT", 62); ("QUOT", 34); ("COPY", 169);
-    ("REG", 174); ("TRADE", 8482);
+    ("AMP", 38);
+    ("LT", 60);
+    ("GT", 62);
+    ("QUOT", 34);
+    ("COPY", 169);
+    ("REG", 174);
+    ("TRADE", 8482);
   ]
 
 (* Keyed, and built once: the lookup below retries every prefix of a name run,
@@ -104,10 +274,12 @@ let extended_entities =
    otherwise answer the other list's codepoint. *)
 let entity_table : (string, int) Hashtbl.t =
   let table = Hashtbl.create 288 in
-  let add name cp =
-    if not (Hashtbl.mem table name) then Hashtbl.replace table name cp
-  in
-  List.iter (fun (name, cp) -> add (name ^ ";") cp; add name cp) legacy_entities;
+  let add name cp = if not (Hashtbl.mem table name) then Hashtbl.replace table name cp in
+  List.iter
+    (fun (name, cp) ->
+      add (name ^ ";") cp;
+      add name cp)
+    legacy_entities;
   List.iter (fun (name, cp) -> add (name ^ ";") cp) extended_entities;
   table
 
@@ -119,7 +291,6 @@ let entity_table : (string, int) Hashtbl.t =
 let windows_1252_special (b : int) : int =
   match b with
   | 0x80 -> 0x20AC (* € *)
-
   | 0x82 -> 0x201A
   | 0x83 -> 0x0192
   | 0x84 -> 0x201E
@@ -153,7 +324,6 @@ let numeric_ref (n : int) : string =
   else if n >= 0x80 && n <= 0x9F then
     (* The HTML5 rule: the Windows-1252 table, and the five bytes it leaves
        undefined are U+FFFD. *)
-
     if List.mem n [ 0x81; 0x8D; 0x8F; 0x90; 0x9D ] then U.encode 0xFFFD
     else U.encode (windows_1252_special n)
   else U.encode n
@@ -169,10 +339,7 @@ let numeric_ref (n : int) : string =
 
 let charref_at (s : string) (amp : int) : (string * int) option =
   let n = String.length s in
-  let is_run_char c =
-    not
-      (String.contains "\t\n\012 <&#;" c)
-  in
+  let is_run_char c = not (String.contains "\t\n\012 <&#;" c) in
   let name_run i =
     let j = ref i in
     while !j < n && !j - i < 32 && is_run_char s.[!j] do
@@ -186,15 +353,11 @@ let charref_at (s : string) (amp : int) : (string * int) option =
        follows. A malformed one leaves the whole text as it was, the [&]
        included, and the scan re-reads the [#] as plain data — the same thing
        the regex's failure to match does. *)
-
     let digits_from i hex =
       let j = ref i in
       while
         !j < n
-        && (match s.[!j] with
-           | '0' .. '9' -> true
-           | 'a' .. 'f' | 'A' .. 'F' -> hex
-           | _ -> false)
+        && match s.[!j] with '0' .. '9' -> true | 'a' .. 'f' | 'A' .. 'F' -> hex | _ -> false
       do
         incr j
       done;
@@ -218,9 +381,7 @@ let charref_at (s : string) (amp : int) : (string * int) option =
           let semi = stop < n && s.[stop] = ';' in
           Some (v, stop + if semi then 1 else 0)
     in
-    match value with
-    | Some (Some v, end_i) -> Some (numeric_ref v, end_i)
-    | _ -> None
+    match value with Some (Some v, end_i) -> Some (numeric_ref v, end_i) | _ -> None
   else
     let stop = name_run (amp + 1) in
     if stop = amp + 1 then None
@@ -235,7 +396,6 @@ let charref_at (s : string) (amp : int) : (string * int) option =
           (* Longest prefix, tried from the length below the whole name down to
              two characters — never the full name twice, never a single
              character. *)
-
           let len = String.length whole in
           let rec try_prefix x =
             if x < 2 then None
@@ -246,33 +406,31 @@ let charref_at (s : string) (amp : int) : (string * int) option =
           in
           match try_prefix (len - 1) with
           | Some (cp, x) ->
-              Some
-                ( U.encode cp ^ String.sub whole x (len - x),
-                  stop + if with_semi then 1 else 0 )
+              Some (U.encode cp ^ String.sub whole x (len - x), stop + if with_semi then 1 else 0)
           | None -> None)
 
 (* [convert_charrefs] over one data run: every reference in the text is
    replaced, and an [&] that starts nothing known stays. *)
 
 let convert (s : string) : string =
-  if String.contains s '&' then
+  if String.contains s '&' then (
     let buf = Buffer.create (String.length s) in
     let n = String.length s in
     let i = ref 0 in
     while !i < n do
-      if s.[!i] = '&' then
+      if s.[!i] = '&' then (
         match charref_at s !i with
         | Some (value, end_i) ->
             Buffer.add_string buf value;
             i := end_i
         | None ->
             Buffer.add_char buf '&';
-            incr i
+            incr i)
       else (
         Buffer.add_char buf s.[!i];
         incr i)
     done;
-    Buffer.contents buf
+    Buffer.contents buf)
   else s
 
 (* A hand-written port of the [html.parser] events this backend consumes:
@@ -283,27 +441,19 @@ let convert (s : string) : string =
    the tokenizer to raw mode, the way the original's CDATA mode does, so a [<]
    inside a script is not parsed as a tag. *)
 
-type event =
-  | Start of string
-  | End of string
-  | Start_end of string
-  | Data of string
+type event = Start of string | End of string | Start_end of string | Data of string
 
 let is_tag_start c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 
-let ascii_lower_char c =
-  if c >= 'A' && c <= 'Z' then Char.chr (Char.code c + 32) else c
+let ascii_lower_char c = if c >= 'A' && c <= 'Z' then Char.chr (Char.code c + 32) else c
 
 let tag_name s i =
   (* [a-zA-Z][^\t\n\r\f />]* — the original's tagfind, lowercased. *)
-
   let n = String.length s in
   let j = ref (i + 1) in
   while
     !j < n
-    && (match s.[!j] with
-       | '\t' | '\n' | '\r' | '\012' | '\ ' | '/' | '>' -> false
-       | _ -> true)
+    && match s.[!j] with '\t' | '\n' | '\r' | '\012' | '\ ' | '/' | '>' -> false | _ -> true
   do
     incr j
   done;
@@ -329,7 +479,9 @@ let scan_tag_end s i =
          | '"' | '\'' ->
              quote := c;
              incr j
-         | '>' -> j := !j + 1; raise Exit
+         | '>' ->
+             j := !j + 1;
+             raise Exit
          | '/' when !j + 1 < n && s.[!j + 1] = '>' ->
              self_closing := true;
              j := !j + 2;
@@ -343,9 +495,7 @@ let find_sub_ignore_case s needle from =
   let n = String.length s and m = String.length needle in
   let lower = String.map ascii_lower_char s in
   let rec go i =
-    if i + m > n then None
-    else if String.sub lower i m = needle then Some i
-    else go (i + 1)
+    if i + m > n then None else if String.sub lower i m = needle then Some i else go (i + 1)
   in
   go from
 
@@ -357,7 +507,6 @@ let tokenize (s : string) : event list =
     if i >= n then ()
     else if s.[i] <> '<' then begin
       (* A data run up to the next [<]. *)
-
       let j = ref i in
       while !j < n && s.[!j] <> '<' do
         incr j
@@ -371,49 +520,46 @@ let tokenize (s : string) : event list =
     end
     else
       match s.[i + 1] with
-      | '!' -> (
+      | '!' ->
           if String.length s >= i + 4 && String.sub s i 4 = "<!--" then
             (* A comment never reaches [handle_data]. *)
-
             match find_sub_ignore_case s "-->" (i + 4) with
             | Some e -> go (e + 3)
             | None -> go n
           else
             (* A declaration ([<!DOCTYPE ...>]) or a marked section: skipped
                to its [>]. *)
-
             let j = ref (i + 2) in
             while !j < n && s.[!j] <> '>' do
               incr j
             done;
-            go (if !j < n then !j + 1 else n))
+            go (if !j < n then !j + 1 else n)
       | '?' ->
           (* A processing instruction. *)
-
           let j = ref (i + 2) in
           while !j < n && s.[!j] <> '>' do
             incr j
           done;
           go (if !j < n then !j + 1 else n)
-      | '/' -> (
-          if i + 2 < n && is_tag_start s.[i + 2] then
+      | '/' ->
+          if i + 2 < n && is_tag_start s.[i + 2] then (
             let name, j = tag_name s (i + 2) in
             let end_, _ = scan_tag_end s j in
             emit (End name);
-            go end_
+            go end_)
           else if i + 2 < n && s.[i + 2] = '>' then go (i + 3)
           else begin
             emit (Data (convert "<"));
             go (i + 1)
-          end)
+          end
       | c when is_tag_start c ->
           let name, j = tag_name s (i + 1) in
           let end_, self_closing = scan_tag_end s j in
           emit (if self_closing then Start_end name else Start name);
+
           (* [script]/[style] are CDATA elements in the original: their content
              is raw text up to the matching end tag, never parsed for tags. *)
-
-          if (not self_closing) && (name = "script" || name = "style") then
+          if (not self_closing) && (name = "script" || name = "style") then (
             let close = find_sub_ignore_case s ("</" ^ name) end_ in
             match close with
             | Some cpos ->
@@ -424,7 +570,7 @@ let tokenize (s : string) : event list =
                 go end2
             | None ->
                 emit (Data (String.sub s end_ (n - end_)));
-                go n
+                go n)
           else go end_
       | _ ->
           emit (Data (convert "<"));
@@ -445,25 +591,23 @@ type parser = {
 }
 
 let separator p tag ~closing =
-  if tag = "br" then begin
+  if tag = "br" then
     (* One break for one [<br>]: the XML form arrives as an open and a
        close in a single event, and two breaks read as a paragraph break. *)
-    if not closing then p.chunks <- "\n" :: p.chunks
-  end
-  else if tag = "li" then begin
+    begin if not closing then p.chunks <- "\n" :: p.chunks
+    end
+  else if tag = "li" then
     (* The marker opens an item, and its end needs nothing: the next item
        opens with a line break of its own, and the list closes with one. *)
-    if not closing then p.chunks <- "\n- " :: p.chunks
-  end
-  else if List.mem tag cell_tags then begin
+    begin if not closing then p.chunks <- "\n- " :: p.chunks
+    end
+  else if List.mem tag cell_tags then
     (* A word boundary *between* two values: the row's own break already
        ends the line, so the cell that opens a row adds no leading space. *)
-    if
-      (not closing)
-      && p.chunks <> []
-      && not (String.ends_with ~suffix:"\n" (List.hd p.chunks))
+    begin if
+      (not closing) && p.chunks <> [] && not (String.ends_with ~suffix:"\n" (List.hd p.chunks))
     then p.chunks <- " " :: p.chunks
-  end
+    end
   else if List.mem tag block_tags then p.chunks <- "\n\n" :: p.chunks
 
 let handle_starttag p tag =
@@ -471,8 +615,7 @@ let handle_starttag p tag =
   if tag = "title" then begin
     (* A [<title>] inside skipped markup or a graphic is a tooltip, not the
        document's name. *)
-
-    p.in_title <- (p.skipping = [] && p.graphics = 0);
+    p.in_title <- p.skipping = [] && p.graphics = 0;
     if p.in_title then p.title_parts <- []
   end
   else if List.mem tag skip_tags then p.skipping <- tag :: p.skipping
@@ -484,7 +627,6 @@ let handle_endtag p tag =
     if p.in_title && p.title_parts <> [] && p.title = None then
       (* A page repeats the element: the first is the document's name, the
          ones an icon sprite adds are graphic labels. *)
-
       let joined = String.concat "" (List.rev p.title_parts) in
       let stripped = String.trim joined in
       p.title <- (if stripped = "" then None else Some stripped)
@@ -496,7 +638,6 @@ let handle_endtag p tag =
        opened inside it: markup ends a [<nav>] without closing its [<div>].
        Innermost, because clearing from the outer [<svg>] of a sprite hands
        every later icon title to the caller as page text. *)
-
     let rec drop depth =
       if depth < 0 then ()
       else if List.nth p.skipping depth = tag then
@@ -513,16 +654,8 @@ let handle_data p data =
 let from_html (html : string) : string * string option =
   (* The document's visible text and its [<title>], or [None] when it has
      none. *)
-
   let p =
-    {
-      chunks = [];
-      title = None;
-      skipping = [];
-      graphics = 0;
-      title_parts = [];
-      in_title = false;
-    }
+    { chunks = []; title = None; skipping = []; graphics = 0; title_parts = []; in_title = false }
   in
   List.iter
     (fun e ->
@@ -533,15 +666,14 @@ let from_html (html : string) : string * string option =
           (* [<br/>] asks for a line break with no end tag to follow, so the
              pair is one call rather than two that a self-closing element
              never completes. *)
-
           handle_starttag p tag;
           handle_endtag p tag
       | Data d -> handle_data p d)
     (tokenize html);
+
   (* Indented markup leaves lines holding nothing but spaces. [normalise] caps
      blank-line runs but cannot see a line that *holds* whitespace, so those are
      emptied here rather than reaching a caller as a paragraph break. *)
-
   let chunks = String.concat "" (List.rev p.chunks) in
   let lines = String.split_on_char '\n' chunks in
   (* An empty [<li>] — a spacer, an icon — earns no bullet: it becomes a blank
@@ -569,12 +701,10 @@ let extract (body : string) (content_type : string option) : E.extract_result =
      JSON only when the bytes look like one of them, so an unknown binary is
      refused rather than fed to the parser to produce nothing. A table type is
      never guessed at: a delimited line reads as prose. *)
-
   let kind = E.media_type content_type in
   if J.is_json_media kind || (kind = "" && J.sniffs_json body) then
     E.json_extraction (E.decode body content_type)
-  else if T.is_table_media kind then
-    E.table_extraction ~text:(E.decode body content_type) ~kind
+  else if T.is_table_media kind then E.table_extraction ~text:(E.decode body content_type) ~kind
   else if List.mem kind E.html_types || (kind = "" && E.sniffs_html body) then
     let text, title = from_html (E.decode body content_type) in
     E.normalise text title
@@ -583,5 +713,4 @@ let extract (body : string) (content_type : string option) : E.extract_result =
     (* A PDF included: this backend claims no PDF type, so the fetcher normally
        refuses one before the body is downloaded, and reaching here means a
        caller built the backend by hand. *)
-
     raise (E.Extraction_failed (if kind = "" then "unknown content type" else kind))

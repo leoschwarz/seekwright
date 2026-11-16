@@ -14,7 +14,7 @@ let cost_for ~cost_per_1k max_results =
   if cost_per_1k = 0.0 then 0.0
   else
     let extra = max 0 (max_results - 10) in
-    (cost_per_1k +. float_of_int extra *. 1.0) /. 1000.0
+    (cost_per_1k +. (float_of_int extra *. 1.0)) /. 1000.0
 
 (* [Author], [ID] and [Score] are parsed only to terminate continuation runs. *)
 let field_names = [ "title"; "url"; "published"; "author"; "highlights"; "text"; "id"; "score" ]
@@ -23,10 +23,7 @@ let body_fields = [ "highlights"; "text" ]
 
 (* Custom whitespace stripping including vertical tab and form feed. *)
 let strip line =
-  let is_space = function
-    | ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true
-    | _ -> false
-  in
+  let is_space = function ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true | _ -> false in
   let length = String.length line in
   let stop = ref length in
   while !stop > 0 && is_space line.[!stop - 1] do
@@ -101,8 +98,7 @@ let parse ~text_chars text ~limit =
           current := put !current "published" (String.sub value 0 (min 10 (String.length value)))
     (* An empty value sets [field] but adds no line: the body that follows the
        field marker is what counts. *)
-    | name when List.mem name body_fields ->
-        if value <> "" then body := value :: !body
+    | name when List.mem name body_fields -> if value <> "" then body := value :: !body
     | _ -> ()
   in
   let rec scan lines =
@@ -110,7 +106,7 @@ let parse ~text_chars text ~limit =
     | [] ->
         flush ();
         take_limit (List.rev !results)
-    | raw :: rest ->
+    | raw :: rest -> (
         let line = strip raw in
         match field_of line with
         | Some (name, value) ->
@@ -132,11 +128,10 @@ let parse ~text_chars text ~limit =
             end
         | None ->
             if
-              line <> ""
-              && line <> "..."
-              && (match !field with Some f -> List.mem f body_fields | None -> false)
+              line <> "" && line <> "..."
+              && match !field with Some f -> List.mem f body_fields | None -> false
             then body := line :: !body;
-            scan rest
+            scan rest)
   in
   scan (String.split_on_char '\n' text)
 
@@ -178,11 +173,9 @@ let round_decisecond value =
   let rounded = if scaled >= 0.0 then floor (scaled +. 0.5) else ceil (scaled -. 0.5) in
   rounded /. 10.0
 
-let make_tiered ?(cost_per_1k = 7.00) ?(text_chars = 2000) ?(cooldown_seconds = 60.0) ~now ?log
-    ~key ~uri ~net () =
-  let sink level event fields =
-    match log with Some log -> log level event fields | None -> ()
-  in
+let make_tiered ?(cost_per_1k = 7.00) ?(text_chars = 2000) ?(cooldown_seconds = 60.0) ~now ?log ~key
+    ~uri ~net () =
+  let sink level event fields = match log with Some log -> log level event fields | None -> () in
   (* Both fallbacks report "exa" as provider name. *)
   let free = make_mcp ~cost_per_1k:0.0 ~text_chars ~name:"exa" ~uri ~net () in
   let keyed = make_mcp ~cost_per_1k ~text_chars ~name:"exa" ~auth:key ~uri ~net () in

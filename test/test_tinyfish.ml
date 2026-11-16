@@ -22,9 +22,8 @@ module Tinyfish = Seekwright_providers.Tinyfish
 module A = Alcotest
 open Test_support
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -79,17 +78,11 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ()
           Ok { Caps.Authority.Net.status; headers = []; body });
     }
   in
-  let provider =
-    Tinyfish.make ?cost_per_1k ~snippet_chars ~key:test_key ~net ()
-  in
+  let provider = Tinyfish.make ?cost_per_1k ~snippet_chars ~key:test_key ~net () in
   (provider, fun () -> Option.get !sent)
 
 let refusal kind ~message =
-  let net =
-    {
-      Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message));
-    }
-  in
+  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
   Tinyfish.make ~key:test_key ~net ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
@@ -99,12 +92,10 @@ let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_
   | Ok outcome -> (outcome, sent ())
   | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
 
-let parse ?(snippet_chars = 500) ?(limit = 10) data =
-  Tinyfish.parse ~snippet_chars data ~limit
+let parse ?(snippet_chars = 500) ?(limit = 10) data = Tinyfish.parse ~snippet_chars data ~limit
 
 let record fields =
-  `Assoc
-    (("title", `String "t") :: ("url", `String "https://example.com/a") :: fields)
+  `Assoc (("title", `String "t") :: ("url", `String "https://example.com/a") :: fields)
 
 let results items = `Assoc [ ("results", `List items) ]
 
@@ -112,9 +103,8 @@ let five_results =
   `Assoc
     [
       ( "results",
-        `List
-          (List.init 5 (fun n ->
-               record [ ("snippet", `String (Printf.sprintf "hit %d" n)) ])) );
+        `List (List.init 5 (fun n -> record [ ("snippet", `String (Printf.sprintf "hit %d" n)) ]))
+      );
     ]
 
 let the_fixture_yields_both_records () =
@@ -122,8 +112,7 @@ let the_fixture_yields_both_records () =
   check_int "two results" 2 (List.length hits);
   check_string "the title" "Write-Ahead Logging" (List.hd hits).result.title;
   check_string "the url" "https://www.sqlite.org/wal.html" (List.hd hits).result.url;
-  check_string "the second url" "https://example.com/wal-explained"
-    (List.nth hits 1).result.url
+  check_string "the second url" "https://example.com/wal-explained" (List.nth hits 1).result.url
 
 let the_limit_is_honoured_in_the_parse () =
   check_int "one of two" 1 (List.length (parse ~limit:1 sample_json));
@@ -138,10 +127,10 @@ let the_snippet_is_capped_and_the_pre_cap_length_measured () =
   let long = "word word word word word word word word" in
   let hits = parse ~snippet_chars:20 (results [ record [ ("snippet", `String long) ] ]) in
   let hit = List.hd hits in
-  check_opt_string "the clip keeps the head and marks the cut"
-    (Some "word word word word…")
+  check_opt_string "the clip keeps the head and marks the cut" (Some "word word word word…")
     hit.result.snippet;
-  check_opt_int "the pre-cap length rides beside the result" (Some (String.length long))
+  check_opt_int "the pre-cap length rides beside the result"
+    (Some (String.length long))
     hit.uncapped_chars
 
 let the_date_is_kept_only_when_a_string () =
@@ -153,7 +142,8 @@ let the_date_is_kept_only_when_a_string () =
 
 let records_without_a_url_are_dropped () =
   check_int "no url" 0
-    (List.length (parse (`Assoc [ ("results", `List [ `Assoc [ ("title", `String "No url here") ] ]) ])))
+    (List.length
+       (parse (`Assoc [ ("results", `List [ `Assoc [ ("title", `String "No url here") ] ]) ])))
 
 let records_without_a_title_are_dropped () =
   check_int "no title" 0
@@ -182,22 +172,20 @@ let a_non_string_snippet_is_dropped_and_the_call_succeeds () =
     (fun (what, value) ->
       let body = Yojson.Safe.to_string (results [ record [ ("snippet", value) ] ]) in
       let outcome, _ = search_of ~body ~query:(query ~max_results:1 ()) () in
-      check_int (Printf.sprintf "the call succeeded through %s" what) 1
-        (List.length outcome.results);
+      check_int
+        (Printf.sprintf "the call succeeded through %s" what)
+        1 (List.length outcome.results);
       check_opt_string what None (List.hd outcome.results).result.snippet)
     non_strings
 
 let a_string_snippet_still_reaches_the_model () =
   (* The guard must not change behaviour for a well-formed payload. *)
   let outcome, _ = search_of ~query:(query ~max_results:1 ()) () in
-  check_opt_string
-    "the snippet"
-    (Some
-       "The default method by which SQLite implements atomic commit is a rollback journal.")
+  check_opt_string "the snippet"
+    (Some "The default method by which SQLite implements atomic commit is a rollback journal.")
     (List.hd outcome.results).result.snippet
 
-let query_param name request =
-  Uri.get_query_param request.Caps.Authority.Net.uri name
+let query_param name request = Uri.get_query_param request.Caps.Authority.Net.uri name
 
 let the_url_the_adapter_builds (request : Caps.Authority.Net.request) =
   Uri.to_string request.Caps.Authority.Net.uri
@@ -226,8 +214,7 @@ let the_domain_lists_are_comma_joined () =
   let _, request =
     search_of
       ~query:
-        (query ~include_domains:[ "sqlite.org"; "docs.rs" ]
-           ~exclude_domains:[ "spam.example" ] ())
+        (query ~include_domains:[ "sqlite.org"; "docs.rs" ] ~exclude_domains:[ "spam.example" ] ())
       ()
   in
   check_opt_string "the include list is joined" (Some "sqlite.org,docs.rs")
@@ -267,8 +254,7 @@ let geo_maps_onto_location_and_language () =
   let _, request = search_of ~query:(query ~country:"de" ~language:"DE" ()) () in
   check_opt_string "the documented examples are uppercase codes" (Some "DE")
     (query_param "location" request);
-  check_opt_string "and the language is lowercased" (Some "de")
-    (query_param "language" request);
+  check_opt_string "and the language is lowercased" (Some "de") (query_param "language" request);
   let _, request = search_of () in
   check_opt_string "neither is sent unasked" None (query_param "location" request);
   check_opt_string "not even the language" None (query_param "language" request)
@@ -281,7 +267,8 @@ let no_result_count_is_ever_sent () =
   let _, narrow = search_of ~query:(query ~max_results:2 ()) () in
   let _, wide = search_of ~query:(query ~max_results:20 ()) () in
   check_string "the URL does not move with max_results"
-    (the_url_the_adapter_builds narrow) (the_url_the_adapter_builds wide);
+    (the_url_the_adapter_builds narrow)
+    (the_url_the_adapter_builds wide);
   check_opt_string "no max_results parameter" None (query_param "max_results" wide);
   check_opt_string "no num parameter" None (query_param "num" wide);
   check_opt_string "no limit parameter" None (query_param "limit" wide)
@@ -299,8 +286,7 @@ let safe_search_is_the_one_drop_it_notices () =
     (fun value ->
       let outcome, _ = search_of ~query:(query ~safe_search:value ()) () in
       check_string "the safe-search sentence"
-        "cannot filter by safe-search; that constraint was ignored"
-        (Option.get outcome.notice))
+        "cannot filter by safe-search; that constraint was ignored" (Option.get outcome.notice))
     [ true; false ]
 
 let an_unconstrained_query_carries_no_notice () =
@@ -314,8 +300,8 @@ let every_other_constraint_is_honoured () =
   let outcome, _ =
     search_of
       ~query:
-        (query ~include_domains:[ "sqlite.org" ] ~country:"de" ~language:"de"
-           ~recency:Model.Month ())
+        (query ~include_domains:[ "sqlite.org" ] ~country:"de" ~language:"de" ~recency:Model.Month
+           ())
       ()
   in
   check_opt_string "no notice" None outcome.notice
@@ -341,9 +327,7 @@ let no_search_access_and_the_rate_limit_are_quota () =
     [ 402; 429 ]
 
 let a_body_that_quotes_the_key_is_not_echoed () =
-  let body =
-    Printf.sprintf "<html>upstream echoed %s on an access page</html>" test_key
-  in
+  let body = Printf.sprintf "<html>upstream echoed %s on an access page</html>" test_key in
   let provider, _ = dial ~status:402 ~body () in
   match Provider.search provider (query ()) with
   | Ok _ -> A.failf "HTTP 402 was accepted"
@@ -352,9 +336,7 @@ let a_body_that_quotes_the_key_is_not_echoed () =
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
 let a_network_failure_does_not_echo_the_request () =
-  let provider =
-    refusal Caps.Error.Denied ~message:"connection refused to X-API-Key: test-key"
-  in
+  let provider = refusal Caps.Error.Denied ~message:"connection refused to X-API-Key: test-key" in
   match Provider.search provider (query ()) with
   | Ok _ -> A.failf "a refused grant was accepted"
   | Error failure ->
@@ -382,8 +364,7 @@ let zero_is_the_default_and_a_correction_reaches_the_adapter () =
   check_number "and its per-query reading" 0.002 (Provider.cost_for provider 5)
 
 let the_endpoint_is_the_one_the_grant_allows () =
-  check_string "the endpoint" "https://api.search.tinyfish.ai"
-    (Uri.to_string Tinyfish.endpoint);
+  check_string "the endpoint" "https://api.search.tinyfish.ai" (Uri.to_string Tinyfish.endpoint);
   check_string "the policy host" "api.search.tinyfish.ai" Tinyfish.policy_endpoint.Caps.Policy.host;
   check_bool "https" true (Tinyfish.policy_endpoint.Caps.Policy.scheme = `Https);
   check_bool "the default port" true (Tinyfish.policy_endpoint.Caps.Policy.port = None);
@@ -392,80 +373,75 @@ let the_endpoint_is_the_one_the_grant_allows () =
     (Uri.host request.Caps.Authority.Net.uri = Some Tinyfish.policy_endpoint.Caps.Policy.host)
 
 let () =
-  A.
-    (run "seekwright/tinyfish"
-       [
-         ( "parsing",
-             [
-               test_case "the live fixture yields both records" `Quick
-                 the_fixture_yields_both_records;
-               test_case "the limit is honoured in the parse" `Quick
-                 the_limit_is_honoured_in_the_parse;
-               test_case "a SERP record fills snippet and never text" `Quick
-                 a_serp_record_fills_snippet_and_never_text;
-               test_case "the snippet is capped and the pre-cap length measured" `Quick
-                 the_snippet_is_capped_and_the_pre_cap_length_measured;
-               test_case "the date is kept only when a string" `Quick
-                 the_date_is_kept_only_when_a_string;
-               test_case "records without a url are dropped" `Quick records_without_a_url_are_dropped;
-               test_case "records without a title are dropped" `Quick
-                 records_without_a_title_are_dropped;
-               test_case "a record that is not an object is skipped" `Quick
-                 a_record_that_is_not_an_object_is_skipped;
-               test_case "missing results is empty, not an error" `Quick
-                 missing_results_is_empty_not_an_error;
-             ] );
-         ( "the upstream field guards",
-             [
-               test_case "a non-string snippet is dropped and the call succeeds" `Quick
-                 a_non_string_snippet_is_dropped_and_the_call_succeeds;
-               test_case "a string snippet still reaches the model" `Quick
-                 a_string_snippet_still_reaches_the_model;
-             ] );
-         ( "the request",
-             [
-               test_case "GET to the endpoint, key in the X-API-Key header" `Quick
-                 get_to_the_endpoint_with_the_api_key_header;
-               test_case "the key never rides the URL" `Quick the_key_never_rides_the_url;
-               test_case "the domain lists are comma-joined" `Quick
-                 the_domain_lists_are_comma_joined;
-               test_case "domain params absent without filters" `Quick
-                 domain_params_absent_without_filters;
-               test_case "recency maps onto recency_minutes" `Quick
-                 recency_maps_onto_recency_minutes;
-               test_case "the recency windows are the fixed day counts" `Quick
-                 the_recency_windows_are_the_fixed_day_counts;
-               test_case "geo maps onto location and language" `Quick
-                 geo_maps_onto_location_and_language;
-               test_case "no result count is ever sent" `Quick no_result_count_is_ever_sent;
-               test_case "no safe-search parameter is ever sent" `Quick
-                 no_safe_search_parameter_is_ever_sent;
-             ] );
-         ( "the constraint report",
-             [
-               test_case "safe-search is the one drop it notices" `Quick
-                 safe_search_is_the_one_drop_it_notices;
-               test_case "an unconstrained query carries no notice" `Quick
-                 an_unconstrained_query_carries_no_notice;
-               test_case "every other constraint is honoured" `Quick
-                 every_other_constraint_is_honoured;
-             ] );
-         ( "the failures this adapter owns",
-             [
-               test_case "no search access and the rate limit are quota" `Quick
-                 no_search_access_and_the_rate_limit_are_quota;
-               test_case "the body behind the payment status is not echoed" `Quick
-                 a_body_that_quotes_the_key_is_not_echoed;
-               test_case "a network failure does not echo the request" `Quick
-                 a_network_failure_does_not_echo_the_request;
-             ] );
-         ( "cost and endpoint",
-             [
-               test_case "the cost is flat zero" `Quick the_cost_is_flat_zero;
-               test_case "the result carries the zero" `Quick the_result_carries_the_zero;
-               test_case "zero is the default and a correction reaches the adapter" `Quick
-                 zero_is_the_default_and_a_correction_reaches_the_adapter;
-               test_case "the endpoint is the one the grant allows" `Quick
-                 the_endpoint_is_the_one_the_grant_allows;
-             ] );
-       ])
+  A.(
+    run "seekwright/tinyfish"
+      [
+        ( "parsing",
+          [
+            test_case "the live fixture yields both records" `Quick the_fixture_yields_both_records;
+            test_case "the limit is honoured in the parse" `Quick the_limit_is_honoured_in_the_parse;
+            test_case "a SERP record fills snippet and never text" `Quick
+              a_serp_record_fills_snippet_and_never_text;
+            test_case "the snippet is capped and the pre-cap length measured" `Quick
+              the_snippet_is_capped_and_the_pre_cap_length_measured;
+            test_case "the date is kept only when a string" `Quick
+              the_date_is_kept_only_when_a_string;
+            test_case "records without a url are dropped" `Quick records_without_a_url_are_dropped;
+            test_case "records without a title are dropped" `Quick
+              records_without_a_title_are_dropped;
+            test_case "a record that is not an object is skipped" `Quick
+              a_record_that_is_not_an_object_is_skipped;
+            test_case "missing results is empty, not an error" `Quick
+              missing_results_is_empty_not_an_error;
+          ] );
+        ( "the upstream field guards",
+          [
+            test_case "a non-string snippet is dropped and the call succeeds" `Quick
+              a_non_string_snippet_is_dropped_and_the_call_succeeds;
+            test_case "a string snippet still reaches the model" `Quick
+              a_string_snippet_still_reaches_the_model;
+          ] );
+        ( "the request",
+          [
+            test_case "GET to the endpoint, key in the X-API-Key header" `Quick
+              get_to_the_endpoint_with_the_api_key_header;
+            test_case "the key never rides the URL" `Quick the_key_never_rides_the_url;
+            test_case "the domain lists are comma-joined" `Quick the_domain_lists_are_comma_joined;
+            test_case "domain params absent without filters" `Quick
+              domain_params_absent_without_filters;
+            test_case "recency maps onto recency_minutes" `Quick recency_maps_onto_recency_minutes;
+            test_case "the recency windows are the fixed day counts" `Quick
+              the_recency_windows_are_the_fixed_day_counts;
+            test_case "geo maps onto location and language" `Quick
+              geo_maps_onto_location_and_language;
+            test_case "no result count is ever sent" `Quick no_result_count_is_ever_sent;
+            test_case "no safe-search parameter is ever sent" `Quick
+              no_safe_search_parameter_is_ever_sent;
+          ] );
+        ( "the constraint report",
+          [
+            test_case "safe-search is the one drop it notices" `Quick
+              safe_search_is_the_one_drop_it_notices;
+            test_case "an unconstrained query carries no notice" `Quick
+              an_unconstrained_query_carries_no_notice;
+            test_case "every other constraint is honoured" `Quick every_other_constraint_is_honoured;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "no search access and the rate limit are quota" `Quick
+              no_search_access_and_the_rate_limit_are_quota;
+            test_case "the body behind the payment status is not echoed" `Quick
+              a_body_that_quotes_the_key_is_not_echoed;
+            test_case "a network failure does not echo the request" `Quick
+              a_network_failure_does_not_echo_the_request;
+          ] );
+        ( "cost and endpoint",
+          [
+            test_case "the cost is flat zero" `Quick the_cost_is_flat_zero;
+            test_case "the result carries the zero" `Quick the_result_carries_the_zero;
+            test_case "zero is the default and a correction reaches the adapter" `Quick
+              zero_is_the_default_and_a_correction_reaches_the_adapter;
+            test_case "the endpoint is the one the grant allows" `Quick
+              the_endpoint_is_the_one_the_grant_allows;
+          ] );
+      ])

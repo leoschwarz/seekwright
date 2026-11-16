@@ -94,12 +94,11 @@ let empty_schema =
 (* The same two declarations test_grant_wiring.ml uses, so a difference between
    the two suites can only come from the transport. *)
 let read_source =
-  Tool.make
-    ~description:"Read a file under the root this server was given."
+  Tool.make ~description:"Read a file under the root this server was given."
     ~input_schema:path_schema
     ~decode:(fun json ->
       match json with
-      | `Assoc [("path", `String path)] -> Ok path
+      | `Assoc [ ("path", `String path) ] -> Ok path
       | _ -> Error "path must be a string")
     ~run:(fun grant path ->
       match Authority.Fs.read_file grant path with
@@ -108,9 +107,7 @@ let read_source =
     "read_source"
 
 let ping =
-  Tool.make
-    ~description:"Say pong."
-    ~input_schema:empty_schema
+  Tool.make ~description:"Say pong." ~input_schema:empty_schema
     ~decode:(fun _json -> Ok ())
     ~run:(fun () () -> Ok (Tool.Output.text "pong"))
     "ping"
@@ -147,7 +144,7 @@ type listener = {
 let build_server ~sw env ~root =
   match Policy.with_root ~sw ~parent:(Eio.Stdenv.fs env) root with
   | Error error -> Alcotest.failf "with_root %s: %s" root (Error.render error)
-  | Ok confinement ->
+  | Ok confinement -> (
       let grant = Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement in
       match
         let* registry = Registry.add Registry.empty ping ~grant:() in
@@ -159,7 +156,7 @@ let build_server ~sw env ~root =
           | Ok server -> server
           | Error (Server.Duplicate_tool name) -> Alcotest.failf "duplicate: %s" name
           | Error (Server.Invalid_declaration message) ->
-              Alcotest.failf "invalid declaration: %s" message)
+              Alcotest.failf "invalid declaration: %s" message))
 
 let run_listener ~env ~sw ?(max_body_size = 4096) ?(allowed_origins = []) server =
   (* [rejected] counts the Origin rejections the adapter reports to [on_error];
@@ -172,17 +169,15 @@ let run_listener ~env ~sw ?(max_body_size = 4096) ?(allowed_origins = []) server
     | exn -> Atomic.set faults (exn :: Atomic.get faults)
   in
   let handler = Mcp_kit_cohttp_eio.handler ~max_body_size ~allowed_origins server in
-  let socket =
-    Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   match Eio.Net.listening_addr socket with
   | `Tcp (_, port) ->
       let stop, fill = Eio.Promise.create () in
       let stopped, fill_stopped = Eio.Promise.create () in
       Eio.Fiber.fork ~sw (fun () ->
-        Fun.protect
-          ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-          (fun () -> Cohttp_eio.Server.run ~stop ~on_error socket handler));
+          Fun.protect
+            ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+            (fun () -> Cohttp_eio.Server.run ~stop ~on_error socket handler));
       { port; rejected; faults; stop = fill; stopped }
   | `Unix path -> Alcotest.failf "unexpected unix socket: %s" path
 
@@ -194,16 +189,15 @@ let stop_listener listener =
    the 403 before it raises [Rejected_origin], so the client can see the
    response while the server's fiber is still on its way to [on_error]. *)
 let check_listener ?(rejections = 0) listener =
-  Alcotest.(check int) "Origin rejections the adapter reported" rejections
-    (Atomic.get listener.rejected);
+  Alcotest.(check int)
+    "Origin rejections the adapter reported" rejections (Atomic.get listener.rejected);
   match Atomic.get listener.faults with
   | [] -> ()
   | exns ->
       Alcotest.failf "unexpected connection faults: %s"
         (String.concat "; " (List.map Printexc.to_string exns))
 
-let json_headers extra =
-  Http.Header.of_list (("content-type", "application/json") :: extra)
+let json_headers extra = Http.Header.of_list (("content-type", "application/json") :: extra)
 
 let read_response response body =
   ( Http.Status.to_int (Http.Response.status response),
@@ -216,11 +210,7 @@ let get ~sw client ~headers uri = Cohttp_eio.Client.get client ~sw ~headers uri
 
 (* What a case is handed: the server value it is calling, and a client that is
    already pointed at the listener serving it. *)
-type serving = {
-  server : Mcp_kit.Server.t;
-  client : Cohttp_eio.Client.t;
-  uri : Uri.t;
-}
+type serving = { server : Mcp_kit.Server.t; client : Cohttp_eio.Client.t; uri : Uri.t }
 
 (* Serves [root]'s grant set on loopback, runs [f] against it, then stops the
    listener and fails on any fault the adapter reported that the case did not
@@ -234,11 +224,12 @@ let with_server ~root ?max_body_size ?allowed_origins ?(rejections = 0) f =
   Fun.protect
     ~finally:(fun () -> stop_listener listener)
     (fun () ->
-      f {
-        server;
-        client;
-        uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/" listener.port);
-      });
+      f
+        {
+          server;
+          client;
+          uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/" listener.port);
+        });
   check_listener ~rejections listener
 
 (* The same seven bodies, in the same order, through both transports; they are
@@ -254,8 +245,8 @@ let tools_list = {|{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}|}
 
 let call name arguments =
   Printf.sprintf
-    {|{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":%S,"arguments":%s}}|}
-    name arguments
+    {|{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":%S,"arguments":%s}}|} name
+    arguments
 
 (* A 2026-07-28 request: the same body on either transport, plus the three
    routing headers the HTTP adapter insists on (its check, not ours). *)
@@ -301,36 +292,32 @@ let over_http ~client ~uri =
   List.map
     (fun (label, body) ->
       Eio.Switch.run (fun sw ->
-        let response, body = post ~sw client ~headers:(json_headers []) ~body uri in
-        let status, text = read_response response body in
-        if status <> 200 && status <> 204 then
-          Alcotest.failf "%s: HTTP %d %S" label status text;
-        (label, if text = "" then None else Some (Yojson.Safe.from_string text))))
+          let response, body = post ~sw client ~headers:(json_headers []) ~body uri in
+          let status, text = read_response response body in
+          if status <> 200 && status <> 204 then Alcotest.failf "%s: HTTP %d %S" label status text;
+          (label, if text = "" then None else Some (Yojson.Safe.from_string text))))
     transcript
 
-let show = function
-  | None -> "<no body>"
-  | Some json -> Yojson.Safe.to_string json
+let show = function None -> "<no body>" | Some json -> Yojson.Safe.to_string json
 
 let same_transcript_stdio_and_http () =
   (* One server value, two transports: every answer is the same JSON, because
      nothing between [Registry.add] and the adapter knows which transport
      carried the call. *)
   with_server ~root:root_a (fun s ->
-    let stdio = over_stdio s.server in
-    let http = over_http ~client:s.client ~uri:s.uri in
-    List.iter2
-      (fun (label, stdio) (label', http) ->
-        Alcotest.(check string) "same transcript entry" label label';
-        match (stdio, http) with
-        | Some stdio, Some http ->
-            Alcotest.(check string)
-              (label ^ " answers the same way")
-              (Yojson.Safe.to_string stdio) (Yojson.Safe.to_string http)
-        | None, None -> ()
-        | _ ->
-            Alcotest.failf "%s: stdio %s but HTTP %s" label (show stdio) (show http))
-      stdio http)
+      let stdio = over_stdio s.server in
+      let http = over_http ~client:s.client ~uri:s.uri in
+      List.iter2
+        (fun (label, stdio) (label', http) ->
+          Alcotest.(check string) "same transcript entry" label label';
+          match (stdio, http) with
+          | Some stdio, Some http ->
+              Alcotest.(check string)
+                (label ^ " answers the same way") (Yojson.Safe.to_string stdio)
+                (Yojson.Safe.to_string http)
+          | None, None -> ()
+          | _ -> Alcotest.failf "%s: stdio %s but HTTP %s" label (show stdio) (show http))
+        stdio http)
 
 let a_modern_call_answers_the_same_way_over_both_transports () =
   (* The 2026-07-28 request model needs no handshake on either transport, so the
@@ -338,23 +325,23 @@ let a_modern_call_answers_the_same_way_over_both_transports () =
      adapter insists on. The answers are the same JSON, [_meta] server info
      included: what the headers buy is admission, not a different server. *)
   with_server ~root:root_a (fun s ->
-    let body = modern_body "tools/call" "read_source" {|{"path":"answer.md"}|} in
-    let stdio =
-      match
-        Mcp_kit_stdio.serve_session_line_frames (Mcp_kit.Server.create_session s.server) body
-      with
-      | [ response ] -> Yojson.Safe.from_string response
-      | frames -> Alcotest.failf "stdio answered with %d frames" (List.length frames)
-    in
-    Eio.Switch.run (fun sw ->
-      let response, http_body =
-        post ~sw s.client ~headers:(modern_headers "tools/call" "read_source") ~body s.uri
+      let body = modern_body "tools/call" "read_source" {|{"path":"answer.md"}|} in
+      let stdio =
+        match
+          Mcp_kit_stdio.serve_session_line_frames (Mcp_kit.Server.create_session s.server) body
+        with
+        | [ response ] -> Yojson.Safe.from_string response
+        | frames -> Alcotest.failf "stdio answered with %d frames" (List.length frames)
       in
-      let status, text = read_response response http_body in
-      Alcotest.(check int) "200" 200 status;
-      Alcotest.(check string)
-        "the modern answer is the same JSON over both transports"
-        (Yojson.Safe.to_string stdio) text))
+      Eio.Switch.run (fun sw ->
+          let response, http_body =
+            post ~sw s.client ~headers:(modern_headers "tools/call" "read_source") ~body s.uri
+          in
+          let status, text = read_response response http_body in
+          Alcotest.(check int) "200" 200 status;
+          Alcotest.(check string)
+            "the modern answer is the same JSON over both transports" (Yojson.Safe.to_string stdio)
+            text))
 
 let stdio_enforces_the_legacy_lifecycle_and_http_does_not () =
   (* A [tools/list] that arrives before [initialize]: the stdio session refuses
@@ -362,70 +349,85 @@ let stdio_enforces_the_legacy_lifecycle_and_http_does_not () =
      list. What the per-connection-authority question turns on is exactly this —
      the HTTP adapter never builds a session value. *)
   with_server ~root:root_a (fun s ->
-    (match Mcp_kit_stdio.serve_session_line_frames (Mcp_kit.Server.create_session s.server) tools_list with
-    | [ response ] ->
-        Alcotest.(check bool) "stdio gates the call behind initialize: " true
-          (contains ~haystack:response ~needle:"server not initialized")
-    | frames ->
-        Alcotest.failf "stdio answered the un-initialized call with %d frames"
-          (List.length frames));
-    Eio.Switch.run (fun sw ->
-      let response, body = post ~sw s.client ~headers:(json_headers []) ~body:tools_list s.uri in
-      let status, text = read_response response body in
-      Alcotest.(check int) "HTTP answers it" 200 status;
-      Alcotest.(check bool) "and lists the registered tools: " true (contains ~haystack:text ~needle:"read_source")))
+      (match
+         Mcp_kit_stdio.serve_session_line_frames (Mcp_kit.Server.create_session s.server) tools_list
+       with
+      | [ response ] ->
+          Alcotest.(check bool)
+            "stdio gates the call behind initialize: " true
+            (contains ~haystack:response ~needle:"server not initialized")
+      | frames ->
+          Alcotest.failf "stdio answered the un-initialized call with %d frames"
+            (List.length frames));
+      Eio.Switch.run (fun sw ->
+          let response, body =
+            post ~sw s.client ~headers:(json_headers []) ~body:tools_list s.uri
+          in
+          let status, text = read_response response body in
+          Alcotest.(check int) "HTTP answers it" 200 status;
+          Alcotest.(check bool)
+            "and lists the registered tools: " true
+            (contains ~haystack:text ~needle:"read_source")))
 
 let a_body_over_the_pinned_bound_is_refused_by_the_adapter () =
   (* [max_body_size] is the only thing this file supplies: the 413 with an empty
      body, and that the oversized body is never parsed, is mcp-kit's. *)
   let oversized = call "read_source" (Printf.sprintf {|{"path":%S}|} (String.make 400 'x')) in
   with_server ~root:root_a ~max_body_size:256 (fun s ->
-    Eio.Switch.run (fun sw ->
-      let response, body =
-        post ~sw s.client ~headers:(json_headers []) ~body:oversized s.uri
-      in
-      let status, text = read_response response body in
-      Alcotest.(check int) "413 from the adapter" 413 status;
-      Alcotest.(check string) "no JSON body comes back" "" text))
+      Eio.Switch.run (fun sw ->
+          let response, body = post ~sw s.client ~headers:(json_headers []) ~body:oversized s.uri in
+          let status, text = read_response response body in
+          Alcotest.(check int) "413 from the adapter" 413 status;
+          Alcotest.(check string) "no JSON body comes back" "" text))
 
 let a_body_under_the_same_bound_still_works () =
   with_server ~root:root_a ~max_body_size:256 (fun s ->
-    Eio.Switch.run (fun sw ->
-      let response, body =
-        post ~sw s.client ~headers:(json_headers [])
-          ~body:(call "read_source" {|{"path":"answer.md"}|})
-          s.uri
-      in
-      let status, text = read_response response body in
-      Alcotest.(check int) "200" 200 status;
-      Alcotest.(check bool) "answered from the grant: " true (contains ~haystack:text ~needle:"from A")))
+      Eio.Switch.run (fun sw ->
+          let response, body =
+            post ~sw s.client ~headers:(json_headers [])
+              ~body:(call "read_source" {|{"path":"answer.md"}|})
+              s.uri
+          in
+          let status, text = read_response response body in
+          Alcotest.(check int) "200" 200 status;
+          Alcotest.(check bool)
+            "answered from the grant: " true
+            (contains ~haystack:text ~needle:"from A")))
 
 let a_modern_request_with_correct_headers_is_answered () =
   (* The adapter's modern path is what serves this server: routing headers
      validated by the library, the tool answered by our registry. *)
   with_server ~root:root_a (fun s ->
-    Eio.Switch.run (fun sw ->
-      let response, body =
-        post ~sw s.client ~headers:(modern_headers "tools/call" "read_source")
-          ~body:(modern_body "tools/call" "read_source" {|{"path":"answer.md"}|})
-          s.uri
-      in
-      let status, text = read_response response body in
-      Alcotest.(check int) "200" 200 status;
-      Alcotest.(check bool) "answered from the grant: " true (contains ~haystack:text ~needle:"from A")))
+      Eio.Switch.run (fun sw ->
+          let response, body =
+            post ~sw s.client
+              ~headers:(modern_headers "tools/call" "read_source")
+              ~body:(modern_body "tools/call" "read_source" {|{"path":"answer.md"}|})
+              s.uri
+          in
+          let status, text = read_response response body in
+          Alcotest.(check int) "200" 200 status;
+          Alcotest.(check bool)
+            "answered from the grant: " true
+            (contains ~haystack:text ~needle:"from A")))
 
 let a_modern_request_with_a_wrong_mcp_method_is_refused () =
   with_server ~root:root_a (fun s ->
-    Eio.Switch.run (fun sw ->
-      let response, body =
-        post ~sw s.client ~headers:(modern_headers "tools/list" "read_source")
-          ~body:(modern_body "tools/call" "read_source" {|{"path":"answer.md"}|})
-          s.uri
-      in
-      let status, text = read_response response body in
-      Alcotest.(check int) "400 from the adapter" 400 status;
-      Alcotest.(check bool) "the adapter's own -32020: " true (contains ~haystack:text ~needle:"-32020");
-      Alcotest.(check bool) ("and no page content: " ^ text) false (contains ~haystack:text ~needle:"from A")))
+      Eio.Switch.run (fun sw ->
+          let response, body =
+            post ~sw s.client
+              ~headers:(modern_headers "tools/list" "read_source")
+              ~body:(modern_body "tools/call" "read_source" {|{"path":"answer.md"}|})
+              s.uri
+          in
+          let status, text = read_response response body in
+          Alcotest.(check int) "400 from the adapter" 400 status;
+          Alcotest.(check bool)
+            "the adapter's own -32020: " true
+            (contains ~haystack:text ~needle:"-32020");
+          Alcotest.(check bool)
+            ("and no page content: " ^ text) false
+            (contains ~haystack:text ~needle:"from A")))
 
 let an_unlisted_origin_and_a_get_are_refused () =
   (* Origin checking is the adapter's, and its default allowlist is empty; the
@@ -435,23 +437,27 @@ let an_unlisted_origin_and_a_get_are_refused () =
      [handler], so it belongs to a listener: the same request on a listener that
      lists that Origin is a 405, not a 403. *)
   with_server ~root:root_a ~rejections:1 (fun s ->
-    Eio.Switch.run (fun sw ->
-      let response, body =
-        get ~sw s.client ~headers:(json_headers [("origin", "http://not-allowed.example")]) s.uri
-      in
-      let status, _ = read_response response body in
-      Alcotest.(check int) "403 for an unlisted Origin" 403 status);
-    Eio.Switch.run (fun sw ->
-      let response, body = get ~sw s.client ~headers:(json_headers []) s.uri in
-      let status, _ = read_response response body in
-      Alcotest.(check int) "405 for GET" 405 status));
-  with_server ~root:root_a ~allowed_origins:["http://not-allowed.example"] (fun s ->
-    Eio.Switch.run (fun sw ->
-      let response, body =
-        get ~sw s.client ~headers:(json_headers [("origin", "http://not-allowed.example")]) s.uri
-      in
-      let status, _ = read_response response body in
-      Alcotest.(check int) "the same request is a 405 once that Origin is listed" 405 status))
+      Eio.Switch.run (fun sw ->
+          let response, body =
+            get ~sw s.client
+              ~headers:(json_headers [ ("origin", "http://not-allowed.example") ])
+              s.uri
+          in
+          let status, _ = read_response response body in
+          Alcotest.(check int) "403 for an unlisted Origin" 403 status);
+      Eio.Switch.run (fun sw ->
+          let response, body = get ~sw s.client ~headers:(json_headers []) s.uri in
+          let status, _ = read_response response body in
+          Alcotest.(check int) "405 for GET" 405 status));
+  with_server ~root:root_a ~allowed_origins:[ "http://not-allowed.example" ] (fun s ->
+      Eio.Switch.run (fun sw ->
+          let response, body =
+            get ~sw s.client
+              ~headers:(json_headers [ ("origin", "http://not-allowed.example") ])
+              s.uri
+          in
+          let status, _ = read_response response body in
+          Alcotest.(check int) "the same request is a 405 once that Origin is listed" 405 status))
 
 let two_listeners_do_not_share_a_grant () =
   (* The spike answer in test form: the grant set is a property of the server
@@ -469,21 +475,29 @@ let two_listeners_do_not_share_a_grant () =
     (fun () ->
       let read listener =
         Eio.Switch.run (fun sw ->
-          let uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/" listener.port) in
-          let response, body =
-            post ~sw client ~headers:(json_headers [])
-              ~body:(call "read_source" {|{"path":"answer.md"}|})
-              uri
-          in
-          let _, text = read_response response body in
-          text)
+            let uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/" listener.port) in
+            let response, body =
+              post ~sw client ~headers:(json_headers [])
+                ~body:(call "read_source" {|{"path":"answer.md"}|})
+                uri
+            in
+            let _, text = read_response response body in
+            text)
       in
       let text_a = read listener_a in
       let text_b = read listener_b in
-      Alcotest.(check bool) "listener A answers its own root" true (contains ~haystack:text_a ~needle:"from A");
-      Alcotest.(check bool) "listener A does not reach B" false (contains ~haystack:text_a ~needle:"from B");
-      Alcotest.(check bool) "listener B answers its own root" true (contains ~haystack:text_b ~needle:"from B");
-      Alcotest.(check bool) "listener B does not reach A" false (contains ~haystack:text_b ~needle:"from A"));
+      Alcotest.(check bool)
+        "listener A answers its own root" true
+        (contains ~haystack:text_a ~needle:"from A");
+      Alcotest.(check bool)
+        "listener A does not reach B" false
+        (contains ~haystack:text_a ~needle:"from B");
+      Alcotest.(check bool)
+        "listener B answers its own root" true
+        (contains ~haystack:text_b ~needle:"from B");
+      Alcotest.(check bool)
+        "listener B does not reach A" false
+        (contains ~haystack:text_b ~needle:"from A"));
   check_listener listener_a;
   check_listener listener_b
 
@@ -504,13 +518,10 @@ let one_listener_can_route_connections_to_different_grants () =
   Eio.Switch.run @@ fun sw ->
   let handlers =
     List.map
-      (fun root ->
-        Mcp_kit_cohttp_eio.handler ~max_body_size:4096 (build_server ~sw env ~root))
-      [root_a; root_b]
+      (fun root -> Mcp_kit_cohttp_eio.handler ~max_body_size:4096 (build_server ~sw env ~root))
+      [ root_a; root_b ]
   in
-  let socket =
-    Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -520,16 +531,18 @@ let one_listener_can_route_connections_to_different_grants () =
   let stop, fill = Eio.Promise.create () in
   let stopped, fill_stopped = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
-    Fun.protect
-      ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-      (fun () ->
-        Eio.Net.run_server socket ~stop ~on_error:ignore (fun flow peer ->
-          Eio.Switch.run (fun conn_sw ->
-            let input = Eio.Buf_read.of_flow ~max_size:max_int flow in
-            Eio.Buf_write.with_flow flow (fun output ->
-              let chosen = Atomic.fetch_and_add next 0 in
-              Atomic.set next (chosen + 1);
-              Cohttp_eio.Server.callback (List.nth handlers (chosen mod 2)) (conn_sw, peer) input output)))));
+      Fun.protect
+        ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+        (fun () ->
+          Eio.Net.run_server socket ~stop ~on_error:ignore (fun flow peer ->
+              Eio.Switch.run (fun conn_sw ->
+                  let input = Eio.Buf_read.of_flow ~max_size:max_int flow in
+                  Eio.Buf_write.with_flow flow (fun output ->
+                      let chosen = Atomic.fetch_and_add next 0 in
+                      Atomic.set next (chosen + 1);
+                      Cohttp_eio.Server.callback
+                        (List.nth handlers (chosen mod 2))
+                        (conn_sw, peer) input output)))));
   let client = Cohttp_eio.Client.make ~https:None env#net in
   let uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/" port) in
   Fun.protect
@@ -542,21 +555,24 @@ let one_listener_can_route_connections_to_different_grants () =
          is request order here. *)
       let read () =
         Eio.Switch.run (fun sw ->
-          let response, body =
-            post ~sw client ~headers:(json_headers [])
-              ~body:(call "read_source" {|{"path":"answer.md"}|})
-              uri
-          in
-          let _, text = read_response response body in
-          text)
+            let response, body =
+              post ~sw client ~headers:(json_headers [])
+                ~body:(call "read_source" {|{"path":"answer.md"}|})
+                uri
+            in
+            let _, text = read_response response body in
+            text)
       in
       let first = read () in
       let second = read () in
-      Alcotest.(check bool) "the first connection gets the first grant" true
+      Alcotest.(check bool)
+        "the first connection gets the first grant" true
         (contains ~haystack:first ~needle:"from A");
-      Alcotest.(check bool) "the second connection gets the second grant" true
+      Alcotest.(check bool)
+        "the second connection gets the second grant" true
         (contains ~haystack:second ~needle:"from B");
-      Alcotest.(check bool) "and neither reaches the other's file" false
+      Alcotest.(check bool)
+        "and neither reaches the other's file" false
         (contains ~haystack:first ~needle:"from B" || contains ~haystack:second ~needle:"from A"))
 
 let concurrent_clients_do_not_mix_answers () =
@@ -564,41 +580,47 @@ let concurrent_clients_do_not_mix_answers () =
      refusal — come back as their own answers. That is the concurrency half of
      §8 for a server-lifetime grant. *)
   with_server ~root:root_a (fun s ->
-    let first = Atomic.make "" and second = Atomic.make "" in
-    Eio.Fiber.all
-      [
-        (fun () ->
-          Eio.Switch.run (fun sw ->
-            let response, body =
-              post ~sw s.client ~headers:(json_headers [])
-                ~body:(call "read_source" {|{"path":"answer.md"}|})
-                s.uri
-            in
-            let _, text = read_response response body in
-            Atomic.set first text));
-        (fun () ->
-          Eio.Switch.run (fun sw ->
-            let response, body =
-              post ~sw s.client ~headers:(json_headers [])
-                ~body:(call "read_source" {|{"path":"../../etc/passwd"}|})
-                s.uri
-            in
-            let _, text = read_response response body in
-            Atomic.set second text));
-      ];
-    let first = Atomic.get first and second = Atomic.get second in
-    Alcotest.(check bool) "the read still answers its own file" true (contains ~haystack:first ~needle:"from A");
-    Alcotest.(check bool) "the walk is still refused" true (contains ~haystack:second ~needle:"isError");
-    Alcotest.(check bool) ("and the refusal carries no root path: " ^ second) false
-      (contains ~haystack:second ~needle:root_a))
+      let first = Atomic.make "" and second = Atomic.make "" in
+      Eio.Fiber.all
+        [
+          (fun () ->
+            Eio.Switch.run (fun sw ->
+                let response, body =
+                  post ~sw s.client ~headers:(json_headers [])
+                    ~body:(call "read_source" {|{"path":"answer.md"}|})
+                    s.uri
+                in
+                let _, text = read_response response body in
+                Atomic.set first text));
+          (fun () ->
+            Eio.Switch.run (fun sw ->
+                let response, body =
+                  post ~sw s.client ~headers:(json_headers [])
+                    ~body:(call "read_source" {|{"path":"../../etc/passwd"}|})
+                    s.uri
+                in
+                let _, text = read_response response body in
+                Atomic.set second text));
+        ];
+      let first = Atomic.get first and second = Atomic.get second in
+      Alcotest.(check bool)
+        "the read still answers its own file" true
+        (contains ~haystack:first ~needle:"from A");
+      Alcotest.(check bool)
+        "the walk is still refused" true
+        (contains ~haystack:second ~needle:"isError");
+      Alcotest.(check bool)
+        ("and the refusal carries no root path: " ^ second)
+        false
+        (contains ~haystack:second ~needle:root_a))
 
 let () =
   Alcotest.run "mcp-caps/http"
     [
       ( "parity",
         [
-          Alcotest.test_case "the same transcript answers the same way over stdio and HTTP"
-            `Quick same_transcript_stdio_and_http;
+          Alcotest.test_case "the same transcript answers the same way over stdio and HTTP" `Quick
+            same_transcript_stdio_and_http;
           Alcotest.test_case "a modern call answers the same way over both transports" `Quick
             a_modern_call_answers_the_same_way_over_both_transports;
           Alcotest.test_case "stdio enforces the legacy lifecycle and HTTP does not" `Quick

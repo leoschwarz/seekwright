@@ -1,7 +1,7 @@
 (** A gated [read_source] tool demonstrating filesystem grants.
 
-    The operator names the directory root at startup; file reads outside that
-    subtree are refused by the grant before any filesystem access.
+    The operator names the directory root at startup; file reads outside that subtree are refused by
+    the grant before any filesystem access.
 
     Run in stdio mode:
     {v
@@ -29,13 +29,11 @@ module Server = Mcp_caps.Server
 module Tool = Mcp_caps.Tool
 
 let read_source =
-  Tool.make
-    ~description:"Read a file from the source root this server was started with."
+  Tool.make ~description:"Read a file from the source root this server was started with."
     ~input_schema:
       (Mcp_kit.Schema.object_
-         ~properties:[("path", Mcp_kit.Schema.string ())]
-         ~required:["path"]
-         ())
+         ~properties:[ ("path", Mcp_kit.Schema.string ()) ]
+         ~required:[ "path" ] ())
     ~decode:(Mcp_kit.Tool.Arg.string "path")
     ~run:(fun grant path ->
       match Authority.Fs.read_file grant path with
@@ -44,15 +42,13 @@ let read_source =
     "read_source"
 
 let ping =
-  Tool.make
-    ~description:"Say pong."
+  Tool.make ~description:"Say pong."
     ~input_schema:(Mcp_kit.Schema.object_ ~properties:[] ~required:[] ())
     ~decode:(fun _json -> Ok ())
     ~run:(fun () () -> Ok (Tool.Output.text "pong"))
     "ping"
 
-let note line =
-  prerr_endline ("read-source: " ^ line)
+let note line = prerr_endline ("read-source: " ^ line)
 
 let max_request_body = 1_048_576
 let loopback = "127.0.0.1"
@@ -103,17 +99,13 @@ let build ~sw env root =
     >>= (fun registry -> Registry.add registry read_source ~grant)
     |> Result.map_error (fun (Registry.Duplicate_tool name) -> Server.Duplicate_tool name)
   in
-  List.iter
-    (fun entry -> note ("serves " ^ Registry.entry_name entry))
-    (Registry.entries registry);
+  List.iter (fun entry -> note ("serves " ^ Registry.entry_name entry)) (Registry.entries registry);
   note ("read_source is confined to " ^ root);
   Server.of_registry ~name:"read-source" ~version:"0.1.0" registry
 
 let serve_http ~sw env server port =
   let handler = Mcp_kit_cohttp_eio.handler ~max_body_size:max_request_body server in
-  let socket =
-    Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, port))
-  in
+  let socket = Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, port)) in
   note (Printf.sprintf "streamable HTTP on http://%s:%d/ (POST JSON-RPC to /)" loopback port);
   Cohttp_eio.Server.run
     ~on_error:(function
@@ -130,6 +122,5 @@ let () =
   | Error (Server.Invalid_declaration message) -> note message
   | Ok server -> (
       match transport with
-      | Transport_stdio ->
-        Mcp_kit_stdio.run_channels server stdin stdout
+      | Transport_stdio -> Mcp_kit_stdio.run_channels server stdin stdout
       | Transport_http port -> serve_http ~sw env server port)

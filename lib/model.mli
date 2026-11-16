@@ -1,13 +1,12 @@
 (** Wire models: data shapes for tool requests, responses, and serialisation.
 
-    Encoders drop unset optional fields and escape special-token literals
-    in text fields. Decoders validate constraints and reject unknown keys
-    on wire models. *)
+    Encoders drop unset optional fields and escape special-token literals in text fields. Decoders
+    validate constraints and reject unknown keys on wire models. *)
 
 type recency = Day | Week | Month | Year
 type depth = Brief | Report
-type mode = Free
-(** [mode] is the [search] tool's [Literal["free"]]; [Free] is its only value. *)
+type mode =
+  | Free  (** [mode] is the [search] tool's [Literal["free"]]; [Free] is its only value. *)
 
 type search_query = {
   query : string;
@@ -19,9 +18,9 @@ type search_query = {
   recency : recency option;
   safe_search : bool option;
 }
-(** A normalised search request, as it reaches a provider adapter. The
-    [safe_search] option is the tri-state: [Some true] filters, [Some false]
-    asks not to, [None] sends nothing -- unknown, not unfiltered. *)
+(** A normalised search request, as it reaches a provider adapter. The [safe_search] option is the
+    tri-state: [Some true] filters, [Some false] asks not to, [None] sends nothing -- unknown, not
+    unfiltered. *)
 
 type result = {
   title : string;
@@ -32,9 +31,8 @@ type result = {
   published_date : string option;
   score : float option;
 }
-(** One search hit. A provider fills [snippet] or [text], never both;
-    [text_truncated] is an option because a [false] would otherwise serialise
-    on every result. *)
+(** One search hit. A provider fills [snippet] or [text], never both; [text_truncated] is an option
+    because a [false] would otherwise serialise on every result. *)
 
 type search_response = {
   query : string;
@@ -47,12 +45,12 @@ type search_response = {
 (** The shape returned by the [search] tool. *)
 
 type fetch_match = { offset : int; text : string }
-(** One contiguous matching span of a fetched page. [offset] indexes the page's
-    full extracted text. *)
+(** One contiguous matching span of a fetched page. [offset] indexes the page's full extracted text.
+*)
 
 type fetch_image = { byte_count : int; base64 : string }
-(** One image resource, carried as bytes. The media type is the parent
-    response's [content_type]; [base64] is deliberately never escaped. *)
+(** One image resource, carried as bytes. The media type is the parent response's [content_type];
+    [base64] is deliberately never escaped. *)
 
 type fetch_response = {
   url : string;
@@ -69,9 +67,8 @@ type fetch_response = {
   image : fetch_image option;
   notice : string option;
 }
-(** The shape returned by the [fetch] tool. [text] and [matches] are
-    alternatives; [truncated] is a plain [bool] because [false] is a report, not
-    an absence. *)
+(** The shape returned by the [fetch] tool. [text] and [matches] are alternatives; [truncated] is a
+    plain [bool] because [false] is a report, not an absence. *)
 
 type search_request = {
   query : string;
@@ -84,9 +81,9 @@ type search_request = {
   language : string option;
   safe_search : bool option;
 }
-(** The [search] tool's parameter set, as a REST body spells it. [provider] is a
-    plain string, not a vocabulary: which names a deployment serves is config,
-    a key and a permission set. Omitting it stays absent. *)
+(** The [search] tool's parameter set, as a REST body spells it. [provider] is a plain string, not a
+    vocabulary: which names a deployment serves is config, a key and a permission set. Omitting it
+    stays absent. *)
 
 type fetch_request = {
   url : string;
@@ -109,17 +106,12 @@ type answer_request = {
   language : string option;
   safe_search : bool option;
 }
-(** The [answer] tool's parameter set. [depth = None] means the plan applies the
-    tool's default, exactly as [Some Brief] does. *)
+(** The [answer] tool's parameter set. [depth = None] means the plan applies the tool's default,
+    exactly as [Some Brief] does. *)
 
-type answer_source = {
-  source_title : string;
-  source_url : string;
-  source_provider : string;
-}
-(** One result the prose actually cited, built by the server from what it
-    retrieved. The field names carry a [source_] prefix because OCaml records
-    share one field namespace. *)
+type answer_source = { source_title : string; source_url : string; source_provider : string }
+(** One result the prose actually cited, built by the server from what it retrieved. The field names
+    carry a [source_] prefix because OCaml records share one field namespace. *)
 
 type answer_response = {
   query : string;
@@ -155,6 +147,7 @@ val answer_source_to_yojson : answer_source -> Yojson.Safe.t
 val answer_request_to_yojson : answer_request -> Yojson.Safe.t
 val answer_response_to_yojson : answer_response -> Yojson.Safe.t
 val search_query_to_yojson : search_query -> Yojson.Safe.t
+
 val provider_result_to_yojson : provider_result -> Yojson.Safe.t
 (** Encoders. Wire-model encoders omit unset fields and escape text fields. *)
 
@@ -169,10 +162,10 @@ val fetch_request_of_yojson : Yojson.Safe.t -> (fetch_request, string) Stdlib.re
 val answer_request_of_yojson : Yojson.Safe.t -> (answer_request, string) Stdlib.result
 val answer_source_of_yojson : Yojson.Safe.t -> (answer_source, string) Stdlib.result
 val answer_response_of_yojson : Yojson.Safe.t -> (answer_response, string) Stdlib.result
-val provider_result_of_yojson :
-  Yojson.Safe.t -> (provider_result, string) Stdlib.result
-(** Decoders. A wire model refuses an unknown key; [search_query] and
-    [provider_result] ignore one. *)
+
+val provider_result_of_yojson : Yojson.Safe.t -> (provider_result, string) Stdlib.result
+(** Decoders. A wire model refuses an unknown key; [search_query] and [provider_result] ignore one.
+*)
 
 val sanitize_result : result -> result * int
 val sanitize_results : result list -> result list * int
@@ -181,7 +174,7 @@ val sanitize_fetch_match : fetch_match -> fetch_match * int
 val sanitize_fetch_response : fetch_response -> fetch_response * int
 val sanitize_answer_source : answer_source -> answer_source * int
 val sanitize_answer_response : answer_response -> answer_response * int
+
 val sanitize_provider_result : provider_result -> provider_result * int
-(** The engine's pass: escape every text-bearing field and return the escaped
-    value with the number of literals escaped -- the count the engine logs,
-    never the content. *)
+(** The engine's pass: escape every text-bearing field and return the escaped value with the number
+    of literals escaped -- the count the engine logs, never the content. *)

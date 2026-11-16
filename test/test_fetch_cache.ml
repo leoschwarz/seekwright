@@ -52,10 +52,10 @@ let url = "https://example.com/article"
 let marker = "PAGE-CACHE-SENTINEL"
 
 let page_text =
-  marker ^ " The body every case here reads through the seam, long enough that the \
-            engine does not mistake it for the nav stub a rendered page leaves \
-            behind, and long enough that a window of it is a different string from \
-            the whole of it."
+  marker
+  ^ " The body every case here reads through the seam, long enough that the engine does not \
+     mistake it for the nav stub a rendered page leaves behind, and long enough that a window of \
+     it is a different string from the whole of it."
 
 let page_len = String.length page_text
 
@@ -91,14 +91,13 @@ let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
         s.park ();
         incr s.calls;
         s.asked := !(s.asked) @ [ (offset, max_chars) ];
-        if !(s.fails) > 0
-        then (
+        if !(s.fails) > 0 then (
           decr s.fails;
           Error unavailable)
         else
           match s.image with
           | Some image ->
-            Ok
+              Ok
                 {
                   Engine.Fetch.url = target;
                   title = None;
@@ -111,7 +110,7 @@ let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
                   image = Some image;
                 }
           | None ->
-            Ok
+              Ok
                 {
                   Engine.Fetch.url = target;
                   title = Some "A Page";
@@ -138,11 +137,10 @@ let readers : Engine.Fetch.Readers.t =
 
 type captured = { event : string; fields : (string * Yojson.Safe.t) list }
 
-let sink lines : Engine.log =
-  fun _level event fields -> lines := !lines @ [ { event; fields } ]
+let sink lines : Engine.log = fun _level event fields -> lines := !lines @ [ { event; fields } ]
 
 let get key = function
-  | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
+  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
   | _ -> `Null
 
 let items = function `List xs -> xs | _ -> []
@@ -153,7 +151,7 @@ let number = function
   | `Float f -> int_of_float f
   | v -> A.failf "not a count: %s" (Yojson.Safe.to_string v)
 
-let is_null = (( = ) `Null)
+let is_null = ( = ) `Null
 let say = function Some s -> s | None -> ""
 
 let field fields name = get name (`Assoc fields)
@@ -166,7 +164,8 @@ let cached_flags lines =
       if c.event = "fetch.ok" then Some (field c.fields "cached" = `Bool true) else None)
     !lines
 
-let render_line c = c.event ^ "|" ^ String.concat "|" (List.map (fun (k, v) -> k ^ "=" ^ str v) c.fields)
+let render_line c =
+  c.event ^ "|" ^ String.concat "|" (List.map (fun (k, v) -> k ^ "=" ^ str v) c.fields)
 
 (* Every log line and the whole journal: what [no page text leaves the process] is
    checked against. [logging.log_content] is off in the fixture, which is the
@@ -206,17 +205,14 @@ let rendered board =
    [allow_private_addresses] is on unless the case is about the address rule: the
    seam's preflight vets the host, and the switch is what keeps that vet from
    asking a resolver about a made-up name. *)
-let with_board
-    ?(allow_private = true)
-    ?(max_text_chars = 40_000)
-    ?(cache_max_entry_bytes = Config.default_fetch_config.Config.cache_max_entry_bytes)
-    ?cache_dir
-    ?(fallbacks = [])
-    local
-    f =
+let with_board ?(allow_private = true) ?(max_text_chars = 40_000)
+    ?(cache_max_entry_bytes = Config.default_fetch_config.Config.cache_max_entry_bytes) ?cache_dir
+    ?(fallbacks = []) local f =
   let base = Config.default_fetch_config in
   let dir =
-    match cache_dir with Some existing -> existing | None -> Filename.temp_dir "seekwright-fetch-cache" ""
+    match cache_dir with
+    | Some existing -> existing
+    | None -> Filename.temp_dir "seekwright-fetch-cache" ""
   in
   let fetch =
     {
@@ -251,20 +247,20 @@ let with_board
               with
               | Error message -> A.failf "the engine refused the fixture: %s" message
               | Ok engine ->
-                f
-                  {
-                    engine;
-                    lines;
-                    usage;
-                    cache_dir = dir;
-                    stats =
-                      (fun () ->
-                        match Factory.page_cache_stats ~sw ~mono_clock ~fs config with
-                        | Ok (Some figures) -> figures
-                        | Ok None -> A.fail "the fixture set cache_dir, so the directory exists"
-                        | Error message -> A.failf "page_cache_stats: %s" message);
-                    sleep = (fun seconds -> Eio.Time.sleep (Eio.Stdenv.clock env) seconds);
-                  })))
+                  f
+                    {
+                      engine;
+                      lines;
+                      usage;
+                      cache_dir = dir;
+                      stats =
+                        (fun () ->
+                          match Factory.page_cache_stats ~sw ~mono_clock ~fs config with
+                          | Ok (Some figures) -> figures
+                          | Ok None -> A.fail "the fixture set cache_dir, so the directory exists"
+                          | Error message -> A.failf "page_cache_stats: %s" message);
+                      sleep = (fun seconds -> Eio.Time.sleep (Eio.Stdenv.clock env) seconds);
+                    })))
 
 let served board ?offset ?provider target =
   match Engine.Fetch.fetch board.engine ?offset ?provider target with
@@ -281,7 +277,8 @@ let refused board ?offset ?provider target =
 let failed board ?offset ?provider target =
   match Engine.Fetch.fetch board.engine ?offset ?provider target with
   | Ok response -> A.failf "expected a failure, got a page: %s" (say response.Model.notice)
-  | Error (Engine.Fetch.Refused sentence) -> A.failf "expected a failure, got a refusal: %s" sentence
+  | Error (Engine.Fetch.Refused sentence) ->
+      A.failf "expected a failure, got a refusal: %s" sentence
   | Error (Engine.Fetch.Failed sentence) -> sentence
 
 let recent board = items (get "recent" (Usage.snapshot board.usage))
@@ -293,9 +290,9 @@ let the_call_that_filled_dispatched_and_the_next_one_did_not () =
       A.(check int "the first read dispatched" 1 !(local.calls));
       ignore (served board url);
       A.(check int "the second read reached the directory, not the origin" 1 !(local.calls));
-      A.(check (list bool) "the fill is a dispatch, the follower is dispatch-free"
-           [ false; true ]
-           (cached_flags board.lines));
+      A.(
+        check (list bool) "the fill is a dispatch, the follower is dispatch-free" [ false; true ]
+          (cached_flags board.lines));
       A.(check int "one entry" 1 (entries board));
       A.(check int "whose body is the whole extraction" page_len (body_bytes board));
       (* The other half of the rule: a cached read puts no page text in the line
@@ -308,26 +305,30 @@ let a_windowed_read_stores_the_whole_page_and_serves_only_its_window () =
   let local = stub () in
   with_board ~max_text_chars:60 local (fun board ->
       let first = served board ~offset:20 url in
-      A.(check (list (pair int string)) "the fill asked for the whole page at offset zero"
-           [ (0, "uncapped") ]
-           (List.map
-              (fun (offset, cap) ->
-                ( offset,
-                  match cap with
-                  | Engine.Fetch.Uncapped -> "uncapped"
-                  | Engine.Fetch.Default -> "configured limit"
-                  | Engine.Fetch.Limit n -> string_of_int n ))
-              !(local.asked)));
+      A.(
+        check
+          (list (pair int string))
+          "the fill asked for the whole page at offset zero"
+          [ (0, "uncapped") ]
+          (List.map
+             (fun (offset, cap) ->
+               ( offset,
+                 match cap with
+                 | Engine.Fetch.Uncapped -> "uncapped"
+                 | Engine.Fetch.Default -> "configured limit"
+                 | Engine.Fetch.Limit n -> string_of_int n ))
+             !(local.asked)));
       let window, more = Fetcher.window_text page_text ~offset:20 ~max_chars:60 in
       A.(check bool "the page has more after this window" true more);
-      A.(check string "and the window is the same cut a live read makes" window
-           (say first.Model.text));
+      A.(
+        check string "and the window is the same cut a live read makes" window
+          (say first.Model.text));
       A.(check int "the fill is the only dispatch" 1 !(local.calls));
       ignore (served board ~offset:80 url);
       A.(check int "a second window did not dispatch" 1 !(local.calls));
-      A.(check (list bool) "the filling window was a dispatch, the one after it was not"
-           [ false; true ]
-           (cached_flags board.lines));
+      A.(
+        check (list bool) "the filling window was a dispatch, the one after it was not"
+          [ false; true ] (cached_flags board.lines));
       A.(check int "one entry holds the whole page" page_len (body_bytes board)))
 
 (* A [park] hook that makes the first dispatch of a stub answer [seconds] late, so
@@ -371,15 +372,17 @@ let three_readers_of_one_cold_key_fill_it_once () =
          finished calls. *)
       A.(check int "three reads, one dispatch" 1 !(local.calls));
       A.(check int "one entry" 1 (entries board));
-      A.(check (array (option string)) "every caller got the whole page"
-           (Array.make 3 (Some page_text))
-           answers);
+      A.(
+        check
+          (array (option string))
+          "every caller got the whole page" (Array.make 3 (Some page_text)) answers);
       (* Which of the three writes its [fetch.ok] line first is the scheduler's —
          the leader looks its own window back up out of the entry it just wrote,
          and a lookup is a filesystem read. So this asserts the multiset: one line
          says it dispatched, two say they did not. *)
-      A.(check (list bool) "one fill and two followers" [ false; true; true ]
-           (List.sort Stdlib.compare (cached_flags board.lines))))
+      A.(
+        check (list bool) "one fill and two followers" [ false; true; true ]
+          (List.sort Stdlib.compare (cached_flags board.lines))))
 
 let each_rung_has_its_own_entry () =
   let local = stub () in
@@ -394,8 +397,9 @@ let each_rung_has_its_own_entry () =
       ignore (served board ~provider:"jina" url);
       A.(check int "neither repeat reached its origin" 1 !(local.calls));
       A.(check int "nor did the named one" 1 !(named.calls));
-      A.(check (list bool) "both repeats are dispatch-free" [ false; false; true; true ]
-           (cached_flags board.lines)))
+      A.(
+        check (list bool) "both repeats are dispatch-free" [ false; false; true; true ]
+          (cached_flags board.lines)))
 
 let a_cached_page_of_a_priced_rung_is_unbilled () =
   (* The journal rule the acceptance names: [cost_usd] absent means "nothing was
@@ -407,31 +411,35 @@ let a_cached_page_of_a_priced_rung_is_unbilled () =
       ignore (served board ~provider:"scrappa" url);
       (match recent board with
       | [ first ] ->
-          A.(check string "the rung that dispatched is named" "scrappa"
-               (str (get "fallback" first)));
+          A.(
+            check string "the rung that dispatched is named" "scrappa" (str (get "fallback" first)));
           A.(check bool "and its call is priced" false (is_null (get "cost_usd" first)))
       | many -> A.failf "expected one journal entry, got %d" (List.length many));
       ignore (served board ~provider:"scrappa" url);
       A.(check int "the priced rung dispatched once in total" 1 !(paid.calls));
-      A.(check (list bool) "the second read is dispatch-free" [ false; true ]
-           (cached_flags board.lines));
+      A.(
+        check (list bool) "the second read is dispatch-free" [ false; true ]
+          (cached_flags board.lines));
       (* The journal's [recent] list is newest first. *)
       (match recent board with
       | [ latest; first ] ->
-          A.(check string "the cached read still names its rung" "scrappa"
-               (str (get "fallback" latest)));
+          A.(
+            check string "the cached read still names its rung" "scrappa"
+              (str (get "fallback" latest)));
           A.(check bool "with no cost on the line" true (is_null (get "cost_usd" latest)));
-          A.(check string "and the call that dispatched still carries its price" "scrappa"
-               (str (get "fallback" first)))
+          A.(
+            check string "and the call that dispatched still carries its price" "scrappa"
+              (str (get "fallback" first)))
       | many -> A.failf "expected two journal entries, got %d" (List.length many));
       let totals = get "totals" (Usage.snapshot board.usage) in
       A.(check int "both reads are counted as fetches" 2 (number (get "fetches" totals)));
-      A.(check int "and the money total covers one priced call" 1
-           (number (get "priced_fetches" totals))))
+      A.(
+        check int "and the money total covers one priced call" 1
+          (number (get "priced_fetches" totals))))
 
 let an_image_page_bypasses_the_store () =
   let local =
-    stub ~image:({ Engine.Fetch.media_type = "image/png"; body = "\x89PNG\x0d\x0a\x1a\nbytes" }) ()
+    stub ~image:{ Engine.Fetch.media_type = "image/png"; body = "\x89PNG\x0d\x0a\x1a\nbytes" } ()
   in
   with_board local (fun board ->
       let first = served board url in
@@ -451,7 +459,8 @@ let a_page_over_the_entry_cap_is_served_and_stays_uncached () =
       A.(check string "the oversized page is served whole" page_text (say first.Model.text));
       ignore (served board url);
       A.(check int "so every read of it dispatches" 2 !(local.calls));
-      A.(check (list bool) "and none is reported cached" [ false; false ] (cached_flags board.lines));
+      A.(
+        check (list bool) "and none is reported cached" [ false; false ] (cached_flags board.lines));
       A.(check int "and the directory holds nothing" 0 (entries board)))
 
 let a_failed_fill_leaves_nothing_behind () =
@@ -466,10 +475,12 @@ let a_failed_fill_leaves_nothing_behind () =
       let second = served board url in
       A.(check int "the next call dispatches again" 2 !(local.calls));
       A.(check string "and serves the page" page_text (say second.Model.text));
-      A.(check (list bool) "and the one line it logged is not a cached read" [ false ]
-           (cached_flags board.lines));
-      A.(check int "the failure is journaled as an error, not a fetch" 1
-           (List.length (List.filter (fun c -> c.event = "fetch.failed") !(board.lines)))))
+      A.(
+        check (list bool) "and the one line it logged is not a cached read" [ false ]
+          (cached_flags board.lines));
+      A.(
+        check int "the failure is journaled as an error, not a fetch" 1
+          (List.length (List.filter (fun c -> c.event = "fetch.failed") !(board.lines)))))
 
 let waiters_on_a_failed_fill_all_get_that_failure () =
   (* The singleflight half of the same rule: callers parked on a fill inherit the
@@ -489,9 +500,10 @@ let waiters_on_a_failed_fill_all_get_that_failure () =
       in
       Eio.Fiber.all [ (fun () -> call 0); (fun () -> call 1); (fun () -> call 2) ];
       A.(check int "three callers, one dispatch" 1 !(local.calls));
-      A.(check (array string) "one failure, handed to all three"
-           (Array.make 3 sentences.(0))
-           sentences);
+      A.(
+        check (array string) "one failure, handed to all three"
+          (Array.make 3 sentences.(0))
+          sentences);
       includes "and the sentence says what failed" "HTTP 503" sentences.(0);
       A.(check int "and nothing was stored" 0 (entries board)))
 
@@ -510,16 +522,16 @@ let an_unusable_cache_dir_is_a_refusal_not_a_miss () =
   | Error message -> A.failf "the fixture config was refused: %s" message
   | Ok config -> (
       match Factory.build_page_cache ~sw ~net:env#net ~mono_clock ~now ~fs config with
-      | Ok Some _ -> A.fail "an unopenable cache_dir built a cache"
+      | Ok (Some _) -> A.fail "an unopenable cache_dir built a cache"
       | Ok None -> A.fail "a set cache_dir built no cache"
-      | Error message ->
+      | Error message -> (
           (* [--check] reads the same directory and reports the same reason, which
              is why the row counts as a problem rather than printing zeroes. *)
           check_bool "the refusal says something" true (String.length message > 0);
           match Factory.page_cache_stats ~sw ~mono_clock ~fs config with
           | Ok _ -> A.fail "the diagnosis invented figures for a directory it cannot open"
           | Error stats_message ->
-              check_string "and [--check] reports the same reason" message stats_message)
+              check_string "and [--check] reports the same reason" message stats_message))
 
 let a_refused_url_is_refused_with_a_warm_entry () =
   (* Seed the entry, then ask the same directory for the same URL under the address
@@ -556,11 +568,11 @@ let no_cache_directory_means_every_read_dispatches () =
   | Ok config -> (
       match Factory.build_page_cache ~sw ~net:env#net ~mono_clock ~now ~fs config with
       | Error message -> A.failf "build_page_cache on an unset cache_dir: %s" message
-      | Ok Some _ -> A.fail "an unset cache_dir built a seam"
-      | Ok None ->
+      | Ok (Some _) -> A.fail "an unset cache_dir built a seam"
+      | Ok None -> (
           (match Factory.page_cache_stats ~sw ~mono_clock ~fs config with
           | Ok None -> ()
-          | Ok Some _ -> A.fail "an unset cache_dir has no directory to report"
+          | Ok (Some _) -> A.fail "an unset cache_dir has no directory to report"
           | Error message -> A.failf "page_cache_stats on an unset cache_dir: %s" message);
           let lines = ref [] in
           match Usage.create ~now () with
@@ -575,8 +587,9 @@ let no_cache_directory_means_every_read_dispatches () =
                   ignore (Engine.Fetch.fetch engine url);
                   ignore (Engine.Fetch.fetch engine url);
                   A.(check int "every read dispatched" 2 !(local.calls));
-                  A.(check (list bool) "and [cached] stays false" [ false; false ]
-                    (cached_flags lines))))
+                  A.(
+                    check (list bool) "and [cached] stays false" [ false; false ]
+                      (cached_flags lines)))))
 
 let () =
   A.run "fetch cache"
@@ -601,7 +614,8 @@ let () =
           A.test_case "an image page bypasses the store" `Quick an_image_page_bypasses_the_store;
           A.test_case "a page over the entry cap stays uncached" `Quick
             a_page_over_the_entry_cap_is_served_and_stays_uncached;
-          A.test_case "a failed fill leaves nothing behind" `Quick a_failed_fill_leaves_nothing_behind;
+          A.test_case "a failed fill leaves nothing behind" `Quick
+            a_failed_fill_leaves_nothing_behind;
           A.test_case "waiters on a failed fill all get that failure" `Quick
             waiters_on_a_failed_fill_all_get_that_failure;
         ] );

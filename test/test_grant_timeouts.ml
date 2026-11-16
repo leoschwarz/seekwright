@@ -15,13 +15,10 @@ open Test_support
 exception Done
 
 let stalling_server env ~sw ~run =
-  let socket =
-    Eio.Net.listen ~backlog:8 ~sw env#net
-      (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:8 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   Eio.Fiber.fork ~sw (fun () ->
       let rec accept () =
-        let (_flow, _peer) = Eio.Net.accept ~sw socket in
+        let _flow, _peer = Eio.Net.accept ~sw socket in
         accept ()
       in
       accept ());
@@ -40,9 +37,7 @@ let endpoint port : Caps.Policy.endpoint =
 let request port : Caps.Authority.Net.request =
   {
     meth = `GET;
-    uri =
-      Uri.of_string
-        (Printf.sprintf "http://127.0.0.1:%d/stall" port);
+    uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/stall" port);
     headers = [];
     body = None;
   }
@@ -51,79 +46,69 @@ let request port : Caps.Authority.Net.request =
    15-second default would need fifteen. The upper bound leaves room for a
    slow machine without letting the default pass. *)
 let assert_bounded ~what elapsed =
-  A.(check bool (what ^ ": gave up inside the configured bound") true
-       (elapsed < 5.0));
+  A.(check bool (what ^ ": gave up inside the configured bound") true (elapsed < 5.0));
   A.(check bool (what ^ ": did not give up before it") true (elapsed >= 0.5))
 
 let test_a_provider_grant_honours_its_bound () =
   Eio_main.run @@ fun env ->
-  (try
-     Eio.Switch.run (fun sw ->
-       stalling_server env ~sw ~run:(fun ~port ->
-           match
-             Factory.grant_of_endpoint ~sw ~net:env#net
-               ~mono_clock:env#mono_clock ~timeout_seconds:1.0
-               (endpoint port)
-           with
-           | Error message -> A.failf "the fixture grant was refused: %s" message
-           | Ok grant ->
-               let outcome, elapsed =
-                 timed (fun () ->
-                     Caps.Authority.Net.request grant (request port))
-               in
-               assert_bounded ~what:"a provider grant" elapsed;
-               (match outcome with
-               | Ok _ -> A.fail "the stalling fixture answered"
-               | Error error ->
-                   A.(check string "the bound's kind" "timeout"
+  try
+    Eio.Switch.run (fun sw ->
+        stalling_server env ~sw ~run:(fun ~port ->
+            match
+              Factory.grant_of_endpoint ~sw ~net:env#net ~mono_clock:env#mono_clock
+                ~timeout_seconds:1.0 (endpoint port)
+            with
+            | Error message -> A.failf "the fixture grant was refused: %s" message
+            | Ok grant -> (
+                let outcome, elapsed =
+                  timed (fun () -> Caps.Authority.Net.request grant (request port))
+                in
+                assert_bounded ~what:"a provider grant" elapsed;
+                match outcome with
+                | Ok _ -> A.fail "the stalling fixture answered"
+                | Error error ->
+                    A.(
+                      check string "the bound's kind" "timeout"
                         (Caps.Error.kind_to_string (Caps.Error.kind error)))));
-       raise Done)
-   with Done -> ())
+        raise Done)
+  with Done -> ()
 
 let test_a_probe_net_honours_its_bound () =
   Eio_main.run @@ fun env ->
-  (try
-     Eio.Switch.run (fun sw ->
-       stalling_server env ~sw ~run:(fun ~port ->
-           let config =
-             match
-               Config.resolve
-                 ~providers:
-                   [
-                     ( "freeserp",
-                       {
-                         Config.default_provider_config with
-                         Config.enabled = true;
-                       } );
-                   ]
-                 ()
-             with
-             | Ok config -> config
-             | Error message -> A.failf "the fixture config was refused: %s" message
-           in
-           let url = Printf.sprintf "http://127.0.0.1:%d/probe" port in
-           let table =
-             [
-               ( "freeserp",
-                 {
-                   Health.endpoint = Health.probe_endpoint_const url;
-                   headers = (fun _config _key -> []);
-                 } );
-             ]
-           in
-           let net =
-             Factory.probe_net ~sw ~net:env#net
-               ~mono_clock:env#mono_clock ~timeout_seconds:1.0
-               [ endpoint port ]
-           in
-           let outcome, elapsed =
-             timed (fun () -> Health.probe ~net ~table config "freeserp")
-           in
-           assert_bounded ~what:"the probe net" elapsed;
-           A.(check string "the probe reads the timeout as unreachable" "unreachable"
+  try
+    Eio.Switch.run (fun sw ->
+        stalling_server env ~sw ~run:(fun ~port ->
+            let config =
+              match
+                Config.resolve
+                  ~providers:
+                    [ ("freeserp", { Config.default_provider_config with Config.enabled = true }) ]
+                  ()
+              with
+              | Ok config -> config
+              | Error message -> A.failf "the fixture config was refused: %s" message
+            in
+            let url = Printf.sprintf "http://127.0.0.1:%d/probe" port in
+            let table =
+              [
+                ( "freeserp",
+                  {
+                    Health.endpoint = Health.probe_endpoint_const url;
+                    headers = (fun _config _key -> []);
+                  } );
+              ]
+            in
+            let net =
+              Factory.probe_net ~sw ~net:env#net ~mono_clock:env#mono_clock ~timeout_seconds:1.0
+                [ endpoint port ]
+            in
+            let outcome, elapsed = timed (fun () -> Health.probe ~net ~table config "freeserp") in
+            assert_bounded ~what:"the probe net" elapsed;
+            A.(
+              check string "the probe reads the timeout as unreachable" "unreachable"
                 (Health.show_outcome outcome)));
-       raise Done)
-   with Done -> ())
+        raise Done)
+  with Done -> ()
 
 (* The wiring is one expression per key; this guards against the read being
    dropped while the behavioural case above still passes for providers. The scan
@@ -131,9 +116,7 @@ let test_a_probe_net_honours_its_bound () =
    against the file that builds the grant it bounds — so a read cannot wander
    into a module that constructs no grant at all. *)
 let factory_impls =
-  List.filter
-    (fun (name, _) -> Filename.check_suffix name ".ml")
-    (Test_support.factory_sources ())
+  List.filter (fun (name, _) -> Filename.check_suffix name ".ml") (Test_support.factory_sources ())
 
 let source_of name =
   match List.assoc_opt name factory_impls with
@@ -143,11 +126,18 @@ let source_of name =
 let test_every_bounded_grant_reads_its_config_key () =
   List.iter
     (fun (what, expression, file) ->
-      A.(check bool (what ^ " is read where its grant is built") true
-            (contains ~haystack:(source_of file) ~needle:expression)))
+      A.(
+        check bool
+          (what ^ " is read where its grant is built")
+          true
+          (contains ~haystack:(source_of file) ~needle:expression)))
     [
-      ("policy.provider_timeout_seconds", "policy.Config.provider_timeout_seconds", "lib/factory/providers_build.ml");
-      ("policy.provider_timeout_seconds", "policy.Config.provider_timeout_seconds", "lib/factory/app.ml");
+      ( "policy.provider_timeout_seconds",
+        "policy.Config.provider_timeout_seconds",
+        "lib/factory/providers_build.ml" );
+      ( "policy.provider_timeout_seconds",
+        "policy.Config.provider_timeout_seconds",
+        "lib/factory/app.ml" );
       ("fetch.timeout_seconds", "fetch.Config.timeout_seconds", "lib/factory/fetch_stack.ml");
       ("agent.model_timeout_seconds", "agent.Config.model_timeout_seconds", "lib/factory/app.ml");
     ]

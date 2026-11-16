@@ -17,16 +17,10 @@ let tbs = function
 (* Upstream puts the API key in query parameters rather than headers. *)
 let request_params ~key (q : Provider.search_query) =
   let params =
-    [
-      ("api_key", [ key ]);
-      ("q", [ Provider.site_filtered_query q ]);
-      ("engine", [ "google" ]);
-    ]
+    [ ("api_key", [ key ]); ("q", [ Provider.site_filtered_query q ]); ("engine", [ "google" ]) ]
   in
   let params =
-    match q.Model.country with
-    | Some country -> params @ [ ("gl", [ country ]) ]
-    | None -> params
+    match q.Model.country with Some country -> params @ [ ("gl", [ country ]) ] | None -> params
   in
   let params =
     match q.Model.language with
@@ -40,7 +34,7 @@ let request_params ~key (q : Provider.search_query) =
   in
   let params =
     match q.Model.safe_search with
-    | Some value -> params @ [ ("safe", [ if value then "active" else "off" ]) ]
+    | Some value -> params @ [ ("safe", [ (if value then "active" else "off") ]) ]
     | None -> params
   in
   params
@@ -53,10 +47,7 @@ let parse ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->
@@ -116,8 +107,8 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
           answer = None;
           cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
           notice =
-            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true
-              ~language:(Some true) ~safety:true;
+            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some true)
+              ~safety:true;
         }
 
 let make ?(cost_per_1k = 0.0) ?(snippet_chars = 500) ~key ~net () : Provider.t =

@@ -14,11 +14,7 @@ let agent = "seekwright"
 let max_size = 100
 
 (* Coarse freshness to day count: Day (1), Week (7), Month (30), Year (365). *)
-let age_days = function
-  | Model.Day -> 1
-  | Model.Week -> 7
-  | Model.Month -> 30
-  | Model.Year -> 365
+let age_days = function Model.Day -> 1 | Model.Week -> 7 | Model.Month -> 30 | Model.Year -> 365
 
 let published_from (now : unit -> float) period =
   Civil.date_of_days (Civil.days_of_secs (Civil.whole_seconds (now ())) - age_days period)
@@ -70,10 +66,7 @@ let parse ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   (* Limit slices upstream results before validation. *)
   List.filter_map
@@ -81,8 +74,7 @@ let parse ~snippet_chars data ~limit =
       match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
       | Some url, Some title when url <> "" && title <> "" ->
           let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "snippet" item)
-              snippet_chars
+            Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
           in
           Some
             {
@@ -111,12 +103,7 @@ let search ~cost_per_1k ~snippet_chars ~(now : unit -> float) (net : Provider.Ne
     (q : Provider.search_query) =
   let ( let* ) = Result.bind in
   let request =
-    {
-      Caps.Authority.Net.meth = `GET;
-      uri = request_uri ~now q;
-      headers = [];
-      body = None;
-    }
+    { Caps.Authority.Net.meth = `GET; uri = request_uri ~now q; headers = []; body = None }
   in
   match net.request request with
   | Error failure -> Error (Provider.transport_error ~provider:name failure)
@@ -141,8 +128,7 @@ let search ~cost_per_1k ~snippet_chars ~(now : unit -> float) (net : Provider.Ne
 (* Keyless; zero cost. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
-let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~(now : unit -> float) ~net ()
-    : Provider.t =
+let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~(now : unit -> float) ~net () : Provider.t =
   (module struct
     let name = name
     let cost_per_1k = cost_per_1k

@@ -2,9 +2,9 @@
 
     Endpoint: [GET https://api.search.tinyfish.ai] with [X-API-Key] header.
 
-    Search API calls are unmetered (0 cost). Results are sliced locally because the
-    endpoint has no count parameter. Supports domains, recency ([recency_minutes]),
-    country ([location]), and language. Safe search is unhonoured.
+    Search API calls are unmetered (0 cost). Results are sliced locally because the endpoint has no
+    count parameter. Supports domains, recency ([recency_minutes]), country ([location]), and
+    language. Safe search is unhonoured.
 
     402/429 indicates Search API access not enabled or rate limit. *)
 
@@ -23,8 +23,7 @@ val recency_minutes : Seekwright.Model.recency -> int
 val request_uri : Seekwright.Provider.search_query -> Uri.t
 (** Constructs the GET URI with query parameters. *)
 
-val parse :
-  snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
+val parse : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** Parses hits from [results[]]. *)
 
 val cost_for : cost_per_1k:float -> int -> float

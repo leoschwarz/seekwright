@@ -10,15 +10,12 @@ let policy_endpoint = Provider.policy_of_uri endpoint
 
 (* time_range takes "day", "week", "month", "year". *)
 let request_body (q : Provider.search_query) =
-  let fields =
-    [ ("query", `String q.Model.query); ("max_results", `Int q.Model.max_results) ]
-  in
+  let fields = [ ("query", `String q.Model.query); ("max_results", `Int q.Model.max_results) ] in
   let fields =
     if q.Model.include_domains <> [] then
       fields
       @ [
-          ( "include_sites",
-            `List (List.map (fun domain -> `String domain) q.Model.include_domains) );
+          ("include_sites", `List (List.map (fun domain -> `String domain) q.Model.include_domains));
         ]
     else fields
   in
@@ -26,8 +23,7 @@ let request_body (q : Provider.search_query) =
     if q.Model.exclude_domains <> [] then
       fields
       @ [
-          ( "exclude_sites",
-            `List (List.map (fun domain -> `String domain) q.Model.exclude_domains) );
+          ("exclude_sites", `List (List.map (fun domain -> `String domain) q.Model.exclude_domains));
         ]
     else fields
   in
@@ -61,10 +57,7 @@ let parse ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->

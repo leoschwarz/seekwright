@@ -1,56 +1,52 @@
 module Utf8 = Seekwright_text.Utf8
 
-let table_types = [ "text/csv"; "application/csv"; "text/tab-separated-values" ]
 (** The types that name a delimited table by themselves.
 
-    [application/vnd.ms-excel] is deliberately absent: it names a binary
-    workbook as often as a CSV export, and a backend must not claim a type it
-    reads by guessing. [text/csv] with a [charset] parameter reaches here
-    anyway — the extractor's media-type normalisation strips parameters. *)
+    [application/vnd.ms-excel] is deliberately absent: it names a binary workbook as often as a CSV
+    export, and a backend must not claim a type it reads by guessing. [text/csv] with a [charset]
+    parameter reaches here anyway — the extractor's media-type normalisation strips parameters. *)
+let table_types = [ "text/csv"; "application/csv"; "text/tab-separated-values" ]
 
-let tab_types = [ "text/tab-separated-values" ]
 (** The types whose own name states the delimiter, so nothing is sniffed. *)
+let tab_types = [ "text/tab-separated-values" ]
 
-let max_column_name_chars = 128
 (** A column name longer than this is cut.
 
-    The name becomes the path label of every cell under it, so one hostile
-    header cell of a megabyte makes every row's label longer than the row. The
-    cap also keeps a printed path inside [fetch]'s 400-character [path] bound,
-    so every column a caller can read off the page is one it can also ask for. *)
+    The name becomes the path label of every cell under it, so one hostile header cell of a megabyte
+    makes every row's label longer than the row. The cap also keeps a printed path inside [fetch]'s
+    400-character [path] bound, so every column a caller can read off the page is one it can also
+    ask for. *)
+let max_column_name_chars = 128
 
-let head_chars = 8192
 (** The head of the file the delimiter sniff parses. *)
+let head_chars = 8192
 
+(** The lines of that head, because the file is a stranger's and the sniff costs four parses of the
+    sample. *)
 let head_lines = 20
-(** The lines of that head, because the file is a stranger's and the sniff
-    costs four parses of the sample. *)
 
-let sniff_order = [ ","; ";"; "\t"; "|" ]
 (** The order candidates are tried in, and the order ties break in. *)
+let sniff_order = [ ","; ";"; "\t"; "|" ]
 
+(** [csv.field_size_limit]'s process default, pinned here because the stop message names it and the
+    value is what a record stream stops on. Never raised by config: the Python original keeps it
+    process-global state, and this port keeps the same constant. *)
 let field_limit = 131072
-(** [csv.field_size_limit]'s process default, pinned here because the stop
-    message names it and the value is what a record stream stops on. Never
-    raised by config: the Python original keeps it process-global state, and
-    this port keeps the same constant. *)
 
 let field_limit_message = Printf.sprintf "field larger than field limit (%d)" field_limit
 
+(** The reader's hard error on a bare [\r] inside an unquoted field, verbatim from [csv]: a [\r]
+    that is not followed by [\n] and is not at end of input ends the record where it stands, and the
+    reader refuses the rest. *)
 let cr_message =
-  "new-line character seen in unquoted field - do you need to open the file \
-   with newline=''?"
-(** The reader's hard error on a bare [\r] inside an unquoted field, verbatim
-    from [csv]: a [\r] that is not followed by [\n] and is not at end of input
-    ends the record where it stands, and the reader refuses the rest. *)
+  "new-line character seen in unquoted field - do you need to open the file with newline=''?"
 
-let is_table_media kind = List.mem kind table_types
 (** Whether a media type names a table.
 
-    Never consulted on an absent header: unlike JSON's braces, a delimited line
-    is indistinguishable from prose, so a body with no Content-Type is text.
-    [Jsondoc.sniffs_json] refuses [1,2,3] for the same reason and that guard
-    stays green. *)
+    Never consulted on an absent header: unlike JSON's braces, a delimited line is indistinguishable
+    from prose, so a body with no Content-Type is text. [Jsondoc.sniffs_json] refuses [1,2,3] for
+    the same reason and that guard stays green. *)
+let is_table_media kind = List.mem kind table_types
 
 (* The first [n] codepoints of [s]. *)
 
@@ -95,9 +91,9 @@ let read_records text delim =
     if !cps >= field_limit then error := Some field_limit_message
     else begin
       Buffer.add_char buf b;
+
       (* A byte below 0x80 or at or above 0xC0 starts a codepoint; a
          continuation byte is part of the one before it. *)
-
       if Char.code b land 0xc0 <> 0x80 then incr cps
     end
   in
@@ -112,7 +108,6 @@ let read_records text delim =
             | _ ->
                 (* End of input with a record under way: the field is
                    complete, quote closed or not. *)
-
                 save_field ();
                 save_record ()
           in
@@ -121,13 +116,17 @@ let read_records text delim =
         else
           let c = text.[i] in
           match state with
-          | `Start_record -> (
-              if c = '\n' then (records := [] :: !records; go `Start_record (i + 1))
+          | `Start_record ->
+              if c = '\n' then (
+                records := [] :: !records;
+                go `Start_record (i + 1))
               else if c = '\r' then
-                if i + 1 < n && text.[i + 1] = '\n' then
-                  (records := [] :: !records; go `Start_record (i + 2))
-                else if i + 1 >= n then
-                  (records := [] :: !records; go `Start_record (i + 1))
+                if i + 1 < n && text.[i + 1] = '\n' then (
+                  records := [] :: !records;
+                  go `Start_record (i + 2))
+                else if i + 1 >= n then (
+                  records := [] :: !records;
+                  go `Start_record (i + 1))
                 else begin
                   error := Some cr_message;
                   finish ()
@@ -136,8 +135,8 @@ let read_records text delim =
               else begin
                 add_byte c;
                 if !error = None then go `In_field (i + 1) else finish ()
-              end)
-          | `Start_field | `In_field -> (
+              end
+          | `Start_field | `In_field ->
               let in_field = state = `In_field in
               if c = '\r' then
                 if i + 1 < n && text.[i + 1] = '\n' then begin
@@ -166,17 +165,17 @@ let read_records text delim =
                 save_field ();
                 go `Start_field (i + 1)
               end
-              else if not in_field && c = '"' then go `Quoted (i + 1)
+              else if (not in_field) && c = '"' then go `Quoted (i + 1)
               else begin
                 add_byte c;
                 if !error = None then go `In_field (i + 1) else finish ()
-              end)
-          | `Quoted -> (
+              end
+          | `Quoted ->
               if c = '"' then go `Quote_in_quoted (i + 1)
               else begin
                 add_byte c;
                 if !error = None then go `Quoted (i + 1) else finish ()
-              end)
+              end
           | `Quote_in_quoted ->
               if c = '"' then begin
                 add_byte '"';
@@ -209,7 +208,6 @@ let read_records text delim =
               else begin
                 (* Characters after a closing quote ride along as field
                    content: ["a"b] is [ab]. *)
-
                 add_byte c;
                 if !error = None then go `In_field (i + 1) else finish ()
               end)
@@ -231,13 +229,9 @@ let choose_delimiter text =
      agrees on nothing stays on commas. Not [csv.Sniffer]: its dialect search
      takes a sample of the caller's choosing and is bounded by nothing this
      tree controls. *)
-
   let sample =
     Utf8.of_string (take_chars text head_chars)
-    |> Utf8.splitlines
-    |> take head_lines
-    |> List.map Utf8.to_string
-    |> String.concat "\n"
+    |> Utf8.splitlines |> take head_lines |> List.map Utf8.to_string |> String.concat "\n"
   in
   let best = ref (",", 1) in
   List.iter
@@ -260,7 +254,6 @@ let choose_delimiter text =
 
 let table_delimiter ~kind ~text =
   (* The delimiter this type declares, or the one this file's head supports. *)
-
   if List.mem kind tab_types then "\t" else choose_delimiter text
 
 let column_names header =
@@ -271,7 +264,6 @@ let column_names header =
      round-trips it. Duplicate names are left alone — [path] then answers both,
      which reports the file's defect rather than renaming its data. An empty
      cell gets the positional name, so no path label is blank. *)
-
   List.mapi
     (fun ordinal raw ->
       match take_chars raw max_column_name_chars with
@@ -280,9 +272,8 @@ let column_names header =
     header
 
 exception No_rows
-(** The reader stopped before any row printed: all that is known of the file
-    is its columns, and the bytes serve the caller better than an empty table
-    that claims to be one. *)
+(** The reader stopped before any row printed: all that is known of the file is its columns, and the
+    bytes serve the caller better than an empty table that claims to be one. *)
 
 (* The format-agnostic half. *)
 
@@ -303,8 +294,8 @@ let emit columns rows body_chars =
               stop :=
                 Some
                   (Printf.sprintf
-                     "not rendered: this file stopped parsing at this row (%s); the \
-                      rows above it are complete"
+                     "not rendered: this file stopped parsing at this row (%s); the rows above it \
+                      are complete"
                      reason)
         | Cells [] -> go rest
         | Cells r ->
@@ -312,22 +303,21 @@ let emit columns rows body_chars =
               stop :=
                 Some
                   (Printf.sprintf
-                     "not rendered: the table expands past the budget of %d \
-                      characters, %d times the file's own %d; %d rows are printed \
-                      above and no further row of the file is addressable in this \
-                      page -- fetch with `offset` to page through what is here, or \
-                      raise fetch.max_download_bytes, the budget being a ratio of it"
+                     "not rendered: the table expands past the budget of %d characters, %d times \
+                      the file's own %d; %d rows are printed above and no further row of the file \
+                      is addressable in this page -- fetch with `offset` to page through what is \
+                      here, or raise fetch.max_download_bytes, the budget being a ratio of it"
                      budget Jsondoc.max_render_ratio body_chars !printed)
             else begin
               let path = Printf.sprintf "$.rows[%d]" !printed in
               let line = Printf.sprintf "%s  object(%d)" path width in
               out := line :: !out;
               spent := !spent + Utf8.count line + 1;
+
               (* Rows shorter than the header are padded with empty cells and
                  rows longer than it are cut to it, so every row object has
                  exactly the header's width — which is what lets the shape view
                  collapse the whole array to one [$.rows[*]] subtree. *)
-
               let pad = max 0 (width - List.length r) in
               let cells = take width r @ List.init pad (fun _ -> "") in
               List.iter2
@@ -335,7 +325,6 @@ let emit columns rows body_chars =
                   (* Cells stay quoted strings whatever they hold: a CSV has no
                      types, and [007] or [1.50] unquoted would be a different
                      value than the file wrote. *)
-
                   let leaf =
                     Printf.sprintf "%s  %s"
                       (Jsondoc.child_path path (Jsondoc.Name name))
@@ -350,10 +339,7 @@ let emit columns rows body_chars =
   in
   try
     go rows;
-    let lines =
-      [ "$  object(1)"; Printf.sprintf "$.rows  array(%d)" !printed ]
-      @ List.rev !out
-    in
+    let lines = [ "$  object(1)"; Printf.sprintf "$.rows  array(%d)" !printed ] @ List.rev !out in
     let lines =
       match !stop with
       | None -> lines
@@ -369,10 +355,8 @@ let render_table text ~delimiter =
      caller's signal to answer with the bytes: a header the reader cannot walk,
      and a reader that stopped before any row printed — columns without one row
      say nothing about the file. *)
-
   let body =
     (* A leading byte-order mark is transport, not a column name. *)
-
     if String.length text >= 3 && String.sub text 0 3 = "\xef\xbb\xbf" then
       String.sub text 3 (String.length text - 3)
     else text
@@ -389,6 +373,6 @@ let render_table text ~delimiter =
   | Some (h, tail) ->
       let rows =
         List.filter (function Cells [] -> false | _ -> true) tail
-        @ (match stop with Some reason -> [ Stopped reason ] | None -> [])
+        @ match stop with Some reason -> [ Stopped reason ] | None -> []
       in
       emit (column_names h) rows (Utf8.count text)

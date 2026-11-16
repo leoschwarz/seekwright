@@ -16,9 +16,7 @@ let ( let* ) = Result.bind
 
 (* Ceiling clamp: callers may lower limits, never raise them. *)
 let ceiling ~grant_max requested =
-  match requested with
-  | None -> grant_max
-  | Some requested -> min grant_max requested
+  match requested with None -> grant_max | Some requested -> min grant_max requested
 
 let operator_limit ~name ~default requested =
   match requested with
@@ -53,8 +51,8 @@ let resolve root path =
       Error
         (Error.make Error.Invalid
            ~message:
-             "a path is root-relative components separated by \"/\": no absolute path, no \".\" \
-              or \"..\", no empty component, no control characters")
+             "a path is root-relative components separated by \"/\": no absolute path, no \".\" or \
+              \"..\", no empty component, no control characters")
 
 let classify exn ~path =
   match exn with
@@ -67,17 +65,19 @@ let classify exn ~path =
         (Error.make Error.Denied
            ~message:
              (path
-             ^ ": refused — it leaves the grant root (a \"..\", an absolute path, or a symlink \
-                out of the root)"))
+            ^ ": refused — it leaves the grant root (a \"..\", an absolute path, or a symlink out \
+               of the root)"))
   | Eio.Io (Eio.Fs.E Eio.Fs.Symlink, _) ->
       Error
         (Error.make Error.Denied
            ~message:(path ^ ": refused — a symlink that does not resolve inside the grant root"))
   | Eio.Io (Eio.Fs.E Eio.Fs.File_too_large, _) ->
       Error
-        (Error.make Error.Denied ~message:(path ^ ": refused — the file is beyond the root's size limit"))
+        (Error.make Error.Denied
+           ~message:(path ^ ": refused — the file is beyond the root's size limit"))
   | Eio.Io (Eio.Fs.E (Eio.Fs.Already_exists _), _) ->
-      Error (Error.make Error.Failed ~message:(path ^ ": a file already exists where one was needed"))
+      Error
+        (Error.make Error.Failed ~message:(path ^ ": a file already exists where one was needed"))
   | Eio.Io _ -> Error (Error.make Error.Failed ~message:(path ^ ": the read failed"))
   | _ -> raise exn
 
@@ -85,28 +85,40 @@ let open_root ~sw ~parent name =
   let refusal =
     Error.make Error.Unavailable
       ~message:
-        (Printf.sprintf "the grant root %s could not be opened as a directory"
-           (Error.sanitize name))
+        (Printf.sprintf "the grant root %s could not be opened as a directory" (Error.sanitize name))
   in
-  try Ok (Eio.Path.open_subtree ~sw (parent / name))
-  with
-  | Eio.Cancel.Cancelled _ | Eio.Exn.Multiple _ as exn -> raise exn
+  try Ok (Eio.Path.open_subtree ~sw (parent / name)) with
+  | (Eio.Cancel.Cancelled _ | Eio.Exn.Multiple _) as exn -> raise exn
   | Eio.Io _ -> Error refusal
 
 let kind_of ~follow ~label path =
   try Ok (Eio.Path.kind ~follow path) with ex -> classify ex ~path:label
 
 let classify_kind kind ~path =
-  match (kind :> [ `Regular_file | `Directory | `Symbolic_link | `Not_found | `Fifo | `Socket
-                 | `Block_device | `Character_special | `Unknown ])
+  match
+    (kind
+      :> [ `Regular_file
+         | `Directory
+         | `Symbolic_link
+         | `Not_found
+         | `Fifo
+         | `Socket
+         | `Block_device
+         | `Character_special
+         | `Unknown ])
   with
-  | `Not_found -> Error (Error.make Error.Unavailable ~message:(path ^ ": not found under the root"))
+  | `Not_found ->
+      Error (Error.make Error.Unavailable ~message:(path ^ ": not found under the root"))
   | `Directory -> Ok `Directory
   | `Regular_file -> Ok `Regular_file
   | `Symbolic_link ->
-      Error (Error.make Error.Denied ~message:(path ^ ": refused — the symlink does not resolve inside the root"))
+      Error
+        (Error.make Error.Denied
+           ~message:(path ^ ": refused — the symlink does not resolve inside the root"))
   | `Fifo | `Socket | `Block_device | `Character_special | `Unknown ->
-      Error (Error.make Error.Invalid ~message:(path ^ ": only regular files and directories are readable"))
+      Error
+        (Error.make Error.Invalid
+           ~message:(path ^ ": only regular files and directories are readable"))
 
 (* [Buf_read.of_flow ~max_size]: stops reading at bound before allocating body. *)
 let read_capped flow limit =
@@ -120,7 +132,9 @@ let read_file_body t ~max_bytes path =
   let* kind = classify_kind ~path kind in
   match kind with
   | `Directory ->
-      Error (Error.make Error.Invalid ~message:(path ^ ": that is a directory — list it, do not read it"))
+      Error
+        (Error.make Error.Invalid
+           ~message:(path ^ ": that is a directory — list it, do not read it"))
   | `Regular_file -> (
       try
         match Eio.Path.with_open_in target (fun flow -> Ok (read_capped flow limit)) with
@@ -144,7 +158,8 @@ let list_dir_body t ~max_entries path =
   let* kind = classify_kind ~path kind in
   match kind with
   | `Regular_file ->
-      Error (Error.make Error.Invalid ~message:(path ^ ": that is a file — read it, do not list it"))
+      Error
+        (Error.make Error.Invalid ~message:(path ^ ": that is a file — read it, do not list it"))
   | `Directory -> (
       try
         (* Counted as it streams: [Eio.Path.read_dir] builds the whole listing
@@ -155,22 +170,21 @@ let list_dir_body t ~max_entries path =
         let counted = ref 0 in
         let over = ref false in
         Eio.Path.with_dir_entries target (fun entries ->
-          Seq.iter
-            (fun (_kind, name) ->
-              if !over then ()
-              else if !counted >= limit then over := true
-              else
-                (
+            Seq.iter
+              (fun (_kind, name) ->
+                if !over then ()
+                else if !counted >= limit then over := true
+                else (
                   incr counted;
-                  found := name :: !found ))
-          entries);
+                  found := name :: !found))
+              entries);
         if !over then
           Error
             (Error.make Error.Denied
                ~message:
                  (Printf.sprintf
-                    "%s: refused — the directory holds more than %d entries (max_entries may \
-                     lower it, never raise it)"
+                    "%s: refused — the directory holds more than %d entries (max_entries may lower \
+                     it, never raise it)"
                     path limit))
         else Ok (List.sort String.compare !found)
       with ex -> classify ex ~path)
@@ -182,7 +196,7 @@ let read_file ~controls ?max_bytes t path =
 
 let list_dir ~controls ?max_entries t path =
   Controls_raw.run controls ~operation:"fs.list_dir"
-    ~notes:(fun entries -> [("entries", string_of_int (List.length entries))])
+    ~notes:(fun entries -> [ ("entries", string_of_int (List.length entries)) ])
     (fun () -> list_dir_body t ~max_entries path)
 
 let ceilings ?max_read_bytes ?max_write_bytes ?max_entries () =
@@ -205,9 +219,8 @@ let with_root ~sw ?max_read_bytes ?max_entries ~parent name =
 
 let open_written_root ~sw ~parent name =
   match
-    try Ok (Eio.Path.mkdirs ~exists_ok:true ~perm:0o700 (parent / name))
-    with
-    | Eio.Cancel.Cancelled _ | Eio.Exn.Multiple _ as exn -> raise exn
+    try Ok (Eio.Path.mkdirs ~exists_ok:true ~perm:0o700 (parent / name)) with
+    | (Eio.Cancel.Cancelled _ | Eio.Exn.Multiple _) as exn -> raise exn
     | Eio.Io _ ->
         Error
           (Error.make Error.Unavailable
@@ -229,7 +242,8 @@ let with_written_root ~sw ?max_read_bytes ?max_write_bytes ?max_entries ~parent 
 let not_writable path =
   Error
     (Error.make Error.Denied
-       ~message:(path ^ ": refused — this grant's root is read-only (it was opened by Policy.with_root)"))
+       ~message:
+         (path ^ ": refused — this grant's root is read-only (it was opened by Policy.with_root)"))
 
 let writable t path = if t.writable then Ok () else not_writable path
 
@@ -241,8 +255,8 @@ let write_body t ~max_bytes path ~contents =
       (Error.make Error.Denied
          ~message:
            (Printf.sprintf
-              "%s: refused — %d bytes is beyond the %d-byte write ceiling (max_bytes may lower \
-               it, never raise it)"
+              "%s: refused — %d bytes is beyond the %d-byte write ceiling (max_bytes may lower it, \
+               never raise it)"
               path (String.length contents) limit))
   else
     let* target = resolve t.root path in
@@ -262,7 +276,7 @@ let write_body t ~max_bytes path ~contents =
           | Error `busy -> attempt (n + 1)
           | Error (`other ex) -> classify ex ~path
           | Ok () -> (
-              match (try Ok (Eio.Path.rename temp target) with ex -> classify ex ~path) with
+              match try Ok (Eio.Path.rename temp target) with ex -> classify ex ~path with
               | Ok () -> Ok ()
               | Error error ->
                   (* Cleanup temp file on failed rename. *)
@@ -283,24 +297,27 @@ let read_range_body t ~max_bytes ~offset path =
   let* kind = classify_kind ~path kind in
   match kind with
   | `Directory ->
-      Error (Error.make Error.Invalid ~message:(path ^ ": that is a directory — list it, do not read it"))
+      Error
+        (Error.make Error.Invalid
+           ~message:(path ^ ": that is a directory — list it, do not read it"))
   | `Regular_file -> (
       try
         Eio.Path.with_open_in target (fun flow ->
-          let size = Optint.Int63.to_int (Eio.File.size flow) in
-          if offset >= size then Ok ("", false)
-          else
-            let want = min limit (size - offset) in
-            let buffer = Cstruct.create want in
-            Eio.File.pread_exact flow ~file_offset:(Optint.Int63.of_int offset) [buffer];
-            let got = Cstruct.to_string buffer in
-            Ok (got, size - (offset + String.length got) > 0))
+            let size = Optint.Int63.to_int (Eio.File.size flow) in
+            if offset >= size then Ok ("", false)
+            else
+              let want = min limit (size - offset) in
+              let buffer = Cstruct.create want in
+              Eio.File.pread_exact flow ~file_offset:(Optint.Int63.of_int offset) [ buffer ];
+              let got = Cstruct.to_string buffer in
+              Ok (got, size - (offset + String.length got) > 0))
       with ex -> classify ex ~path)
 
 let read_range ~controls ?max_bytes t ~offset path =
   Controls_raw.run controls ~operation:"fs.read_range"
     ~measure:(fun (content, _more) -> Some (String.length content))
-    ~notes:(fun (_content, more) -> [("offset", string_of_int offset); ("more", string_of_bool more)])
+    ~notes:(fun (_content, more) ->
+      [ ("offset", string_of_int offset); ("more", string_of_bool more) ])
     (fun () -> read_range_body t ~max_bytes ~offset path)
 
 let stat_body t path =
@@ -312,7 +329,7 @@ let stat_body t path =
 
 let stat ~controls t path =
   Controls_raw.run controls ~operation:"fs.stat"
-    ~notes:(fun (size, _atime) -> [("size", string_of_int size)])
+    ~notes:(fun (size, _atime) -> [ ("size", string_of_int size) ])
     (fun () -> stat_body t path)
 
 (* Unlink is idempotent on missing paths to tolerate concurrent eviction races. *)
@@ -323,4 +340,3 @@ let unlink_body t path =
 
 let unlink ~controls t path =
   Controls_raw.run controls ~operation:"fs.unlink" (fun () -> unlink_body t path)
-

@@ -12,9 +12,8 @@ module Provider = Seekwright.Provider
 module A = Alcotest
 open Test_support
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -28,8 +27,8 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 
 (* An adapter that honours everything, as a call site writes it. *)
 let honoured q =
-  Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true
-    ~language:(Some true) ~safety:true
+  Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some true)
+    ~safety:true
 
 (* The constraint report. *)
 
@@ -54,8 +53,8 @@ let each_bucket_names_its_token () =
       (* [~language:(Some false)]: this probe refuses every bucket, so each case
          has to name exactly one drop. *)
       match
-        Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false
-          ~language:(Some false) ~safety:false
+        Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:(Some false)
+          ~safety:false
       with
       | None -> A.failf "%s drew no notice" what
       | Some sentence ->
@@ -69,8 +68,7 @@ let the_geo_bucket_stays_joined_when_language_is_not_answered () =
      reports both halves as one token. *)
   let q = query ~country:"de" ~language:"de" () in
   check_string "the joined bucket" "cannot filter by country/language; that constraint was ignored"
-    (Option.value
-       ~default:""
+    (Option.value ~default:""
        (Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:None
           ~safety:true))
 
@@ -80,10 +78,9 @@ let a_split_bucket_names_only_what_dropped () =
      happen. *)
   let q = query ~country:"de" ~language:"de" () in
   check_string "the split bucket" "cannot filter by country; that constraint was ignored"
-    (Option.value
-       ~default:""
-       (Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false
-          ~language:(Some true) ~safety:true))
+    (Option.value ~default:""
+       (Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:(Some true)
+          ~safety:true))
 
 let every_dropped_bucket_is_named_in_order () =
   let q =
@@ -91,19 +88,18 @@ let every_dropped_bucket_is_named_in_order () =
       ~country:"de" ~language:"de" ~safe_search:true ()
   in
   check_string "all five buckets"
-    "cannot filter by domain or dates or country or language or safe-search; that \
-     constraint was ignored"
-    (Option.value
-       ~default:""
-       (Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false
-          ~language:(Some false) ~safety:false))
+    "cannot filter by domain or dates or country or language or safe-search; that constraint was \
+     ignored"
+    (Option.value ~default:""
+       (Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:(Some false)
+          ~safety:false))
 
 let a_constraint_that_is_not_asked_for_draws_no_notice () =
   (* The buckets fire on what the caller asked for, not on what the adapter
      cannot do: an incapable adapter with nothing asked files nothing. *)
   check_opt_string "nothing asked" None
-    (Provider.ignored_constraints (query ()) ~domains:false ~dates:false ~geo:false
-       ~language:None ~safety:false)
+    (Provider.ignored_constraints (query ()) ~domains:false ~dates:false ~geo:false ~language:None
+       ~safety:false)
 
 (* Folding domain filters into the query, for the backends where the operators
    are the interface. *)
@@ -116,10 +112,10 @@ let site_operators () =
     (Provider.site_filtered_query
        (query ~text:"wal mode" ~include_domains:[ "sqlite.org"; "python.org" ] ()));
   check_string "excludes carry the minus" "wal mode -site:spam.example"
-    (Provider.site_filtered_query
-       (query ~text:"wal mode" ~exclude_domains:[ "spam.example" ] ()));
+    (Provider.site_filtered_query (query ~text:"wal mode" ~exclude_domains:[ "spam.example" ] ()));
   check_string "both, includes first" "q site:a.com -site:b.com"
-    (Provider.site_filtered_query (query ~include_domains:[ "a.com" ] ~exclude_domains:[ "b.com" ] ()))
+    (Provider.site_filtered_query
+       (query ~include_domains:[ "a.com" ] ~exclude_domains:[ "b.com" ] ()))
 
 (* The caps. *)
 
@@ -266,7 +262,8 @@ let the_quota_row_is_never_retryable () =
   check_bool "not retryable" false e.retryable;
   check_bool "a quota failure" true (e.kind = Provider.Quota);
   check_string "a backend words its own quota failure" "out of credits or rate limited"
-    (Provider.quota_exhausted ~provider:"anysearch" ~message:"out of credits or rate limited" ()).message
+    (Provider.quota_exhausted ~provider:"anysearch" ~message:"out of credits or rate limited" ())
+      .message
 
 let the_auth_row_is_not_retryable () =
   let e = Provider.auth_error ~provider:"freeserp" in
@@ -325,7 +322,8 @@ let json_readers_drop_the_wrong_shape () =
   check_opt_string "a string field" (Some "t") (Provider.Json.string_field "title" record);
   check_opt_string "a missing field" None (Provider.Json.string_field "absent" record);
   check_opt_string "an object is not a string" None (Provider.Json.string_field "nested" record);
-  check_opt_string "an empty string is still a string" (Some "") (Provider.Json.string_field "empty" record);
+  check_opt_string "an empty string is still a string" (Some "")
+    (Provider.Json.string_field "empty" record);
   check_opt_number "a float" (Some 1.5) (Provider.Json.number_field "score" record);
   check_opt_number "an int" (Some 7.) (Provider.Json.number_field "count" record);
   (* [true] is not a number: Python's [isinstance(value, bool)] arm. *)
@@ -370,9 +368,9 @@ let forbidden =
 let adapter_sources =
   "../lib/provider.ml" :: "../lib/provider.mli"
   :: (Array.to_list (Sys.readdir "../lib/providers")
-      |> List.filter (fun name ->
-           Filename.check_suffix name ".ml" || Filename.check_suffix name ".mli")
-      |> List.map (Filename.concat "../lib/providers"))
+     |> List.filter (fun name ->
+         Filename.check_suffix name ".ml" || Filename.check_suffix name ".mli")
+     |> List.map (Filename.concat "../lib/providers"))
 
 let an_adapter_never_reaches_for_the_values_that_leak () =
   List.iter
@@ -380,7 +378,7 @@ let an_adapter_never_reaches_for_the_values_that_leak () =
       let text = read_file path in
       List.iter
         (fun needle ->
-          if contains ~haystack:text ~needle:needle then
+          if contains ~haystack:text ~needle then
             A.failf "%s mentions %S, which the redaction rule refuses" path needle)
         forbidden)
     adapter_sources;
@@ -391,67 +389,88 @@ let an_adapter_never_reaches_for_the_values_that_leak () =
     (List.length (List.filter (fun path -> Filename.check_suffix path ".ml") adapter_sources));
   List.iter
     (fun name ->
-      A.(check bool) (name ^ " is scanned") true
+      A.(check bool)
+        (name ^ " is scanned") true
         (List.exists (fun path -> Filename.basename path = name) adapter_sources))
-    [ "provider.ml"; "algolia.ml"; "anysearch.ml"; "deepseek.ml"; "exa.ml"; "freeserp.ml"
-    ; "linkup.ml"; "mcp_client.ml"; "parallel.ml"; "querit.ml"; "scrappa.ml"; "search1api.ml"
-    ; "searxng.ml"; "serpapi.ml"; "serper.ml"; "tavily.ml"; "tinyfish.ml" ]
+    [
+      "provider.ml";
+      "algolia.ml";
+      "anysearch.ml";
+      "deepseek.ml";
+      "exa.ml";
+      "freeserp.ml";
+      "linkup.ml";
+      "mcp_client.ml";
+      "parallel.ml";
+      "querit.ml";
+      "scrappa.ml";
+      "search1api.ml";
+      "searxng.ml";
+      "serpapi.ml";
+      "serper.ml";
+      "tavily.ml";
+      "tinyfish.ml";
+    ]
 
 let () =
   A.(
     run "seekwright/provider"
       [
         ( "the constraint report",
-            [
-              test_case "an unconstrained query draws no notice" `Quick no_constraints_draws_no_notice;
-              test_case "each bucket names its own token" `Quick each_bucket_names_its_token;
-              test_case "the geo bucket stays joined when language is not answered" `Quick
-                the_geo_bucket_stays_joined_when_language_is_not_answered;
-              test_case "a split bucket names only what dropped" `Quick
-                a_split_bucket_names_only_what_dropped;
-              test_case "every dropped bucket is named in order" `Quick
-                every_dropped_bucket_is_named_in_order;
-              test_case "a constraint that is not asked for draws no notice" `Quick
-                a_constraint_that_is_not_asked_for_draws_no_notice;
-            ] );
-        ("folding domain filters into the query", [ test_case "the site: operators" `Quick site_operators ]);
+          [
+            test_case "an unconstrained query draws no notice" `Quick no_constraints_draws_no_notice;
+            test_case "each bucket names its own token" `Quick each_bucket_names_its_token;
+            test_case "the geo bucket stays joined when language is not answered" `Quick
+              the_geo_bucket_stays_joined_when_language_is_not_answered;
+            test_case "a split bucket names only what dropped" `Quick
+              a_split_bucket_names_only_what_dropped;
+            test_case "every dropped bucket is named in order" `Quick
+              every_dropped_bucket_is_named_in_order;
+            test_case "a constraint that is not asked for draws no notice" `Quick
+              a_constraint_that_is_not_asked_for_draws_no_notice;
+          ] );
+        ( "folding domain filters into the query",
+          [ test_case "the site: operators" `Quick site_operators ] );
         ( "the caps",
-            [
-              test_case "a short snippet is returned whole" `Quick a_short_snippet_is_returned_whole;
-              test_case "a missing snippet stays missing" `Quick a_missing_snippet_stays_missing;
-              test_case "whitespace is normalised before the cap" `Quick
-                whitespace_is_normalised_before_the_cap;
-              test_case "unicode whitespace is normalised before the cap" `Quick
-                unicode_whitespace_is_normalised_before_the_cap;
-              test_case "a sentence boundary beats mid-word" `Quick a_sentence_boundary_beats_mid_word;
-              test_case "a boundary too early is not used" `Quick a_boundary_too_early_is_not_used;
-              test_case "the cap counts characters, not bytes" `Quick the_cap_counts_characters_not_bytes;
-              test_case "the crossing pairs match the oracle" `Quick
-                the_crossing_pairs_match_the_oracle;
-              test_case "ASCII pairs match the oracle" `Quick ascii_caps_match_the_oracle;
-              test_case "inline text reports whether it was cut" `Quick text_reports_whether_it_was_cut;
-              test_case "empty text is absent, not empty" `Quick empty_text_is_absent_not_empty;
-            ] );
+          [
+            test_case "a short snippet is returned whole" `Quick a_short_snippet_is_returned_whole;
+            test_case "a missing snippet stays missing" `Quick a_missing_snippet_stays_missing;
+            test_case "whitespace is normalised before the cap" `Quick
+              whitespace_is_normalised_before_the_cap;
+            test_case "unicode whitespace is normalised before the cap" `Quick
+              unicode_whitespace_is_normalised_before_the_cap;
+            test_case "a sentence boundary beats mid-word" `Quick a_sentence_boundary_beats_mid_word;
+            test_case "a boundary too early is not used" `Quick a_boundary_too_early_is_not_used;
+            test_case "the cap counts characters, not bytes" `Quick
+              the_cap_counts_characters_not_bytes;
+            test_case "the crossing pairs match the oracle" `Quick
+              the_crossing_pairs_match_the_oracle;
+            test_case "ASCII pairs match the oracle" `Quick ascii_caps_match_the_oracle;
+            test_case "inline text reports whether it was cut" `Quick
+              text_reports_whether_it_was_cut;
+            test_case "empty text is absent, not empty" `Quick empty_text_is_absent_not_empty;
+          ] );
         ( "the failure rows",
-            [
-              test_case "the quota row is never retryable" `Quick the_quota_row_is_never_retryable;
-              test_case "the auth row is not retryable" `Quick the_auth_row_is_not_retryable;
-              test_case "the status row carries only the code" `Quick
-                the_status_row_carries_only_the_code;
-              test_case "the grant answers its two transport rows" `Quick
-                the_grant_answered_its_two_transport_rows;
-              test_case "a body that is not an object is the same failure" `Quick
-                a_body_that_is_not_an_object_is_the_same_failure;
-            ] );
+          [
+            test_case "the quota row is never retryable" `Quick the_quota_row_is_never_retryable;
+            test_case "the auth row is not retryable" `Quick the_auth_row_is_not_retryable;
+            test_case "the status row carries only the code" `Quick
+              the_status_row_carries_only_the_code;
+            test_case "the grant answers its two transport rows" `Quick
+              the_grant_answered_its_two_transport_rows;
+            test_case "a body that is not an object is the same failure" `Quick
+              a_body_that_is_not_an_object_is_the_same_failure;
+          ] );
         ( "reading an upstream payload",
-            [
-              test_case "a field of the wrong shape is absent" `Quick json_readers_drop_the_wrong_shape;
-              test_case "the project URL is the one the oracle prints" `Quick
-                project_url_is_the_one_the_providers_send;
-            ] );
+          [
+            test_case "a field of the wrong shape is absent" `Quick
+              json_readers_drop_the_wrong_shape;
+            test_case "the project URL is the one the oracle prints" `Quick
+              project_url_is_the_one_the_providers_send;
+          ] );
         ( "the seam",
-            [
-              test_case "no adapter reads the values the redaction rule bans" `Quick
-                an_adapter_never_reaches_for_the_values_that_leak;
-            ] );
+          [
+            test_case "no adapter reads the values the redaction rule bans" `Quick
+              an_adapter_never_reaches_for_the_values_that_leak;
+          ] );
       ])

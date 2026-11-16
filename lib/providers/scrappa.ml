@@ -27,9 +27,7 @@ let request_uri (q : Provider.search_query) =
     ]
   in
   let params =
-    match q.Model.country with
-    | Some code -> params @ [ ("gl", [ code ]) ]
-    | None -> params
+    match q.Model.country with Some code -> params @ [ ("gl", [ code ]) ] | None -> params
   in
   let params =
     match q.Model.language with
@@ -57,18 +55,14 @@ let parse ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->
       match (Provider.Json.string_field "link" item, Provider.Json.string_field "title" item) with
       | Some url, Some title when url <> "" && title <> "" ->
           let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "snippet" item)
-              snippet_chars
+            Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
           in
           Some
             {

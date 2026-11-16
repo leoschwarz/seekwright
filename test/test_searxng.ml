@@ -23,14 +23,13 @@ let chars s =
   let n = ref 0 and i = ref 0 in
   while !i < String.length s do
     let c = Char.code s.[!i] in
-    i := !i + (if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4);
+    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
     incr n
   done;
   !n
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -81,8 +80,8 @@ let sample_json =
 let n_results n =
   `Assoc
     [
-      ( "results"
-      , `List
+      ( "results",
+        `List
           (List.init n (fun i ->
                `Assoc
                  [
@@ -105,9 +104,7 @@ let dial_pages ?(snippet_chars = 500) ?cost_per_1k ?(instance = instance) ~handl
           Ok (handler request));
     }
   in
-  let provider =
-    Searxng.make ?cost_per_1k ~snippet_chars ~endpoint:instance ~net ()
-  in
+  let provider = Searxng.make ?cost_per_1k ~snippet_chars ~endpoint:instance ~net () in
   (provider, fun () -> List.rev !sent)
 
 let answering ?(status = 200) ?(body = sample) () =
@@ -117,12 +114,7 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ()
   dial_pages ~snippet_chars ?cost_per_1k ~handler:(fun _ -> answering ~status ~body ()) ()
 
 let refusal kind ~message =
-  let net =
-    {
-      Provider.Net.request =
-        (fun _ -> Error (Caps.Error.make kind ~message));
-    }
-  in
+  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
   Searxng.make ~endpoint:instance ~net ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
@@ -140,11 +132,9 @@ let search_pages_of ?(handler = fun _ -> answering ()) ?(query = query ()) () =
 
 let params (request : Caps.Authority.Net.request) = Uri.query request.uri
 
-let param (request : Caps.Authority.Net.request) name =
-  Uri.get_query_param request.uri name
+let param (request : Caps.Authority.Net.request) name = Uri.get_query_param request.uri name
 
-let has_param request name =
-  List.exists (fun (key, _) -> key = name) (params request)
+let has_param request name = List.exists (fun (key, _) -> key = name) (params request)
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Searxng.parse ~snippet_chars data ~limit
 
@@ -158,11 +148,9 @@ let the_fixture_yields_both_records () =
   check_int "two results" 2 (List.length hits);
   check_string "the title" "Write-Ahead Logging" (List.hd hits).result.title;
   check_string "the url" "https://www.sqlite.org/wal.html" (List.hd hits).result.url;
-  check_string "the second url" "https://example.com/wal-explained"
-    (List.nth hits 1).result.url
+  check_string "the second url" "https://example.com/wal-explained" (List.nth hits 1).result.url
 
-let the_limit_is_honoured () =
-  check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
+let the_limit_is_honoured () = check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
 
 let content_becomes_the_snippet () =
   let hits = parse sample_json in
@@ -196,11 +184,13 @@ let the_published_date_is_kept_only_when_a_string () =
 
 let records_without_a_url_are_dropped () =
   check_int "no url" 0
-    (List.length (parse (`Assoc [ ("results", `List [ `Assoc [ ("title", `String "No url here") ] ]) ])))
+    (List.length
+       (parse (`Assoc [ ("results", `List [ `Assoc [ ("title", `String "No url here") ] ]) ])))
 
 let records_without_a_title_are_dropped () =
   check_int "no title" 0
-    (List.length (parse (`Assoc [ ("results", `List [ `Assoc [ ("url", `String "https://example.com") ] ]) ])))
+    (List.length
+       (parse (`Assoc [ ("results", `List [ `Assoc [ ("url", `String "https://example.com") ] ]) ])))
 
 let a_record_that_is_not_an_object_is_skipped () =
   check_int "the string is dropped, the object survives" 1
@@ -228,17 +218,17 @@ let a_non_string_content_is_dropped_and_the_call_succeeds () =
     (fun (what, value) ->
       let body = Yojson.Safe.to_string (results [ record [ ("content", value) ] ]) in
       let outcome, _ = search_of ~body ~query:(query ~max_results:1 ()) () in
-      check_int (Printf.sprintf "the call succeeded through %s" what) 1 (List.length outcome.results);
+      check_int
+        (Printf.sprintf "the call succeeded through %s" what)
+        1 (List.length outcome.results);
       check_opt_string what None (List.hd outcome.results).result.snippet)
     non_strings
 
 let a_string_content_still_reaches_the_model () =
   (* The guard must not change behaviour for a well-formed payload. *)
   let outcome, _ = search_of ~query:(query ~max_results:1 ()) () in
-  check_opt_string
-    "the snippet"
-    (Some
-       "The default method by which SQLite implements atomic commit is a rollback journal.")
+  check_opt_string "the snippet"
+    (Some "The default method by which SQLite implements atomic commit is a rollback journal.")
     (List.hd outcome.results).result.snippet
 
 let get_with_the_json_format_and_no_auth () =
@@ -251,8 +241,7 @@ let get_with_the_json_format_and_no_auth () =
   check_opt_string "the query" (Some "wal mode") (param request "q");
   (* Nothing authenticates this name: an instance has no API key for a search,
      and a header would name this client to the operator's logs. *)
-  check_bool "no authorization header" true
-    (List.assoc_opt "authorization" request.headers = None);
+  check_bool "no authorization header" true (List.assoc_opt "authorization" request.headers = None);
   check_bool "no x-api-key header" true (List.assoc_opt "x-api-key" request.headers = None)
 
 let the_instance_path_is_joined_not_replaced () =
@@ -261,7 +250,9 @@ let the_instance_path_is_joined_not_replaced () =
      keeps that prefix. *)
   List.iter
     (fun (written, expected) ->
-      check_string (Printf.sprintf "%s reaches %s" written expected) expected
+      check_string
+        (Printf.sprintf "%s reaches %s" written expected)
+        expected
         (Uri.to_string (Searxng.search_uri (Uri.of_string written))))
     [
       ("http://host:8080/", "http://host:8080/search");
@@ -271,16 +262,15 @@ let the_instance_path_is_joined_not_replaced () =
     ]
 
 let the_recency_maps_onto_time_range () =
-  let provider, sent =
-    dial_pages ~handler:(fun _ -> answering ()) ()
-  in
+  let provider, sent = dial_pages ~handler:(fun _ -> answering ()) () in
   List.iter
-    (fun period ->
-      ignore (Provider.search provider (query ~max_results:2 ~recency:period ())))
+    (fun period -> ignore (Provider.search provider (query ~max_results:2 ~recency:period ())))
     [ Model.Day; Model.Week; Model.Month; Model.Year ];
   check_strings "SearXNG's own enum, in the order asked"
     [ "day"; "week"; "month"; "year" ]
-    (List.map (fun request -> Option.value ~default:"(absent)" (param request "time_range")) (sent ()));
+    (List.map
+       (fun request -> Option.value ~default:"(absent)" (param request "time_range"))
+       (sent ()));
   let _, request = search_of ~query:(query ~max_results:2 ()) () in
   check_bool "unasked, no time_range" false (has_param request "time_range")
 
@@ -350,9 +340,13 @@ let a_failed_continuation_keeps_the_first_page () =
         else answering ~body:(Yojson.Safe.to_string (n_results 2)) ()
       in
       let outcome, sent = search_pages_of ~handler ~query:(query ~max_results:10 ()) () in
-      check_strings (Printf.sprintf "HTTP %d asked for two pages" status) [ "1"; "2" ]
+      check_strings
+        (Printf.sprintf "HTTP %d asked for two pages" status)
+        [ "1"; "2" ]
         (List.map (fun request -> Option.value ~default:"?" (param request "pageno")) sent);
-      check_int (Printf.sprintf "HTTP %d kept the first page" status) 2 (List.length outcome.results))
+      check_int
+        (Printf.sprintf "HTTP %d kept the first page" status)
+        2 (List.length outcome.results))
     [ 429; 500 ]
 
 let the_first_page_fails_the_call () =
@@ -376,8 +370,8 @@ let a_language_beside_a_country_is_still_honoured () =
     search_of ~query:(query ~max_results:2 ~country:"de" ~language:"de" ()) ()
   in
   check_opt_string "the language rode the wire" (Some "de") (param request "language");
-  check_string "only the country is named"
-    "cannot filter by country; that constraint was ignored" (Option.get outcome.notice)
+  check_string "only the country is named" "cannot filter by country; that constraint was ignored"
+    (Option.get outcome.notice)
 
 let a_language_alone_is_honoured_without_a_notice () =
   let outcome, _ = search_of ~query:(query ~max_results:2 ~language:"de" ()) () in
@@ -389,10 +383,10 @@ let the_safe_search_maps_onto_safesearch () =
      — the property the boolean rests on. *)
   List.iter
     (fun (value, wire) ->
-      let outcome, request =
-        search_of ~query:(query ~max_results:2 ~safe_search:value ()) ()
-      in
-      check_opt_string (Printf.sprintf "safesearch=%s" wire) (Some wire) (param request "safesearch");
+      let outcome, request = search_of ~query:(query ~max_results:2 ~safe_search:value ()) () in
+      check_opt_string
+        (Printf.sprintf "safesearch=%s" wire)
+        (Some wire) (param request "safesearch");
       check_opt_string "and nothing was dropped" None outcome.notice)
     [ (true, "2"); (false, "0") ]
 
@@ -404,15 +398,15 @@ let the_safesearch_is_omitted_when_none () =
 let a_safe_search_is_not_claimed_as_dropped () =
   (* The country still goes, and only the country is named. *)
   let outcome, _ = search_of ~query:(query ~max_results:2 ~country:"de" ~safe_search:true ()) () in
-  check_string "the country sentence, once"
-    "cannot filter by country; that constraint was ignored" (Option.get outcome.notice)
+  check_string "the country sentence, once" "cannot filter by country; that constraint was ignored"
+    (Option.get outcome.notice)
 
 let no_notice_for_what_it_honours () =
   let outcome, _ =
     search_of
       ~query:
-        (query ~max_results:2 ~include_domains:[ "sqlite.org" ] ~language:"de"
-           ~recency:Model.Week ~safe_search:true ())
+        (query ~max_results:2 ~include_domains:[ "sqlite.org" ] ~language:"de" ~recency:Model.Week
+           ~safe_search:true ())
       ()
   in
   check_opt_string "nothing dropped" None outcome.notice
@@ -474,8 +468,10 @@ let the_endpoint_is_the_instance_the_grant_allows () =
      by the registry and handed here as [endpoint], so the adapter dials the
      very instance it was built from — scheme, port and any mount prefix. *)
   let provider, sent =
-    dial_pages ~instance:(Uri.of_string "http://searx.internal:8888/mirror")
-      ~handler:(fun _ -> answering ()) ()
+    dial_pages
+      ~instance:(Uri.of_string "http://searx.internal:8888/mirror")
+      ~handler:(fun _ -> answering ())
+      ()
   in
   ignore (Provider.search provider (query ~max_results:1 ()));
   let request = List.hd (sent ()) in
@@ -487,91 +483,90 @@ let the_endpoint_is_the_instance_the_grant_allows () =
     (string_of_int (Option.value ~default:0 (Uri.port request.uri)))
 
 let () =
-  A.
-    (run "seekwright/searxng"
-       [
-         ( "parsing",
-             [
-               test_case "the live fixture yields both records" `Quick the_fixture_yields_both_records;
-               test_case "the limit is honoured" `Quick the_limit_is_honoured;
-               test_case "content becomes the snippet" `Quick content_becomes_the_snippet;
-               test_case "the snippet is truncated" `Quick the_snippet_is_truncated;
-               test_case "the engine and infobox metadata are dropped" `Quick
-                 the_engine_and_infobox_metadata_are_dropped;
-               test_case "the score is kept when numeric" `Quick the_score_is_kept_when_numeric;
-               test_case "a non-numeric score is not coerced" `Quick a_non_numeric_score_is_not_coerced;
-               test_case "the published date is kept only when a string" `Quick
-                 the_published_date_is_kept_only_when_a_string;
-               test_case "records without a url are dropped" `Quick records_without_a_url_are_dropped;
-               test_case "records without a title are dropped" `Quick
-                 records_without_a_title_are_dropped;
-               test_case "a record that is not an object is skipped" `Quick
-                 a_record_that_is_not_an_object_is_skipped;
-               test_case "missing results is empty, not an error" `Quick
-                 missing_results_is_empty_not_an_error;
-             ] );
-         ( "the upstream field guards",
-             [
-               test_case "a non-string content is dropped and the call succeeds" `Quick
-                 a_non_string_content_is_dropped_and_the_call_succeeds;
-               test_case "a string content still reaches the model" `Quick
-                 a_string_content_still_reaches_the_model;
-             ] );
-         ( "the request",
-             [
-               test_case "GET with the JSON format and no auth" `Quick
-                 get_with_the_json_format_and_no_auth;
-               test_case "the instance path is joined, not replaced" `Quick
-                 the_instance_path_is_joined_not_replaced;
-               test_case "the recency maps onto time_range" `Quick the_recency_maps_onto_time_range;
-               test_case "the language is passed verbatim" `Quick the_language_is_passed_verbatim;
-               test_case "the domain filters ride in the query" `Quick
-                 the_domain_filters_ride_in_the_query;
-             ] );
-         ( "paging",
-             [
-               test_case "a small ask stays a single request" `Quick
-                 a_small_ask_stays_a_single_request;
-               test_case "it pages while the ask exceeds the pages" `Quick
-                 it_paginates_while_the_ask_exceeds_the_pages;
-               test_case "paging stops when a page runs dry" `Quick paging_stops_when_a_page_runs_dry;
-               test_case "paging is bounded at three pages" `Quick paging_is_bounded_at_three_pages;
-               test_case "a failed continuation keeps the first page" `Quick
-                 a_failed_continuation_keeps_the_first_page;
-               test_case "the first page fails the call" `Quick the_first_page_fails_the_call;
-             ] );
-         ( "the constraint report",
-             [
-               test_case "the notice names the country it cannot honour" `Quick
-                 the_notice_names_the_country_it_cannot_honour;
-               test_case "a language beside a country is still honoured" `Quick
-                 a_language_beside_a_country_is_still_honoured;
-               test_case "a language alone is honoured without a notice" `Quick
-                 a_language_alone_is_honoured_without_a_notice;
-               test_case "the safe-search maps onto safesearch" `Quick
-                 the_safe_search_maps_onto_safesearch;
-               test_case "the safesearch is omitted when none" `Quick
-                 the_safesearch_is_omitted_when_none;
-               test_case "a safe search is not claimed as dropped" `Quick
-                 a_safe_search_is_not_claimed_as_dropped;
-               test_case "no notice for what it honours" `Quick no_notice_for_what_it_honours;
-               test_case "the result reports a flat zero cost" `Quick
-                 the_result_reports_a_flat_zero_cost;
-             ] );
-         ( "the failures this adapter owns",
-             [
-               test_case "the rate limit is quota" `Quick the_rate_limit_is_quota;
-               test_case "a payment status falls to the generic row" `Quick
-                 a_payment_status_falls_to_the_generic_row;
-               test_case "a network error does not echo the request" `Quick
-                 a_network_error_does_not_echo_the_request;
-             ] );
-         ( "cost and the instance",
-             [
-               test_case "the cost is flat zero" `Quick the_cost_is_flat_zero;
-               test_case "config can correct the figure, and zero is the default" `Quick
-                 config_can_correct_the_figure_but_zero_is_the_default;
-               test_case "the endpoint is the instance the grant allows" `Quick
-                 the_endpoint_is_the_instance_the_grant_allows;
-             ] );
-       ])
+  A.(
+    run "seekwright/searxng"
+      [
+        ( "parsing",
+          [
+            test_case "the live fixture yields both records" `Quick the_fixture_yields_both_records;
+            test_case "the limit is honoured" `Quick the_limit_is_honoured;
+            test_case "content becomes the snippet" `Quick content_becomes_the_snippet;
+            test_case "the snippet is truncated" `Quick the_snippet_is_truncated;
+            test_case "the engine and infobox metadata are dropped" `Quick
+              the_engine_and_infobox_metadata_are_dropped;
+            test_case "the score is kept when numeric" `Quick the_score_is_kept_when_numeric;
+            test_case "a non-numeric score is not coerced" `Quick a_non_numeric_score_is_not_coerced;
+            test_case "the published date is kept only when a string" `Quick
+              the_published_date_is_kept_only_when_a_string;
+            test_case "records without a url are dropped" `Quick records_without_a_url_are_dropped;
+            test_case "records without a title are dropped" `Quick
+              records_without_a_title_are_dropped;
+            test_case "a record that is not an object is skipped" `Quick
+              a_record_that_is_not_an_object_is_skipped;
+            test_case "missing results is empty, not an error" `Quick
+              missing_results_is_empty_not_an_error;
+          ] );
+        ( "the upstream field guards",
+          [
+            test_case "a non-string content is dropped and the call succeeds" `Quick
+              a_non_string_content_is_dropped_and_the_call_succeeds;
+            test_case "a string content still reaches the model" `Quick
+              a_string_content_still_reaches_the_model;
+          ] );
+        ( "the request",
+          [
+            test_case "GET with the JSON format and no auth" `Quick
+              get_with_the_json_format_and_no_auth;
+            test_case "the instance path is joined, not replaced" `Quick
+              the_instance_path_is_joined_not_replaced;
+            test_case "the recency maps onto time_range" `Quick the_recency_maps_onto_time_range;
+            test_case "the language is passed verbatim" `Quick the_language_is_passed_verbatim;
+            test_case "the domain filters ride in the query" `Quick
+              the_domain_filters_ride_in_the_query;
+          ] );
+        ( "paging",
+          [
+            test_case "a small ask stays a single request" `Quick a_small_ask_stays_a_single_request;
+            test_case "it pages while the ask exceeds the pages" `Quick
+              it_paginates_while_the_ask_exceeds_the_pages;
+            test_case "paging stops when a page runs dry" `Quick paging_stops_when_a_page_runs_dry;
+            test_case "paging is bounded at three pages" `Quick paging_is_bounded_at_three_pages;
+            test_case "a failed continuation keeps the first page" `Quick
+              a_failed_continuation_keeps_the_first_page;
+            test_case "the first page fails the call" `Quick the_first_page_fails_the_call;
+          ] );
+        ( "the constraint report",
+          [
+            test_case "the notice names the country it cannot honour" `Quick
+              the_notice_names_the_country_it_cannot_honour;
+            test_case "a language beside a country is still honoured" `Quick
+              a_language_beside_a_country_is_still_honoured;
+            test_case "a language alone is honoured without a notice" `Quick
+              a_language_alone_is_honoured_without_a_notice;
+            test_case "the safe-search maps onto safesearch" `Quick
+              the_safe_search_maps_onto_safesearch;
+            test_case "the safesearch is omitted when none" `Quick
+              the_safesearch_is_omitted_when_none;
+            test_case "a safe search is not claimed as dropped" `Quick
+              a_safe_search_is_not_claimed_as_dropped;
+            test_case "no notice for what it honours" `Quick no_notice_for_what_it_honours;
+            test_case "the result reports a flat zero cost" `Quick
+              the_result_reports_a_flat_zero_cost;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "the rate limit is quota" `Quick the_rate_limit_is_quota;
+            test_case "a payment status falls to the generic row" `Quick
+              a_payment_status_falls_to_the_generic_row;
+            test_case "a network error does not echo the request" `Quick
+              a_network_error_does_not_echo_the_request;
+          ] );
+        ( "cost and the instance",
+          [
+            test_case "the cost is flat zero" `Quick the_cost_is_flat_zero;
+            test_case "config can correct the figure, and zero is the default" `Quick
+              config_can_correct_the_figure_but_zero_is_the_default;
+            test_case "the endpoint is the instance the grant allows" `Quick
+              the_endpoint_is_the_instance_the_grant_allows;
+          ] );
+      ])

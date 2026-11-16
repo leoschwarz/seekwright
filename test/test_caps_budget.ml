@@ -38,8 +38,9 @@ let test_a_budget_spends_its_limit_and_no_more () =
   let second = Budget.take budget in
   let third = Budget.take budget in
   let fourth = Budget.take budget in
-  A.(check (A.list A.bool) "the first three are granted, the fourth is not"
-       [ true; true; true; false ] [ first; second; third; fourth ]);
+  A.(
+    check (A.list A.bool) "the first three are granted, the fourth is not"
+      [ true; true; true; false ] [ first; second; third; fourth ]);
   A.(check int "spent" 0 (Budget.remaining budget));
   A.(check int "the limit does not move when it is spent" 3 (Budget.limit budget));
   (* spent is spent: a refusal does not hand the operation back *)
@@ -57,8 +58,9 @@ let test_a_non_positive_budget_spends_nothing () =
       A.(check int "nothing may be spent" 0 (Budget.remaining budget));
       A.(check bool "every operation is refused" false (Budget.take budget));
       A.(check bool "again" false (Budget.take budget));
-      A.(check int "and the count stays at zero rather than going negative" 0
-           (Budget.remaining budget)))
+      A.(
+        check int "and the count stays at zero rather than going negative" 0
+          (Budget.remaining budget)))
     [ 0; -1; -100 ]
 
 (* [remaining] is a snapshot, not a reservation: it reports what is available at
@@ -81,8 +83,12 @@ let test_remaining_is_a_snapshot_not_a_reservation () =
   in
   let first = snapshot_then_take () in
   let second = snapshot_then_take () in
-  A.(check (A.list A.(pair int bool)) "the snapshot can be stale, the reservation cannot"
-       [ (1, true); (0, false) ] [ first; second ])
+  A.(
+    check
+      (A.list A.(pair int bool))
+      "the snapshot can be stale, the reservation cannot"
+      [ (1, true); (0, false) ]
+      [ first; second ])
 
 (* Domains, not fibers: [take] is stdlib [Atomic], so the race worth pinning is
    a real parallel one — N threads at the boundary, each racing to reserve the
@@ -94,17 +100,15 @@ let test_a_budget_across_domains_spends_exactly_its_limit () =
       let competitors = 32 in
       let granted =
         List.map Domain.join
-        @@ List.init competitors
-             (fun _ ->
-               Domain.spawn
-                 (fun () ->
-                   let hits = ref 0 in
-                   for _ = 1 to 20 do
-                     if Budget.take budget then incr hits
-                   done;
-                   !hits))
+        @@ List.init competitors (fun _ ->
+            Domain.spawn (fun () ->
+                let hits = ref 0 in
+                for _ = 1 to 20 do
+                  if Budget.take budget then incr hits
+                done;
+                !hits))
       in
-      let total = List.fold_left (+) 0 granted in
+      let total = List.fold_left ( + ) 0 granted in
       check_int
         (Printf.sprintf "%d competitors, limit %d: exactly the limit is granted" competitors limit)
         limit total;
@@ -120,9 +124,7 @@ let test_fibers_sharing_a_grant_are_granted_exactly_the_limit () =
   let fibers = 16 in
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  let socket =
-    Eio.Net.listen ~backlog:32 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:32 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -139,9 +141,9 @@ let test_fibers_sharing_a_grant_are_granted_exactly_the_limit () =
   let stop, fill_stop = Eio.Promise.create () in
   let stopped, fill_stopped = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
-    Fun.protect
-      ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-      (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
+      Fun.protect
+        ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+        (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
   Fun.protect
     ~finally:(fun () ->
       Eio.Promise.resolve fill_stop ();
@@ -162,19 +164,21 @@ let test_fibers_sharing_a_grant_are_granted_exactly_the_limit () =
              every fiber reaches for the same counter at the same moment; the
              result of each call is parked in a reference because the combinators
              themselves hand back [unit]. *)
-          let results = Array.make fibers (Ok { Authority.Net.status = 0; headers = []; body = "" }) in
+          let results =
+            Array.make fibers (Ok { Authority.Net.status = 0; headers = []; body = "" })
+          in
           Eio.Fiber.all
             (List.mapi
                (fun index () ->
                  fun () ->
-                   results.(index)
-                   <- Authority.Net.request grant
-                        {
-                          meth = `GET;
-                          uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/" port);
-                          headers = [];
-                          body = None;
-                        })
+                  results.(index) <-
+                    Authority.Net.request grant
+                      {
+                        meth = `GET;
+                        uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/" port);
+                        headers = [];
+                        body = None;
+                      })
                (List.init fibers (fun _ -> ())));
           let results = Array.to_list results in
           let successes =
@@ -187,8 +191,9 @@ let test_fibers_sharing_a_grant_are_granted_exactly_the_limit () =
               (fun acc result ->
                 match result with
                 | Error error ->
-                    A.(check string "a spent budget refuses" "denied"
-                         (Error.kind_to_string (Error.kind error)));
+                    A.(
+                      check string "a spent budget refuses" "denied"
+                        (Error.kind_to_string (Error.kind error)));
                     includes "the refusal names the caller's ceiling" "operation budget"
                       (Error.message error);
                     acc + 1
@@ -220,12 +225,10 @@ let test_one_budget_spans_every_grant_it_is_attached_to () =
       let mono_clock = Eio.Stdenv.mono_clock env in
       let budget = Budget.make 3 in
       let first =
-        Authority.with_operation_budget budget
-          (Authority.Fs.of_confinement ~mono_clock confinement)
+        Authority.with_operation_budget budget (Authority.Fs.of_confinement ~mono_clock confinement)
       in
       let second =
-        Authority.with_operation_budget budget
-          (Authority.Fs.of_confinement ~mono_clock confinement)
+        Authority.with_operation_budget budget (Authority.Fs.of_confinement ~mono_clock confinement)
       in
       (* alternating, so neither grant can be quietly counting its own *)
       let calls =
@@ -245,8 +248,10 @@ let test_one_budget_spans_every_grant_it_is_attached_to () =
             | Error error -> Error.kind_to_string (Error.kind error))
           calls
       in
-      A.(check (A.list A.string) "three granted across both grants, then refused"
-           [ "ok"; "ok"; "ok"; "denied"; "denied" ] kinds);
+      A.(
+        check (A.list A.string) "three granted across both grants, then refused"
+          [ "ok"; "ok"; "ok"; "denied"; "denied" ]
+          kinds);
       A.(check int "one counter, spent once" 0 (Budget.remaining budget))
 
 (* Two budgets stay apart, and a grant keeps its own counter after a caller's is
@@ -278,9 +283,10 @@ let test_two_budgets_do_not_share_a_counter () =
       let loose_first = kinds loose in
       let loose_second = kinds loose in
       let loose_third = kinds loose in
-      A.(check (A.list A.string) "each grant spends its own counter"
-           [ "ok"; "denied"; "ok"; "ok"; "denied" ]
-           [ tight_first; tight_second; loose_first; loose_second; loose_third ]);
+      A.(
+        check (A.list A.string) "each grant spends its own counter"
+          [ "ok"; "denied"; "ok"; "ok"; "denied" ]
+          [ tight_first; tight_second; loose_first; loose_second; loose_third ]);
       A.(check string "and the undecorated grant is unbounded" "ok" (kinds plain));
       A.(check string "still unbounded after the others ran out" "ok" (kinds plain))
 
@@ -295,7 +301,7 @@ let test_a_spent_budget_refuses_without_running_the_operation () =
   Eio.Switch.run @@ fun sw ->
   match Policy.with_root ~sw ~parent:(Eio.Stdenv.fs env) root with
   | Error error -> A.failf "with_root: %s" (Error.render error)
-  | Ok confinement ->
+  | Ok confinement -> (
       let grant =
         Authority.with_operation_budget budget
           (Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement)
@@ -303,27 +309,31 @@ let test_a_spent_budget_refuses_without_running_the_operation () =
       (match Authority.Fs.read_file grant "no-such-file-at-all" with
       | Ok _ -> A.fail "the read ran"
       | Error error ->
-          A.(check string "refused before the filesystem was touched" "denied"
-               (Error.kind_to_string (Error.kind error)));
+          A.(
+            check string "refused before the filesystem was touched" "denied"
+              (Error.kind_to_string (Error.kind error)));
           includes "the sentence names the caller's ceiling" "operation budget of 0"
             (Error.message error);
           (* the refusal is about the count, never about the argument: a path is
              not something the audit trail and the tool result carry *)
-          A.(check bool "the message does not name the path" false
-               (contains ~haystack:(Error.message error) ~needle:"no-such-file-at-all"));
-          A.(check bool "the message does not name the root" false
-               (contains ~haystack:(Error.message error) ~needle:root)));
+          A.(
+            check bool "the message does not name the path" false
+              (contains ~haystack:(Error.message error) ~needle:"no-such-file-at-all"));
+          A.(
+            check bool "the message does not name the root" false
+              (contains ~haystack:(Error.message error) ~needle:root)));
       (match Authority.Fs.list_dir grant "" with
       | Ok _ -> A.fail "the listing ran"
       | Error error ->
-          A.(check string "the other operation of the same grant is refused too" "denied"
-               (Error.kind_to_string (Error.kind error))));
+          A.(
+            check string "the other operation of the same grant is refused too" "denied"
+              (Error.kind_to_string (Error.kind error))));
       (* and a spent counter stays spent while the grant itself is fine: the
          same confinement, undecorated, still answers *)
       let plain = Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement in
       match Authority.Fs.list_dir plain "" with
       | Error error -> A.failf "the undecorated grant should answer: %s" (Error.render error)
-      | Ok names -> A.(check (A.list A.string) "the confinement is unchanged" [] names)
+      | Ok names -> A.(check (A.list A.string) "the confinement is unchanged" [] names))
 
 (* Retaining the decorated grant is the point of the decorator: the same caller,
    the same counter, over every operation it goes on to do. *)
@@ -353,11 +363,13 @@ let test_a_decorated_grant_keeps_spending_the_same_counter () =
             | Error error -> Error.kind_to_string (Error.kind error))
           paths
       in
-      A.(check (A.list A.string) "the retained grant spends the same counter"
-           [ "ok"; "ok"; "ok"; "denied" ]
-           (kinds [ "n1.md"; "n2.md"; "n3.md"; "n4.md" ]));
-      A.(check int "and the budget sees all four calls, not the last one's" 0
-           (Budget.remaining budget));
+      A.(
+        check (A.list A.string) "the retained grant spends the same counter"
+          [ "ok"; "ok"; "ok"; "denied" ]
+          (kinds [ "n1.md"; "n2.md"; "n3.md"; "n4.md" ]));
+      A.(
+        check int "and the budget sees all four calls, not the last one's" 0
+          (Budget.remaining budget));
       ignore (kinds [ "n1.md" ])
 
 (* A budget bounds the count of operations, never their cost — the docstring's
@@ -381,20 +393,23 @@ let test_a_budget_counts_operations_not_bytes () =
      that the *count* runs out, not the byte ceiling *)
   match Policy.with_root ~sw ~max_read_bytes:1_000_000 ~parent:(Eio.Stdenv.fs env) root with
   | Error error -> A.failf "with_root: %s" (Error.render error)
-  | Ok confinement ->
+  | Ok confinement -> (
       let grant =
         Authority.with_operation_budget budget
           (Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement)
       in
       match (Authority.Fs.read_file grant "small.txt", Authority.Fs.read_file grant "big.txt") with
-      | Error error, _ | _, Error error -> A.failf "both reads are within their ceilings: %s" (Error.render error)
+      | Error error, _ | _, Error error ->
+          A.failf "both reads are within their ceilings: %s" (Error.render error)
       | Ok small_text, Ok big_text ->
           A.(check int "one byte" 1 (String.length small_text));
           A.(check int "four hundred thousand bytes" (400 * 1024) (String.length big_text));
-          A.(check int "and the budget spent two, because it counts calls" 0
-               (Budget.remaining budget));
-          A.(check bool "the third is refused whatever its size would have been" false
-               (Budget.take budget))
+          A.(
+            check int "and the budget spent two, because it counts calls" 0
+              (Budget.remaining budget));
+          A.(
+            check bool "the third is refused whatever its size would have been" false
+              (Budget.take budget)))
 
 let () =
   A.run "caps-budget"

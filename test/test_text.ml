@@ -79,9 +79,11 @@ let test_a_malformed_sequence_costs_one_per_maximal_subpart () =
   A.(check int) "a five-byte payload costs five" 5 (U.count "\xf8abcd");
   (* The codec agrees with the count: an ill-formed subpart decodes to U+FFFD and
      re-encodes to its bytes, so the round trip is stable, not byte-identical. *)
-  A.(check string) "decode then encode replaces" "\xef\xbf\xbdabc"
+  A.(check string)
+    "decode then encode replaces" "\xef\xbf\xbdabc"
     (U.to_string (U.of_string "\xe2abc"));
-  A.(check string) "the overlong pair is two replacements" "\xef\xbf\xbd\xef\xbf\xbd"
+  A.(check string)
+    "the overlong pair is two replacements" "\xef\xbf\xbd\xef\xbf\xbd"
     (U.to_string (U.of_string "\xc0\xaf"))
 
 let test_slices_and_codepoints_agree_with_the_walk () =
@@ -95,24 +97,25 @@ let test_slices_and_codepoints_agree_with_the_walk () =
   A.(check string) "and they re-join" s (String.concat "" (Array.to_list slices));
   (* The truncated case again: the last width is the bytes present, not the
      sequence's nominal width. *)
-  A.(check (list int)) "a truncated last width is clamped" [ 1; 2 ]
+  A.(check (list int))
+    "a truncated last width is clamped" [ 1; 2 ]
     (List.map (fun cp -> cp.U.width) (U.codepoints "a\xe2\x80"))
 
 let test_the_array_round_trips () =
   List.iter
-    (fun s ->
-      A.(check string) ("round trip " ^ String.escaped s) s (U.to_string (U.of_string s)))
+    (fun s -> A.(check string) ("round trip " ^ String.escaped s) s (U.to_string (U.of_string s)))
     [ ""; "plain"; "caf\xc3\xa9"; "\xe2\x82\xac euro"; "\xf0\x9f\x98\x80 emoji" ];
   (* The lenient half of the contract: a byte sequence the encoder would not
      emit is still {i one} entry, and re-encoding writes the well-formed
      sequence for whatever value the decode landed on — byte identity across a
      malformed input is not the promise, {i never raising} and {i one entry per
      bad lead} are. *)
-  A.(check int) "a truncated sequence is still one entry" 2
-    (Array.length (U.of_string "a\xe2\x80"));
-  A.(check int) "the truncated entry holds the bytes present" 1
+  A.(check int) "a truncated sequence is still one entry" 2 (Array.length (U.of_string "a\xe2\x80"));
+  A.(check int)
+    "the truncated entry holds the bytes present" 1
     (List.length (List.filter (fun cp -> cp.U.width = 2) (U.codepoints "a\xe2\x80")));
-  A.(check bool) "and the walk stops at the end without raising" true
+  A.(check bool)
+    "and the walk stops at the end without raising" true
     (U.next_index "a\xe2\x80" 1 = 3)
 
 let test_encode_writes_the_sequence () =
@@ -120,19 +123,37 @@ let test_encode_writes_the_sequence () =
   A.(check string) "two bytes" "\xc3\xa9" (U.encode 0xe9);
   A.(check string) "three bytes" "\xe2\x82\xac" (U.encode 0x20ac);
   A.(check string) "four bytes" "\xf0\x9f\x98\x80" (U.encode 0x1f600);
-  A.(check bool) "and decodes back" true
-    (List.for_all
-       (fun cp -> U.of_string (U.encode cp) = [| cp |])
-       [ 0x41; 0xa0; 0x2028; 0x1f600 ])
+  A.(check bool)
+    "and decodes back" true
+    (List.for_all (fun cp -> U.of_string (U.encode cp) = [| cp |]) [ 0x41; 0xa0; 0x2028; 0x1f600 ])
 
 let test_the_whitespace_set_is_pythons () =
   (* [is_python_space] is [str.isspace()], which is what [strip], [split] and
      [splitlines] all agree on. One set, one rule: the old ASCII-only set was a
      behavioural fork. *)
   List.iter
-    (fun cp ->
-      A.(check bool) (Printf.sprintf "python space U+%04X" cp) true (U.is_python_space cp))
-    [ 0x09; 0x0a; 0x0b; 0x0c; 0x0d; 0x20; 0x1c; 0x1d; 0x1e; 0x1f; 0x85; 0xa0; 0x1680; 0x2000; 0x2028; 0x2029; 0x202f; 0x205f; 0x3000 ];
+    (fun cp -> A.(check bool) (Printf.sprintf "python space U+%04X" cp) true (U.is_python_space cp))
+    [
+      0x09;
+      0x0a;
+      0x0b;
+      0x0c;
+      0x0d;
+      0x20;
+      0x1c;
+      0x1d;
+      0x1e;
+      0x1f;
+      0x85;
+      0xa0;
+      0x1680;
+      0x2000;
+      0x2028;
+      0x2029;
+      0x202f;
+      0x205f;
+      0x3000;
+    ];
   A.(check bool) "a letter is not" false (U.is_python_space (Char.code 'a'));
   A.(check bool) "and NUL is not" false (U.is_python_space 0x00)
 
@@ -143,9 +164,9 @@ let test_strip_and_split_use_the_unicode_set () =
   A.(check string) "strip drops both ends" "a b" (U.strip padded);
   A.(check string) "lstrip alone" "a b \xe3\x80\x80" (U.lstrip padded);
   A.(check string) "rstrip alone" "\xe3\x80\x80\xc2\xa0 a b" (U.rstrip padded);
-  A.(check (list string)) "split collapses every run" [ "a"; "b" ]
-    (U.split_whitespace padded);
-  A.(check (list string)) "an all-blank string has no words" []
+  A.(check (list string)) "split collapses every run" [ "a"; "b" ] (U.split_whitespace padded);
+  A.(check (list string))
+    "an all-blank string has no words" []
     (U.split_whitespace "\xe3\x80\x80\xc2\xa0");
   A.(check (list string)) "empty is no words" [] (U.split_whitespace "")
 
@@ -154,16 +175,17 @@ let test_splitlines_breaks_where_python_does () =
   A.(check (list string)) "one line" [ "a b" ] (lines "a b");
   A.(check (list string)) "two lines" [ "a"; "b" ] (lines "a\nb");
   A.(check (list string)) "a trailing break adds no empty line" [ "a" ] (lines "a\n");
-  A.(check (list string)) "two breaks end with the one empty line they made"
-    [ "a"; "" ] (lines "a\n\n");
+  A.(check (list string))
+    "two breaks end with the one empty line they made" [ "a"; "" ] (lines "a\n\n");
   A.(check (list string)) "empty input has no lines" [] (lines "");
   A.(check (list string)) "the separators break" [ "a"; "b"; "c" ] (lines "a\x1cb\x1ec");
   A.(check (list string)) "NEL breaks" [ "a"; "b" ] (lines "a\xc2\x85b");
-  A.(check (list string)) "the Unicode line and paragraph separators break"
-    [ "a"; "b"; "c" ] (lines ("a\xe2\x80\xa8b\xe2\x80\xa9c"));
+  A.(check (list string))
+    "the Unicode line and paragraph separators break" [ "a"; "b"; "c" ]
+    (lines "a\xe2\x80\xa8b\xe2\x80\xa9c");
   (* CR is a boundary on its own, and [CRLF] is one break: Python's rule. *)
-  A.(check (list string)) "CRLF is one break with no CR left in the line"
-    [ "a"; "b" ] (lines "a\r\nb");
+  A.(check (list string))
+    "CRLF is one break with no CR left in the line" [ "a"; "b" ] (lines "a\r\nb");
   A.(check (list string)) "a lone CR breaks too" [ "a"; "b" ] (lines "a\rb");
   A.(check bool) "CR is a boundary" true (U.is_line_boundary 0x0d);
   A.(check bool) "a tab is not" false (U.is_line_boundary (Char.code '\t'))
@@ -177,15 +199,15 @@ let test_the_log_repr_is_the_one_a_refusal_quotes_with () =
   A.(check string) "empty" "''" (R.py_repr "");
   (* The rule that makes a log line safe: a newline in a scraped title is
      named, so it cannot close one record and open a fabricated one. *)
-  A.(check string) "newline, tab, carriage return" "'a\\nb\\tc\\rd'"
-    (R.py_repr "a\nb\tc\rd");
+  A.(check string) "newline, tab, carriage return" "'a\\nb\\tc\\rd'" (R.py_repr "a\nb\tc\rd");
   A.(check string) "backslash" "'a\\\\b'" (R.py_repr "a\\b");
   (* Single quotes unless the text holds one and no double quote. *)
   A.(check string) "an apostrophe picks double quotes" "\"it's\"" (R.py_repr "it's");
-  A.(check string) "a double quote stays inside single quotes" "'say \"hi\"'"
-    (R.py_repr "say \"hi\"");
-  A.(check string) "both quotes keeps singles and escapes the apostrophe"
-    "'it\\'s \"ok\"'" (R.py_repr "it's \"ok\"");
+  A.(check string)
+    "a double quote stays inside single quotes" "'say \"hi\"'" (R.py_repr "say \"hi\"");
+  A.(check string)
+    "both quotes keeps singles and escapes the apostrophe" "'it\\'s \"ok\"'"
+    (R.py_repr "it's \"ok\"");
   (* Control bytes and DEL are [\\xNN]; a non-ASCII printable is left alone,
      because a log reader keeps UTF-8 and rewriting it would hide the page. *)
   A.(check string) "control bytes" "'\\x01\\x7f'" (R.py_repr "\x01\x7f");
@@ -197,53 +219,52 @@ let test_the_log_repr_is_the_one_a_refusal_quotes_with () =
   A.(check string) "nbsp is \\xa0" "'a\\xa0b'" (R.py_repr "a\xc2\xa0b");
   A.(check string) "zwsp is \\u200b" "'a\\u200bb'" (R.py_repr "a\xe2\x80\x8bb");
   A.(check string) "ideographic space is \\u3000" "'\\u3000'" (R.py_repr "\xe3\x80\x80");
-  A.(check string) "an astral format character is \\U" "'\\U000e0001'"
-    (R.py_repr "\xf3\xa0\x80\x81");
-  A.(check string) "a replacement character is printable" "'\xef\xbf\xbd'"
-    (R.py_repr "\xef\xbf\xbd");
+  A.(check string)
+    "an astral format character is \\U" "'\\U000e0001'" (R.py_repr "\xf3\xa0\x80\x81");
+  A.(check string)
+    "a replacement character is printable" "'\xef\xbf\xbd'" (R.py_repr "\xef\xbf\xbd");
   (* Idempotence is not the contract, but re-escaping a repr must not lose the
      text's own quoting — and a repr never contains a raw newline. *)
   let once = R.py_repr "a\nb" in
   A.(check bool) "no raw newline survives" true (not (String.contains once '\n'));
   (* The path grammar's refusals use this same pass, so a non-ASCII token comes
      back readable rather than as its bytes. *)
-  A.(check string) "a refusal quotes a non-ascii token the same way" "'caf\xc3\xa9'"
-    (R.py_repr "caf\xc3\xa9")
+  A.(check string)
+    "a refusal quotes a non-ascii token the same way" "'caf\xc3\xa9'" (R.py_repr "caf\xc3\xa9")
 
 let () =
   A.run "text"
     [
       ( "the step",
-          [
-            A.test_case "a truncated trailing sequence is cut, not raised" `Quick
-              test_a_truncated_trailing_sequence_is_cut_not_raised;
-            A.test_case "the step returns an index" `Quick test_the_step_returns_an_index;
-            A.test_case "a bad lead byte advances one" `Quick test_a_bad_lead_byte_advances_one;
-            A.test_case "counting is codepoints, not bytes" `Quick
-              test_counting_is_codepoints_not_bytes;
-            A.test_case "a malformed sequence costs one per maximal subpart" `Quick
-              test_a_malformed_sequence_costs_one_per_maximal_subpart;
-            A.test_case "slices and codepoints agree with the walk" `Quick
-              test_slices_and_codepoints_agree_with_the_walk;
-          ] );
+        [
+          A.test_case "a truncated trailing sequence is cut, not raised" `Quick
+            test_a_truncated_trailing_sequence_is_cut_not_raised;
+          A.test_case "the step returns an index" `Quick test_the_step_returns_an_index;
+          A.test_case "a bad lead byte advances one" `Quick test_a_bad_lead_byte_advances_one;
+          A.test_case "counting is codepoints, not bytes" `Quick
+            test_counting_is_codepoints_not_bytes;
+          A.test_case "a malformed sequence costs one per maximal subpart" `Quick
+            test_a_malformed_sequence_costs_one_per_maximal_subpart;
+          A.test_case "slices and codepoints agree with the walk" `Quick
+            test_slices_and_codepoints_agree_with_the_walk;
+        ] );
       ( "codepoint arrays",
-          [
-            A.test_case "the array round trips" `Quick test_the_array_round_trips;
-            A.test_case "encode writes the sequence" `Quick test_encode_writes_the_sequence;
-          ] );
+        [
+          A.test_case "the array round trips" `Quick test_the_array_round_trips;
+          A.test_case "encode writes the sequence" `Quick test_encode_writes_the_sequence;
+        ] );
       ( "blanks and lines",
-          [
-            A.test_case "the whitespace set is python's" `Quick
-              test_the_whitespace_set_is_pythons;
-            A.test_case "strip and split use the unicode set" `Quick
-              test_strip_and_split_use_the_unicode_set;
-            A.test_case "splitlines breaks where python does" `Quick
-              test_splitlines_breaks_where_python_does;
-            A.test_case "ascii lower folds only ascii" `Quick test_ascii_lower_folds_only_ascii;
-          ] );
+        [
+          A.test_case "the whitespace set is python's" `Quick test_the_whitespace_set_is_pythons;
+          A.test_case "strip and split use the unicode set" `Quick
+            test_strip_and_split_use_the_unicode_set;
+          A.test_case "splitlines breaks where python does" `Quick
+            test_splitlines_breaks_where_python_does;
+          A.test_case "ascii lower folds only ascii" `Quick test_ascii_lower_folds_only_ascii;
+        ] );
       ( "repr",
-          [
-            A.test_case "the log repr is the one a refusal quotes with" `Quick
-              test_the_log_repr_is_the_one_a_refusal_quotes_with;
-          ] );
+        [
+          A.test_case "the log repr is the one a refusal quotes with" `Quick
+            test_the_log_repr_is_the_one_a_refusal_quotes_with;
+        ] );
     ]

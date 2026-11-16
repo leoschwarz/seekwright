@@ -1,8 +1,8 @@
 (** HTTP head parsing, rendering, and wire byte ceilings.
 
-    The listener reads a request head before any other inspection, and writes
-    refusals itself. Ceilings bound wire memory: {!request_head_limit} bounds
-    buffered client bytes, {!response_head_limit} bounds outbound head bytes. *)
+    The listener reads a request head before any other inspection, and writes refusals itself.
+    Ceilings bound wire memory: {!request_head_limit} bounds buffered client bytes,
+    {!response_head_limit} bounds outbound head bytes. *)
 
 val request_head_limit : int
 (** The request-line and header block ceiling in wire bytes (terminators included). *)
@@ -10,26 +10,17 @@ val request_head_limit : int
 val response_head_limit : int
 (** Outbound response-head ceiling in wire bytes. *)
 
-type request_head = {
-  request_line : string;
-  header_lines : string list;
-}
+type request_head = { request_line : string; header_lines : string list }
 (** Head lines in arrival order with line terminators stripped. *)
 
-type read_error =
-  | Client_closed
-  | Request_head_too_large
-  | Malformed_request_head
+type read_error = Client_closed | Request_head_too_large | Malformed_request_head
 
 val request_reader : ?limit:int -> _ Eio.Flow.source -> Eio.Buf_read.t
 (** Builds an [Eio.Buf_read.t] bounded at [limit + 1] bytes. *)
 
-val read_request_head :
-  ?limit:int ->
-  Eio.Buf_read.t ->
-  (request_head * string, read_error) result
-(** Reads request line and headers up to the terminating blank line. Returns
-    the parsed head and the verbatim wire bytes consumed. *)
+val read_request_head : ?limit:int -> Eio.Buf_read.t -> (request_head * string, read_error) result
+(** Reads request line and headers up to the terminating blank line. Returns the parsed head and the
+    verbatim wire bytes consumed. *)
 
 type head_error = Response_head_too_large
 

@@ -19,8 +19,7 @@ module Health = Seekwright.Health
 module Provider = Seekwright.Provider
 module A = Alcotest
 
-let outcome =
-  A.testable (fun fmt o -> Format.pp_print_string fmt (Health.show_outcome o)) ( = )
+let outcome = A.testable (fun fmt o -> Format.pp_print_string fmt (Health.show_outcome o)) ( = )
 
 (* Keys come from the environment only, and OCaml 5.3 has no [unsetenv], so "no
    key" is an empty value: [Config.api_key] reads an empty variable as unset. *)
@@ -35,8 +34,9 @@ let board ?(threshold = Health.default_failure_threshold)
     ?(cooldown = Health.default_cooldown_seconds) ?(clock = ref 0.) () =
   let lines = ref [] in
   let board =
-    Health.create ~now:(fun () -> !clock) ~failure_threshold:threshold
-      ~cooldown_seconds:cooldown
+    Health.create
+      ~now:(fun () -> !clock)
+      ~failure_threshold:threshold ~cooldown_seconds:cooldown
       ~log:(fun _level event fields -> lines := (event, fields) :: !lines)
       ()
   in
@@ -46,7 +46,8 @@ let board ?(threshold = Health.default_failure_threshold)
     fields |> List.map (fun (k, v) -> (k, Yojson.Safe.to_string v)) |> List.sort compare
   in
   let events name =
-    !lines |> List.rev |> List.filter_map (fun (event, fields) ->
+    !lines |> List.rev
+    |> List.filter_map (fun (event, fields) ->
         if event = name then Some (rendered fields) else None)
   in
   (board, events)
@@ -79,10 +80,8 @@ let selective_net () =
           let host = Uri.host_with_default ~default:"" request.Caps.Authority.Net.uri in
           hosts := host :: !hosts;
           match host with
-          | "api.linkup.so" ->
-            Error (Caps.Error.make ~message:"no route" Caps.Error.Unavailable)
-          | "google.serper.dev" ->
-            Ok { Caps.Authority.Net.status = 403; headers = []; body = "" }
+          | "api.linkup.so" -> Error (Caps.Error.make ~message:"no route" Caps.Error.Unavailable)
+          | "google.serper.dev" -> Ok { Caps.Authority.Net.status = 403; headers = []; body = "" }
           | _ -> Ok { Caps.Authority.Net.status = 200; headers = []; body = "" });
     }
   in
@@ -93,8 +92,7 @@ let header (request : Caps.Authority.Net.request) name =
     (fun (k, v) -> if String.equal (String.lowercase_ascii k) name then Some v else None)
     request.Caps.Authority.Net.headers
 
-let url (request : Caps.Authority.Net.request) =
-  Uri.to_string request.Caps.Authority.Net.uri
+let url (request : Caps.Authority.Net.request) = Uri.to_string request.Caps.Authority.Net.uri
 
 let one_request sent =
   match sent () with
@@ -111,13 +109,16 @@ let const endpoint = Health.probe_endpoint_const endpoint
 let table =
   [
     ( "serper",
-      row ~headers:(Health.probe_headers_const "X-API-KEY")
+      row
+        ~headers:(Health.probe_headers_const "X-API-KEY")
         (const "https://google.serper.dev/search") );
     ( "parallel",
-      row ~headers:(Health.probe_headers_const "x-api-key")
+      row
+        ~headers:(Health.probe_headers_const "x-api-key")
         (const "https://api.parallel.ai/v1/search") );
     ( "linkup",
-      row ~headers:(Health.probe_headers_const ~prefix:"Bearer " "Authorization")
+      row
+        ~headers:(Health.probe_headers_const ~prefix:"Bearer " "Authorization")
         (const "https://api.linkup.so/v1/search") );
     ("searxng", row Health.searxng_endpoint);
     ("algolia", row ~headers:Health.algolia_headers Health.algolia_endpoint);
@@ -143,20 +144,17 @@ let reaching_the_threshold_opens_once_with_its_fields () =
   Health.record_failure board ~reason:"upstream 503" "serper" ();
   Health.record_failure board ~reason:"upstream 503" "serper" ();
   A.(check bool) "open" true (Health.is_open board "serper");
-  A.(check A.(list (list (pair string string)))) "one line, with its fields"
-    [
-      [
-        ("consecutive", "2"); ("provider", "\"serper\""); ("reason", "\"upstream 503\"");
-      ];
-    ]
+  A.(check A.(list (list (pair string string))))
+    "one line, with its fields"
+    [ [ ("consecutive", "2"); ("provider", "\"serper\""); ("reason", "\"upstream 503\"") ] ]
     (events "health.open")
 
 let a_failure_while_open_extends_the_gate_without_relogging () =
   let board, events = board ~threshold:2 ~cooldown:60. () in
   List.iter (fun reason -> Health.record_failure board ~reason "serper" ()) [ "a"; "b"; "c" ];
   A.(check bool) "open" true (Health.is_open board "serper");
-  A.(check (A.list string)) "the second failure opened it; the third only extended it"
-    [ "\"b\"" ]
+  A.(check (A.list string))
+    "the second failure opened it; the third only extended it" [ "\"b\"" ]
     (List.filter_map (fun fields -> List.assoc_opt "reason" fields) (events "health.open"))
 
 let expiry_is_half_open_and_one_failure_reopens () =
@@ -168,8 +166,8 @@ let expiry_is_half_open_and_one_failure_reopens () =
   A.(check bool) "an expired gate reads closed" false (Health.is_open board "serper");
   Health.record_failure board ~reason:"again" "serper" ();
   A.(check bool) "and one failure re-opens it" true (Health.is_open board "serper");
-  A.(check (A.list string)) "two opens, the second named for the new failure"
-    [ "\"b\""; "\"again\"" ]
+  A.(check (A.list string))
+    "two opens, the second named for the new failure" [ "\"b\""; "\"again\"" ]
     (List.filter_map (fun fields -> List.assoc_opt "reason" fields) (events "health.open"))
 
 let half_open_reopens_without_the_threshold () =
@@ -181,8 +179,8 @@ let half_open_reopens_without_the_threshold () =
   clock := 0.06;
   A.(check bool) "the gate expired" false (Health.is_open board "serper");
   Health.record_failure board ~reason:"still down" "serper" ();
-  A.(check bool) "one failure re-opens it, eight short of the threshold" true
-    (Health.is_open board "serper");
+  A.(check bool)
+    "one failure re-opens it, eight short of the threshold" true (Health.is_open board "serper");
   A.(check int) "two opens" 2 (List.length (events "health.open"))
 
 let a_success_while_armed_closes_and_resets_the_count () =
@@ -192,7 +190,8 @@ let a_success_while_armed_closes_and_resets_the_count () =
   Health.record_success board ~reason:"search succeeded" "serper" ();
   A.(check bool) "closed" false (Health.is_open board "serper");
   A.(check (float 1e-9) "no time left on the gate" 0.0 (Health.open_for_s board "serper"));
-  A.(check A.(list (list (pair string string)))) "health.closed names who closed it"
+  A.(check A.(list (list (pair string string))))
+    "health.closed names who closed it"
     [ [ ("provider", "\"serper\""); ("reason", "\"search succeeded\"") ] ]
     (events "health.closed");
   (* the count was reset, so the threshold applies from zero again *)
@@ -211,12 +210,9 @@ let force_open_opens_from_zero_failures () =
   let board, events = board ~threshold:3 ~cooldown:60. () in
   Health.record_failure board ~reason:"probe key rejected" ~force_open:true "serper" ();
   A.(check bool) "open at once" true (Health.is_open board "serper");
-  A.(check A.(list (list (pair string string)))) "on the first failure"
-    [
-      [
-        ("consecutive", "1"); ("provider", "\"serper\""); ("reason", "\"probe key rejected\"");
-      ];
-    ]
+  A.(check A.(list (list (pair string string))))
+    "on the first failure"
+    [ [ ("consecutive", "1"); ("provider", "\"serper\""); ("reason", "\"probe key rejected\"") ] ]
     (events "health.open")
 
 let an_unknown_name_reads_closed () =
@@ -230,24 +226,25 @@ let a_200_with_a_key_is_reachable () =
   let config = config_with [ ("serper", Config.default_provider_config) ] in
   A.(check outcome) "reachable" Health.Reachable (Health.probe ~net ~table config "serper");
   let request = one_request sent in
-  A.(check string) "the adapter's own endpoint" "https://google.serper.dev/search"
-    (url request);
-  A.(check (A.option string)) "with the key the search would send" (Some "k")
-    (header request "x-api-key");
+  A.(check string) "the adapter's own endpoint" "https://google.serper.dev/search" (url request);
+  A.(check (A.option string))
+    "with the key the search would send" (Some "k") (header request "x-api-key");
   A.(check bool) "and no body" true (request.Caps.Authority.Net.body = None)
 
 let a_200_without_a_key_is_reachable_no_key () =
   keyless "searxng";
   let net, _ = dial () in
   let config = config_with [ ("searxng", at_url "http://searx.test:8080") ] in
-  A.(check outcome) "reachable without a key" Health.Reachable_no_key
+  A.(check outcome)
+    "reachable without a key" Health.Reachable_no_key
     (Health.probe ~net ~table config "searxng")
 
 let an_auth_rejection_is_key_rejected status () =
   keyed "serper" "k";
   let net, _ = dial ~status () in
   let config = config_with [ ("serper", Config.default_provider_config) ] in
-  A.(check outcome) "the key was refused" Health.Key_rejected
+  A.(check outcome)
+    "the key was refused" Health.Key_rejected
     (Health.probe ~net ~table config "serper")
 
 let a_transport_error_is_unreachable () =
@@ -270,17 +267,19 @@ let parallel_probes_its_endpoint_with_the_key_header () =
   A.(check outcome) "reachable" Health.Reachable (Health.probe ~net ~table config "parallel");
   let request = one_request sent in
   A.(check string) "its search endpoint" "https://api.parallel.ai/v1/search" (url request);
-  A.(check (A.option string)) "authenticated the way the adapter does" (Some "k")
-    (header request "x-api-key")
+  A.(check (A.option string))
+    "authenticated the way the adapter does" (Some "k") (header request "x-api-key")
 
 let searxng_builds_its_url_from_config () =
   keyless "searxng";
   let net, sent = dial () in
   let config = config_with [ ("searxng", at_url "http://searx.internal:8080/") ] in
-  A.(check outcome) "reachable without a key" Health.Reachable_no_key
+  A.(check outcome)
+    "reachable without a key" Health.Reachable_no_key
     (Health.probe ~net ~table config "searxng");
-  A.(check string) "the instance's own search endpoint"
-    "http://searx.internal:8080/search?q=probe&format=json" (url (one_request sent))
+  A.(check string)
+    "the instance's own search endpoint" "http://searx.internal:8080/search?q=probe&format=json"
+    (url (one_request sent))
 
 let algolia_builds_its_endpoint_and_sends_both_headers () =
   keyed "algolia" "k";
@@ -290,10 +289,12 @@ let algolia_builds_its_endpoint_and_sends_both_headers () =
      and spends no quota — and a key went out, so the answer is still reachable. *)
   A.(check outcome) "reachable" Health.Reachable (Health.probe ~net ~table config "algolia");
   let request = one_request sent in
-  A.(check string) "the index's own query endpoint"
+  A.(check string)
+    "the index's own query endpoint"
     "https://app123-dsn.algolia.net/1/indexes/products/query?query=probe&hitsPerPage=notanumber"
     (url request);
-  A.(check (A.option string)) "the application id" (Some "app123")
+  A.(check (A.option string))
+    "the application id" (Some "app123")
     (header request "x-algolia-application-id");
   A.(check (A.option string)) "and the key" (Some "k") (header request "x-algolia-api-key")
 
@@ -301,7 +302,8 @@ let algolia_without_a_key_is_key_required () =
   keyless "algolia";
   let net, sent = dial () in
   let config = config_with [ ("algolia", scoped "app123" "products") ] in
-  A.(check outcome) "its key is mandatory on every tier" Health.Key_required
+  A.(check outcome)
+    "its key is mandatory on every tier" Health.Key_required
     (Health.probe ~net ~table config "algolia");
   A.(check int) "and nothing was dialed" 0 (List.length (sent ()))
 
@@ -314,65 +316,77 @@ let every_mandatory_key_provider_without_a_key_is_key_required () =
   |> List.filter (fun name -> name <> "algolia")
   |> List.sort String.compare
   |> List.iter (fun name ->
-         keyless name;
-         let net, sent = dial () in
-         let config = config_with [ (name, Config.default_provider_config) ] in
-         A.(check outcome) (Printf.sprintf "%s is never probed keyless" name) Health.Key_required
-           (Health.probe ~net ~table config name);
-         A.(check int) (Printf.sprintf "%s made no request" name) 0 (List.length (sent ())))
+      keyless name;
+      let net, sent = dial () in
+      let config = config_with [ (name, Config.default_provider_config) ] in
+      A.(check outcome)
+        (Printf.sprintf "%s is never probed keyless" name)
+        Health.Key_required
+        (Health.probe ~net ~table config name);
+      A.(check int) (Printf.sprintf "%s made no request" name) 0 (List.length (sent ())))
 
 let algolia_with_a_bad_key_is_key_rejected () =
   keyed "algolia" "bad";
   let net, _ = dial ~status:403 () in
   let config = config_with [ ("algolia", scoped "app123" "products") ] in
-  A.(check outcome) "the key was refused" Health.Key_rejected
+  A.(check outcome)
+    "the key was refused" Health.Key_rejected
     (Health.probe ~net ~table config "algolia")
 
 let a_row_that_cannot_build_a_url_is_no_probe () =
   keyless "searxng";
   let net, sent = dial () in
   let config = config_with [ ("searxng", Config.default_provider_config) ] in
-  A.(check (A.option string)) "searxng with no url configured addresses nothing" None
+  A.(check (A.option string))
+    "searxng with no url configured addresses nothing" None
     (Health.searxng_endpoint config None);
-  A.(check (A.option string)) "algolia with no app id or index addresses nothing" None
+  A.(check (A.option string))
+    "algolia with no app id or index addresses nothing" None
     (Health.algolia_endpoint config (Some "k"));
-  A.(check outcome) "and the probe answers like a name with no probe at all"
-    Health.Unsupported (Health.probe ~net ~table config "searxng");
+  A.(check outcome)
+    "and the probe answers like a name with no probe at all" Health.Unsupported
+    (Health.probe ~net ~table config "searxng");
   A.(check int) "without a request" 0 (List.length (sent ()))
 
 let rows_are_constants_where_the_endpoint_is () =
-  A.(check (A.option string)) "the endpoint builder ignores the config"
-    (Some "https://google.serper.dev/search")
+  A.(check (A.option string))
+    "the endpoint builder ignores the config" (Some "https://google.serper.dev/search")
     (Health.probe_endpoint_const "https://google.serper.dev/search" Config.default (Some "k"));
-  A.(check A.(list (pair string string))) "the header builder takes the prefix the endpoint spells"
+  A.(check A.(list (pair string string)))
+    "the header builder takes the prefix the endpoint spells"
     [ ("Authorization", "Bearer k") ]
     (Health.probe_headers_const ~prefix:"Bearer " "Authorization" Config.default (Some "k"));
-  A.(check A.(list (pair string string))) "and sends no header when there is no key" []
+  A.(check A.(list (pair string string)))
+    "and sends no header when there is no key" []
     (Health.probe_headers_const "X-API-KEY" Config.default None);
-  A.(check A.(list (pair string string))) "algolia sends the application id even keyless"
+  A.(check A.(list (pair string string)))
+    "algolia sends the application id even keyless"
     [ ("x-algolia-application-id", "app123") ]
     (Health.algolia_headers (config_with [ ("algolia", scoped "app123" "products") ]) None);
-  A.(check (A.option string)) "serpapi's key rides the query string"
-    (Some "https://serpapi.com/search.json?api_key=k")
+  A.(check (A.option string))
+    "serpapi's key rides the query string" (Some "https://serpapi.com/search.json?api_key=k")
     (Health.serpapi_endpoint ~base:"https://serpapi.com/search.json" Config.default (Some "k"))
 
 let monitor ?(threshold = 1) ?(cooldown = 60.) () =
   let clock = ref 0. in
   let lines = ref [] in
   let board =
-    Health.create ~now:(fun () -> !clock) ~failure_threshold:threshold ~cooldown_seconds:cooldown
-      ~log:(fun _level event fields -> lines := (event, fields) :: !lines) ()
+    Health.create
+      ~now:(fun () -> !clock)
+      ~failure_threshold:threshold ~cooldown_seconds:cooldown
+      ~log:(fun _level event fields -> lines := (event, fields) :: !lines)
+      ()
   in
   let reason name =
-    !lines
-    |> List.rev
+    !lines |> List.rev
     |> List.filter_map (fun (event, fields) ->
-         if event = "health.open" && List.assoc "provider" fields = `String name
-         then Some (Yojson.Safe.to_string (List.assoc "reason" fields))
-         else None)
+        if event = "health.open" && List.assoc "provider" fields = `String name then
+          Some (Yojson.Safe.to_string (List.assoc "reason" fields))
+        else None)
   in
   let events name =
-    !lines |> List.rev |> List.filter_map (fun (event, _) -> if event = name then Some event else None)
+    !lines |> List.rev
+    |> List.filter_map (fun (event, _) -> if event = name then Some event else None)
   in
   (board, reason, events)
 
@@ -401,9 +415,10 @@ let the_monitor_feeds_the_board () =
   A.(check bool) "a rejected key opens at once" true (Health.is_open board "serper");
   A.(check bool) "unreachable trips threshold 1" true (Health.is_open board "linkup");
   A.(check bool) "a reachable name stays closed" false (Health.is_open board "searxng");
-  A.(check bool) "a name that was not built is not probed at all" false
-    (Health.is_open board "exa:free");
-  A.(check (A.list string)) "and it was never dialed"
+  A.(check bool)
+    "a name that was not built is not probed at all" false (Health.is_open board "exa:free");
+  A.(check (A.list string))
+    "and it was never dialed"
     (* [Config.enabled_providers] is sorted, which is the order the tick walks. *)
     [ "api.linkup.so"; "searx.test"; "google.serper.dev" ]
     (hosts ());

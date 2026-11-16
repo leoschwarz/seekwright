@@ -37,7 +37,8 @@ let request_shape () =
   Alcotest.(check string) "host" (Option.value ~default:"" (Uri.host uri)) "scrappa.co";
   (* The target rides in the [url] parameter — the scraper dials it, not us —
      and the two knobs say "render, and I do not want the HTML back". *)
-  Alcotest.(check (list (pair string (list string)))) "params" (Uri.query uri)
+  Alcotest.(check (list (pair string (list string))))
+    "params" (Uri.query uri)
     [ ("url", [ Fix.public_url ]); ("javascript", [ "1" ]); ("include_html", [ "0" ]) ];
   Alcotest.(check (list (pair string string))) "credential" got.headers [ ("x-api-key", "sk-test") ];
   Alcotest.(check (option string)) "no body" got.body None;
@@ -48,24 +49,35 @@ let request_shape () =
 let arms () =
   let one status =
     let fixture = Fix.make [ Fix.Response (status, "{}") ] in
-    Fix.show_error (Result.get_error (Scrappa.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None))
+    Fix.show_error
+      (Result.get_error (Scrappa.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None))
   in
-  Alcotest.(check string) "401 is the key" (one 401)
+  Alcotest.(check string)
+    "401 is the key" (one 401)
     (Fix.error_case ~kind:"rejected" ~message:"authentication rejected (check API key)");
-  Alcotest.(check string) "403 is the key" (one 403)
+  Alcotest.(check string)
+    "403 is the key" (one 403)
     (Fix.error_case ~kind:"rejected" ~message:"authentication rejected (check API key)");
-  Alcotest.(check string) "402 is the credit meter" (one 402)
+  Alcotest.(check string)
+    "402 is the credit meter" (one 402)
     (Fix.error_case ~kind:"quota" ~message:"rate limited or out of credits");
-  Alcotest.(check string) "429 is the credit meter" (one 429)
+  Alcotest.(check string)
+    "429 is the credit meter" (one 429)
     (Fix.error_case ~kind:"quota" ~message:"rate limited or out of credits");
-  Alcotest.(check string) "500 is a failure" (one 500)
+  Alcotest.(check string)
+    "500 is a failure" (one 500)
     (Fix.error_case ~kind:"failed" ~message:"HTTP 500");
   (* A refused target never reaches the vendor at all. *)
   let fixture = Fix.make [] in
-  Alcotest.(check string) "private target"
+  Alcotest.(check string)
+    "private target"
     (Fix.show_error
-       (Result.get_error (Scrappa.fetch (cfg fixture) "https://internal.test/x" ~offset:0 ~max_chars:None)))
-    (Fix.error_case ~kind:"url_blocked" ~message:"internal.test resolves to a non-public address (127.0.0.1); fetching private, loopback and link-local addresses is disabled");
+       (Result.get_error
+          (Scrappa.fetch (cfg fixture) "https://internal.test/x" ~offset:0 ~max_chars:None)))
+    (Fix.error_case ~kind:"url_blocked"
+       ~message:
+         "internal.test resolves to a non-public address (127.0.0.1); fetching private, loopback \
+          and link-local addresses is disabled");
   Fix.check_no_request fixture "the vendor saw nothing"
 
 let envelope body =
@@ -73,50 +85,58 @@ let envelope body =
   Scrappa.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None
 
 let envelope_cases () =
-  Alcotest.(check string) "success false"
+  Alcotest.(check string)
+    "success false"
     (Fix.show_error (Result.get_error (envelope {|{"success":false}|})))
     (Fix.error_case ~kind:"failed" ~message:"scraper reported failure");
   (* [site_status_code] is the {i origin's}: a 404 page scraped
      successfully is a successful API call and a failed fetch. *)
-  Alcotest.(check string) "origin 404"
+  Alcotest.(check string)
+    "origin 404"
     (Fix.show_error (Result.get_error (envelope {|{"site_status_code":404}|})))
     (Fix.error_case ~kind:"failed" ~message:"HTTP 404");
   (* Not JSON, and JSON that is not an object: the one sentence for both. *)
-  Alcotest.(check string) "not JSON"
+  Alcotest.(check string)
+    "not JSON"
     (Fix.show_error (Result.get_error (envelope "<html>")))
     (Fix.error_case ~kind:"failed" ~message:"malformed JSON response");
-  Alcotest.(check string) "not an object"
+  Alcotest.(check string)
+    "not an object"
     (Fix.show_error (Result.get_error (envelope "[]")))
     (Fix.error_case ~kind:"failed" ~message:"malformed JSON response");
   (* A missing [data] is an empty read, not an error — emptiness is the
      walk's gate, not this module's. *)
-  let page = Fix.ok_page (envelope {|{"success":true}|}) "empty data";
-  in
+  let page = Fix.ok_page (envelope {|{"success":true}|}) "empty data" in
   Alcotest.(check string) "empty text" page.Seekwright_wire.Page.text "";
   (* [final_url] wins, [url] is the fallback, and the target is the last
      resort. *)
   let landed body = (Fix.ok_page (envelope body) "landed").Seekwright_wire.Page.url in
-  Alcotest.(check string) "final_url"
+  Alcotest.(check string)
+    "final_url"
     (landed {|{"final_url":"https://public.test/final","url":"https://public.test/u"}|})
     "https://public.test/final";
-  Alcotest.(check string) "url fallback" (landed {|{"url":"https://public.test/u"}|})
+  Alcotest.(check string)
+    "url fallback"
+    (landed {|{"url":"https://public.test/u"}|})
     "https://public.test/u";
   Alcotest.(check string) "target stays" (landed {|{"url":""}|}) Fix.public_url
 
 let timeout_row () =
   let fixture = Fix.make [ Fix.Transport (Caps.Error.make Caps.Error.Timeout ~message:"x") ] in
-  Alcotest.(check string) "timed out"
-    (Fix.show_error (Result.get_error (Scrappa.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None)))
+  Alcotest.(check string)
+    "timed out"
+    (Fix.show_error
+       (Result.get_error (Scrappa.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None)))
     (Fix.error_case ~kind:"failed" ~message:"request timed out")
 
 let () =
   Alcotest.run "fallback_scrappa"
     [
       ( "scrappa",
-          [
-            Alcotest.test_case "request shape" `Quick request_shape;
-            Alcotest.test_case "status arms and the private target" `Quick arms;
-            Alcotest.test_case "envelope mappings" `Quick envelope_cases;
-            Alcotest.test_case "transport timeout" `Quick timeout_row;
-          ] );
+        [
+          Alcotest.test_case "request shape" `Quick request_shape;
+          Alcotest.test_case "status arms and the private target" `Quick arms;
+          Alcotest.test_case "envelope mappings" `Quick envelope_cases;
+          Alcotest.test_case "transport timeout" `Quick timeout_row;
+        ] );
     ]

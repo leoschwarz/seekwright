@@ -17,8 +17,8 @@ let () =
   | [ _; area; dir ] -> (
       match List.assoc_opt area Seekwright_diff.Projection.areas with
       | None ->
-        prerr_endline (Printf.sprintf "no such area: %s" area);
-        exit 2
+          prerr_endline (Printf.sprintf "no such area: %s" area);
+          exit 2
       | Some project ->
           let names =
             Array.to_list (Sys.readdir dir)
@@ -33,5 +33,5 @@ let () =
               List.iter (fun line -> print_endline (stem ^ "\t" ^ line)) lines)
             names)
   | _ ->
-    prerr_endline "usage: drive.exe <area> <corpus-dir>";
-    exit 2
+      prerr_endline "usage: drive.exe <area> <corpus-dir>";
+      exit 2

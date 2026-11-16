@@ -25,14 +25,13 @@ let chars s =
   let n = ref 0 and i = ref 0 in
   while !i < String.length s do
     let c = Char.code s.[!i] in
-    i := !i + (if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4);
+    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
     incr n
   done;
   !n
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -81,8 +80,7 @@ let sample_data =
   | `Assoc _ as data -> data
   | _ -> A.failf "the fixture carries no data object"
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
-    ?(cost_per_1k = 0.) () =
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.) () =
   let sent = ref None in
   let net =
     {
@@ -97,8 +95,8 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
 let refusal kind ~message =
   Anysearch.make ~net:{ Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
-    ?(cost_per_1k = 0.) ?(query = query ()) () =
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.)
+    ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ~cost_per_1k () in
   match Provider.search provider query with
   | Ok outcome -> (outcome, sent ())
@@ -118,14 +116,13 @@ let failed_search ?(status = 200) ?(body = sample) ?(query = query ()) () =
 let body_of (request : Caps.Authority.Net.request) =
   match request.Caps.Authority.Net.body with
   | None -> A.failf "the request carried no body"
-  | Some text -> (match Yojson.Safe.from_string text with json -> json)
+  | Some text -> ( match Yojson.Safe.from_string text with json -> json)
 
 let body_fields request = Option.get (Provider.Json.members (body_of request))
 
 let has_field request name = List.exists (fun (key, _) -> key = name) (body_fields request)
 
-let parse ?(snippet_chars = 500) ?(limit = 10) data =
-  Anysearch.parse ~snippet_chars data ~limit
+let parse ?(snippet_chars = 500) ?(limit = 10) data = Anysearch.parse ~snippet_chars data ~limit
 
 let record fields = `Assoc fields
 let payload items = `Assoc [ ("results", `List items) ]
@@ -139,8 +136,7 @@ let records_that_carry_a_title_and_url () =
   check_string "the untitled record is gone" "https://example.com/no-snippet"
     (List.nth hits 1).result.url
 
-let the_limit_is_honoured () =
-  check_int "one of three" 1 (List.length (parse ~limit:1 sample_data))
+let the_limit_is_honoured () = check_int "one of three" 1 (List.length (parse ~limit:1 sample_data))
 
 let a_serp_record_keeps_snippet_and_never_text () =
   let hits = parse sample_data in
@@ -191,7 +187,9 @@ let the_length_the_cap_discarded_is_recorded () =
      here the measurement sits beside the result on the provider boundary, and
      the wire model has no field for it. *)
   check_bool "absent from the wire model" false
-    (contains ~haystack:(Yojson.Safe.to_string (Model.result_to_yojson hit.result)) ~needle:"uncapped")
+    (contains
+       ~haystack:(Yojson.Safe.to_string (Model.result_to_yojson hit.result))
+       ~needle:"uncapped")
 
 let records_without_a_url_or_title_are_dropped () =
   let drop items = List.length (parse (`Assoc [ ("results", `List items) ])) in
@@ -203,12 +201,14 @@ let records_without_a_url_or_title_are_dropped () =
 
 let a_record_that_is_not_an_object_is_skipped () =
   check_int "the string is dropped, the object survives" 1
-    (List.length (parse (payload [ `String "nonsense"; record [ ("title", `String "t"); ("url", `String "https://x") ] ])))
+    (List.length
+       (parse
+          (payload
+             [ `String "nonsense"; record [ ("title", `String "t"); ("url", `String "https://x") ] ])))
 
 let missing_container_is_empty_not_an_error () =
   List.iter
-    (fun (what, data) ->
-      check_int what 0 (List.length (parse data)))
+    (fun (what, data) -> check_int what 0 (List.length (parse data)))
     [
       ("results is null", `Assoc [ ("results", `Null) ]);
       ("results is absent", `Assoc []);
@@ -246,8 +246,7 @@ let a_non_string_snippet_is_dropped_and_the_call_succeeds () =
           ]
       in
       let outcome, _ = search_of ~body:(Yojson.Safe.to_string data) () in
-      check_int (Printf.sprintf "the call succeeds with a %s" what) 1
-        (List.length outcome.results);
+      check_int (Printf.sprintf "the call succeeds with a %s" what) 1 (List.length outcome.results);
       check_opt_string "the snippet is dropped" None (List.hd outcome.results).result.snippet)
     [
       ("object", `Assoc [ ("nested", `String "object") ]);
@@ -262,21 +261,24 @@ let a_non_string_title_drops_the_record () =
         `Assoc
           [
             ("code", `Int 0);
-            ("data",
+            ( "data",
               `Assoc
                 [
                   ( "results",
                     `List
                       [
                         record [ ("title", value); ("url", `String "https://example.com/a") ];
-                        record [ ("title", `String "kept"); ("url", `String "https://example.com/b") ];
+                        record
+                          [ ("title", `String "kept"); ("url", `String "https://example.com/b") ];
                       ] );
                 ] );
           ]
       in
       let outcome, _ = search_of ~body:(Yojson.Safe.to_string data) () in
       A.(
-        check (list string) ("a " ^ what ^ " title drops its record") [ "kept" ]
+        check (list string)
+          ("a " ^ what ^ " title drops its record")
+          [ "kept" ]
           (List.map (fun (h : Provider.hit) -> h.result.title) outcome.results)))
     [
       ("object", `Assoc [ ("nested", `String "object") ]);
@@ -312,8 +314,10 @@ let posts_json_to_the_documented_endpoint_without_auth () =
 
 let the_query_and_max_results_are_sent () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:3 ()) () in
-  check_opt_string "the query" (Some "wal mode") (Provider.Json.string_field "query" (body_of request));
-  check_opt_number "max_results" (Some 3.) (Provider.Json.number_field "max_results" (body_of request))
+  check_opt_string "the query" (Some "wal mode")
+    (Provider.Json.string_field "query" (body_of request));
+  check_opt_number "max_results" (Some 3.)
+    (Provider.Json.number_field "max_results" (body_of request))
 
 let max_results_is_clamped_to_the_documented_range () =
   (* The tool caps [max_results] at 20; the API's range is 1-10, so 11-20 would
@@ -325,7 +329,8 @@ let max_results_is_clamped_to_the_documented_range () =
 
 let language_is_lowercased_on_the_wire () =
   let outcome, request = search_of ~query:(query ~language:"DE" ()) () in
-  check_opt_string "lowercased" (Some "de") (Provider.Json.string_field "language" (body_of request));
+  check_opt_string "lowercased" (Some "de")
+    (Provider.Json.string_field "language" (body_of request));
   (* Language is honoured, so a language-only constraint carries no notice. *)
   check_opt_string "no notice" None outcome.notice
 
@@ -339,7 +344,8 @@ let never_sends_a_region_or_capability_field () =
      read. None of them may appear in a body at all. *)
   let _, request = search_of ~query:(query ~country:"de" ~language:"en" ()) () in
   List.iter
-    (fun name -> check_bool (Printf.sprintf "no %s in the body" name) false (has_field request name))
+    (fun name ->
+      check_bool (Printf.sprintf "no %s in the body" name) false (has_field request name))
     [ "zone"; "tag"; "params"; "format" ]
 
 let an_unconstrained_query_carries_no_notice () =
@@ -350,14 +356,17 @@ let each_dropped_constraint_is_noticed () =
   List.iter
     (fun (what, q, sentence) ->
       let outcome, _ = search_of ~query:q () in
-      check_string what (Printf.sprintf "cannot filter by %s; that constraint was ignored" sentence)
+      check_string what
+        (Printf.sprintf "cannot filter by %s; that constraint was ignored" sentence)
         (Option.get outcome.notice))
     [
       ("a country", query ~country:"de" (), "country");
       ("a recency", query ~recency:Model.Week (), "dates");
       ("safe-search on", query ~safe_search:true (), "safe-search");
       ("safe-search off", query ~safe_search:false (), "safe-search");
-      ("domain filters", query ~include_domains:[ "go.dev" ] ~exclude_domains:[ "spam.example" ] (), "domain");
+      ( "domain filters",
+        query ~include_domains:[ "go.dev" ] ~exclude_domains:[ "spam.example" ] (),
+        "domain" );
       ("a language beside a country", query ~country:"de" ~language:"en" (), "country");
     ]
 
@@ -365,8 +374,8 @@ let all_dropped_buckets_are_named_together () =
   let outcome, _ =
     search_of
       ~query:
-        (query ~include_domains:[ "go.dev" ] ~recency:Model.Day ~country:"de"
-           ~safe_search:true ~language:"en" ())
+        (query ~include_domains:[ "go.dev" ] ~recency:Model.Day ~country:"de" ~safe_search:true
+           ~language:"en" ())
       ()
   in
   check_string "four buckets, in the order the report writes them"
@@ -392,7 +401,9 @@ let a_402_body_with_credentials_never_reaches_the_message () =
   check_string "the message is a constant" "out of credits or rate limited" failure.message;
   List.iter
     (fun secret ->
-      check_bool (Printf.sprintf "the body never echoes %s" secret) false
+      check_bool
+        (Printf.sprintf "the body never echoes %s" secret)
+        false
         (contains ~haystack:(Provider.render_error failure) ~needle:secret))
     [ "op123"; "secret-password"; "sk-live-abc" ]
 
@@ -401,7 +412,8 @@ let a_nonzero_business_code_fails_without_echoing_the_message () =
      [message] is operator text the 402 flow shows can hold credentials, so the
      failure carries a constant. *)
   let failure =
-    failed_search ~body:{|{"code": -1, "message": "Query is required. caller=seekwright-deployment"}|} ()
+    failed_search
+      ~body:{|{"code": -1, "message": "Query is required. caller=seekwright-deployment"}|} ()
   in
   check_string "the contracted sentence" "search failed (business error)" failure.message;
   check_bool "the operator's text is not echoed" false
@@ -459,74 +471,77 @@ let the_endpoint_is_the_one_the_grant_allows () =
     (Uri.host request.uri = Some Anysearch.policy_endpoint.Caps.Policy.host)
 
 let () =
-  A.
-    (run "seekwright/anysearch"
-       [
-         ( "parsing",
-             [
-               test_case "the records that carry a title and url" `Quick
-                 records_that_carry_a_title_and_url;
-               test_case "the limit is honoured" `Quick the_limit_is_honoured;
-               test_case "a SERP record keeps snippet and never text" `Quick
-                 a_serp_record_keeps_snippet_and_never_text;
-               test_case "the content extract is never read" `Quick the_content_extract_is_never_read;
-               test_case "a missing snippet stays absent" `Quick a_missing_snippet_stays_absent;
-               test_case "no date is invented" `Quick no_date_is_invented;
-               test_case "the snippet cap clips" `Quick the_snippet_cap_clips;
-               test_case "the length the cap discarded is recorded" `Quick
-                 the_length_the_cap_discarded_is_recorded;
-               test_case "records without a url or title are dropped" `Quick
-                 records_without_a_url_or_title_are_dropped;
-               test_case "a record that is not an object is skipped" `Quick
-                 a_record_that_is_not_an_object_is_skipped;
-               test_case "a missing container is empty, not an error" `Quick
-                 missing_container_is_empty_not_an_error;
-             ] );
-         ( "the upstream field guards",
-             [
-               test_case "a non-string snippet is dropped and the call succeeds" `Quick
-                 a_non_string_snippet_is_dropped_and_the_call_succeeds;
-               test_case "a non-string title drops the record" `Quick a_non_string_title_drops_the_record;
-               test_case "a string snippet still reaches the caller" `Quick
-                 a_string_snippet_still_reaches_the_caller;
-             ] );
-         ( "the request",
-             [
-               test_case "POST JSON to the documented endpoint, without auth" `Quick
-                 posts_json_to_the_documented_endpoint_without_auth;
-               test_case "the query and max_results are sent" `Quick the_query_and_max_results_are_sent;
-               test_case "max_results is clamped to the documented range" `Quick
-                 max_results_is_clamped_to_the_documented_range;
-               test_case "language is lowercased on the wire" `Quick language_is_lowercased_on_the_wire;
-               test_case "language is absent without a language" `Quick language_is_absent_without_a_language;
-               test_case "never a region or capability field" `Quick
-                 never_sends_a_region_or_capability_field;
-               test_case "an unconstrained query carries no notice" `Quick
-                 an_unconstrained_query_carries_no_notice;
-               test_case "each dropped constraint is noticed" `Quick each_dropped_constraint_is_noticed;
-               test_case "all dropped buckets are named together" `Quick
-                 all_dropped_buckets_are_named_together;
-             ] );
-         ( "the failures this adapter owns",
-             [
-               test_case "quota and rate limit are quota" `Quick quota_and_rate_limit_are_quota;
-               test_case "a 402 body with credentials never reaches the message" `Quick
-                 a_402_body_with_credentials_never_reaches_the_message;
-               test_case "a non-zero business code fails without echoing the message" `Quick
-                 a_nonzero_business_code_fails_without_echoing_the_message;
-               test_case "a missing business code fails the same way" `Quick
-                 a_missing_business_code_fails_the_same_way;
-               test_case "a zero written as a float is success" `Quick a_zero_written_as_a_float_is_success;
-               test_case "a network failure does not echo the request" `Quick
-                 a_network_failure_does_not_echo_the_request;
-             ] );
-         ( "cost and endpoint",
-             [
-               test_case "cost is flat zero" `Quick cost_is_flat_zero;
-               test_case "the result reports its flat cost" `Quick the_result_reports_its_flat_cost;
-               test_case "an operator-corrected cost reaches the adapter" `Quick
-                 an_operator_corrected_cost_reaches_the_adapter;
-               test_case "the endpoint is the one the grant allows" `Quick
-                 the_endpoint_is_the_one_the_grant_allows;
-             ] );
-       ])
+  A.(
+    run "seekwright/anysearch"
+      [
+        ( "parsing",
+          [
+            test_case "the records that carry a title and url" `Quick
+              records_that_carry_a_title_and_url;
+            test_case "the limit is honoured" `Quick the_limit_is_honoured;
+            test_case "a SERP record keeps snippet and never text" `Quick
+              a_serp_record_keeps_snippet_and_never_text;
+            test_case "the content extract is never read" `Quick the_content_extract_is_never_read;
+            test_case "a missing snippet stays absent" `Quick a_missing_snippet_stays_absent;
+            test_case "no date is invented" `Quick no_date_is_invented;
+            test_case "the snippet cap clips" `Quick the_snippet_cap_clips;
+            test_case "the length the cap discarded is recorded" `Quick
+              the_length_the_cap_discarded_is_recorded;
+            test_case "records without a url or title are dropped" `Quick
+              records_without_a_url_or_title_are_dropped;
+            test_case "a record that is not an object is skipped" `Quick
+              a_record_that_is_not_an_object_is_skipped;
+            test_case "a missing container is empty, not an error" `Quick
+              missing_container_is_empty_not_an_error;
+          ] );
+        ( "the upstream field guards",
+          [
+            test_case "a non-string snippet is dropped and the call succeeds" `Quick
+              a_non_string_snippet_is_dropped_and_the_call_succeeds;
+            test_case "a non-string title drops the record" `Quick
+              a_non_string_title_drops_the_record;
+            test_case "a string snippet still reaches the caller" `Quick
+              a_string_snippet_still_reaches_the_caller;
+          ] );
+        ( "the request",
+          [
+            test_case "POST JSON to the documented endpoint, without auth" `Quick
+              posts_json_to_the_documented_endpoint_without_auth;
+            test_case "the query and max_results are sent" `Quick the_query_and_max_results_are_sent;
+            test_case "max_results is clamped to the documented range" `Quick
+              max_results_is_clamped_to_the_documented_range;
+            test_case "language is lowercased on the wire" `Quick language_is_lowercased_on_the_wire;
+            test_case "language is absent without a language" `Quick
+              language_is_absent_without_a_language;
+            test_case "never a region or capability field" `Quick
+              never_sends_a_region_or_capability_field;
+            test_case "an unconstrained query carries no notice" `Quick
+              an_unconstrained_query_carries_no_notice;
+            test_case "each dropped constraint is noticed" `Quick each_dropped_constraint_is_noticed;
+            test_case "all dropped buckets are named together" `Quick
+              all_dropped_buckets_are_named_together;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "quota and rate limit are quota" `Quick quota_and_rate_limit_are_quota;
+            test_case "a 402 body with credentials never reaches the message" `Quick
+              a_402_body_with_credentials_never_reaches_the_message;
+            test_case "a non-zero business code fails without echoing the message" `Quick
+              a_nonzero_business_code_fails_without_echoing_the_message;
+            test_case "a missing business code fails the same way" `Quick
+              a_missing_business_code_fails_the_same_way;
+            test_case "a zero written as a float is success" `Quick
+              a_zero_written_as_a_float_is_success;
+            test_case "a network failure does not echo the request" `Quick
+              a_network_failure_does_not_echo_the_request;
+          ] );
+        ( "cost and endpoint",
+          [
+            test_case "cost is flat zero" `Quick cost_is_flat_zero;
+            test_case "the result reports its flat cost" `Quick the_result_reports_its_flat_cost;
+            test_case "an operator-corrected cost reaches the adapter" `Quick
+              an_operator_corrected_cost_reaches_the_adapter;
+            test_case "the endpoint is the one the grant allows" `Quick
+              the_endpoint_is_the_one_the_grant_allows;
+          ] );
+      ])

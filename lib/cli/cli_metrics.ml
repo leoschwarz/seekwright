@@ -6,22 +6,28 @@ let json_field key = function
 
 let json_string key json = match json_field key json with `String s -> Some s | _ -> None
 let json_int key json =
-  match json_field key json with
-  | `Int n -> Some n
-  | `Float f -> Some (int_of_float f)
-  | _ -> None
+  match json_field key json with `Int n -> Some n | `Float f -> Some (int_of_float f) | _ -> None
 
 let json_float key json =
-  match json_field key json with
-  | `Int n -> Some (float_of_int n)
-  | `Float f -> Some f
-  | _ -> None
+  match json_field key json with `Int n -> Some (float_of_int n) | `Float f -> Some f | _ -> None
 
 let json_bool key json = match json_field key json with `Bool b -> Some b | _ -> None
 let json_list key json = match json_field key json with `List items -> Some items | _ -> None
 
 let columns =
-  [ "provider"; "calls"; "errors"; "fellback"; "samples"; "p50 ms"; "p95 ms"; "mean ms"; "cost usd"; "$/1k"; "last seen" ]
+  [
+    "provider";
+    "calls";
+    "errors";
+    "fellback";
+    "samples";
+    "p50 ms";
+    "p95 ms";
+    "mean ms";
+    "cost usd";
+    "$/1k";
+    "last seen";
+  ]
 
 let milliseconds = function None -> "—" | Some n -> string_of_int n
 let per_1k = function None -> "—" | Some v -> Printf.sprintf "%.4f" v
@@ -33,18 +39,18 @@ let digit2 s i =
     if String.for_all (fun c -> c >= '0' && c <= '9') sub then int_of_string sub else 0
 
 let secs_of_utc day time offset_secs =
-  let (y, m, d) =
+  let y, m, d =
     let y = int_of_string (String.sub day 0 4) in
     let m = int_of_string (String.sub day 5 2) in
     let d = int_of_string (String.sub day 8 2) in
     (y, m, d)
   in
-  Civil.days_from_civil y m d * 86_400 + time - offset_secs
+  (Civil.days_from_civil y m d * 86_400) + time - offset_secs
 
 let seen value =
   match value with
   | None -> "—"
-  | Some text ->
+  | Some text -> (
       match String.index_opt text 'T' with
       | None -> text
       | Some t ->
@@ -53,7 +59,10 @@ let seen value =
           let cut =
             match String.index_opt timetext '+' with
             | Some i -> i
-            | None -> ( match String.index_opt timetext '-' with Some i when i > 0 -> i | _ -> String.length timetext)
+            | None -> (
+                match String.index_opt timetext '-' with
+                | Some i when i > 0 -> i
+                | _ -> String.length timetext)
           in
           let clock = String.sub timetext 0 cut in
           let offset_text = String.sub timetext cut (String.length timetext - cut) in
@@ -67,10 +76,10 @@ let seen value =
               let body = String.sub offset_text 1 (String.length offset_text - 1) in
               let oh = digit2 body 0 in
               let om = if String.length body >= 4 then digit2 body 2 else digit2 body 1 in
-              sign * (oh * 3600 + om * 60)
+              sign * ((oh * 3600) + (om * 60))
           in
           Civil.iso_utc_seconds
-            (float_of_int (secs_of_utc day (hh * 3600 + mm * 60 + ss) offset))
+            (float_of_int (secs_of_utc day ((hh * 3600) + (mm * 60) + ss) offset)))
 
 let row entry =
   [
@@ -94,8 +103,7 @@ let format_row cells widths =
        (fun i cell ->
          if i = 0 || i = last then
            cell ^ String.make (max 0 (List.nth widths i - String.length cell)) ' '
-         else
-           String.make (max 0 (List.nth widths i - String.length cell)) ' ' ^ cell)
+         else String.make (max 0 (List.nth widths i - String.length cell)) ' ' ^ cell)
        cells)
 
 let journal_state journal =
@@ -111,7 +119,7 @@ let iso day =
 let print_report ~emit ~now endpoints journal =
   let today = Unix.gmtime now in
   let window_days = Option.value ~default:14 (json_int "window_days" endpoints) in
-  let first = Unix.gmtime (now -. float_of_int (window_days - 1) *. 86_400.0) in
+  let first = Unix.gmtime (now -. (float_of_int (window_days - 1) *. 86_400.0)) in
   emit "seekwright metrics";
   emit "==================";
   emit (Printf.sprintf "window      %d days, %s .. %s (UTC)" window_days (iso first) (iso today));
@@ -124,7 +132,9 @@ let print_report ~emit ~now endpoints journal =
       let widths =
         List.mapi
           (fun i label ->
-            List.fold_left (fun acc row -> max acc (String.length (List.nth row i))) (String.length label) rows)
+            List.fold_left
+              (fun acc row -> max acc (String.length (List.nth row i)))
+              (String.length label) rows)
           columns
       in
       emit (format_row columns widths);

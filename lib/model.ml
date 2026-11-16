@@ -112,7 +112,8 @@ type provider_result = {
   notice : string option;
 }
 
-let json_kind (json : Yojson.Safe.t) = match json with
+let json_kind (json : Yojson.Safe.t) =
+  match json with
   | `Null -> "null"
   | `Bool _ -> "a boolean"
   | `Int _ -> "an integer"
@@ -122,12 +123,10 @@ let json_kind (json : Yojson.Safe.t) = match json with
   | `Assoc _ -> "an object"
   | `List _ -> "an array"
 
-let type_error expected json =
-  Printf.sprintf "expected %s, got %s" expected (json_kind json)
+let type_error expected json = Printf.sprintf "expected %s, got %s" expected (json_kind json)
 
-let as_assoc (json : Yojson.Safe.t) = match json with
-  | `Assoc kvs -> Ok kvs
-  | json -> Error (type_error "an object" json)
+let as_assoc (json : Yojson.Safe.t) =
+  match json with `Assoc kvs -> Ok kvs | json -> Error (type_error "an object" json)
 
 let find name kvs =
   (* Last value wins for duplicate keys. *)
@@ -203,9 +202,7 @@ let decode_list f (json : Yojson.Safe.t) =
   | json -> Error (type_error "an array" json)
 
 let string_item (json : Yojson.Safe.t) =
-  match json with
-  | `String s -> Ok s
-  | json -> Error (type_error "a string" json)
+  match json with `String s -> Ok s | json -> Error (type_error "a string" json)
 
 let opt_string_list name kvs =
   match find name kvs with
@@ -241,20 +238,16 @@ let default_string_list name kvs default =
 
 let check_length ~name ~min ~max value =
   let n = Utf8.count value in
-  if n < min then
-    Error (Printf.sprintf "field %S is shorter than %d characters" name min)
-  else if n > max then
-    Error (Printf.sprintf "field %S is longer than %d characters" name max)
+  if n < min then Error (Printf.sprintf "field %S is shorter than %d characters" name min)
+  else if n > max then Error (Printf.sprintf "field %S is longer than %d characters" name max)
   else Ok value
 
 let check_max_items ~name ~max items =
-  if List.length items > max then
-    Error (Printf.sprintf "field %S has more than %d items" name max)
+  if List.length items > max then Error (Printf.sprintf "field %S has more than %d items" name max)
   else Ok items
 
 let check_min_int ~name ~min value =
-  if value < min then Error (Printf.sprintf "field %S is below %d" name min)
-  else Ok value
+  if value < min then Error (Printf.sprintf "field %S is below %d" name min) else Ok value
 
 let check_int_range ~name ~min ~max value =
   if value < min || value > max then
@@ -266,11 +259,7 @@ let check_exact_length ~name ~expected value =
     Error (Printf.sprintf "field %S must be exactly %d characters" name expected)
   else Ok value
 
-let string_of_recency = function
-  | Day -> "day"
-  | Week -> "week"
-  | Month -> "month"
-  | Year -> "year"
+let string_of_recency = function Day -> "day" | Week -> "week" | Month -> "month" | Year -> "year"
 
 let recency_of_yojson = function
   | `String "day" -> Ok Day
@@ -318,22 +307,13 @@ let escaped text = fst (Sanitize.sanitize_text text)
 let result_to_yojson (r : result) : Yojson.Safe.t =
   let fields =
     [ ("title", `String (escaped r.title)); ("url", `String r.url) ]
-    @ (match r.snippet with
-      | None -> []
-      | Some s -> [ ("snippet", `String (escaped s)) ])
-    @ (match r.text with
-      | None -> []
-      | Some s -> [ ("text", `String (escaped s)) ])
-    @
-    match r.text_truncated with
-    | None -> []
-    | Some b -> [ ("text_truncated", `Bool b) ]
+    @ (match r.snippet with None -> [] | Some s -> [ ("snippet", `String (escaped s)) ])
+    @ (match r.text with None -> [] | Some s -> [ ("text", `String (escaped s)) ])
+    @ match r.text_truncated with None -> [] | Some b -> [ ("text_truncated", `Bool b) ]
   in
   let fields =
     fields
-    @ (match r.published_date with
-      | None -> []
-      | Some s -> [ ("published_date", `String s) ])
+    @ (match r.published_date with None -> [] | Some s -> [ ("published_date", `String s) ])
     @ match r.score with None -> [] | Some f -> [ ("score", `Float f) ]
   in
   `Assoc fields
@@ -345,82 +325,51 @@ let search_response_to_yojson (r : search_response) : Yojson.Safe.t =
        ("provider", `String r.provider);
        ("results", `List (List.map result_to_yojson r.results));
      ]
-    @ (match r.answer with
-      | None -> []
-      | Some s -> [ ("answer", `String (escaped s)) ])
-    @ (match r.retrieved_at with
-      | None -> []
-      | Some s -> [ ("retrieved_at", `String s) ])
-    @ match r.notice with
-    | None -> []
-    | Some s -> [ ("notice", `String s) ])
+    @ (match r.answer with None -> [] | Some s -> [ ("answer", `String (escaped s)) ])
+    @ (match r.retrieved_at with None -> [] | Some s -> [ ("retrieved_at", `String s) ])
+    @ match r.notice with None -> [] | Some s -> [ ("notice", `String s) ])
 
 let fetch_match_to_yojson (m : fetch_match) : Yojson.Safe.t =
-  `Assoc
-    [ ("offset", `Int m.offset); ("text", `String (escaped m.text)) ]
+  `Assoc [ ("offset", `Int m.offset); ("text", `String (escaped m.text)) ]
 
 let fetch_image_to_yojson (i : fetch_image) : Yojson.Safe.t =
   (* Base64 bytes are not escaped. *)
-  `Assoc
-    [ ("byte_count", `Int i.byte_count); ("base64", `String i.base64) ]
+  `Assoc [ ("byte_count", `Int i.byte_count); ("base64", `String i.base64) ]
 
 let fetch_response_to_yojson (r : fetch_response) : Yojson.Safe.t =
   `Assoc
-    ([
-       ("url", `String r.url);
-       ("requested_url", `String r.requested_url);
-     ]
-    @ (match r.title with
-      | None -> []
-      | Some s -> [ ("title", `String (escaped s)) ])
-    @ (match r.text with
-      | None -> []
-      | Some s -> [ ("text", `String (escaped s)) ])
-    @ (match r.content_type with
-      | None -> []
-      | Some s -> [ ("content_type", `String s) ])
+    ([ ("url", `String r.url); ("requested_url", `String r.requested_url) ]
+    @ (match r.title with None -> [] | Some s -> [ ("title", `String (escaped s)) ])
+    @ (match r.text with None -> [] | Some s -> [ ("text", `String (escaped s)) ])
+    @ (match r.content_type with None -> [] | Some s -> [ ("content_type", `String s) ])
     @ (match r.status_code with None -> [] | Some i -> [ ("status_code", `Int i) ])
-    @ (match r.retrieved_at with
-      | None -> []
-      | Some s -> [ ("retrieved_at", `String s) ])
+    @ (match r.retrieved_at with None -> [] | Some s -> [ ("retrieved_at", `String s) ])
     @ [ ("truncated", `Bool r.truncated) ]
-    @ (match r.total_chars with
-      | None -> []
-      | Some i -> [ ("total_chars", `Int i) ])
+    @ (match r.total_chars with None -> [] | Some i -> [ ("total_chars", `Int i) ])
     @ (match r.offset with None -> [] | Some i -> [ ("offset", `Int i) ])
     @ (match r.matches with
       | None -> []
       | Some ms -> [ ("matches", `List (List.map fetch_match_to_yojson ms)) ])
-    @ (match r.image with
-      | None -> []
-      | Some image -> [ ("image", fetch_image_to_yojson image) ])
+    @ (match r.image with None -> [] | Some image -> [ ("image", fetch_image_to_yojson image) ])
     @ match r.notice with None -> [] | Some s -> [ ("notice", `String s) ])
 
 let search_request_to_yojson (r : search_request) : Yojson.Safe.t =
   `Assoc
     ([ ("query", `String r.query) ]
-    @ (match r.provider with
-      | None -> []
-      | Some s -> [ ("provider", `String s) ])
-    @ (match r.mode with
-      | None -> []
-      | Some m -> [ ("mode", `String (string_of_mode m)) ])
+    @ (match r.provider with None -> [] | Some s -> [ ("provider", `String s) ])
+    @ (match r.mode with None -> [] | Some m -> [ ("mode", `String (string_of_mode m)) ])
     @ [ ("max_results", `Int r.max_results) ]
     @ (match r.include_domains with
       | None -> []
-      | Some ds ->
-          [ ("include_domains", `List (List.map (fun s -> `String s) ds)) ])
+      | Some ds -> [ ("include_domains", `List (List.map (fun s -> `String s) ds)) ])
     @ (match r.exclude_domains with
       | None -> []
-      | Some ds ->
-          [ ("exclude_domains", `List (List.map (fun s -> `String s) ds)) ])
+      | Some ds -> [ ("exclude_domains", `List (List.map (fun s -> `String s) ds)) ])
     @ (match r.recency with
       | None -> []
       | Some value -> [ ("recency", `String (string_of_recency value)) ])
     @ (match r.language with None -> [] | Some s -> [ ("language", `String s) ])
-    @ match r.safe_search with
-    | None -> []
-    | Some b -> [ ("safe_search", `Bool b) ])
+    @ match r.safe_search with None -> [] | Some b -> [ ("safe_search", `Bool b) ])
 
 let fetch_request_to_yojson (r : fetch_request) : Yojson.Safe.t =
   `Assoc
@@ -444,27 +393,20 @@ let answer_request_to_yojson (r : answer_request) : Yojson.Safe.t =
     ([ ("query", `String r.query) ]
     @ (match r.extra_queries with
       | None -> []
-      | Some qs ->
-          [ ("extra_queries", `List (List.map (fun s -> `String s) qs)) ])
-    @ (match r.depth with
-      | None -> []
-      | Some d -> [ ("depth", `String (string_of_depth d)) ])
+      | Some qs -> [ ("extra_queries", `List (List.map (fun s -> `String s) qs)) ])
+    @ (match r.depth with None -> [] | Some d -> [ ("depth", `String (string_of_depth d)) ])
     @ (match r.provider with None -> [] | Some s -> [ ("provider", `String s) ])
     @ (match r.include_domains with
       | None -> []
-      | Some ds ->
-          [ ("include_domains", `List (List.map (fun s -> `String s) ds)) ])
+      | Some ds -> [ ("include_domains", `List (List.map (fun s -> `String s) ds)) ])
     @ (match r.exclude_domains with
       | None -> []
-      | Some ds ->
-          [ ("exclude_domains", `List (List.map (fun s -> `String s) ds)) ])
+      | Some ds -> [ ("exclude_domains", `List (List.map (fun s -> `String s) ds)) ])
     @ (match r.recency with
       | None -> []
       | Some value -> [ ("recency", `String (string_of_recency value)) ])
     @ (match r.language with None -> [] | Some s -> [ ("language", `String s) ])
-    @ match r.safe_search with
-    | None -> []
-    | Some b -> [ ("safe_search", `Bool b) ])
+    @ match r.safe_search with None -> [] | Some b -> [ ("safe_search", `Bool b) ])
 
 let answer_response_to_yojson (r : answer_response) : Yojson.Safe.t =
   `Assoc
@@ -477,9 +419,7 @@ let answer_response_to_yojson (r : answer_response) : Yojson.Safe.t =
        ("searches", `Int r.searches);
        ("fetched", `Int r.fetched);
      ]
-    @ (match r.retrieved_at with
-      | None -> []
-      | Some s -> [ ("retrieved_at", `String s) ])
+    @ (match r.retrieved_at with None -> [] | Some s -> [ ("retrieved_at", `String s) ])
     @ (match r.truncated with None -> [] | Some b -> [ ("truncated", `Bool b) ])
     @ match r.notice with None -> [] | Some s -> [ ("notice", `String s) ])
 
@@ -494,9 +434,7 @@ let search_query_to_yojson (q : search_query) : Yojson.Safe.t =
       ("country", opt_string q.country);
       ("language", opt_string q.language);
       ( "recency",
-        match q.recency with
-        | None -> `Null
-        | Some value -> `String (string_of_recency value) );
+        match q.recency with None -> `Null | Some value -> `String (string_of_recency value) );
       ("safe_search", match q.safe_search with None -> `Null | Some b -> `Bool b);
     ]
 
@@ -511,15 +449,7 @@ let provider_result_to_yojson (r : provider_result) : Yojson.Safe.t =
     ]
 
 let result_allowed =
-  [
-    "title";
-    "url";
-    "snippet";
-    "text";
-    "text_truncated";
-    "published_date";
-    "score";
-  ]
+  [ "title"; "url"; "snippet"; "text"; "text_truncated"; "published_date"; "score" ]
 
 let result_of_yojson (json : Yojson.Safe.t) =
   let* kvs = as_assoc json in
@@ -536,9 +466,7 @@ let result_of_yojson (json : Yojson.Safe.t) =
 let search_response_of_yojson (json : Yojson.Safe.t) =
   let* kvs = as_assoc json in
   let* () =
-    reject_extra
-      ~allowed:[ "query"; "provider"; "results"; "answer"; "retrieved_at"; "notice" ]
-      kvs
+    reject_extra ~allowed:[ "query"; "provider"; "results"; "answer"; "retrieved_at"; "notice" ] kvs
   in
   let* query = req_string "query" kvs in
   let* provider = req_string "provider" kvs in
@@ -712,8 +640,7 @@ let search_request_of_yojson (json : Yojson.Safe.t) =
       safe_search;
     }
 
-let fetch_request_allowed =
-  [ "url"; "offset"; "query"; "path"; "structure"; "provider" ]
+let fetch_request_allowed = [ "url"; "offset"; "query"; "path"; "structure"; "provider" ]
 
 let fetch_request_of_yojson (json : Yojson.Safe.t) =
   let* kvs = as_assoc json in
@@ -867,19 +794,7 @@ let answer_response_of_yojson (json : Yojson.Safe.t) =
   let* retrieved_at = opt_string "retrieved_at" kvs in
   let* truncated = opt_bool "truncated" kvs in
   let* notice = opt_string "notice" kvs in
-  Ok
-    {
-      query;
-      answer;
-      sources;
-      model;
-      depth;
-      searches;
-      fetched;
-      retrieved_at;
-      truncated;
-      notice;
-    }
+  Ok { query; answer; sources; model; depth; searches; fetched; retrieved_at; truncated; notice }
 
 let provider_result_of_yojson (json : Yojson.Safe.t) =
   let* kvs = as_assoc json in
@@ -906,8 +821,7 @@ let sanitize_result (r : result) : result * int =
   let title, title_count = Sanitize.sanitize_text r.title in
   let snippet, snippet_count = sanitize_option r.snippet in
   let text, text_count = sanitize_option r.text in
-  ( { r with title; snippet; text },
-    title_count + snippet_count + text_count )
+  ({ r with title; snippet; text }, title_count + snippet_count + text_count)
 
 let sanitize_results results =
   List.fold_left
@@ -944,8 +858,7 @@ let sanitize_fetch_response (r : fetch_response) : fetch_response * int =
           ([], 0) ms
         |> fun (ms, total) -> (Some (List.rev ms), total)
   in
-  ( { r with title; text; matches },
-    title_count + text_count + matches_count )
+  ({ r with title; text; matches }, title_count + text_count + matches_count)
 
 let sanitize_answer_response (r : answer_response) : answer_response * int =
   let answer, answer_count = Sanitize.sanitize_text r.answer in

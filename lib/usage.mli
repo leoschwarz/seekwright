@@ -1,19 +1,18 @@
 (** Usage accounting for the dashboard: RAM aggregates plus an optional journal.
 
-    The journal is append-only JSONL, one line per terminal call, read back only
-    by the dashboard at start and on refresh.
+    The journal is append-only JSONL, one line per terminal call, read back only by the dashboard at
+    start and on refresh.
 
-    Content-free by construction: a line holds counts, money, timing and a
-    provider or fallback name, never query text, URLs, hosts, titles or
-    extracted text.
+    Content-free by construction: a line holds counts, money, timing and a provider or fallback
+    name, never query text, URLs, hosts, titles or extracted text.
 
-    - Unknown is absent, never 0.0. A money total covers only the lines that
-      carried a price, and the count of those travels beside it.
+    - Unknown is absent, never 0.0. A money total covers only the lines that carried a price, and
+      the count of those travels beside it.
     - Per-provider, per-day latency samples stay in RAM.
-    - Agent mode's ranking data folds onto the same lines, and invalid citations
-      are attributed to the model, never to a provider.
-    - The fold of a line into the aggregates and the append of that line to the
-      journal are guarded by an [Eio.Mutex].
+    - Agent mode's ranking data folds onto the same lines, and invalid citations are attributed to
+      the model, never to a provider.
+    - The fold of a line into the aggregates and the append of that line to the journal are guarded
+      by an [Eio.Mutex].
     - Timestamps are generated from the [now] function injected at {!create}. *)
 
 type log = Log.log
@@ -21,18 +20,17 @@ type log = Log.log
 type t
 (** The recorder: aggregates, the recent deque, and the optional journal. *)
 
-val create
-  :  now:(unit -> float) ->
+val create :
+  now:(unit -> float) ->
   ?log:log ->
   ?history_path:Eio.Fs.dir_ty Eio.Path.t ->
   ?recent:int ->
   ?keep_days:int ->
   unit ->
   (t, string) result
-(** [create ~now ()] counts in memory only. [~history_path] adds the journal.
-    An unwritable directory or file returns an [Error] naming the path and fault.
-    [~recent] bounds the deque the dashboard shows newest-first; [~keep_days]
-    how far back day buckets survive. *)
+(** [create ~now ()] counts in memory only. [~history_path] adds the journal. An unwritable
+    directory or file returns an [Error] naming the path and fault. [~recent] bounds the deque the
+    dashboard shows newest-first; [~keep_days] how far back day buckets survive. *)
 
 val window_days : int
 (** The window the dashboard charts: 14 days. *)
@@ -52,8 +50,8 @@ val record_search :
   ?step:int ->
   unit ->
   unit
-(** One terminal search: success with a cost, or a named failure. A failure
-    carries [results=0] and [cost_usd=0.0]. [error] is the failure class name. *)
+(** One terminal search: success with a cost, or a named failure. A failure carries [results=0] and
+    [cost_usd=0.0]. [error] is the failure class name. *)
 
 val record_fetch :
   t ->
@@ -66,9 +64,8 @@ val record_fetch :
   ?step:int ->
   unit ->
   unit
-(** One terminal fetch. [fallback] names the fallback that served it, or [None]
-    for the local fetcher and for every failure. [cost_usd] is absent whenever
-    nothing was billed. *)
+(** One terminal fetch. [fallback] names the fallback that served it, or [None] for the local
+    fetcher and for every failure. [cost_usd] is absent whenever nothing was billed. *)
 
 val record_answer :
   t ->
@@ -90,24 +87,23 @@ val record_answer :
   ?error:string ->
   unit ->
   unit
-(** One terminal [answer] call: one line per call, content-free. [sources] is a
-    count of distinct URLs cited. *)
+(** One terminal [answer] call: one line per call, content-free. [sources] is a count of distinct
+    URLs cited. *)
 
 val search_cost_usd : t -> float
 (** Search spend so far, unrounded, from the in-memory aggregate. *)
 
 val snapshot : t -> Yojson.Safe.t
-(** The whole dashboard state, as the JSON the page reads.
-    Costs are rounded to six decimal places.
-    [endpoints] is the windowed per-provider series and [answers] is agent mode's
-    ranking data (see [citation_rows]). Every money figure is null rather than
-    0.0 when nothing was priced. *)
+(** The whole dashboard state, as the JSON the page reads. Costs are rounded to six decimal places.
+    [endpoints] is the windowed per-provider series and [answers] is agent mode's ranking data (see
+    [citation_rows]). Every money figure is null rather than 0.0 when nothing was priced. *)
 
 val iso_utc_full : float -> string
 (** [iso_utc_full secs] produces ISO 8601 UTC timestamp: [YYYY-MM-DDThh:mm:ss.uuuuuu+00:00]. *)
 
 val iso_utc_seconds : float -> string
-(** [iso_utc_seconds secs] produces second-resolution ISO 8601 UTC timestamp: [YYYY-MM-DDThh:mm:ss+00:00]. *)
+(** [iso_utc_seconds secs] produces second-resolution ISO 8601 UTC timestamp:
+    [YYYY-MM-DDThh:mm:ss+00:00]. *)
 
 val utc_date : float -> string
 (** [utc_date secs] is the UTC calendar day [YYYY-MM-DD], the day-bucket key. *)

@@ -20,17 +20,17 @@ let startup_verdict = Verdict.startup_verdict
 let agent_net ~sw ~net ~mono_clock ?audit config =
   match config.Config.agent.Config.base_url with
   | None -> Error "agent mode is enabled but [agent] base_url is unset"
-  | Some url -> (
+  | Some url ->
       let endpoint = Provider.policy_of_uri (Uri.of_string url) in
       grant_of_endpoint ~sw ~net ~mono_clock
-        ~timeout_seconds:config.Config.agent.Config.model_timeout_seconds ?audit endpoint)
+        ~timeout_seconds:config.Config.agent.Config.model_timeout_seconds ?audit endpoint
 
 let build_app ~sw
-    ~(env : < net : [> [> `Generic ] Eio.Net.ty] Eio.Resource.t;
-    fs : Eio.Fs.dir_ty Eio.Path.t;
-    mono_clock : [> Eio.Time.Mono.ty] Eio.Resource.t;
-    .. >)
-    ~now ~log ~allowed_hosts config =
+    ~(env :
+       < net : [> [> `Generic ] Eio.Net.ty ] Eio.Resource.t
+       ; fs : Eio.Fs.dir_ty Eio.Path.t
+       ; mono_clock : [> Eio.Time.Mono.ty ] Eio.Resource.t
+       ; .. >) ~now ~log ~allowed_hosts config =
   let mono_clock = Eio.Stdenv.mono_clock env in
   let mono_now () = Int64.to_float (Mtime.to_uint64_ns (Eio.Time.Mono.now mono_clock)) /. 1e9 in
   let history_path =
@@ -42,31 +42,27 @@ let build_app ~sw
   | Error message -> Error message
   | Ok usage -> (
       let audit = audit_sink log in
-      let built =
-        build_providers ~sw ~net:(env#net) ~mono_clock ~now ~audit ~log config
-      in
+      let built = build_providers ~sw ~net:env#net ~mono_clock ~now ~audit ~log config in
       match built.grant_errors with
-      | (name, message) :: _ ->
-          Error (Printf.sprintf "provider %s: %s" name message)
+      | (name, message) :: _ -> Error (Printf.sprintf "provider %s: %s" name message)
       | [] ->
           let* () = startup_verdict config built in
           let board =
             Health.create ~now:mono_now
               ~failure_threshold:config.Config.search.Config.health_failure_threshold
-              ~cooldown_seconds:config.Config.search.Config.health_cooldown_seconds
-              ~log ()
+              ~cooldown_seconds:config.Config.search.Config.health_cooldown_seconds ~log ()
           in
           let search =
-            Engine.Search.create config ~health:board ~usage ~log built.built
-              ~clock:mono_now ~now ()
+            Engine.Search.create config ~health:board ~usage ~log built.built ~clock:mono_now ~now
+              ()
           in
           let* fetch =
-            match build_fetch_stack ~sw ~net:(env#net) ~mono_clock ~audit config with
+            match build_fetch_stack ~sw ~net:env#net ~mono_clock ~audit config with
             | None -> Ok None
             | Some (Error message) -> Error message
             | Some (Ok (local, fallbacks)) -> (
                 match
-                  build_page_cache ~sw ~net:(env#net) ~mono_clock ~now ~audit ~fs:(env#fs) config
+                  build_page_cache ~sw ~net:env#net ~mono_clock ~now ~audit ~fs:env#fs config
                 with
                 | Error message -> Error message
                 | Ok cache -> (
@@ -80,7 +76,7 @@ let build_app ~sw
           let* agent =
             if not config.Config.agent.Config.enabled then Ok None
             else
-              match agent_net ~sw ~net:(env#net) ~mono_clock ~audit config with
+              match agent_net ~sw ~net:env#net ~mono_clock ~audit config with
               | Error message -> Error message
               | Ok net ->
                   Ok
@@ -105,9 +101,8 @@ let build_app ~sw
                       built = List.map fst built.probe_table;
                       probes = built.probe_table;
                       net =
-                        probe_net ~sw ~net:(env#net) ~mono_clock ~audit
-                          ~timeout_seconds:
-                            config.Config.policy.Config.provider_timeout_seconds
+                        probe_net ~sw ~net:env#net ~mono_clock ~audit
+                          ~timeout_seconds:config.Config.policy.Config.provider_timeout_seconds
                           built.endpoints;
                     };
               },

@@ -31,6 +31,6 @@ let search_web =
 let registry ~sw ~net =
   let decision =
     Mcp_caps.Policy.with_endpoints ~sw ~net ~max_response_bytes:4096
-      [{ Mcp_caps.Policy.scheme = `Https; host = "api.example.com"; port = None }]
+      [ { Mcp_caps.Policy.scheme = `Https; host = "api.example.com"; port = None } ]
   in
   Mcp_caps.Registry.add Mcp_caps.Registry.empty search_web ~grant:decision

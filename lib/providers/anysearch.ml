@@ -32,18 +32,14 @@ let parse ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->
       match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
       | Some url, Some title when url <> "" && title <> "" ->
           let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "snippet" item)
-              snippet_chars
+            Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
           in
           Some
             {
@@ -66,8 +62,7 @@ let check_status status =
   if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
   else if status = 402 || status = 429 then
     (* 402 indicates quota exhaustion. Fixed message avoids leaking generated credentials. *)
-    Error
-      (Provider.quota_exhausted ~provider:name ~message:"out of credits or rate limited" ())
+    Error (Provider.quota_exhausted ~provider:name ~message:"out of credits or rate limited" ())
   else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
   else Ok ()
 
@@ -96,7 +91,8 @@ let search ~cost_per_1k ~snippet_chars (net : Provider.Net.t) (q : Provider.sear
       Ok
         {
           Provider.provider = name;
-          results = parse ~snippet_chars (Provider.Json.field "data" data) ~limit:q.Model.max_results;
+          results =
+            parse ~snippet_chars (Provider.Json.field "data" data) ~limit:q.Model.max_results;
           answer = None;
           cost_usd = Some (cost_per_1k /. 1000.);
           notice =

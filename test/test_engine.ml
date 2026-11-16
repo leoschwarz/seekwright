@@ -46,7 +46,7 @@ let now () = 1768478400.
 (* [Usage.snapshot] is a [Yojson.Safe.t] and the log capture is a field list; the
    helpers below are the loose typing the Python suite gets from dicts. *)
 let get key = function
-  | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
+  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
   | _ -> `Null
 
 let items = function `List xs -> xs | _ -> []
@@ -58,7 +58,7 @@ let int = function
   | v -> A.failf "not a count: %s" (Yojson.Safe.to_string v)
 
 let bool = function `Bool b -> b | v -> A.failf "not a flag: %s" (Yojson.Safe.to_string v)
-let is_null = (( = ) `Null)
+let is_null = ( = ) `Null
 
 let money label expected = function
   | `Int n -> A.(check (float 1e-9) label (float_of_int n) expected)
@@ -68,15 +68,7 @@ let money label expected = function
 (* Python builds these with keyword defaults; an OCaml record has none, so the
    optional argument is the field a case cares about and the rest are [None]. *)
 let result ?snippet ?text ?(url = "https://example.com/a") title =
-  {
-    Model.title;
-    url;
-    snippet;
-    text;
-    text_truncated = None;
-    published_date = None;
-    score = None;
-  }
+  { Model.title; url; snippet; text; text_truncated = None; published_date = None; score = None }
 
 let query ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country ?language
     ?recency ?safe_search text =
@@ -104,8 +96,8 @@ type stub = {
   behavior : (Model.search_query -> (Provider.outcome, Provider.error) result) ref;
 }
 
-let stub ?(name = "serper") ?fail ?(results = `Default) ?(cost_usd = Some 0.001) ?answer ?notice
-    () =
+let stub ?(name = "serper") ?fail ?(results = `Default) ?(cost_usd = Some 0.001) ?answer ?notice ()
+    =
   let s =
     {
       name;
@@ -116,13 +108,13 @@ let stub ?(name = "serper") ?fail ?(results = `Default) ?(cost_usd = Some 0.001)
       behavior = ref (fun _ -> Error (Provider.provider_error ~provider:name "not configured"));
     }
   in
-  s.behavior
-    := (fun q ->
-         incr s.calls;
-         s.seen := q :: !(s.seen);
-         match fail with
-         | Some failure -> Error failure
-         | None ->
+  (s.behavior :=
+     fun q ->
+       incr s.calls;
+       s.seen := q :: !(s.seen);
+       match fail with
+       | Some failure -> Error failure
+       | None ->
            let hits =
              match results with
              | `Default -> [ result ~snippet:"a snippet" ("Result for " ^ q.Model.query) ]
@@ -143,17 +135,20 @@ let stub ?(name = "serper") ?fail ?(results = `Default) ?(cost_usd = Some 0.001)
    order is measured by. *)
 let recording order s =
   let inner = !(s.behavior) in
-  s.behavior := (fun q -> order := !order @ [ s.name ]; inner q);
+  (s.behavior :=
+     fun q ->
+       order := !order @ [ s.name ];
+       inner q);
   s
 
 (* A stub that reports the pre-cap length of its first hit, which is how an
    adapter says what its own policy cap discarded. *)
 let clip ?(rank = 0) chars s =
   let inner = !(s.behavior) in
-  s.behavior
-    := (fun q ->
-         match inner q with
-         | Ok outcome ->
+  (s.behavior :=
+     fun q ->
+       match inner q with
+       | Ok outcome ->
            Ok
              {
                outcome with
@@ -163,17 +158,17 @@ let clip ?(rank = 0) chars s =
                      if index = rank then { hit with Provider.uncapped_chars = Some chars } else hit)
                    outcome.Provider.results;
              }
-         | Error failure -> Error failure);
+       | Error failure -> Error failure);
   s
 
 (* The zero-results fixtures: the same stub answering with no hits, and with an
    answer beside them. *)
 let no_hits ?answer ?notice s =
   let inner = !(s.behavior) in
-  s.behavior
-    := (fun q ->
-         match inner q with
-         | Ok outcome ->
+  (s.behavior :=
+     fun q ->
+       match inner q with
+       | Ok outcome ->
            Ok
              {
                outcome with
@@ -181,7 +176,7 @@ let no_hits ?answer ?notice s =
                answer = (match answer with Some text -> Some text | None -> outcome.answer);
                notice = (match notice with Some text -> Some text | None -> outcome.notice);
              }
-         | Error failure -> Error failure);
+       | Error failure -> Error failure);
   s
 
 let provider (s : stub) : Provider.t =
@@ -193,17 +188,14 @@ let provider (s : stub) : Provider.t =
     let aclose () = ()
   end : Provider.S)
 
-let failure ?(retryable = true) ~name message = Provider.provider_error ~retryable ~provider:name message
+let failure ?(retryable = true) ~name message =
+  Provider.provider_error ~retryable ~provider:name message
 let quota ~name = Provider.quota_exhausted ~provider:name ()
 
-type captured = {
-  level : Config.log_level;
-  event : string;
-  fields : (string * Yojson.Safe.t) list;
-}
+type captured = { level : Config.log_level; event : string; fields : (string * Yojson.Safe.t) list }
 
 let sink lines : Engine.log =
-  fun level event fields -> lines := !lines @ [ { level; event; fields } ]
+ fun level event fields -> lines := !lines @ [ { level; event; fields } ]
 
 let events lines name =
   List.filter_map (fun (c : captured) -> if c.event = name then Some c.fields else None) !lines
@@ -238,10 +230,12 @@ let level_name = function
 let config ?default ?permitted ?fallback ?free_fallback ?(logging = Config.default_logging_config)
     names =
   let entry name =
-    ( name
-    , { Config.default_provider_config with
-        Config.enabled = true
-      ; url = if name = "searxng" then Some "http://searxng.test:8080" else None } )
+    ( name,
+      {
+        Config.default_provider_config with
+        Config.enabled = true;
+        url = (if name = "searxng" then Some "http://searxng.test:8080" else None);
+      } )
   in
   match
     Config.resolve ~providers:(List.map entry names) ?default_provider:default
@@ -277,8 +271,8 @@ type board = {
   config : Config.t;
 }
 
-let make_engine ?default ?permitted ?fallback ?free_fallback
-    ?(health = Health.create ~now ()) ?usage ?logging rigs =
+let make_engine ?default ?permitted ?fallback ?free_fallback ?(health = Health.create ~now ())
+    ?usage ?logging rigs =
   let lines = ref [] in
   let names = List.map (fun (r : rig) -> r.name) rigs in
   let config = config ?default ?permitted ?fallback ?free_fallback ?logging names in
@@ -287,14 +281,7 @@ let make_engine ?default ?permitted ?fallback ?free_fallback
       (List.map (fun (r : rig) -> (r.name, r.provider)) rigs)
       ~clock ~now ()
   in
-  {
-    engine;
-    lines;
-    stubs = List.map (fun (r : rig) -> r.stub) rigs;
-    health;
-    usage;
-    config;
-  }
+  { engine; lines; stubs = List.map (fun (r : rig) -> r.stub) rigs; health; usage; config }
 
 let calls board name =
   List.fold_left
@@ -307,7 +294,10 @@ let snapshot board =
   | Some usage -> Usage.snapshot usage
 
 let recent json = items (get "recent" json)
-let one_recent json = match recent json with [ entry ] -> entry | many -> A.failf "expected one usage entry, got %d" (List.length many)
+let one_recent json =
+  match recent json with
+  | [ entry ] -> entry
+  | many -> A.failf "expected one usage entry, got %d" (List.length many)
 
 (* Answers and refusals. The Python suite reads [str(exc.value)] on both sides of
    [pytest.raises]; here the refusal and the failure are returned values whose
@@ -323,14 +313,14 @@ let refused board ?provider ?mode q =
   match Engine.Search.search board.engine ?provider ?mode q with
   | Error (Engine.Search.Refused sentence) -> sentence
   | Error (Engine.Search.Failed sentence) ->
-    A.failf "expected a refusal (400), got a failure (502): %s" sentence
+      A.failf "expected a refusal (400), got a failure (502): %s" sentence
   | Ok response -> A.failf "expected a refusal, got results from %s" response.Model.provider
 
 let failed board ?provider ?mode q =
   match Engine.Search.search board.engine ?provider ?mode q with
   | Error (Engine.Search.Failed sentence) -> sentence
   | Error (Engine.Search.Refused sentence) ->
-    A.failf "expected a failure (502), got a refusal (400): %s" sentence
+      A.failf "expected a failure (502), got a refusal (400): %s" sentence
   | Ok response -> A.failf "expected a failure, got results from %s" response.Model.provider
 
 let results_are_returned () =
@@ -387,7 +377,8 @@ let the_default_is_only_offered_when_there_is_one () =
   let board = make_engine [ rig ~name:"serper" (); rig ~name:"exa" () ] in
   excludes "no default to omit" "omit `provider`" (refused board ~provider:"linkup" (query "x y"));
   let with_default = make_engine ~default:"serper" [ rig ~name:"serper" () ] in
-  includes "a default to omit" "omit `provider`" (refused with_default ~provider:"linkup" (query "x y"))
+  includes "a default to omit" "omit `provider`"
+    (refused with_default ~provider:"linkup" (query "x y"))
 
 let a_failure_carries_retry_advice () =
   let board = make_engine [ rig ~fail:(failure ~name:"serper" "503") () ] in
@@ -412,7 +403,10 @@ let a_non_object_json_body_reaches_the_caller_as_advice () =
     }
   in
   let adapter = Freeserp.make ~now ~net () in
-  let board = make_engine ~default:"freeserp" [ { stub = stub ~name:"freeserp" (); provider = adapter; name = "freeserp" } ] in
+  let board =
+    make_engine ~default:"freeserp"
+      [ { stub = stub ~name:"freeserp" (); provider = adapter; name = "freeserp" } ]
+  in
   check_string "the whole sentence"
     "Search failed - freeserp: malformed JSON response. Retry shortly or try a different phrasing."
     (failed board (query "sqlite wal mode"))
@@ -420,10 +414,7 @@ let a_non_object_json_body_reaches_the_caller_as_advice () =
 let a_failed_default_is_served_by_the_fallback () =
   let board =
     make_engine ~default:"serper" ~fallback:[ "linkup" ]
-      [
-        rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") ();
-        rig ~name:"linkup" ();
-      ]
+      [ rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") (); rig ~name:"linkup" () ]
   in
   let r = served board (query "x y") in
   check_string "provider" "linkup" r.Model.provider;
@@ -442,16 +433,14 @@ let the_substitute_notice_joins_the_adapter_notice () =
   linkup.stub.notice := Some "cannot filter by domain; that constraint was ignored";
   let board = make_engine ~default:"serper" ~fallback:[ "linkup" ] [ failing; linkup ] in
   check_string "notice"
-    "serper failed (upstream 503); served by linkup instead; cannot filter by domain; that constraint was ignored"
+    "serper failed (upstream 503); served by linkup instead; cannot filter by domain; that \
+     constraint was ignored"
     (Option.value ~default:"" (served board (query "x y")).Model.notice)
 
 let a_named_provider_failure_stays_terminal () =
   let board =
     make_engine ~default:"serper" ~fallback:[ "linkup" ]
-      [
-        rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") ();
-        rig ~name:"linkup" ();
-      ]
+      [ rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") (); rig ~name:"linkup" () ]
   in
   includes "advice" "Retry shortly" (failed board ~provider:"serper" (query "x y"));
   check_int "the ladder behind the default is not walked" 0 (calls board "linkup");
@@ -467,10 +456,7 @@ let an_open_circuit_fallback_is_skipped () =
   Health.record_failure health ~reason:"probe unreachable" "linkup" ();
   let board =
     make_engine ~default:"serper" ~fallback:[ "linkup" ] ~health
-      [
-        rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") ();
-        rig ~name:"linkup" ();
-      ]
+      [ rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") (); rig ~name:"linkup" () ]
   in
   let text = failed board (query "x y") in
   check_int "the gated fallback was never dialed" 0 (calls board "linkup");
@@ -497,22 +483,19 @@ let when_every_fallback_fails_the_original_error_leads () =
     "linkup|HTTP 502|upstream 503;tavily|HTTP 500|upstream 503"
     (events board.lines "search.fallback_failed"
     |> List.map (fun fields ->
-           String.concat "|"
-             [
-               str (field fields "fallback")
-             ; str (field fields "reason")
-             ; str (field fields "original_reason")
-             ])
+        String.concat "|"
+          [
+            str (field fields "fallback");
+            str (field fields "reason");
+            str (field fields "original_reason");
+          ])
     |> String.concat ";");
   check_int "one failure line for the call" 1 (count board.lines "search.failed")
 
 let each_fallback_runs_once_and_the_default_is_not_retried () =
   let board =
     make_engine ~default:"serper" ~fallback:[ "serper"; "linkup" ]
-      [
-        rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") ();
-        rig ~name:"linkup" ();
-      ]
+      [ rig ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") (); rig ~name:"linkup" () ]
   in
   let r = served board (query "x y") in
   check_int "the tried default is skipped, not retried" 1 (calls board "serper");
@@ -561,8 +544,11 @@ let free_rigs ?(fail = []) ?order names =
 let the_free_walk_is_the_constant_order_keyless_first () =
   let order = ref [] in
   let board =
-    make_engine (free_rigs ~fail:[ "tinyfish"; "searxng"; "parallel:free"; "exa:free" ] ~order
-        [ "tinyfish"; "searxng"; "parallel:free"; "exa:free" ])
+    make_engine
+      (free_rigs
+         ~fail:[ "tinyfish"; "searxng"; "parallel:free"; "exa:free" ]
+         ~order
+         [ "tinyfish"; "searxng"; "parallel:free"; "exa:free" ])
   in
   ignore (failed board ~mode:Router.Free (query "x y"));
   check_string "the declaration order, not the order they were handed to the engine"
@@ -666,7 +652,9 @@ let no_free_provider_enabled_is_a_clean_refusal () =
   let board = make_engine ~default:"serper" [ rig ~name:"serper" () ] in
   let text = refused board ~mode:Router.Free (query "x y") in
   includes "the reason" "No free provider is enabled" text;
-  List.iter (fun name -> includes "the free set is named" name text) (List.sort String.compare Config.free_providers)
+  List.iter
+    (fun name -> includes "the free set is named" name text)
+    (List.sort String.compare Config.free_providers)
 
 let naming_a_provider_and_a_mode_is_refused () =
   (* Two ways to name a route is an ambiguity with a precedence rule hiding in
@@ -674,8 +662,9 @@ let naming_a_provider_and_a_mode_is_refused () =
   let board = make_engine ~default:"serper" [ rig ~name:"serper" (); rig ~name:"exa:free" () ] in
   (match Engine.Search.search board.engine ~provider:"serper" ~mode:Router.Free (query "x y") with
   | Error (Engine.Search.Refused sentence) ->
-    includes "the rule" "pass `provider` or `mode`, not both" sentence
-  | Error (Engine.Search.Failed sentence) -> A.failf "expected a refusal, got a failure: %s" sentence
+      includes "the rule" "pass `provider` or `mode`, not both" sentence
+  | Error (Engine.Search.Failed sentence) ->
+      A.failf "expected a refusal, got a failure: %s" sentence
   | Ok response -> A.failf "expected a refusal, got results from %s" response.Model.provider);
   check_int "nothing was dispatched" 0 (calls board "serper" + calls board "exa:free")
 
@@ -686,7 +675,8 @@ let mode_is_bound_on_search_ok_either_way () =
   ignore (served board ~mode:Router.Free (query "q"));
   check_string "mode" "free" (str (field (last_event board.lines "search.ok") "mode"));
   ignore (served board (query "q"));
-  check_bool "mode is null when unasked" true (is_null (field (last_event board.lines "search.ok") "mode"))
+  check_bool "mode is null when unasked" true
+    (is_null (field (last_event board.lines "search.ok") "mode"))
 
 let a_free_served_search_records_the_fallback_once () =
   (* One terminal record naming the fallback that served it, like the default
@@ -759,7 +749,9 @@ let the_free_order_and_only_free_names () =
   let order = ref [] in
   let board =
     make_engine
-      (free_rigs ~fail:[ "tinyfish"; "searxng"; "parallel:free"; "exa:free" ] ~order
+      (free_rigs
+         ~fail:[ "tinyfish"; "searxng"; "parallel:free"; "exa:free" ]
+         ~order
          [ "tinyfish"; "searxng"; "parallel:free"; "exa:free" ])
   in
   ignore (failed board (query "x y"));
@@ -817,7 +809,9 @@ let an_open_circuit_is_skipped_on_the_implicit_walk () =
   check_int "the gated fallback was never dialed" 0 (calls board "parallel:free");
   check_string "the skipped names" "parallel:free"
     (String.concat ","
-       (List.map (fun fields -> str (field fields "fallback")) (events board.lines "search.fallback_skipped")))
+       (List.map
+          (fun fields -> str (field fields "fallback"))
+          (events board.lines "search.fallback_skipped")))
 
 let one_billable_name_brings_the_refusal_back () =
   (* The moment the deployment can spend, an unnamed search is the old error
@@ -861,7 +855,9 @@ let mode_stays_none_on_the_unnamed_walk () =
   check_bool "fell_back" false (bool (field ok "fell_back"))
 
 let a_name_enabled_but_not_permitted_never_reaches_the_adapter () =
-  let board = make_engine ~permitted:[ "linkup" ] [ rig ~name:"serper" (); rig ~name:"linkup" () ] in
+  let board =
+    make_engine ~permitted:[ "linkup" ] [ rig ~name:"serper" (); rig ~name:"linkup" () ]
+  in
   let message = refused board ~provider:"serper" (query "q") in
   check_int "the refusal is before dispatch, so nothing billed" 0 (calls board "serper");
   includes "the refused name is named" "'serper'" message;
@@ -869,7 +865,9 @@ let a_name_enabled_but_not_permitted_never_reaches_the_adapter () =
   excludes "the other refusal must not be reused" "not enabled" message;
   check_int "a refused call dispatches nothing to journal" 0 (count board.lines "search.ok");
   check_string "the operator's line is a warning" "WARNING"
-    (level_name (List.hd (List.filter (fun (c : captured) -> c.event = "search.rejected") !(board.lines))).level)
+    (level_name
+       (List.hd (List.filter (fun (c : captured) -> c.event = "search.rejected") !(board.lines)))
+         .level)
 
 let an_unset_permission_set_is_permissive () =
   (* No key means every enabled provider is permitted: the same call that is
@@ -883,7 +881,9 @@ let an_unset_permission_set_is_permissive () =
 let the_permission_intersection_holds_both_ways () =
   (* The two refusals are asserted apart, not merely asserted: permitted is not
      enabled, and enabled is not permitted. *)
-  let board = make_engine ~permitted:[ "linkup" ] [ rig ~name:"serper" (); rig ~name:"linkup" () ] in
+  let board =
+    make_engine ~permitted:[ "linkup" ] [ rig ~name:"serper" (); rig ~name:"linkup" () ]
+  in
   (* Permitted but not enabled: the honest reason is "not enabled", and [linkup]
      is here precisely so the wording cannot be the other one. *)
   let enabled = refused board ~provider:"tavily" (query "q") in
@@ -899,10 +899,7 @@ let the_default_route_skips_an_unpermitted_fallback () =
      the fallback is skipped with a line saying so, and never called. *)
   let board =
     make_engine ~default:"linkup" ~fallback:[ "linkup"; "serper" ] ~permitted:[ "linkup" ]
-      [
-        rig ~name:"serper" ();
-        rig ~name:"linkup" ~fail:(failure ~name:"linkup" "503") ();
-      ]
+      [ rig ~name:"serper" (); rig ~name:"linkup" ~fail:(failure ~name:"linkup" "503") () ]
   in
   ignore (failed board (query "q"));
   check_int "the default is still attempted first" 1 (calls board "linkup");
@@ -913,17 +910,19 @@ let the_default_route_skips_an_unpermitted_fallback () =
   (* Warning rather than info: a fallback the ladder names but the allow-list
      removes is dead config the operator should fix. *)
   check_string "level" "WARNING"
-    (level_name (List.hd (List.filter (fun (c : captured) -> c.event = "search.fallback_unpermitted") !(board.lines))).level)
+    (level_name
+       (List.hd
+          (List.filter
+             (fun (c : captured) -> c.event = "search.fallback_unpermitted")
+             !(board.lines)))
+         .level)
 
 let an_unpermitted_default_is_refused_not_rerouted () =
   (* Never a silent reroute: the ladder behind the default is not walked, because
      the refusal is raised before the ladder exists to be walked. *)
   let board =
     make_engine ~default:"serper" ~fallback:[ "linkup" ] ~permitted:[ "linkup" ]
-      [
-        rig ~name:"serper" ~fail:(failure ~name:"serper" "503") ();
-        rig ~name:"linkup" ();
-      ]
+      [ rig ~name:"serper" ~fail:(failure ~name:"serper" "503") (); rig ~name:"linkup" () ]
   in
   let message = refused board (query "q") in
   includes "the reason" "The default provider 'serper' is not permitted" message;
@@ -934,10 +933,7 @@ let a_free_walk_never_reaches_an_unpermitted_fallback () =
   let order = ref [] in
   let board =
     make_engine ~free_fallback:[ "exa:free"; "parallel:free" ] ~permitted:[ "parallel:free" ]
-      [
-        rig ~name:"exa:free" ~order ();
-        rig ~name:"parallel:free" ~order ();
-      ]
+      [ rig ~name:"exa:free" ~order (); rig ~name:"parallel:free" ~order () ]
   in
   let r = served board ~mode:Router.Free (query "q") in
   check_string "provider" "parallel:free" r.Model.provider;
@@ -956,7 +952,9 @@ let a_free_walk_emptied_by_the_list_says_permitted () =
 
 let a_rejection_binds_the_permitted_set () =
   (* The operator's line tells the two refusals apart; [enabled] stays. *)
-  let board = make_engine ~permitted:[ "linkup" ] [ rig ~name:"serper" (); rig ~name:"linkup" () ] in
+  let board =
+    make_engine ~permitted:[ "linkup" ] [ rig ~name:"serper" (); rig ~name:"linkup" () ]
+  in
   ignore (refused board ~provider:"serper" (query "q"));
   let fields = event board.lines "search.rejected" in
   check_string "permitted" "linkup" (str (field fields "permitted"));
@@ -965,7 +963,8 @@ let a_rejection_binds_the_permitted_set () =
 let the_rejection_bind_is_none_when_unset () =
   let board = make_engine [ rig ~name:"serper" () ] in
   ignore (refused board ~provider:"linkup" (query "q"));
-  check_bool "permitted is null" true (is_null (field (event board.lines "search.rejected") "permitted"))
+  check_bool "permitted is null" true
+    (is_null (field (event board.lines "search.rejected") "permitted"))
 
 let empty_results_are_not_an_error () =
   let r = served (make_engine [ rig ~results:(`List []) () ]) (query "asdkjhasdkjh") in
@@ -984,7 +983,8 @@ let a_zero_results_notice_names_the_other_providers () =
 
 let a_solo_provider_zero_results_says_it_is_alone () =
   let r = served (make_engine [ rig ~results:(`List []) () ]) (query "asdkjhasdkjh") in
-  includes "the fact" "serper is the only enabled provider." (Option.value ~default:"" r.Model.notice)
+  includes "the fact" "serper is the only enabled provider."
+    (Option.value ~default:"" r.Model.notice)
 
 let an_answered_zero_result_gets_no_notice () =
   (* An answer with no hits is content; a nag would be noise on it. *)
@@ -993,7 +993,9 @@ let an_answered_zero_result_gets_no_notice () =
   check_bool "no notice" true (r.Model.notice = None)
 
 let an_adapter_notice_is_joined_with_the_zero_notice () =
-  let empty_serper = no_hits (stub ~name:"serper" ~notice:"cannot filter by domain; that constraint was ignored" ()) in
+  let empty_serper =
+    no_hits (stub ~name:"serper" ~notice:"cannot filter by domain; that constraint was ignored" ())
+  in
   let r =
     served
       (make_engine [ rig_of empty_serper; rig ~name:"linkup" () ])
@@ -1078,7 +1080,9 @@ let result_content_is_recorded_when_opted_in () =
   check_string "snippet" "'a snippet'" (str (field fields "snippet"));
   (* The correlation handle rides along from the base logger, which is what ties
      this back to its [search.ok] without repeating the query. *)
-  check_string "qhash" (str (field (event board.lines "search.ok") "qhash")) (str (field fields "qhash"))
+  check_string "qhash"
+    (str (field (event board.lines "search.ok") "qhash"))
+    (str (field fields "qhash"))
 
 let ranks_are_one_based_and_ordered () =
   let hits =
@@ -1086,21 +1090,27 @@ let ranks_are_one_based_and_ordered () =
         result ~snippet:"s" (Printf.sprintf "t%d" i) ~url:(Printf.sprintf "https://x.test/%d" i))
   in
   let board =
-    make_engine ~logging:{ Config.default_logging_config with Config.log_content = true }
+    make_engine
+      ~logging:{ Config.default_logging_config with Config.log_content = true }
       [ rig ~results:(`List hits) () ]
   in
   ignore (served board (query "q"));
   check_string "ranks" "1,2,3"
     (String.concat ","
-       (List.map (fun fields -> string_of_int (int (field fields "rank"))) (events board.lines "search.result")));
+       (List.map
+          (fun fields -> string_of_int (int (field fields "rank")))
+          (events board.lines "search.result")));
   check_string "titles" "'t0','t1','t2'"
-    (String.concat "," (List.map (fun fields -> str (field fields "title")) (events board.lines "search.result")))
+    (String.concat ","
+       (List.map (fun fields -> str (field fields "title")) (events board.lines "search.result")))
 
 let the_answer_is_recorded_only_when_there_is_one () =
   (* [search.ok] reduces it to a bool; this is what recovers the prose. *)
   let s = stub () in
   let board =
-    make_engine ~logging:{ Config.default_logging_config with Config.log_content = true } [ rig_of s ]
+    make_engine
+      ~logging:{ Config.default_logging_config with Config.log_content = true }
+      [ rig_of s ]
   in
   ignore (served board (query "q"));
   check_int "no answer event yet" 0 (count board.lines "search.answer");
@@ -1173,7 +1183,9 @@ let the_cap_lengths_ride_their_own_event () =
   check_string "provider" (str (field ok "provider")) (str (field fields "provider"));
   (* Counts only: nothing carrying a hit's title, URL or text reaches this line. *)
   let names = String.concat "," (List.map fst fields) in
-  List.iter (fun forbidden -> excludes "no content on the cap line" forbidden names) [ "title"; "url"; "snippet"; "text" ]
+  List.iter
+    (fun forbidden -> excludes "no content on the cap line" forbidden names)
+    [ "title"; "url"; "snippet"; "text" ]
 
 let a_result_with_no_capped_field_is_not_measured () =
   (* No snippet and no extract means no cap ran, so nothing was discarded. The
@@ -1185,7 +1197,9 @@ let a_result_with_no_capped_field_is_not_measured () =
 
 let an_extract_is_measured_against_the_other_cap () =
   (* [field] is which cap applied, and it decides which limit is named. *)
-  let s = clip 9000 (stub ~results:(`List [ result "t" ~url:"https://x.test/a" ~text:"body" ]) ()) in
+  let s =
+    clip 9000 (stub ~results:(`List [ result "t" ~url:"https://x.test/a" ~text:"body" ]) ())
+  in
   let board = make_engine [ rig_of s ] in
   ignore (served board (query "q"));
   let fields = event board.lines "search.cap" in
@@ -1200,7 +1214,9 @@ let the_cap_line_follows_search_oks_provider_rule () =
      [provider]. *)
   let serper = stub ~name:"serper" ~fail:(failure ~name:"serper" "upstream 503") () in
   let linkup = clip 812 (stub ~name:"linkup" ()) in
-  let board = make_engine ~default:"serper" ~fallback:[ "linkup" ] [ rig_of serper; rig_of linkup ] in
+  let board =
+    make_engine ~default:"serper" ~fallback:[ "linkup" ] [ rig_of serper; rig_of linkup ]
+  in
   let r = served board (query "x y") in
   check_string "the substitute served" "linkup" r.Model.provider;
   let fields = event board.lines "search.cap" in
@@ -1219,9 +1235,7 @@ let a_success_records_provider_cost_and_results () =
   check_bool "no error" true (is_null (get "error" entry))
 
 let a_terminal_failure_records_the_class_and_attempted_provider () =
-  let board =
-    make_engine ~usage:(recorder ()) [ rig ~fail:(quota ~name:"serper") () ]
-  in
+  let board = make_engine ~usage:(recorder ()) [ rig ~fail:(quota ~name:"serper") () ] in
   ignore (failed board (query "q"));
   let entry = one_recent (snapshot board) in
   check_string "error" "QuotaExhausted" (str (get "error" entry));
@@ -1233,10 +1247,7 @@ let a_terminal_failure_records_the_class_and_attempted_provider () =
 let a_fallback_served_call_records_only_the_fallback () =
   let board =
     make_engine ~default:"serper" ~fallback:[ "linkup" ] ~usage:(recorder ())
-      [
-        rig ~name:"serper" ~fail:(failure ~name:"serper" "503") ();
-        rig ~name:"linkup" ();
-      ]
+      [ rig ~name:"serper" ~fail:(failure ~name:"serper" "503") (); rig ~name:"linkup" () ]
   in
   ignore (served board (query "q"));
   let snapshot = snapshot board in
@@ -1261,9 +1272,7 @@ let an_exhausted_ladder_records_the_tried_default () =
 
 let a_pre_dispatch_reject_records_nothing () =
   (* Nothing was billed; the error is model-facing, not usage. *)
-  let board =
-    make_engine ~usage:(recorder ()) [ rig ~name:"serper" (); rig ~name:"linkup" () ]
-  in
+  let board = make_engine ~usage:(recorder ()) [ rig ~name:"serper" (); rig ~name:"linkup" () ] in
   ignore (refused board ~provider:"google" (query "q"));
   check_int "nothing journalled" 0 (List.length (recent (snapshot board)))
 
@@ -1295,7 +1304,8 @@ let result_text_is_escaped_before_it_leaves () =
   let r = served board (query "special tokens") in
   let hit = List.hd r.Model.results in
   check_string "title" ("a title with <" ^ z ^ "start_of_turn>") hit.Model.title;
-  check_string "text" (Printf.sprintf "the page says <%s|endoftext|> and [%sINST] hi" z z)
+  check_string "text"
+    (Printf.sprintf "the page says <%s|endoftext|> and [%sINST] hi" z z)
     (Option.value ~default:"" hit.Model.text);
   check_string "url is left alone" "https://example.com/tokens" hit.Model.url;
   check_int "sanitized" 3 (sanitized board)
@@ -1303,7 +1313,9 @@ let result_text_is_escaped_before_it_leaves () =
 let the_answer_tier_escapes_too () =
   let board = make_engine [ rig ~answer:"an answer quoting <|im_end|>" () ] in
   let r = served board (query "special tokens") in
-  check_string "answer" ("an answer quoting <" ^ z ^ "|im_end|>") (Option.value ~default:"" r.Model.answer);
+  check_string "answer"
+    ("an answer quoting <" ^ z ^ "|im_end|>")
+    (Option.value ~default:"" r.Model.answer);
   check_int "sanitized" 1 (sanitized board)
 
 let a_clean_result_counts_zero () =
@@ -1324,14 +1336,17 @@ let a_reread_response_is_not_escaped_again () =
   let board = make_engine [ rig ~results:(`List hits) () ] in
   let first = served board (query "special tokens") in
   let second = served board (query "special tokens") in
-  check_string "first serve" ("raw <" ^ z ^ "|im_start|> raw")
+  check_string "first serve"
+    ("raw <" ^ z ^ "|im_start|> raw")
     (Option.value ~default:"" (List.hd first.Model.results).Model.text);
   check_string "second serve is unchanged"
     (Option.value ~default:"" (List.hd first.Model.results).Model.text)
     (Option.value ~default:"" (List.hd second.Model.results).Model.text);
   check_string "the engine counts one escape per fresh adapter object" "1,1"
     (String.concat ","
-       (List.map (fun fields -> string_of_int (int (field fields "sanitized"))) (events board.lines "search.ok")));
+       (List.map
+          (fun fields -> string_of_int (int (field fields "sanitized")))
+          (events board.lines "search.ok")));
   let again, count =
     Model.sanitize_provider_result
       {
@@ -1376,9 +1391,12 @@ let provider_failure_cases =
 
 let default_route_cases =
   [
-    A.test_case "a failed default is served by the fallback" `Quick a_failed_default_is_served_by_the_fallback;
-    A.test_case "the substitute notice joins the adapter notice" `Quick the_substitute_notice_joins_the_adapter_notice;
-    A.test_case "a named provider failure stays terminal" `Quick a_named_provider_failure_stays_terminal;
+    A.test_case "a failed default is served by the fallback" `Quick
+      a_failed_default_is_served_by_the_fallback;
+    A.test_case "the substitute notice joins the adapter notice" `Quick
+      the_substitute_notice_joins_the_adapter_notice;
+    A.test_case "a named provider failure stays terminal" `Quick
+      a_named_provider_failure_stays_terminal;
     A.test_case "an open circuit fallback is skipped" `Quick an_open_circuit_fallback_is_skipped;
     A.test_case "when every fallback fails the original error leads" `Quick
       when_every_fallback_fails_the_original_error_leads;
@@ -1396,31 +1414,44 @@ let free_mode_cases =
       the_free_walk_is_the_constant_order_keyless_first;
     A.test_case "the configured ladder decides the order and narrows the walk" `Quick
       the_configured_free_ladder_decides_the_order_and_narrows_the_walk;
-    A.test_case "the free walk does not consult the default" `Quick the_free_walk_does_not_consult_the_default;
+    A.test_case "the free walk does not consult the default" `Quick
+      the_free_walk_does_not_consult_the_default;
     A.test_case "a paid provider is never reached" `Quick a_paid_provider_is_never_reached;
     A.test_case "one free fallback alone still says why nothing paid was tried" `Quick
       one_free_fallback_alone_still_says_why_nothing_paid_was_tried;
-    A.test_case "an open circuit free fallback is skipped" `Quick an_open_circuit_free_fallback_is_skipped;
-    A.test_case "a failed free fallback gates on the health board" `Quick a_failed_free_fallback_gates_on_the_health_board;
-    A.test_case "no free provider enabled is a clean refusal" `Quick no_free_provider_enabled_is_a_clean_refusal;
-    A.test_case "naming a provider and a mode is refused" `Quick naming_a_provider_and_a_mode_is_refused;
+    A.test_case "an open circuit free fallback is skipped" `Quick
+      an_open_circuit_free_fallback_is_skipped;
+    A.test_case "a failed free fallback gates on the health board" `Quick
+      a_failed_free_fallback_gates_on_the_health_board;
+    A.test_case "no free provider enabled is a clean refusal" `Quick
+      no_free_provider_enabled_is_a_clean_refusal;
+    A.test_case "naming a provider and a mode is refused" `Quick
+      naming_a_provider_and_a_mode_is_refused;
     A.test_case "mode is bound on search.ok either way" `Quick mode_is_bound_on_search_ok_either_way;
-    A.test_case "a free served search records the fallback once" `Quick a_free_served_search_records_the_fallback_once;
+    A.test_case "a free served search records the fallback once" `Quick
+      a_free_served_search_records_the_fallback_once;
   ]
 
 let free_only_default_route_cases =
   [
-    A.test_case "an unnamed search is served by the free walk" `Quick an_unnamed_search_is_served_by_the_free_walk;
-    A.test_case "the implicit keyless set is walked whole" `Quick the_implicit_keyless_set_is_walked_whole;
-    A.test_case "the walk is the free order and only free names" `Quick the_free_order_and_only_free_names;
+    A.test_case "an unnamed search is served by the free walk" `Quick
+      an_unnamed_search_is_served_by_the_free_walk;
+    A.test_case "the implicit keyless set is walked whole" `Quick
+      the_implicit_keyless_set_is_walked_whole;
+    A.test_case "the walk is the free order and only free names" `Quick
+      the_free_order_and_only_free_names;
     A.test_case "the configured free ladder orders the implicit walk" `Quick
       the_configured_free_ladder_orders_the_implicit_walk;
     A.test_case "the ending is the walk's own" `Quick the_implicit_walks_ending_is_the_walks_own;
-    A.test_case "an open circuit is skipped on the implicit walk" `Quick an_open_circuit_is_skipped_on_the_implicit_walk;
-    A.test_case "one billable name brings the refusal back" `Quick one_billable_name_brings_the_refusal_back;
+    A.test_case "an open circuit is skipped on the implicit walk" `Quick
+      an_open_circuit_is_skipped_on_the_implicit_walk;
+    A.test_case "one billable name brings the refusal back" `Quick
+      one_billable_name_brings_the_refusal_back;
     A.test_case "a free tier is not a free name" `Quick a_free_tier_is_not_a_free_name;
-    A.test_case "a named provider is unaffected" `Quick a_named_provider_is_unaffected_by_the_free_only_route;
-    A.test_case "a single free provider is still the default" `Quick a_single_free_provider_is_still_the_default;
+    A.test_case "a named provider is unaffected" `Quick
+      a_named_provider_is_unaffected_by_the_free_only_route;
+    A.test_case "a single free provider is still the default" `Quick
+      a_single_free_provider_is_still_the_default;
     A.test_case "mode stays none on the unnamed walk" `Quick mode_stays_none_on_the_unnamed_walk;
   ]
 
@@ -1429,11 +1460,16 @@ let allow_list_cases =
     A.test_case "a name enabled but not permitted never reaches the adapter" `Quick
       a_name_enabled_but_not_permitted_never_reaches_the_adapter;
     A.test_case "unset is permissive" `Quick an_unset_permission_set_is_permissive;
-    A.test_case "the intersection holds both ways" `Quick the_permission_intersection_holds_both_ways;
-    A.test_case "the default route skips an unpermitted fallback" `Quick the_default_route_skips_an_unpermitted_fallback;
-    A.test_case "an unpermitted default is refused not rerouted" `Quick an_unpermitted_default_is_refused_not_rerouted;
-    A.test_case "a free walk never reaches an unpermitted fallback" `Quick a_free_walk_never_reaches_an_unpermitted_fallback;
-    A.test_case "a free walk emptied by the list says permitted" `Quick a_free_walk_emptied_by_the_list_says_permitted;
+    A.test_case "the intersection holds both ways" `Quick
+      the_permission_intersection_holds_both_ways;
+    A.test_case "the default route skips an unpermitted fallback" `Quick
+      the_default_route_skips_an_unpermitted_fallback;
+    A.test_case "an unpermitted default is refused not rerouted" `Quick
+      an_unpermitted_default_is_refused_not_rerouted;
+    A.test_case "a free walk never reaches an unpermitted fallback" `Quick
+      a_free_walk_never_reaches_an_unpermitted_fallback;
+    A.test_case "a free walk emptied by the list says permitted" `Quick
+      a_free_walk_emptied_by_the_list_says_permitted;
     A.test_case "a rejection binds the permitted set" `Quick a_rejection_binds_the_permitted_set;
     A.test_case "the rejection bind is none when unset" `Quick the_rejection_bind_is_none_when_unset;
   ]
@@ -1441,51 +1477,70 @@ let allow_list_cases =
 let zero_results_cases =
   [
     A.test_case "empty results are not an error" `Quick empty_results_are_not_an_error;
-    A.test_case "a zero results notice names the other providers" `Quick a_zero_results_notice_names_the_other_providers;
-    A.test_case "a solo provider zero results says it is alone" `Quick a_solo_provider_zero_results_says_it_is_alone;
-    A.test_case "an answered zero result gets no notice" `Quick an_answered_zero_result_gets_no_notice;
-    A.test_case "an adapter notice is joined with the zero notice" `Quick an_adapter_notice_is_joined_with_the_zero_notice;
-    A.test_case "a fallback serving zero results names the fallback" `Quick a_fallback_serving_zero_results_names_the_fallback;
+    A.test_case "a zero results notice names the other providers" `Quick
+      a_zero_results_notice_names_the_other_providers;
+    A.test_case "a solo provider zero results says it is alone" `Quick
+      a_solo_provider_zero_results_says_it_is_alone;
+    A.test_case "an answered zero result gets no notice" `Quick
+      an_answered_zero_result_gets_no_notice;
+    A.test_case "an adapter notice is joined with the zero notice" `Quick
+      an_adapter_notice_is_joined_with_the_zero_notice;
+    A.test_case "a fallback serving zero results names the fallback" `Quick
+      a_fallback_serving_zero_results_names_the_fallback;
   ]
 
 let observability_cases =
   [
     A.test_case "a search records cost and latency" `Quick a_search_records_cost_and_latency;
-    A.test_case "reported usage is absent until an adapter measures it" `Quick reported_usage_is_absent_until_an_adapter_measures_it;
+    A.test_case "reported usage is absent until an adapter measures it" `Quick
+      reported_usage_is_absent_until_an_adapter_measures_it;
     A.test_case "query text is withheld by default" `Quick query_text_is_withheld_by_default;
     A.test_case "query text is recorded when opted in" `Quick query_text_is_recorded_when_opted_in;
     A.test_case "result content is withheld by default" `Quick result_content_is_withheld_by_default;
-    A.test_case "result content is recorded when opted in" `Quick result_content_is_recorded_when_opted_in;
+    A.test_case "result content is recorded when opted in" `Quick
+      result_content_is_recorded_when_opted_in;
     A.test_case "ranks are one based and ordered" `Quick ranks_are_one_based_and_ordered;
-    A.test_case "the answer is recorded only when there is one" `Quick the_answer_is_recorded_only_when_there_is_one;
-    A.test_case "a failure records the sanitised message only" `Quick a_failure_records_the_sanitised_message_only;
-    A.test_case "an unresolvable provider is reported before dispatch" `Quick an_unresolvable_provider_is_reported_before_dispatch;
-    A.test_case "a forged provider name cannot break the line" `Quick a_forged_provider_name_cannot_break_the_line;
+    A.test_case "the answer is recorded only when there is one" `Quick
+      the_answer_is_recorded_only_when_there_is_one;
+    A.test_case "a failure records the sanitised message only" `Quick
+      a_failure_records_the_sanitised_message_only;
+    A.test_case "an unresolvable provider is reported before dispatch" `Quick
+      an_unresolvable_provider_is_reported_before_dispatch;
+    A.test_case "a forged provider name cannot break the line" `Quick
+      a_forged_provider_name_cannot_break_the_line;
     A.test_case "the composed notice rides search.ok" `Quick the_composed_notice_rides_search_ok;
     A.test_case "the answer is a bool on search.ok" `Quick the_answer_is_a_bool_on_search_ok;
     A.test_case "the cap lengths ride their own event" `Quick the_cap_lengths_ride_their_own_event;
-    A.test_case "a result with no capped field is not measured" `Quick a_result_with_no_capped_field_is_not_measured;
-    A.test_case "an extract is measured against the other cap" `Quick an_extract_is_measured_against_the_other_cap;
-    A.test_case "the cap line follows search.ok's provider rule" `Quick the_cap_line_follows_search_oks_provider_rule;
+    A.test_case "a result with no capped field is not measured" `Quick
+      a_result_with_no_capped_field_is_not_measured;
+    A.test_case "an extract is measured against the other cap" `Quick
+      an_extract_is_measured_against_the_other_cap;
+    A.test_case "the cap line follows search.ok's provider rule" `Quick
+      the_cap_line_follows_search_oks_provider_rule;
   ]
 
 let usage_recording_cases =
   [
-    A.test_case "a success records provider cost and results" `Quick a_success_records_provider_cost_and_results;
+    A.test_case "a success records provider cost and results" `Quick
+      a_success_records_provider_cost_and_results;
     A.test_case "a terminal failure records the class and attempted provider" `Quick
       a_terminal_failure_records_the_class_and_attempted_provider;
-    A.test_case "a fallback served call records only the fallback" `Quick a_fallback_served_call_records_only_the_fallback;
-    A.test_case "an exhausted ladder records the tried default" `Quick an_exhausted_ladder_records_the_tried_default;
+    A.test_case "a fallback served call records only the fallback" `Quick
+      a_fallback_served_call_records_only_the_fallback;
+    A.test_case "an exhausted ladder records the tried default" `Quick
+      an_exhausted_ladder_records_the_tried_default;
     A.test_case "a pre dispatch reject records nothing" `Quick a_pre_dispatch_reject_records_nothing;
     A.test_case "no recorder means nothing is counted" `Quick no_recorder_means_nothing_is_counted;
   ]
 
 let escaping_cases =
   [
-    A.test_case "result text is escaped before it leaves" `Quick result_text_is_escaped_before_it_leaves;
+    A.test_case "result text is escaped before it leaves" `Quick
+      result_text_is_escaped_before_it_leaves;
     A.test_case "the answer tier escapes too" `Quick the_answer_tier_escapes_too;
     A.test_case "a clean result counts zero" `Quick a_clean_result_counts_zero;
-    A.test_case "a reread response is not escaped again" `Quick a_reread_response_is_not_escaped_again;
+    A.test_case "a reread response is not escaped again" `Quick
+      a_reread_response_is_not_escaped_again;
   ]
 
 (* The engine's registry is the only set routing may name: the routing table's
@@ -1520,8 +1575,7 @@ let the_free_walk_only_names_built_permitted_names () =
      set. The permitted-out name stays dialled-zero, and no free name outside
      the registry enters the walk at all. *)
   let board =
-    make_engine ~permitted:[ "freeserp" ]
-      [ rig ~name:"freeserp" (); rig ~name:"anysearch" () ]
+    make_engine ~permitted:[ "freeserp" ] [ rig ~name:"freeserp" (); rig ~name:"anysearch" () ]
   in
   let r = served board (query "x y") in
   check_string "the walk reaches the built permitted name" "freeserp" r.Model.provider;
@@ -1542,7 +1596,7 @@ let the_default_ladder_skips_a_name_outside_the_registry () =
     match Engine.Search.search engine (query "x y") with
     | Error (Engine.Search.Failed sentence) -> sentence
     | Error (Engine.Search.Refused sentence) ->
-      A.failf "expected a failure (502), got a refusal (400): %s" sentence
+        A.failf "expected a failure (502), got a refusal (400): %s" sentence
     | Ok response -> A.failf "expected a failure, got results from %s" response.Model.provider
   in
   includes "the original failure leads" "Search failed - serper: HTTP 503." text;
@@ -1561,9 +1615,9 @@ let the_no_adapter_guard_is_a_value_not_a_crash () =
   let engine = Engine.Search.create cfg [] ~clock ~now () in
   match Engine.Search.search engine (query "x y") with
   | Error (Engine.Search.Failed sentence) ->
-    includes "the guard names the fact" "no adapter was built" sentence
+      includes "the guard names the fact" "no adapter was built" sentence
   | Error (Engine.Search.Refused sentence) ->
-    A.failf "expected the guard's failure channel, got a refusal: %s" sentence
+      A.failf "expected the guard's failure channel, got a refusal: %s" sentence
   | Ok response -> A.failf "expected a failure, got results from %s" response.Model.provider
 
 let routable_set_cases =

@@ -59,14 +59,10 @@ let test_key = "test-key"
    and the fixture's net never dials. *)
 let fixture_uri = Uri.of_string "https://mcp.exa.invalid/mcp"
 
-let hd label = function
-  | x :: _ -> x
-  | [] -> A.failf "%s was empty" label
+let hd label = function x :: _ -> x | [] -> A.failf "%s was empty" label
 
 let nth label index xs =
-  match List.nth_opt xs index with
-  | Some x -> x
-  | None -> A.failf "%s has no item %d" label index
+  match List.nth_opt xs index with Some x -> x | None -> A.failf "%s has no item %d" label index
 
 (* Copied from the oracle's suite, which captured them from
    [https://mcp.exa.ai/mcp]: plain formatted text, an empty [structuredContent],
@@ -147,7 +143,8 @@ let a_short_extract_is_neither_cut_nor_flagged () =
   (* Omitted rather than [false]: "nothing was cut" is the uninteresting case, and
      every serialised field costs the caller context. *)
   A.(check (option bool) "no flag" None hit.result.text_truncated);
-  check_opt_int "and the denominator is still measured" (Some (String.length text))
+  check_opt_int "and the denominator is still measured"
+    (Some (String.length text))
     hit.uncapped_chars
 
 let an_untitled_record_is_titled_by_its_url_and_kept () =
@@ -158,8 +155,7 @@ let an_untitled_record_is_titled_by_its_url_and_kept () =
   includes "and its body is not lost" "Model Context Protocol"
     (Option.get (hd "results" hits).result.text)
 
-let the_limit_stops_the_scan () =
-  check_int "one record" 1 (List.length (parse ~limit:1 sample))
+let the_limit_stops_the_scan () = check_int "one record" 1 (List.length (parse ~limit:1 sample))
 
 let a_record_without_a_url_is_not_a_result () =
   check_int "a title, an author and highlights do not make a result" 0
@@ -200,10 +196,7 @@ type reply =
    presented a credential, and the request. *)
 type dial = string * bool * Caps.Authority.Net.request
 
-type endpoint = {
-  dials : dial list ref;  (** in send order *)
-  net : Provider.Net.t;
-}
+type endpoint = { dials : dial list ref;  (** in send order *) net : Provider.Net.t }
 
 let is_keyed (request : Caps.Authority.Net.request) =
   List.exists
@@ -215,34 +208,33 @@ let jsonrpc = Yojson.Safe.to_string
 let tool_reply ~id text ~is_error =
   jsonrpc
     (`Assoc
-        [
-          ("jsonrpc", `String "2.0");
-          ("id", `Int id);
-          ( "result"
-          , `Assoc
-              [
-                ("content", `List [ `Assoc [ ("type", `String "text"); ("text", `String text) ] ]);
-                ("isError", `Bool is_error);
-              ] );
-        ])
+       [
+         ("jsonrpc", `String "2.0");
+         ("id", `Int id);
+         ( "result",
+           `Assoc
+             [
+               ("content", `List [ `Assoc [ ("type", `String "text"); ("text", `String text) ] ]);
+               ("isError", `Bool is_error);
+             ] );
+       ])
 
 let initialize_reply ~id =
   jsonrpc
     (`Assoc
-        [
-          ("jsonrpc", `String "2.0");
-          ("id", `Int id);
-          ( "result"
-          , `Assoc
-              [
-                ("protocolVersion", `String "2025-06-18");
-                ("capabilities", `Assoc []);
-                ("serverInfo", `Assoc [ ("name", `String "fixture"); ("version", `String "1") ]);
-              ] );
-        ])
+       [
+         ("jsonrpc", `String "2.0");
+         ("id", `Int id);
+         ( "result",
+           `Assoc
+             [
+               ("protocolVersion", `String "2025-06-18");
+               ("capabilities", `Assoc []);
+               ("serverInfo", `Assoc [ ("name", `String "fixture"); ("version", `String "1") ]);
+             ] );
+       ])
 
-let respond ?(headers = []) ?(body = "") status =
-  { Caps.Authority.Net.status; headers; body }
+let respond ?(headers = []) ?(body = "") status = { Caps.Authority.Net.status; headers; body }
 
 let json_headers = [ ("content-type", "application/json") ]
 
@@ -266,7 +258,7 @@ let endpoint ?(session_id = "fixture-session") ?(free = []) ?(keyed = []) () =
                  ignores whatever comes back. *)
               dials := ("DELETE", is_keyed request, request) :: !dials;
               Ok (respond 204)
-          | Some raw ->
+          | Some raw -> (
               let message = Yojson.Safe.from_string raw in
               let meth = Option.value ~default:"" (Provider.Json.string_field "method" message) in
               let id = match Provider.Json.field "id" message with `Int id -> id | _ -> 0 in
@@ -274,19 +266,29 @@ let endpoint ?(session_id = "fixture-session") ?(free = []) ?(keyed = []) () =
               dials := (meth, keyed_call, request) :: !dials;
               match meth with
               | "initialize" ->
-                  Ok (respond
-                        ~headers:(json_headers @ [ ("mcp-session-id", session_id) ])
-                        ~body:(initialize_reply ~id) 200)
+                  Ok
+                    (respond
+                       ~headers:(json_headers @ [ ("mcp-session-id", session_id) ])
+                       ~body:(initialize_reply ~id) 200)
               | "notifications/initialized" -> Ok (respond 202)
-              | "tools/call" ->
-                  (match take (if keyed_call then keyed else free)
-                   (if keyed_call then "keyed" else "free") with
+              | "tools/call" -> (
+                  match
+                    take
+                      (if keyed_call then keyed else free)
+                      (if keyed_call then "keyed" else "free")
+                  with
                   | Text text ->
-                      Ok (respond ~headers:json_headers ~body:(tool_reply ~id text ~is_error:false) 200)
+                      Ok
+                        (respond ~headers:json_headers
+                           ~body:(tool_reply ~id text ~is_error:false)
+                           200)
                   | Tool_error text ->
-                      Ok (respond ~headers:json_headers ~body:(tool_reply ~id text ~is_error:true) 200)
+                      Ok
+                        (respond ~headers:json_headers
+                           ~body:(tool_reply ~id text ~is_error:true)
+                           200)
                   | Http status -> Ok (respond status))
-              | other -> A.failf "the scripted endpoint was asked for %S" other);
+              | other -> A.failf "the scripted endpoint was asked for %S" other));
     }
   in
   { dials; net }
@@ -336,7 +338,7 @@ let the_advertised_arguments_only () =
   let ep = endpoint ~free:[ Text sample ] () in
   let session = free_session ep in
   ignore (search session (query ~max_results:3 ()));
-  let (_meth, _keyed, request) = hd "tools/call" (dials ep ~meth:"tools/call" ()) in
+  let _meth, _keyed, request = hd "tools/call" (dials ep ~meth:"tools/call" ()) in
   let message = body_json request in
   let params = Provider.Json.field "params" message in
   check_string "the tool named is the advertised one" Exa.tool_name
@@ -355,11 +357,10 @@ let a_search_shakes_hands_then_calls_the_tool () =
   check_strings "handshake, acknowledgement, call"
     [ "initialize"; "notifications/initialized"; "tools/call" ]
     (dial_methods ep);
-  let (_meth, _keyed, request) = hd "tools/call" (dials ep ~meth:"tools/call" ()) in
+  let _meth, _keyed, request = hd "tools/call" (dials ep ~meth:"tools/call" ()) in
   check_string "the endpoint the grant allows" (Uri.to_string fixture_uri)
     (Uri.to_string request.Caps.Authority.Net.uri);
-  check_bool "an anonymous session sends no credential" true
-    (header request "authorization" = None);
+  check_bool "an anonymous session sends no credential" true (header request "authorization" = None);
   check_string "the session reports the name it was built as" "exa:free" outcome.provider;
   check_int "the parser ran over the text block" 2 (List.length outcome.results);
   check_opt_number "a free session prices itself at zero" (Some 0.0) outcome.cost_usd
@@ -369,15 +370,19 @@ let a_keyed_session_carries_the_bearer_token () =
   ignore (search (mcp_session ~auth:test_key ep) (query ()));
   List.iteri
     (fun i (_meth, _keyed, request) ->
-      check_string (Printf.sprintf "every request authenticates (%d)" i)
+      check_string
+        (Printf.sprintf "every request authenticates (%d)" i)
         (Printf.sprintf "Bearer %s" test_key)
         (Option.get (header request "authorization")))
     (List.rev !(ep.dials));
-  check_int "and the keyed half is the one that answered" 1 (count ~meth:"tools/call" ~keyed:true ep)
+  check_int "and the keyed half is the one that answered" 1
+    (count ~meth:"tools/call" ~keyed:true ep)
 
 let a_keyed_session_reports_the_billed_price () =
   let ep = endpoint ~keyed:[ Text sample ] () in
-  let outcome = search (mcp_session ~auth:test_key ~cost_per_1k:7.00 ep) (query ~max_results:20 ()) in
+  let outcome =
+    search (mcp_session ~auth:test_key ~cost_per_1k:7.00 ep) (query ~max_results:20 ())
+  in
   check_opt_number "twenty results at the published shape" (Some 0.017) outcome.cost_usd
 
 let a_dropped_filter_is_named () =
@@ -385,7 +390,9 @@ let a_dropped_filter_is_named () =
      to be told it did not apply: unfiltered results the caller knows about beat
      filtered-looking ones it does not. *)
   let ep = endpoint ~free:[ Text sample ] () in
-  let outcome = search (free_session ep) (query ~include_domains:[ "sqlite.org" ] ~country:"de" ()) in
+  let outcome =
+    search (free_session ep) (query ~include_domains:[ "sqlite.org" ] ~country:"de" ())
+  in
   let notice = Option.get outcome.notice in
   includes "the domain bucket" "domain" notice;
   includes "the geo bucket" "country/language" notice;
@@ -400,9 +407,7 @@ let warmup_opens_the_session_and_calls_nothing () =
   let ep = endpoint () in
   let session = free_session ep in
   check_bool "the handshake completes" true (session.Provider.warmup ());
-  check_strings "handshake only"
-    [ "initialize"; "notifications/initialized" ]
-    (dial_methods ep);
+  check_strings "handshake only" [ "initialize"; "notifications/initialized" ] (dial_methods ep);
   check_int "no tool call" 0 (count ~meth:"tools/call" ep)
 
 let a_warm_session_gives_its_first_search_one_handshake () =
@@ -433,7 +438,8 @@ let ladder ?asked session =
 let a_healthy_free_tier_is_never_billed () =
   let ep = endpoint ~free:[ Text sample ] () in
   let outcome = succeeded "the ladder" (ladder (tiered ep)) in
-  check_int "a working free tier never reaches the API key" 0 (count ~meth:"tools/call" ~keyed:true ep);
+  check_int "a working free tier never reaches the API key" 0
+    (count ~meth:"tools/call" ~keyed:true ep);
   check_opt_number "the free tier answers zero" (Some 0.0) outcome.cost_usd;
   check_opt_string "nothing happened worth warning about" None outcome.notice;
   check_string "which fallback ran is a cost detail, not another backend" "exa" outcome.provider
@@ -460,7 +466,9 @@ let any_free_failure_escalates_not_only_a_classified_quota () =
 let a_dropped_filter_warning_survives_the_escalation () =
   (* [ignored_constraints] owns this field too, so overwriting it would leave a
      caller unwarned that its domain filter was never applied. *)
-  let ep = endpoint ~free:[ Tool_error "upstream MCP tool reported an error" ] ~keyed:[ Text sample ] () in
+  let ep =
+    endpoint ~free:[ Tool_error "upstream MCP tool reported an error" ] ~keyed:[ Text sample ] ()
+  in
   let outcome =
     succeeded "the ladder" (ladder ~asked:(query ~include_domains:[ "sqlite.org" ] ()) (tiered ep))
   in
@@ -468,8 +476,8 @@ let a_dropped_filter_warning_survives_the_escalation () =
   includes "the adapter's own notice" "cannot filter by domain" notice;
   includes "and the escalation" "so this call used the API key" notice;
   check_string "the two halves are joined, not substituted"
-    "cannot filter by domain; that constraint was ignored; free tier unavailable \
-     (upstream MCP tool reported an error), so this call used the API key"
+    "cannot filter by domain; that constraint was ignored; free tier unavailable (upstream MCP \
+     tool reported an error), so this call used the API key"
     notice
 
 let the_key_is_billed_at_most_once_per_search () =
@@ -486,8 +494,7 @@ let both_fallbacks_down_reports_the_free_failure_first () =
      was tried and what it said, while the failure the caller hit first is the one
      that explains the search. *)
   check_string "both halves, free first"
-    "rate limited; the API key also failed (upstream MCP tool reported an error)"
-    failure.message;
+    "rate limited; the API key also failed (upstream MCP tool reported an error)" failure.message;
   (* [QuotaExhausted] is what makes the engine say "do not retry immediately";
      degrading it to a plain failure would invite a retry loop. *)
   check_bool "the free failure's kind is kept" true (failure.kind = Provider.Quota);
@@ -508,7 +515,8 @@ let a_burned_free_tier_is_not_retried_on_every_call () =
   let session = tiered ~cooldown:1000.0 ep in
   ignore (succeeded "the first search" (ladder session));
   ignore (succeeded "the second search" (ladder session));
-  check_int "the second call did not re-probe the free tier" 1 (count ~meth:"tools/call" ~keyed:false ep);
+  check_int "the second call did not re-probe the free tier" 1
+    (count ~meth:"tools/call" ~keyed:false ep);
   check_int "and both searches were served on the key" 2 (count ~meth:"tools/call" ~keyed:true ep)
 
 let the_cooldown_expires_and_free_is_tried_again () =
@@ -516,7 +524,9 @@ let the_cooldown_expires_and_free_is_tried_again () =
      process restarts. The clock is the suite's, so the deadline is moved rather
      than waited for. *)
   let now = ref 1_000.0 in
-  let ep = endpoint ~free:[ Tool_error "429 rate limited"; Text sample ] ~keyed:[ Text sample ] () in
+  let ep =
+    endpoint ~free:[ Tool_error "429 rate limited"; Text sample ] ~keyed:[ Text sample ] ()
+  in
   let session = tiered ~cooldown:1000.0 ~now:(fun () -> !now) ep in
   ignore (succeeded "the escalation" (ladder session));
   now := 2_001.0;
@@ -526,9 +536,9 @@ let the_cooldown_expires_and_free_is_tried_again () =
 
 let a_zero_cooldown_always_tries_free_first () =
   let ep =
-    endpoint ~free:[ Tool_error "429 rate limited"; Tool_error "429 rate limited" ]
-      ~keyed:[ Text sample; Text sample ]
-      ()
+    endpoint
+      ~free:[ Tool_error "429 rate limited"; Tool_error "429 rate limited" ]
+      ~keyed:[ Text sample; Text sample ] ()
   in
   let session = tiered ~cooldown:0.0 ep in
   ignore (succeeded "the first search" (ladder session));
@@ -611,9 +621,7 @@ let every_billed_call_the_cooldown_costs_is_recorded () =
       ()
   in
   let session = tiered ?log:(sink events) ~cooldown:1000.0 ep in
-  List.iter
-    (fun (_ : int) -> ignore (succeeded "a ladder call" (ladder session)))
-    [ 1; 2; 3 ];
+  List.iter (fun (_ : int) -> ignore (succeeded "a ladder call" (ladder session))) [ 1; 2; 3 ];
   let cooldowns = named events "exa.cooldown" in
   check_int "one line per call the cooldown billed for" 2 (List.length cooldowns);
   check_bool "each carrying its cost" true
@@ -658,101 +666,102 @@ let upstream_error_text_reaches_neither_caller_nor_log () =
   excludes "not in the notice" "sk-secret-value" (Option.value ~default:"" outcome.notice);
   let rendered =
     String.concat "\n"
-      (List.map (fun (_l, event, fields) -> event ^ " " ^ jsonrpc (`Assoc fields)) (List.rev !events))
+      (List.map
+         (fun (_l, event, fields) -> event ^ " " ^ jsonrpc (`Assoc fields))
+         (List.rev !events))
   in
   excludes "not in the log" "sk-secret-value" rendered;
   includes "the caller still learns which tier served" "API key"
     (Option.value ~default:"" outcome.notice)
 
 let () =
-  A.
-    (run "seekwright/exa"
-       [
-         ( "the block-format parser"
-         , [
-             test_case "the block format becomes results" `Quick the_block_format_becomes_results;
-             test_case "a published stamp keeps its ISO day" `Quick
-               a_published_stamp_keeps_its_iso_day;
-             test_case "highlights join into text, elisions do not" `Quick
-               highlights_join_into_text_and_elisions_do_not;
-             test_case "a content backend fills text and never a snippet" `Quick
-               a_content_backend_fills_text_and_never_a_snippet;
-             test_case "the cap bites, flags, and measures what it dropped" `Quick
-               the_cap_bites_flags_and_measures_what_it_dropped;
-             test_case "a short extract is neither cut nor flagged" `Quick
-               a_short_extract_is_neither_cut_nor_flagged;
-             test_case "an untitled record is titled by its url and kept" `Quick
-               an_untitled_record_is_titled_by_its_url_and_kept;
-             test_case "the limit stops the scan" `Quick the_limit_stops_the_scan;
-             test_case "a record without a url is not a result" `Quick
-               a_record_without_a_url_is_not_a_result;
-           ] );
-         ( "the price and the endpoint"
-         , [
-             test_case "the published price is a subscription plus a rung" `Quick
-               the_published_price_is_a_subscription_plus_a_rung;
-             test_case "a free session costs nothing at any count" `Quick
-               a_free_session_costs_nothing_at_any_count;
-             test_case "the endpoint and the tool" `Quick the_endpoint_and_the_tool;
-           ] );
-         ( "one session on one credential"
-         , [
-             test_case "the advertised arguments and nothing else" `Quick
-               the_advertised_arguments_only;
-             test_case "a search shakes hands, then calls the tool" `Quick
-               a_search_shakes_hands_then_calls_the_tool;
-             test_case "a keyed session carries the bearer token" `Quick
-               a_keyed_session_carries_the_bearer_token;
-             test_case "a keyed session reports the billed price" `Quick
-               a_keyed_session_reports_the_billed_price;
-             test_case "a dropped filter is named" `Quick a_dropped_filter_is_named;
-             test_case "an unconstrained query gets no notice" `Quick
-               an_unconstrained_query_gets_no_notice;
-             test_case "warmup opens the session and calls nothing" `Quick
-               warmup_opens_the_session_and_calls_nothing;
-             test_case "a warm session gives its first search one handshake" `Quick
-               a_warm_session_gives_its_first_search_one_handshake;
-             test_case "close terminates the session and refuses after" `Quick
-               close_terminates_the_session_and_refuses_after;
-           ] );
-         ( "the free-before-key ladder"
-         , [
-             test_case "a healthy free tier is never billed" `Quick
-               a_healthy_free_tier_is_never_billed;
-             test_case "a failed free tier is retried on the key" `Quick
-               a_failed_free_tier_is_retried_on_the_key;
-             test_case "any free failure escalates, not only a classified quota" `Quick
-               any_free_failure_escalates_not_only_a_classified_quota;
-             test_case "a dropped-filter warning survives the escalation" `Quick
-               a_dropped_filter_warning_survives_the_escalation;
-             test_case "the key is billed at most once per search" `Quick
-               the_key_is_billed_at_most_once_per_search;
-             test_case "both fallbacks down reports the free failure first" `Quick
-               both_fallbacks_down_reports_the_free_failure_first;
-             test_case "a keyed HTTP failure reaches the caller as itself" `Quick
-               a_keyed_http_failure_reaches_the_caller_as_itself;
-             test_case "a burned free tier is not retried on every call" `Quick
-               a_burned_free_tier_is_not_retried_on_every_call;
-             test_case "the cooldown expires and free is tried again" `Quick
-               the_cooldown_expires_and_free_is_tried_again;
-             test_case "a zero cooldown always tries free first" `Quick
-               a_zero_cooldown_always_tries_free_first;
-             test_case "a call served on the key during cooldown says so" `Quick
-               a_call_served_on_the_key_during_cooldown_says_so;
-             test_case "warmup warms only the free session" `Quick
-               warmup_warms_only_the_free_session;
-             test_case "close closes both fallbacks" `Quick close_closes_both_fallbacks;
-           ] );
-         ( "what the ladder logs"
-         , [
-             test_case "the moment it stops being free is a warning" `Quick
-               the_moment_it_stops_being_free_is_a_warning;
-             test_case "every billed call the cooldown costs is recorded" `Quick
-               every_billed_call_the_cooldown_costs_is_recorded;
-             test_case "a healthy free tier logs nothing" `Quick a_healthy_free_tier_logs_nothing;
-             test_case "both fallbacks failing is an error line" `Quick
-               both_fallbacks_failing_is_an_error_line;
-             test_case "upstream error text reaches neither caller nor log" `Quick
-               upstream_error_text_reaches_neither_caller_nor_log;
-           ] );
-       ])
+  A.(
+    run "seekwright/exa"
+      [
+        ( "the block-format parser",
+          [
+            test_case "the block format becomes results" `Quick the_block_format_becomes_results;
+            test_case "a published stamp keeps its ISO day" `Quick
+              a_published_stamp_keeps_its_iso_day;
+            test_case "highlights join into text, elisions do not" `Quick
+              highlights_join_into_text_and_elisions_do_not;
+            test_case "a content backend fills text and never a snippet" `Quick
+              a_content_backend_fills_text_and_never_a_snippet;
+            test_case "the cap bites, flags, and measures what it dropped" `Quick
+              the_cap_bites_flags_and_measures_what_it_dropped;
+            test_case "a short extract is neither cut nor flagged" `Quick
+              a_short_extract_is_neither_cut_nor_flagged;
+            test_case "an untitled record is titled by its url and kept" `Quick
+              an_untitled_record_is_titled_by_its_url_and_kept;
+            test_case "the limit stops the scan" `Quick the_limit_stops_the_scan;
+            test_case "a record without a url is not a result" `Quick
+              a_record_without_a_url_is_not_a_result;
+          ] );
+        ( "the price and the endpoint",
+          [
+            test_case "the published price is a subscription plus a rung" `Quick
+              the_published_price_is_a_subscription_plus_a_rung;
+            test_case "a free session costs nothing at any count" `Quick
+              a_free_session_costs_nothing_at_any_count;
+            test_case "the endpoint and the tool" `Quick the_endpoint_and_the_tool;
+          ] );
+        ( "one session on one credential",
+          [
+            test_case "the advertised arguments and nothing else" `Quick
+              the_advertised_arguments_only;
+            test_case "a search shakes hands, then calls the tool" `Quick
+              a_search_shakes_hands_then_calls_the_tool;
+            test_case "a keyed session carries the bearer token" `Quick
+              a_keyed_session_carries_the_bearer_token;
+            test_case "a keyed session reports the billed price" `Quick
+              a_keyed_session_reports_the_billed_price;
+            test_case "a dropped filter is named" `Quick a_dropped_filter_is_named;
+            test_case "an unconstrained query gets no notice" `Quick
+              an_unconstrained_query_gets_no_notice;
+            test_case "warmup opens the session and calls nothing" `Quick
+              warmup_opens_the_session_and_calls_nothing;
+            test_case "a warm session gives its first search one handshake" `Quick
+              a_warm_session_gives_its_first_search_one_handshake;
+            test_case "close terminates the session and refuses after" `Quick
+              close_terminates_the_session_and_refuses_after;
+          ] );
+        ( "the free-before-key ladder",
+          [
+            test_case "a healthy free tier is never billed" `Quick
+              a_healthy_free_tier_is_never_billed;
+            test_case "a failed free tier is retried on the key" `Quick
+              a_failed_free_tier_is_retried_on_the_key;
+            test_case "any free failure escalates, not only a classified quota" `Quick
+              any_free_failure_escalates_not_only_a_classified_quota;
+            test_case "a dropped-filter warning survives the escalation" `Quick
+              a_dropped_filter_warning_survives_the_escalation;
+            test_case "the key is billed at most once per search" `Quick
+              the_key_is_billed_at_most_once_per_search;
+            test_case "both fallbacks down reports the free failure first" `Quick
+              both_fallbacks_down_reports_the_free_failure_first;
+            test_case "a keyed HTTP failure reaches the caller as itself" `Quick
+              a_keyed_http_failure_reaches_the_caller_as_itself;
+            test_case "a burned free tier is not retried on every call" `Quick
+              a_burned_free_tier_is_not_retried_on_every_call;
+            test_case "the cooldown expires and free is tried again" `Quick
+              the_cooldown_expires_and_free_is_tried_again;
+            test_case "a zero cooldown always tries free first" `Quick
+              a_zero_cooldown_always_tries_free_first;
+            test_case "a call served on the key during cooldown says so" `Quick
+              a_call_served_on_the_key_during_cooldown_says_so;
+            test_case "warmup warms only the free session" `Quick warmup_warms_only_the_free_session;
+            test_case "close closes both fallbacks" `Quick close_closes_both_fallbacks;
+          ] );
+        ( "what the ladder logs",
+          [
+            test_case "the moment it stops being free is a warning" `Quick
+              the_moment_it_stops_being_free_is_a_warning;
+            test_case "every billed call the cooldown costs is recorded" `Quick
+              every_billed_call_the_cooldown_costs_is_recorded;
+            test_case "a healthy free tier logs nothing" `Quick a_healthy_free_tier_logs_nothing;
+            test_case "both fallbacks failing is an error line" `Quick
+              both_fallbacks_failing_is_an_error_line;
+            test_case "upstream error text reaches neither caller nor log" `Quick
+              upstream_error_text_reaches_neither_caller_nor_log;
+          ] );
+      ])

@@ -16,9 +16,7 @@ let partition line =
   | Some i -> (String.sub line 0 i, String.sub line (i + 1) (String.length line - i - 1))
   | None -> (line, "")
 
-let lower_strip = function
-  | "" -> ""
-  | s -> Utf8.to_string (Utf8.ascii_lower (Utf8.of_string s))
+let lower_strip = function "" -> "" | s -> Utf8.to_string (Utf8.ascii_lower (Utf8.of_string s))
 
 let split_reader_body body =
   let lines = List.map Utf8.to_string (Utf8.splitlines (Utf8.of_string body)) in
@@ -27,8 +25,7 @@ let split_reader_body body =
       | [] -> None
       | line :: rest ->
           let name, value = partition line in
-          if lower_strip (Utf8.strip name) = content_marker
-          then Some (index, value)
+          if lower_strip (Utf8.strip name) = content_marker then Some (index, value)
           else go (index + 1) rest
     in
     go 0 lines
@@ -84,20 +81,22 @@ let fetch cfg raw ~offset ~max_chars =
          parsing the result is what keeps the grant's [uri] a [Uri.t] without
          re-encoding the target the caller wrote. *)
       let uri = Uri.of_string (jina_reader_endpoint ^ target) in
-      let request : Caps.Authority.Net.request = {
-        meth = `GET;
-        uri;
-        headers = [ ("Accept", "text/markdown"); ("User-Agent", cfg.user_agent) ];
-        body = None;
-      } in
+      let request : Caps.Authority.Net.request =
+        {
+          meth = `GET;
+          uri;
+          headers = [ ("Accept", "text/markdown"); ("User-Agent", cfg.user_agent) ];
+          body = None;
+        }
+      in
       match cfg.net.request ~max_response_bytes:None request with
       | Error caps_error -> Error (Fallback.transport_error caps_error)
-      | Ok response -> (
-          (* Free, but metered by IP: a burst shares one window with every
+      | Ok response ->
+          if
+            (* Free, but metered by IP: a burst shares one window with every
              other caller behind this address. *)
-          if response.Caps.Authority.Net.status = 402 || response.Caps.Authority.Net.status = 429
-          then
-            Error (Fallback.Quota "rate limited")
+            response.Caps.Authority.Net.status = 402 || response.Caps.Authority.Net.status = 429
+          then Error (Fallback.Quota "rate limited")
             (* 401/403 included, and not read as an auth failure: this
                fallback sends no credential, so a rejection is the service
                refusing this address or target. *)
@@ -115,20 +114,14 @@ let fetch cfg raw ~offset ~max_chars =
               if
                 String.starts_with ~prefix:"Loading..." stripped
                 || String.starts_with ~prefix:"Please enable JavaScript" stripped
-              then
-                ""
+              then ""
               else text
             in
             let find key = List.assoc_opt key header_block in
             (* Python's [source or url] and [title or None]: an empty string
                from the reader is no value at all. *)
-            let source =
-              match find "url source" with Some s when s <> "" -> s | _ -> target
-            in
-            let title =
-              match find "title" with Some t when t <> "" -> Some t | _ -> None
-            in
+            let source = match find "url source" with Some s when s <> "" -> s | _ -> target in
+            let title = match find "title" with Some t when t <> "" -> Some t | _ -> None in
             Ok
               (Fallback.windowed text ~url:source ~max_text_chars:cfg.max_text_chars ~offset
                  ~max_chars ~title ~status_code:200))
-          )

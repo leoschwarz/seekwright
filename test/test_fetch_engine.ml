@@ -41,7 +41,7 @@ let now () = 1768478400.
 (* [Usage.snapshot] is a [Yojson.Safe.t] and the log capture is a field list;
    these are the loose reads the Python suite gets from dicts. *)
 let get key = function
-  | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
+  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
   | _ -> `Null
 
 let items = function `List xs -> xs | _ -> []
@@ -53,7 +53,7 @@ let int = function
   | v -> A.failf "not a count: %s" (Yojson.Safe.to_string v)
 
 let bool = function `Bool b -> b | v -> A.failf "not a flag: %s" (Yojson.Safe.to_string v)
-let is_null = (( = ) `Null)
+let is_null = ( = ) `Null
 
 let money label expected = function
   | `Int n -> A.(check (float 1e-9) label (float_of_int n) expected)
@@ -95,7 +95,8 @@ type fetcher_stub = {
 }
 
 let stub ?(name = "fetch") ?fail ?(cost_per_1k = None) ?(text = page_text) ?landed
-    ?(title = Some "A Page") ?(content_type = Some "text/html") ?(path_addressable = false) ?image () =
+    ?(title = Some "A Page") ?(content_type = Some "text/html") ?(path_addressable = false) ?image
+    () =
   {
     name;
     calls = ref 0;
@@ -120,37 +121,36 @@ let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
         s.kwargs := !(s.kwargs) @ [ (offset, max_chars) ];
         match s.fail with
         | Some error -> Error error
-        | None ->
-          (* An image page carries no text and no title: its type is the image's
+        | None -> (
+            (* An image page carries no text and no title: its type is the image's
              own, which is what the body's bytes agreed with. *)
-          (match s.image with
-          | Some image ->
-            Ok
-                {
-                  Engine.Fetch.url = (match s.landed with Some u -> u | None -> target);
-                  title = None;
-                  text = "";
-                  content_type = Some image.media_type;
-                  status_code = 200;
-                  truncated = false;
-                  total_chars = 0;
-                  path_addressable = false;
-                  image = Some image;
-                }
-          | None ->
-            Ok
-              {
-                Engine.Fetch.url = (match s.landed with Some u -> u | None -> target);
-                title = s.title;
-                text = s.text;
-                content_type = s.content_type;
-                status_code = 200;
-                truncated = false;
-                total_chars = String.length s.text;
-                path_addressable = s.path_addressable;
-                image = None;
-              });
-        );
+            match s.image with
+            | Some image ->
+                Ok
+                  {
+                    Engine.Fetch.url = (match s.landed with Some u -> u | None -> target);
+                    title = None;
+                    text = "";
+                    content_type = Some image.media_type;
+                    status_code = 200;
+                    truncated = false;
+                    total_chars = 0;
+                    path_addressable = false;
+                    image = Some image;
+                  }
+            | None ->
+                Ok
+                  {
+                    Engine.Fetch.url = (match s.landed with Some u -> u | None -> target);
+                    title = s.title;
+                    text = s.text;
+                    content_type = s.content_type;
+                    status_code = 200;
+                    truncated = false;
+                    total_chars = String.length s.text;
+                    path_addressable = s.path_addressable;
+                    image = None;
+                  }));
     aclose = (fun () -> ());
   }
 
@@ -213,31 +213,27 @@ let lines_with_offsets text =
 let in_subtree node lp =
   let nlen = String.length node in
   lp = node
-  || (String.length lp > nlen
-      && String.starts_with ~prefix:node lp
-      && (lp.[nlen] = '.' || lp.[nlen] = '['))
+  || String.length lp > nlen
+     && String.starts_with ~prefix:node lp
+     && (lp.[nlen] = '.' || lp.[nlen] = '[')
 
 (* A selector is one node, or, written with [*], a family of lines. *)
 let path_matches selector lp =
   match find_sub ~haystack:selector ~needle:"[*]" () with
   | Some i ->
-    let head = String.sub selector 0 i in
-    let tail = String.sub selector (i + 3) (String.length selector - i - 3) in
-    let ll = String.length lp in
-    ll >= String.length head + String.length tail
-    && String.starts_with ~prefix:head lp
-    && String.ends_with ~suffix:tail lp
+      let head = String.sub selector 0 i in
+      let tail = String.sub selector (i + 3) (String.length selector - i - 3) in
+      let ll = String.length lp in
+      ll >= String.length head + String.length tail
+      && String.starts_with ~prefix:head lp
+      && String.ends_with ~suffix:tail lp
   | None -> selector = lp
 
 let sections_at text ~max_chars selector =
   let lines = lines_with_offsets text in
-  let matched =
-    List.filter (fun (_offset, line) -> path_matches selector (line_path line)) lines
-  in
-  if matched = []
-  then []
-  else if find_sub ~haystack:selector ~needle:"[*]" () <> None
-  then matched
+  let matched = List.filter (fun (_offset, line) -> path_matches selector (line_path line)) lines in
+  if matched = [] then []
+  else if find_sub ~haystack:selector ~needle:"[*]" () <> None then matched
   else
     List.flatten
       (List.map
@@ -246,10 +242,9 @@ let sections_at text ~max_chars selector =
            let rec take acc = function
              | [] -> List.rev acc
              | (other, later) :: rest ->
-                 if other < offset
-                 then take acc rest
-                 else if line_path later = node || in_subtree node (line_path later)
-                 then take ((other, later) :: acc) rest
+                 if other < offset then take acc rest
+                 else if line_path later = node || in_subtree node (line_path later) then
+                   take ((other, later) :: acc) rest
                  else List.rev acc
            in
            let block = take [] lines in
@@ -257,8 +252,7 @@ let sections_at text ~max_chars selector =
            (* A subtree that does not fit the budget whole is offered a line at a
               time, so a caller still gets what fits and the count of what did
               not is the number the budget notice reports. *)
-           if String.length body <= max_chars || List.length block <= 1
-           then [ (offset, body) ]
+           if String.length body <= max_chars || List.length block <= 1 then [ (offset, body) ]
            else block)
          matched)
 
@@ -271,10 +265,8 @@ let within_sections sections budget =
   let stop = ref false in
   List.iter
     (fun (offset, body) ->
-      if !stop
-      then dropped := !dropped + 1
-      else if !used + String.length body <= budget
-      then begin
+      if !stop then dropped := !dropped + 1
+      else if !used + String.length body <= budget then begin
         used := !used + String.length body;
         kept := !kept @ [ (offset, body) ]
       end
@@ -309,8 +301,8 @@ let doc_readers : Engine.Fetch.Readers.t =
       (fun selector ->
         (* A filter expression is not in the grammar, and a caller that asks for
            one is refused before a byte is fetched. *)
-        if find_sub ~haystack:selector ~needle:"[?(" () <> None
-        then Error "a filter is not a path this server can read"
+        if find_sub ~haystack:selector ~needle:"[?(" () <> None then
+          Error "a filter is not a path this server can read"
         else Ok ());
     (* [doc_readers] renders no schema: the shape grammar is a [render_schema]
        question pinned with the readers that build it, so the [structure] cases
@@ -334,7 +326,7 @@ let doc_readers : Engine.Fetch.Readers.t =
 type captured = { level : Config.log_level; event : string; fields : (string * Yojson.Safe.t) list }
 
 let sink lines : Engine.log =
-  fun level event fields -> lines := !lines @ [ { level; event; fields } ]
+ fun level event fields -> lines := !lines @ [ { level; event; fields } ]
 
 let levels lines name =
   List.filter_map (fun (c : captured) -> if c.event = name then Some c.level else None) !lines
@@ -363,8 +355,7 @@ let level_name = function
   | Config.Log_trace -> "TRACE"
   | Config.Log_success -> "SUCCESS"
 
-let check_level label expected actual =
-  check_string label (level_name actual) (level_name expected)
+let check_level label expected actual = check_string label (level_name actual) (level_name expected)
 
 (* [Usage.create] can refuse for the two journal checks a server makes before it
    is ready to serve; an in-memory recorder cannot fail. *)
@@ -385,9 +376,8 @@ type board = {
    reader as the primary route, and the built fallbacks behind it.  The provider
    block is the implicit keyless set: this suite never dispatches a search
    provider, and [Config] needs a non-empty set to resolve. *)
-let make_engine ?(fetch = Config.default_fetch_config)
-    ?(logging = Config.default_logging_config) ?usage ?(readers = doc_readers) ?(fallbacks = [])
-    ?(local = stub ()) () =
+let make_engine ?(fetch = Config.default_fetch_config) ?(logging = Config.default_logging_config)
+    ?usage ?(readers = doc_readers) ?(fallbacks = []) ?(local = stub ()) () =
   let lines = ref [] in
   let config =
     match Config.resolve ~fetch ~logging () with
@@ -396,15 +386,15 @@ let make_engine ?(fetch = Config.default_fetch_config)
   in
   let usage = Option.map (fun (u : Usage.t) -> u) usage in
   match
-    Engine.Fetch.create config (make_fetcher local) ~readers ?usage
-      ~log:(sink lines) ~fallbacks:(List.map make_fetcher fallbacks) ~clock ~now ()
+    Engine.Fetch.create config (make_fetcher local) ~readers ?usage ~log:(sink lines)
+      ~fallbacks:(List.map make_fetcher fallbacks) ~clock ~now ()
   with
   | Error message -> A.failf "the engine refused the fixture: %s" message
-  | Ok engine ->
-    { engine; lines; local; fallbacks; usage }
+  | Ok engine -> { engine; lines; local; fallbacks; usage }
 
 let ok board = event board.lines "fetch.ok"
-let recent board = items (get "recent" (Usage.snapshot (Option.value ~default:(recorder ()) board.usage)))
+let recent board =
+  items (get "recent" (Usage.snapshot (Option.value ~default:(recorder ()) board.usage)))
 let one_recent board =
   match recent board with
   | [ entry ] -> entry
@@ -414,8 +404,12 @@ let one_recent board =
    [pytest.raises]; here the refusal and the failure are returned values whose
    payload is that same sentence, and the two channels stay apart because the REST
    projection reports them as 400 and 502. *)
-let served board ?offset ?query ?path ?(structure = false) ?provider ?auto_fallback ?run ?step target =
-  match Engine.Fetch.fetch board.engine ?offset ?query ?path ~structure ?provider ?auto_fallback ?run ?step target with
+let served board ?offset ?query ?path ?(structure = false) ?provider ?auto_fallback ?run ?step
+    target =
+  match
+    Engine.Fetch.fetch board.engine ?offset ?query ?path ~structure ?provider ?auto_fallback ?run
+      ?step target
+  with
   | Ok response -> response
   | Error (Engine.Fetch.Refused sentence) -> A.failf "the fetch was refused: %s" sentence
   | Error (Engine.Fetch.Failed sentence) -> A.failf "the fetch failed: %s" sentence
@@ -427,10 +421,13 @@ let refused board ?offset ?query ?path ?(structure = false) ?provider target =
   | Error (Engine.Fetch.Failed sentence) -> A.failf "expected a refusal, got a failure: %s" sentence
 
 let failed board ?offset ?query ?path ?provider ?auto_fallback ?run ?step target =
-  match Engine.Fetch.fetch board.engine ?offset ?query ?path ?provider ?auto_fallback ?run ?step target with
+  match
+    Engine.Fetch.fetch board.engine ?offset ?query ?path ?provider ?auto_fallback ?run ?step target
+  with
   | Ok response -> A.failf "expected a failure, got a page: %s" (say response.Model.notice)
   | Error (Engine.Fetch.Failed sentence) -> sentence
-  | Error (Engine.Fetch.Refused sentence) -> A.failf "expected a failure, got a refusal: %s" sentence
+  | Error (Engine.Fetch.Refused sentence) ->
+      A.failf "expected a failure, got a refusal: %s" sentence
 
 let one_kwargs board name =
   let found =
@@ -443,21 +440,22 @@ let one_kwargs board name =
 
 let check_kw board name ~(offset : int) ~(max_chars : Engine.Fetch.cap) =
   match one_kwargs board name with
-  | [ seen ] ->
-    check_int (name ^ " offset") offset (fst seen);
-    (match (snd seen, max_chars) with
-    | Engine.Fetch.Default, Engine.Fetch.Default -> ()
-    | Engine.Fetch.Uncapped, Engine.Fetch.Uncapped -> ()
-    | Engine.Fetch.Limit a, Engine.Fetch.Limit b -> check_int (name ^ " max_chars") a b
-    | _, _ -> A.failf "%s was asked for %s, not %s" name
-        (match snd seen with
-        | Engine.Fetch.Default -> "the configured limit"
-        | Engine.Fetch.Uncapped -> "no limit"
-        | Engine.Fetch.Limit n -> string_of_int n)
-        (match max_chars with
-        | Engine.Fetch.Default -> "the configured limit"
-        | Engine.Fetch.Uncapped -> "no limit"
-        | Engine.Fetch.Limit n -> string_of_int n))
+  | [ seen ] -> (
+      check_int (name ^ " offset") offset (fst seen);
+      match (snd seen, max_chars) with
+      | Engine.Fetch.Default, Engine.Fetch.Default -> ()
+      | Engine.Fetch.Uncapped, Engine.Fetch.Uncapped -> ()
+      | Engine.Fetch.Limit a, Engine.Fetch.Limit b -> check_int (name ^ " max_chars") a b
+      | _, _ ->
+          A.failf "%s was asked for %s, not %s" name
+            (match snd seen with
+            | Engine.Fetch.Default -> "the configured limit"
+            | Engine.Fetch.Uncapped -> "no limit"
+            | Engine.Fetch.Limit n -> string_of_int n)
+            (match max_chars with
+            | Engine.Fetch.Default -> "the configured limit"
+            | Engine.Fetch.Uncapped -> "no limit"
+            | Engine.Fetch.Limit n -> string_of_int n))
   | many -> A.failf "expected one dispatch to %s, got %d" name (List.length many)
 
 let page_text_is_returned () =
@@ -484,7 +482,9 @@ let every_call_fetches () =
   check_int "calls" 2 !(local.calls)
 
 let failure_raises () =
-  let local = stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "503")) () in
+  let local =
+    stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "503")) ()
+  in
   let message = failed (make_engine ~local ()) url in
   includes "the retry sentence" "Retry shortly" message
 
@@ -521,9 +521,7 @@ let unicode_whitespace_does_not_clear_the_emptiness_gate () =
   (* [min_text_chars] counts what is left after Python's [str.strip()]. A page
      padded with ideographic spaces is blank, so the gate has to see one
      character, not three hundred. *)
-  let padded =
-    "a" ^ String.concat "" (List.init 300 (fun _ -> "\xe3\x80\x80"))
-  in
+  let padded = "a" ^ String.concat "" (List.init 300 (fun _ -> "\xe3\x80\x80")) in
   let fetch = { Config.default_fetch_config with min_text_chars = 200 } in
   let r = served (make_engine ~fetch ~local:(stub ~text:padded ()) ()) url in
   includes "the blank page is a shell" "JavaScript-rendered" (say r.Model.notice)
@@ -547,15 +545,16 @@ let query_returns_matches_with_absolute_offsets () =
   match r.Model.matches with
   | None -> failwith "expected matches"
   | Some found ->
-    check_ints "offsets" [ 0; String.length walrus_first + 2 ]
-      (List.map (fun (m : Model.fetch_match) -> m.Model.offset) found);
-    List.iter
-      (fun (m : Model.fetch_match) ->
-        includes "the match carries the term" "walrus" m.Model.text;
-        check_string "a match's offset must locate its own text"
-          (String.sub text m.Model.offset (String.length m.Model.text))
-          m.Model.text)
-      found
+      check_ints "offsets"
+        [ 0; String.length walrus_first + 2 ]
+        (List.map (fun (m : Model.fetch_match) -> m.Model.offset) found);
+      List.iter
+        (fun (m : Model.fetch_match) ->
+          includes "the match carries the term" "walrus" m.Model.text;
+          check_string "a match's offset must locate its own text"
+            (String.sub text m.Model.offset (String.length m.Model.text))
+            m.Model.text)
+        found
 
 let query_with_no_hits_says_so_and_leaves_text_unset () =
   let r = served (make_engine ()) ~query:"zzzqqq" url in
@@ -565,12 +564,11 @@ let query_with_no_hits_says_so_and_leaves_text_unset () =
   includes "and the way out" "fetch without `query`" (say r.Model.notice)
 
 let query_over_budget_reports_dropped_sections () =
-  let paras =
-    List.init 3 (fun i -> "Walrus " ^ string_of_int i ^ ". " ^ String.make 1600 'x')
-  in
+  let paras = List.init 3 (fun i -> "Walrus " ^ string_of_int i ^ ". " ^ String.make 1600 'x') in
   let text = String.concat "\n\n" paras in
   let board =
-    make_engine ~fetch:{ Config.default_fetch_config with Config.max_match_chars = 2000 }
+    make_engine
+      ~fetch:{ Config.default_fetch_config with Config.max_match_chars = 2000 }
       ~local:(stub ~text ()) ()
   in
   let r = served board ~query:"walrus" url in
@@ -614,12 +612,12 @@ let a_path_returns_the_subtree_at_an_offset_into_the_rendering () =
   check_int "total_chars" (String.length rendered) (Option.value ~default:0 r.Model.total_chars);
   match r.Model.matches with
   | Some [ span ] ->
-    check_bool "the subtree starts at its own line" true
-      (String.starts_with ~prefix:"$.items[1]  object(4)" span.Model.text);
-    check_string "the offset indexes the whole rendering"
-      (String.sub rendered span.Model.offset (String.length span.Model.text))
-      span.Model.text;
-    excludes "and holds only that element" "$.items[0]" span.Model.text
+      check_bool "the subtree starts at its own line" true
+        (String.starts_with ~prefix:"$.items[1]  object(4)" span.Model.text);
+      check_string "the offset indexes the whole rendering"
+        (String.sub rendered span.Model.offset (String.length span.Model.text))
+        span.Model.text;
+      excludes "and holds only that element" "$.items[0]" span.Model.text
   | Some many -> A.failf "expected one match, got %d" (List.length many)
   | None -> failwith "expected matches"
 
@@ -661,7 +659,10 @@ let a_page_whose_text_happens_to_start_with_a_dollar_is_still_a_page () =
      with nothing at that path, which withheld a page the caller had already been
      billed for. *)
   let page =
-    stub ~text:("$ make all\n" ^ String.concat "" (List.init 20 (fun _ -> "# build every target in the directory\n")))
+    stub
+      ~text:
+        ("$ make all\n"
+        ^ String.concat "" (List.init 20 (fun _ -> "# build every target in the directory\n")))
       ~title:None ~content_type:(Some "text/plain") ()
   in
   let r = served (make_engine ~local:page ()) ~path:"$.src" url in
@@ -674,7 +675,11 @@ let a_page_whose_text_happens_to_start_with_a_dollar_is_still_a_page () =
 let a_json_claim_on_a_body_that_is_not_a_document_says_which () =
   let stub_page =
     (* A malformed body long enough not to read as the empty-page case. *)
-    stub ~text:("{\"total\": 2,, \"items\": [" ^ String.concat "" (List.init 8 (fun _ -> "\"a very long record that goes on and on\", ")) ^ "]}")
+    stub
+      ~text:
+        ("{\"total\": 2,, \"items\": ["
+        ^ String.concat "" (List.init 8 (fun _ -> "\"a very long record that goes on and on\", "))
+        ^ "]}")
       ~title:None ~content_type:(Some "application/json") ()
   in
   let r = served (make_engine ~local:stub_page ()) ~path:"$.total" url in
@@ -684,8 +689,9 @@ let a_json_claim_on_a_body_that_is_not_a_document_says_which () =
 let a_selection_cut_before_its_first_span_says_so () =
   (* A budget too small for the smallest match is a cut answer, not a no-match. *)
   let board =
-    make_engine ~fetch:{ Config.default_fetch_config with Config.max_match_chars = 20 }
-      ~local:(json ())  ()
+    make_engine
+      ~fetch:{ Config.default_fetch_config with Config.max_match_chars = 20 }
+      ~local:(json ()) ()
   in
   let r = served board ~path:"$.items[0]" url in
   check_bool "nothing was returned" true (r.Model.matches = Some []);
@@ -694,14 +700,15 @@ let a_selection_cut_before_its_first_span_says_so () =
 
 let a_path_over_budget_reports_what_was_cut_and_how_to_narrow_it () =
   let board =
-    make_engine ~fetch:{ Config.default_fetch_config with Config.max_match_chars = 60 }
-      ~local:(json ())  ()
+    make_engine
+      ~fetch:{ Config.default_fetch_config with Config.max_match_chars = 60 }
+      ~local:(json ()) ()
   in
   let r = served board ~path:"$.items" url in
   (match r.Model.matches with
   | Some found when found <> [] ->
-    check_bool "every span fits the budget" true
-      (List.for_all (fun (m : Model.fetch_match) -> String.length m.Model.text <= 60) found)
+      check_bool "every span fits the budget" true
+        (List.for_all (fun (m : Model.fetch_match) -> String.length m.Model.text <= 60) found)
   | _ -> failwith "expected spans within the budget");
   includes "the budget sentence" "selection budget (60 chars) reached" (say r.Model.notice);
   includes "and how to narrow it" "narrower `path`" (say r.Model.notice)
@@ -764,9 +771,7 @@ let a_tiny_structure_page_is_answered_without_a_walk () =
      deliberate read of the shape and must not bill a fallback over emptiness,
      even with the walk asked for. *)
   let tiny = "$.n  1" in
-  let local =
-    stub ~text:tiny ~content_type:(Some "application/json") ~path_addressable:true ()
-  in
+  let local = stub ~text:tiny ~content_type:(Some "application/json") ~path_addressable:true () in
   let ladder = stub ~name:"crawl4ai" ~text:"the ladder served prose instead" () in
   let fetch = { Config.default_fetch_config with min_text_chars = String.length tiny + 1 } in
   let board = make_engine ~fetch ~readers:schema_readers ~local ~fallbacks:[ ladder ] () in
@@ -780,8 +785,7 @@ let a_structure_read_on_a_page_with_no_structure_returns_the_page () =
   let r = served board ~structure:true url in
   check_opt_string "the whole page" (Some page_text) r.Model.text;
   includes "the constraint is named"
-    "`structure` reports a JSON or CSV table's shape, and this page is not one"
-    (say r.Model.notice)
+    "`structure` reports a JSON or CSV table's shape, and this page is not one" (say r.Model.notice)
 
 let a_structure_read_with_a_query_is_refused_before_anything_is_fetched () =
   let local = stub () in
@@ -853,7 +857,9 @@ let a_short_tail_window_gets_no_empty_diagnosis () =
 let ok_sanitize board = int (field (ok board) "sanitized")
 
 let page_text_is_escaped_and_counted () =
-  let board = make_engine ~local:(stub ~text:"the page says <|endoftext|> and nothing else" ()) () in
+  let board =
+    make_engine ~local:(stub ~text:"the page says <|endoftext|> and nothing else" ()) ()
+  in
   let r = served board url in
   check_string "the token is split"
     ("the page says <" ^ zwsp ^ "|endoftext|> and nothing else")
@@ -891,33 +897,35 @@ let query_matches_are_escaped_in_escaped_space () =
   let board = make_engine ~local:(stub ~text:(first ^ "\n\n" ^ second) ()) () in
   let r = served board ~query:"walrus" url in
   check_bool "text unset" true (r.Model.text = None);
-  check_int "total_chars" (String.length first + String.length second + 2)
+  check_int "total_chars"
+    (String.length first + String.length second + 2)
     (Option.value ~default:0 r.Model.total_chars);
   let escaped_first = "The walrus lives in <" ^ zwsp ^ "|arctic|>. " ^ String.make 1600 'x' in
   let escaped_page = escaped_first ^ "\n\n" ^ second in
   let found =
-    match r.Model.matches with
-    | Some found -> found
-    | None -> A.failf "expected matches"
+    match r.Model.matches with Some found -> found | None -> A.failf "expected matches"
   in
   check_int "the escape is counted once for the page" 1 (ok_sanitize board);
   match found with
   | [ one; two ] ->
-    check_ints "offsets in the escaped page" [ 0; String.length escaped_first + 2 ]
-      [ one.Model.offset; two.Model.offset ];
-    check_bool "the match carries the escaped token" true
-      (String.starts_with ~prefix:("The walrus lives in <" ^ zwsp ^ "|arctic|>.") one.Model.text);
-    excludes "and never the raw token" "<|arctic|>" one.Model.text;
-    List.iter
-      (fun (m : Model.fetch_match) ->
-        check_string "the offset locates its own text, in the same escaped space"
-          (String.sub escaped_page m.Model.offset (String.length m.Model.text))
-          m.Model.text)
-      [ one; two ]
+      check_ints "offsets in the escaped page"
+        [ 0; String.length escaped_first + 2 ]
+        [ one.Model.offset; two.Model.offset ];
+      check_bool "the match carries the escaped token" true
+        (String.starts_with ~prefix:("The walrus lives in <" ^ zwsp ^ "|arctic|>.") one.Model.text);
+      excludes "and never the raw token" "<|arctic|>" one.Model.text;
+      List.iter
+        (fun (m : Model.fetch_match) ->
+          check_string "the offset locates its own text, in the same escaped space"
+            (String.sub escaped_page m.Model.offset (String.length m.Model.text))
+            m.Model.text)
+        [ one; two ]
   | many -> A.failf "expected two matches, got %d" (List.length many)
 
 let a_url_is_logged_when_queries_are_opted_in () =
-  let board = make_engine ~logging:{ Config.default_logging_config with Config.log_queries = true } () in
+  let board =
+    make_engine ~logging:{ Config.default_logging_config with Config.log_queries = true } ()
+  in
   ignore (served board url);
   check_string "the URL is repr'd, not bare" ("'" ^ url ^ "'") (str (field (ok board) "url"))
 
@@ -932,11 +940,17 @@ let a_readable_page_does_not_log_the_empty_event () =
   check_bool "no empty event" true ([] = events board.lines "fetch.empty")
 
 let a_failure_logs_its_reason_and_retryability () =
-  let board = make_engine ~local:(stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "503")) ()) () in
+  let board =
+    make_engine
+      ~local:
+        (stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "503")) ())
+      ()
+  in
   ignore (failed board url);
   let fields = event board.lines "fetch.failed" in
   check_string "reason" "503" (str (field fields "reason"));
-  check_level "a failure is levelled a warning" Config.Log_warning (level_of board.lines "fetch.failed");
+  check_level "a failure is levelled a warning" Config.Log_warning
+    (level_of board.lines "fetch.failed");
   check_bool "retryable" true (bool (field fields "retryable"));
   check_bool "ms is a count" true (int (field fields "ms") >= 0)
 
@@ -968,7 +982,8 @@ let a_success_records_chars_and_no_fallback () =
 let a_failure_records_the_class_and_no_chars () =
   let board =
     make_engine ~usage:(recorder ())
-      ~local:(stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "503")) ())
+      ~local:
+        (stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "503")) ())
       ()
   in
   ignore (failed board url);
@@ -980,7 +995,8 @@ let a_failure_records_the_class_and_no_chars () =
 let a_blocked_fetch_records_the_block_class () =
   let board =
     make_engine ~usage:(recorder ())
-      ~local:(stub ~fail:(Engine.Fetch.Fetch_blocked "private address") ()) ()
+      ~local:(stub ~fail:(Engine.Fetch.Fetch_blocked "private address") ())
+      ()
   in
   ignore (failed board url);
   check_string "error" "FetchBlocked" (str (get "error" (one_recent board)))
@@ -1004,16 +1020,15 @@ let a_past_end_offset_records_the_call_it_billed () =
 let image_url = "https://img.test/a.png"
 let image_body = "\x89PNG\r\n\x1a\na png body"
 let image_body_len = String.length image_body
-let image_stub () =
-  stub ~image:({ Engine.Fetch.media_type = "image/png"; body = image_body }) ()
+let image_stub () = stub ~image:{ Engine.Fetch.media_type = "image/png"; body = image_body } ()
 
 let the_image_is_carried_and_the_text_fields_stay_unset () =
   let r = served (make_engine ~local:(image_stub ()) ()) image_url in
   check_bool "an image travels" true (r.Model.image <> None);
   (match r.Model.image with
   | Some image ->
-    check_int "byte_count" image_body_len image.Model.byte_count;
-    check_string "the bytes arrive whole" "iVBORw0KGgphIHBuZyBib2R5" image.Model.base64
+      check_int "byte_count" image_body_len image.Model.byte_count;
+      check_string "the bytes arrive whole" "iVBORw0KGgphIHBuZyBib2R5" image.Model.base64
   | None -> ());
   check_opt_string "content_type" (Some "image/png") r.Model.content_type;
   check_bool "text unset" true (r.Model.text = None);
@@ -1089,7 +1104,8 @@ let the_fetch_is_still_journaled () =
    observability and must not become load-bearing. *)
 
 let rendered_by_fallback =
-  "The text a browser sees, served by the fallback the plan walked to. " ^ "The text a browser sees, served by the fallback the plan walked to. "
+  "The text a browser sees, served by the fallback the plan walked to. "
+  ^ "The text a browser sees, served by the fallback the plan walked to. "
   ^ "The text a browser sees, served by the fallback the plan walked to. "
   ^ "The text a browser sees, served by the fallback the plan walked to. "
 
@@ -1117,7 +1133,8 @@ let the_key_still_walks_everything_that_does_not_override () =
   let local = blocked_local () in
   let fallback = stub ~name:"crawl4ai" ~text:rendered_by_fallback () in
   let board =
-    make_engine ~fetch:{ Config.default_fetch_config with Config.auto_fallback = true }
+    make_engine
+      ~fetch:{ Config.default_fetch_config with Config.auto_fallback = true }
       ~local ~fallbacks:[ fallback ] ()
   in
   let response = served board url in
@@ -1160,7 +1177,8 @@ let a_named_provider_that_fails_does_not_walk_the_others () =
   let local = stub () in
   let named =
     stub ~name:"scrappa"
-      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"scrappa" "rate limited")) ()
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"scrappa" "rate limited"))
+      ()
   in
   let other = stub ~name:"crawl4ai" () in
   let board = make_engine ~local ~fallbacks:[ other; named ] () in
@@ -1217,15 +1235,15 @@ let primary_text =
     (List.init 8 (fun _ -> "Served by the configured primary route, not by this server. "))
 
 let behind_primary =
-  String.concat ""
-    (List.init 8 (fun _ -> "Rendered by the fallback behind the primary route. "))
+  String.concat "" (List.init 8 (fun _ -> "Rendered by the fallback behind the primary route. "))
 
 let the_named_primary_serves_and_the_local_reader_is_never_dialed () =
   (* The whole point of the key: the page never leaves this server's own IP. *)
   let local = stub () in
   let primary = stub ~name:"jina" ~text:primary_text () in
   let board =
-    make_engine ~fetch:{ Config.default_fetch_config with Config.primary = "jina" }
+    make_engine
+      ~fetch:{ Config.default_fetch_config with Config.primary = "jina" }
       ~local ~fallbacks:[ primary ] ()
   in
   let response = served board url in
@@ -1253,7 +1271,8 @@ let a_failing_primary_walks_the_ladder_behind_it_once () =
   let local = stub () in
   let primary =
     stub ~name:"jina"
-      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"jina" "HTTP 403")) ()
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"jina" "HTTP 403"))
+      ()
   in
   let behind = stub ~name:"scrappa" ~text:behind_primary () in
   let board =
@@ -1279,19 +1298,26 @@ let a_failing_primary_with_the_walk_off_offers_the_ladder_only () =
      provider the operator already watched fail. *)
   let primary =
     stub ~name:"jina"
-      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"jina" "HTTP 403")) ()
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"jina" "HTTP 403"))
+      ()
   in
   let behind = stub ~name:"scrappa" ~text:behind_primary () in
   let board =
     make_engine
       ~fetch:
-        { Config.default_fetch_config with Config.primary = "jina"; fallback = Some [ "jina"; "scrappa" ] }
+        {
+          Config.default_fetch_config with
+          Config.primary = "jina";
+          fallback = Some [ "jina"; "scrappa" ];
+        }
       ~fallbacks:[ primary; behind ] ()
   in
   let message = failed board url in
   includes "the ladder is offered" " Other configured fetch providers: scrappa." message;
   (match find_sub ~haystack:message ~needle:"Other configured" () with
-  | Some i -> excludes "and the primary is not in it" "jina" (String.sub message i (String.length message - i))
+  | Some i ->
+      excludes "and the primary is not in it" "jina"
+        (String.sub message i (String.length message - i))
   | None -> A.failf "the message offered no ladder: %s" message);
   check_int "nothing was walked" 0 !(behind.calls)
 
@@ -1321,7 +1347,8 @@ let the_primary_can_still_be_named_by_a_caller () =
      for it gets the one attempt it asked for. *)
   let primary = stub ~name:"jina" ~text:primary_text () in
   let board =
-    make_engine ~fetch:{ Config.default_fetch_config with Config.primary = "jina" }
+    make_engine
+      ~fetch:{ Config.default_fetch_config with Config.primary = "jina" }
       ~fallbacks:[ primary ] ()
   in
   let response = served board ~provider:"jina" url in
@@ -1334,8 +1361,10 @@ let the_refusal_names_the_default_route_not_a_local_read () =
      route rather than promise a page read no parameter reaches. *)
   let board =
     make_engine
-      ~fetch:{ Config.default_fetch_config with Config.primary = "jina"; fallback = Some [ "jina" ] }
-      ~fallbacks:[ stub ~name:"jina" () ] ()
+      ~fetch:
+        { Config.default_fetch_config with Config.primary = "jina"; fallback = Some [ "jina" ] }
+      ~fallbacks:[ stub ~name:"jina" () ]
+      ()
   in
   includes "the default route, not a local read"
     "or omit `provider` to use this server's default route."
@@ -1345,18 +1374,18 @@ let a_primary_this_engine_was_not_handed_refuses_construction () =
   (* The defensive twin of the startup refusal: silently reading locally instead
      would dial from this server's own IP against a config that said not to. *)
   let config =
-    match
-      Config.resolve ~fetch:{ Config.default_fetch_config with Config.primary = "jina" } ()
-    with
+    match Config.resolve ~fetch:{ Config.default_fetch_config with Config.primary = "jina" } () with
     | Ok config -> config
     | Error message -> A.failf "the fixture config was refused: %s" message
   in
   match
-    Engine.Fetch.create config (make_fetcher (stub ())) ~readers:doc_readers ~fallbacks:[] ~clock
-      ~now ()
+    Engine.Fetch.create config
+      (make_fetcher (stub ()))
+      ~readers:doc_readers ~fallbacks:[] ~clock ~now ()
   with
   | Ok _ -> A.failf "a primary nobody built cannot be a route"
-  | Error sentence -> includes "the refusal says what is missing" "which this deployment did not build" sentence
+  | Error sentence ->
+      includes "the refusal says what is missing" "which this deployment did not build" sentence
 
 (* A walk that spends two attempts prices the page at the fallback that answered.
    The figure on the line is read off the fallback object that served the page,
@@ -1367,16 +1396,21 @@ let a_primary_this_engine_was_not_handed_refuses_construction () =
 let walk_board usage fallbacks =
   (* The local reader fails, so every case here reaches the ladder, and the walk
      is asked for on the config half of the switch. *)
-  make_engine ~usage ~fetch:{ Config.default_fetch_config with Config.auto_fallback = true }
-    ~local:(stub ~name:"local"
-              ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403")) ())
+  make_engine ~usage
+    ~fetch:{ Config.default_fetch_config with Config.auto_fallback = true }
+    ~local:
+      (stub ~name:"local"
+         ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403"))
+         ())
     ~fallbacks ()
 
 let a_walk_bills_the_fallback_that_answered () =
   (* Two priced fallbacks, two different figures: the line carries the second
      one. *)
-  let tried = stub ~name:"scrappa" ~cost_per_1k:(Some 0.30)
-    ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403")) ()
+  let tried =
+    stub ~name:"scrappa" ~cost_per_1k:(Some 0.30)
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403"))
+      ()
   in
   let answered = stub ~name:"priced-two" ~cost_per_1k:(Some 1.60) () in
   let board = walk_board (recorder ()) [ tried; answered ] in
@@ -1391,8 +1425,10 @@ let a_walk_bills_the_fallback_that_answered () =
   money "fetch_cost_usd" 0.0016 (get "fetch_cost_usd" totals)
 
 let a_walk_past_a_free_fallback_bills_the_priced_one () =
-  let tried = stub ~name:"jina"
-    ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403")) ()
+  let tried =
+    stub ~name:"jina"
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403"))
+      ()
   in
   let answered = stub ~name:"scrappa" ~cost_per_1k:(Some 0.30) () in
   let board = walk_board (recorder ()) [ tried; answered ] in
@@ -1403,8 +1439,10 @@ let a_walk_past_a_free_fallback_bills_the_priced_one () =
 
 let a_walk_answered_by_a_free_fallback_bills_nothing () =
   (* The priced fallback that was tried and failed is not the one that billed. *)
-  let tried = stub ~name:"scrappa" ~cost_per_1k:(Some 0.30)
-    ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403")) ()
+  let tried =
+    stub ~name:"scrappa" ~cost_per_1k:(Some 0.30)
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403"))
+      ()
   in
   let answered = stub ~name:"crawl4ai" () in
   let board = walk_board (recorder ()) [ tried; answered ] in
@@ -1418,135 +1456,201 @@ let a_walk_answered_by_a_free_fallback_bills_nothing () =
   check_int "priced_fetches" 0 (int (get "priced_fetches" totals))
 
 let () =
-  A.run
-    "fetch engine"
+  A.run "fetch engine"
     [
-      ( "success"
-      , [
+      ( "success",
+        [
           A.test_case "page text is returned" `Quick page_text_is_returned;
           A.test_case "requested url is always reported" `Quick requested_url_is_always_reported;
           A.test_case "every call fetches" `Quick every_call_fetches;
         ] );
-      ( "failure"
-      , [
+      ( "failure",
+        [
           A.test_case "failure raises" `Quick failure_raises;
-          A.test_case "blocked url does not advise a retry" `Quick blocked_url_does_not_advise_a_retry;
+          A.test_case "blocked url does not advise a retry" `Quick
+            blocked_url_does_not_advise_a_retry;
         ] );
-      ( "empty extraction"
-      , [ A.test_case "empty text is reported not raised" `Quick empty_text_is_reported_not_raised;
+      ( "empty extraction",
+        [
+          A.test_case "empty text is reported not raised" `Quick empty_text_is_reported_not_raised;
           A.test_case "unicode whitespace does not clear the emptiness gate" `Quick
-            unicode_whitespace_does_not_clear_the_emptiness_gate ] );
-      ( "query targeting"
-      , [
-          A.test_case "query fetches uncapped" `Quick query_fetches_uncapped;
-          A.test_case "query returns matches with absolute offsets" `Quick query_returns_matches_with_absolute_offsets;
-          A.test_case "query with no hits says so and leaves text unset" `Quick query_with_no_hits_says_so_and_leaves_text_unset;
-          A.test_case "query over budget reports dropped sections" `Quick query_over_budget_reports_dropped_sections;
-          A.test_case "query on an unreadable page keeps the shell diagnosis" `Quick query_on_an_unreadable_page_keeps_the_shell_diagnosis;
+            unicode_whitespace_does_not_clear_the_emptiness_gate;
         ] );
-      ( "json path targeting"
-      , [
+      ( "query targeting",
+        [
+          A.test_case "query fetches uncapped" `Quick query_fetches_uncapped;
+          A.test_case "query returns matches with absolute offsets" `Quick
+            query_returns_matches_with_absolute_offsets;
+          A.test_case "query with no hits says so and leaves text unset" `Quick
+            query_with_no_hits_says_so_and_leaves_text_unset;
+          A.test_case "query over budget reports dropped sections" `Quick
+            query_over_budget_reports_dropped_sections;
+          A.test_case "query on an unreadable page keeps the shell diagnosis" `Quick
+            query_on_an_unreadable_page_keeps_the_shell_diagnosis;
+        ] );
+      ( "json path targeting",
+        [
           A.test_case "a path fetches uncapped" `Quick a_path_fetches_uncapped;
-          A.test_case "a path returns the subtree at an offset into the rendering" `Quick a_path_returns_the_subtree_at_an_offset_into_the_rendering;
-          A.test_case "a wildcard path returns one match per element" `Quick a_wildcard_path_returns_one_match_per_element;
-          A.test_case "a path that matches nothing says the structure is one away" `Quick a_path_that_matches_nothing_says_the_structure_is_one_away;
-          A.test_case "a path on a page with no structure returns the page" `Quick a_path_on_a_page_with_no_structure_returns_the_page;
-          A.test_case "a page whose text happens to start with a dollar is still a page" `Quick a_page_whose_text_happens_to_start_with_a_dollar_is_still_a_page;
-          A.test_case "a json claim on a body that is not a document says which" `Quick a_json_claim_on_a_body_that_is_not_a_document_says_which;
-          A.test_case "a selection cut before its first span says so" `Quick a_selection_cut_before_its_first_span_says_so;
-          A.test_case "a path over budget reports what was cut and how to narrow it" `Quick a_path_over_budget_reports_what_was_cut_and_how_to_narrow_it;
-          A.test_case "a path selects nothing on an unreadable page" `Quick a_path_selects_nothing_on_an_unreadable_page;
+          A.test_case "a path returns the subtree at an offset into the rendering" `Quick
+            a_path_returns_the_subtree_at_an_offset_into_the_rendering;
+          A.test_case "a wildcard path returns one match per element" `Quick
+            a_wildcard_path_returns_one_match_per_element;
+          A.test_case "a path that matches nothing says the structure is one away" `Quick
+            a_path_that_matches_nothing_says_the_structure_is_one_away;
+          A.test_case "a path on a page with no structure returns the page" `Quick
+            a_path_on_a_page_with_no_structure_returns_the_page;
+          A.test_case "a page whose text happens to start with a dollar is still a page" `Quick
+            a_page_whose_text_happens_to_start_with_a_dollar_is_still_a_page;
+          A.test_case "a json claim on a body that is not a document says which" `Quick
+            a_json_claim_on_a_body_that_is_not_a_document_says_which;
+          A.test_case "a selection cut before its first span says so" `Quick
+            a_selection_cut_before_its_first_span_says_so;
+          A.test_case "a path over budget reports what was cut and how to narrow it" `Quick
+            a_path_over_budget_reports_what_was_cut_and_how_to_narrow_it;
+          A.test_case "a path selects nothing on an unreadable page" `Quick
+            a_path_selects_nothing_on_an_unreadable_page;
           A.test_case "a path with a query is refused" `Quick a_path_with_a_query_is_refused;
           A.test_case "a path with an offset is refused" `Quick a_path_with_an_offset_is_refused;
-          A.test_case "an unreadable path is refused before anything is fetched" `Quick an_unreadable_path_is_refused_before_anything_is_fetched;
+          A.test_case "an unreadable path is refused before anything is fetched" `Quick
+            an_unreadable_path_is_refused_before_anything_is_fetched;
         ] );
-      ( "structure reads"
-      , [
-          A.test_case "a structure read returns the schema not the page" `Quick a_structure_read_returns_the_schema_not_the_page;
+      ( "structure reads",
+        [
+          A.test_case "a structure read returns the schema not the page" `Quick
+            a_structure_read_returns_the_schema_not_the_page;
           A.test_case "a structure read fetches uncapped" `Quick a_structure_read_fetches_uncapped;
-          A.test_case "a tiny structure page is answered without a walk" `Quick a_tiny_structure_page_is_answered_without_a_walk;
-          A.test_case "a structure read on a page with no structure returns the page" `Quick a_structure_read_on_a_page_with_no_structure_returns_the_page;
-          A.test_case "a structure read with a query is refused before anything is fetched" `Quick a_structure_read_with_a_query_is_refused_before_anything_is_fetched;
-          A.test_case "a structure read with a path is refused before anything is fetched" `Quick a_structure_read_with_a_path_is_refused_before_anything_is_fetched;
-          A.test_case "a structure read with an offset is refused before anything is fetched" `Quick a_structure_read_with_an_offset_is_refused_before_anything_is_fetched;
+          A.test_case "a tiny structure page is answered without a walk" `Quick
+            a_tiny_structure_page_is_answered_without_a_walk;
+          A.test_case "a structure read on a page with no structure returns the page" `Quick
+            a_structure_read_on_a_page_with_no_structure_returns_the_page;
+          A.test_case "a structure read with a query is refused before anything is fetched" `Quick
+            a_structure_read_with_a_query_is_refused_before_anything_is_fetched;
+          A.test_case "a structure read with a path is refused before anything is fetched" `Quick
+            a_structure_read_with_a_path_is_refused_before_anything_is_fetched;
+          A.test_case "a structure read with an offset is refused before anything is fetched" `Quick
+            a_structure_read_with_an_offset_is_refused_before_anything_is_fetched;
         ] );
-      ( "offset paging"
-      , [
-          A.test_case "offset is forwarded to the fallback" `Quick offset_is_forwarded_to_the_fallback;
-          A.test_case "past end returns a notice and no ladder" `Quick past_end_returns_a_notice_and_no_ladder;
-          A.test_case "query and offset together are refused" `Quick query_and_offset_together_are_refused;
-          A.test_case "offset zero stays unset on the response" `Quick offset_zero_stays_unset_on_the_response;
-          A.test_case "a short tail window gets no empty diagnosis" `Quick a_short_tail_window_gets_no_empty_diagnosis;
+      ( "offset paging",
+        [
+          A.test_case "offset is forwarded to the fallback" `Quick
+            offset_is_forwarded_to_the_fallback;
+          A.test_case "past end returns a notice and no ladder" `Quick
+            past_end_returns_a_notice_and_no_ladder;
+          A.test_case "query and offset together are refused" `Quick
+            query_and_offset_together_are_refused;
+          A.test_case "offset zero stays unset on the response" `Quick
+            offset_zero_stays_unset_on_the_response;
+          A.test_case "a short tail window gets no empty diagnosis" `Quick
+            a_short_tail_window_gets_no_empty_diagnosis;
         ] );
-      ( "special token escaping"
-      , [
+      ( "special token escaping",
+        [
           A.test_case "page text is escaped and counted" `Quick page_text_is_escaped_and_counted;
           A.test_case "the title is escaped too" `Quick the_title_is_escaped_too;
           A.test_case "a clean page counts zero" `Quick a_clean_page_counts_zero;
-          A.test_case "a past end response escapes the title and counts" `Quick a_past_end_response_escapes_the_title_and_counts;
-          A.test_case "query matches are escaped in escaped space" `Quick query_matches_are_escaped_in_escaped_space;
+          A.test_case "a past end response escapes the title and counts" `Quick
+            a_past_end_response_escapes_the_title_and_counts;
+          A.test_case "query matches are escaped in escaped space" `Quick
+            query_matches_are_escaped_in_escaped_space;
         ] );
-      ( "observability"
-      , [
-          A.test_case "a url is logged when queries are opted in" `Quick a_url_is_logged_when_queries_are_opted_in;
+      ( "observability",
+        [
+          A.test_case "a url is logged when queries are opted in" `Quick
+            a_url_is_logged_when_queries_are_opted_in;
           A.test_case "an empty page logs the empty event" `Quick an_empty_page_logs_the_empty_event;
-          A.test_case "a readable page does not log the empty event" `Quick a_readable_page_does_not_log_the_empty_event;
-          A.test_case "a failure logs its reason and retryability" `Quick a_failure_logs_its_reason_and_retryability;
-          A.test_case "matches replace the page in the content log" `Quick matches_replace_the_page_in_the_content_log;
+          A.test_case "a readable page does not log the empty event" `Quick
+            a_readable_page_does_not_log_the_empty_event;
+          A.test_case "a failure logs its reason and retryability" `Quick
+            a_failure_logs_its_reason_and_retryability;
+          A.test_case "matches replace the page in the content log" `Quick
+            matches_replace_the_page_in_the_content_log;
         ] );
-      ( "usage recording"
-      , [
-          A.test_case "a success records chars and no fallback" `Quick a_success_records_chars_and_no_fallback;
-          A.test_case "a failure records the class and no chars" `Quick a_failure_records_the_class_and_no_chars;
-          A.test_case "a blocked fetch records the block class" `Quick a_blocked_fetch_records_the_block_class;
-          A.test_case "a past end offset records the call it billed" `Quick a_past_end_offset_records_the_call_it_billed;
+      ( "usage recording",
+        [
+          A.test_case "a success records chars and no fallback" `Quick
+            a_success_records_chars_and_no_fallback;
+          A.test_case "a failure records the class and no chars" `Quick
+            a_failure_records_the_class_and_no_chars;
+          A.test_case "a blocked fetch records the block class" `Quick
+            a_blocked_fetch_records_the_block_class;
+          A.test_case "a past end offset records the call it billed" `Quick
+            a_past_end_offset_records_the_call_it_billed;
         ] );
-      ( "image pages"
-      , [
-          A.test_case "the image is carried and the text fields stay unset" `Quick the_image_is_carried_and_the_text_fields_stay_unset;
-          A.test_case "the notice names the type and the size" `Quick the_notice_names_the_type_and_the_size;
-          A.test_case "the ladder is never asked for an image" `Quick the_ladder_is_never_asked_for_an_image;
-          A.test_case "an offset past the end of nothing addresses nothing" `Quick an_offset_past_the_end_of_nothing_addresses_nothing;
-          A.test_case "the call is journaled as a call with no text chars" `Quick the_call_is_journaled_as_a_call_with_no_text_chars;
-          A.test_case "the size that left the process rides fetch ok" `Quick the_size_that_left_the_process_rides_fetch_ok;
-          A.test_case "a text page binds no image field at all" `Quick a_text_page_binds_no_image_field_at_all;
+      ( "image pages",
+        [
+          A.test_case "the image is carried and the text fields stay unset" `Quick
+            the_image_is_carried_and_the_text_fields_stay_unset;
+          A.test_case "the notice names the type and the size" `Quick
+            the_notice_names_the_type_and_the_size;
+          A.test_case "the ladder is never asked for an image" `Quick
+            the_ladder_is_never_asked_for_an_image;
+          A.test_case "an offset past the end of nothing addresses nothing" `Quick
+            an_offset_past_the_end_of_nothing_addresses_nothing;
+          A.test_case "the call is journaled as a call with no text chars" `Quick
+            the_call_is_journaled_as_a_call_with_no_text_chars;
+          A.test_case "the size that left the process rides fetch ok" `Quick
+            the_size_that_left_the_process_rides_fetch_ok;
+          A.test_case "a text page binds no image field at all" `Quick
+            a_text_page_binds_no_image_field_at_all;
         ] );
-      ( "images in agent mode"
-      , [
-          A.test_case "the bytes are left out and the notice says why" `Quick the_bytes_are_left_out_and_the_notice_says_why;
+      ( "images in agent mode",
+        [
+          A.test_case "the bytes are left out and the notice says why" `Quick
+            the_bytes_are_left_out_and_the_notice_says_why;
           A.test_case "the fetch is still journaled" `Quick the_fetch_is_still_journaled;
         ] );
-      ( "the route asks for the walk"
-      , [
-          A.test_case "a call can ask for the walk the key withholds" `Quick a_call_can_ask_for_the_walk_the_key_withholds;
-          A.test_case "the journal fields alone never open the walk" `Quick the_journal_fields_alone_never_open_the_walk;
-          A.test_case "the key still walks everything that does not override" `Quick the_key_still_walks_everything_that_does_not_override;
+      ( "the route asks for the walk",
+        [
+          A.test_case "a call can ask for the walk the key withholds" `Quick
+            a_call_can_ask_for_the_walk_the_key_withholds;
+          A.test_case "the journal fields alone never open the walk" `Quick
+            the_journal_fields_alone_never_open_the_walk;
+          A.test_case "the key still walks everything that does not override" `Quick
+            the_key_still_walks_everything_that_does_not_override;
         ] );
-      ( "the ladder walk bills the answering fallback"
-      , [
-          A.test_case "a walk bills the fallback that answered" `Quick a_walk_bills_the_fallback_that_answered;
-          A.test_case "a walk past a free fallback bills the priced one" `Quick a_walk_past_a_free_fallback_bills_the_priced_one;
-          A.test_case "a walk answered by a free fallback bills nothing" `Quick a_walk_answered_by_a_free_fallback_bills_nothing;
+      ( "the ladder walk bills the answering fallback",
+        [
+          A.test_case "a walk bills the fallback that answered" `Quick
+            a_walk_bills_the_fallback_that_answered;
+          A.test_case "a walk past a free fallback bills the priced one" `Quick
+            a_walk_past_a_free_fallback_bills_the_priced_one;
+          A.test_case "a walk answered by a free fallback bills nothing" `Quick
+            a_walk_answered_by_a_free_fallback_bills_nothing;
         ] );
-      ( "named provider"
-      , [
-          A.test_case "a named provider serves the page and nothing else is tried" `Quick a_named_provider_serves_the_page_and_nothing_else_is_tried;
-          A.test_case "the named fallback is the fallback the call is journalled to" `Quick the_named_fallback_is_the_fallback_the_call_is_journalled_to;
-          A.test_case "a named provider that fails does not walk the others" `Quick a_named_provider_that_fails_does_not_walk_the_others;
-          A.test_case "an unknown name is refused before anything is dispatched" `Quick an_unknown_name_is_refused_before_anything_is_dispatched;
-          A.test_case "a search name is refused with the fetch list" `Quick a_search_name_is_refused_with_the_fetch_list;
-          A.test_case "no configured provider says so rather than listing nothing" `Quick no_configured_provider_says_so_rather_than_listing_nothing;
-          A.test_case "the three ways a name cannot serve refuse alike" `Quick the_three_ways_a_name_cannot_serve_refuse_alike;
+      ( "named provider",
+        [
+          A.test_case "a named provider serves the page and nothing else is tried" `Quick
+            a_named_provider_serves_the_page_and_nothing_else_is_tried;
+          A.test_case "the named fallback is the fallback the call is journalled to" `Quick
+            the_named_fallback_is_the_fallback_the_call_is_journalled_to;
+          A.test_case "a named provider that fails does not walk the others" `Quick
+            a_named_provider_that_fails_does_not_walk_the_others;
+          A.test_case "an unknown name is refused before anything is dispatched" `Quick
+            an_unknown_name_is_refused_before_anything_is_dispatched;
+          A.test_case "a search name is refused with the fetch list" `Quick
+            a_search_name_is_refused_with_the_fetch_list;
+          A.test_case "no configured provider says so rather than listing nothing" `Quick
+            no_configured_provider_says_so_rather_than_listing_nothing;
+          A.test_case "the three ways a name cannot serve refuse alike" `Quick
+            the_three_ways_a_name_cannot_serve_refuse_alike;
         ] );
-      ( "primary route"
-      , [
-          A.test_case "the named primary serves and the local reader is never dialed" `Quick the_named_primary_serves_and_the_local_reader_is_never_dialed;
-          A.test_case "the primary is the route the call is journalled to" `Quick the_primary_is_the_route_the_call_is_journalled_to;
-          A.test_case "a failing primary walks the ladder behind it once" `Quick a_failing_primary_walks_the_ladder_behind_it_once;
-          A.test_case "a failing primary with the walk off offers the ladder only" `Quick a_failing_primary_with_the_walk_off_offers_the_ladder_only;
-          A.test_case "a nearly empty primary names itself and offers the ladder" `Quick a_nearly_empty_primary_names_itself_and_offers_the_ladder;
-          A.test_case "the primary can still be named by a caller" `Quick the_primary_can_still_be_named_by_a_caller;
-          A.test_case "the refusal names the default route not a local read" `Quick the_refusal_names_the_default_route_not_a_local_read;
-          A.test_case "a primary this engine was not handed refuses construction" `Quick a_primary_this_engine_was_not_handed_refuses_construction;
+      ( "primary route",
+        [
+          A.test_case "the named primary serves and the local reader is never dialed" `Quick
+            the_named_primary_serves_and_the_local_reader_is_never_dialed;
+          A.test_case "the primary is the route the call is journalled to" `Quick
+            the_primary_is_the_route_the_call_is_journalled_to;
+          A.test_case "a failing primary walks the ladder behind it once" `Quick
+            a_failing_primary_walks_the_ladder_behind_it_once;
+          A.test_case "a failing primary with the walk off offers the ladder only" `Quick
+            a_failing_primary_with_the_walk_off_offers_the_ladder_only;
+          A.test_case "a nearly empty primary names itself and offers the ladder" `Quick
+            a_nearly_empty_primary_names_itself_and_offers_the_ladder;
+          A.test_case "the primary can still be named by a caller" `Quick
+            the_primary_can_still_be_named_by_a_caller;
+          A.test_case "the refusal names the default route not a local read" `Quick
+            the_refusal_names_the_default_route_not_a_local_read;
+          A.test_case "a primary this engine was not handed refuses construction" `Quick
+            a_primary_this_engine_was_not_handed_refuses_construction;
         ] );
     ]

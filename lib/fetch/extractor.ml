@@ -43,25 +43,18 @@ let media_type content_type =
   match content_type with
   | None -> ""
   | Some ct ->
-    let bare =
-      match String.index_opt ct ';' with
-      | Some i -> String.sub ct 0 i
-      | None -> ct
-    in
-    String.trim (ascii_lower bare)
+      let bare = match String.index_opt ct ';' with Some i -> String.sub ct 0 i | None -> ct in
+      String.trim (ascii_lower bare)
 
+(** The one place the RFC 6839 rule sits: a [+json] type *is* a JSON document whatever its prefix
+    registers. A backend reading [application/json] reads [application/geo+json] with it;
+    enumerating suffixes would make each new one a refusal the operator has to patch. The fetcher
+    runs this before spending the body, so the claim stays the backend's. *)
 let is_supported types kind =
   member kind types
   ||
   let n = String.length kind in
-  n >= 5
-  && String.sub kind (n - 5) 5 = "+json"
-  && List.mem "application/json" types
-  (** The one place the RFC 6839 rule sits: a [+json] type *is* a JSON document
-      whatever its prefix registers. A backend reading [application/json] reads
-      [application/geo+json] with it; enumerating suffixes would make each new
-      one a refusal the operator has to patch. The fetcher runs this before
-      spending the body, so the claim stays the backend's. *)
+  n >= 5 && String.sub kind (n - 5) 5 = "+json" && List.mem "application/json" types
 
 let charset_of content_type =
   let unquote value =
@@ -76,29 +69,24 @@ let charset_of content_type =
   in
   match content_type with
   | None -> None
-  | Some ct ->
-    match String.split_on_char ';' ct with
-    | _ :: params ->
-      let rec go = function
-        | [] -> None
-        | p :: tl -> (
-            match String.index_opt p '=' with
-            | Some eq ->
-                let name =
-                  String.trim (ascii_lower (String.sub p 0 eq))
-                in
-                if name = "charset" then
-                  let value =
-                    String.trim
-                      (String.sub p (eq + 1) (String.length p - eq - 1))
-                  in
-                  let value = unquote value in
-                  if value = "" then go tl else Some value
-                else go tl
-            | None -> go tl)
-      in
-      go params
-    | [] -> None
+  | Some ct -> (
+      match String.split_on_char ';' ct with
+      | _ :: params ->
+          let rec go = function
+            | [] -> None
+            | p :: tl -> (
+                match String.index_opt p '=' with
+                | Some eq ->
+                    let name = String.trim (ascii_lower (String.sub p 0 eq)) in
+                    if name = "charset" then
+                      let value = String.trim (String.sub p (eq + 1) (String.length p - eq - 1)) in
+                      let value = unquote value in
+                      if value = "" then go tl else Some value
+                    else go tl
+                | None -> go tl)
+          in
+          go params
+      | [] -> None)
 
 (* The declared charset is honoured for the encodings this port implements;
    anything else is a header problem, not a lost page, and falls through to
@@ -110,71 +98,44 @@ let charset_of content_type =
 let windows_1252_special (b : int) : int =
   match b with
   | 0x80 -> 0x20AC (* € *)
-
   | 0x81 -> 0xFFFD
   | 0x82 -> 0x201A (* ‚ *)
-
   | 0x83 -> 0x0192 (* ƒ *)
-
   | 0x84 -> 0x201E (* „ *)
-
   | 0x85 -> 0x2026 (* … *)
-
   | 0x86 -> 0x2020 (* † *)
-
   | 0x87 -> 0x2021 (* ‡ *)
-
   | 0x88 -> 0x02C6 (* ˆ *)
-
   | 0x89 -> 0x2030 (* ‰ *)
-
   | 0x8A -> 0x0160 (* Š *)
-
   | 0x8B -> 0x2039 (* ‹ *)
-
   | 0x8C -> 0x0152 (* Œ *)
-
   | 0x8D -> 0xFFFD
   | 0x8E -> 0x017D (* Ž *)
-
   | 0x8F | 0x90 -> 0xFFFD
   | 0x91 -> 0x2018 (* ' *)
-
   | 0x92 -> 0x2019 (* ' *)
-
   | 0x93 -> 0x201C (* " *)
 
   | 0x94 -> 0x201D (* " *)
-
   | 0x95 -> 0x2022 (* • *)
-
   | 0x96 -> 0x2013 (* – *)
-
   | 0x97 -> 0x2014 (* — *)
-
   | 0x98 -> 0x02DC (* ˜ *)
-
   | 0x99 -> 0x2122 (* ™ *)
-
   | 0x9A -> 0x0161 (* š *)
-
   | 0x9B -> 0x203A (* › *)
-
   | 0x9C -> 0x0153 (* œ *)
-
   | 0x9D -> 0xFFFD
   | 0x9E -> 0x017E (* ž *)
-
   | 0x9F -> 0x0178 (* Ÿ *)
-
   | _ -> b
 
 let utf8_encode (cp : int) : string =
   if cp < 0x80 then String.make 1 (Char.chr cp)
   else if cp < 0x800 then
     String.init 2 (fun i ->
-        if i = 0 then Char.chr (0xC0 lor (cp lsr 6))
-        else Char.chr (0x80 lor (cp land 0x3F)))
+        if i = 0 then Char.chr (0xC0 lor (cp lsr 6)) else Char.chr (0x80 lor (cp land 0x3F)))
   else if cp < 0x10000 then
     String.init 3 (fun i ->
         match i with
@@ -203,25 +164,30 @@ let valid_utf8 (s : string) : bool =
       if b < 0x80 then go (i + 1)
       else if b < 0xC0 then false
       else if b < 0xE0 then
-        b >= 0xC2 && i + 1 < n
-        && Char.code s.[i + 1] >= 0x80 && Char.code s.[i + 1] < 0xC0
+        b >= 0xC2
+        && i + 1 < n
+        && Char.code s.[i + 1] >= 0x80
+        && Char.code s.[i + 1] < 0xC0
         && go (i + 2)
       else if b < 0xF0 then
         i + 2 < n
         && (match Char.code s.[i + 1] with
-            | c when b = 0xE0 -> c >= 0xA0 && c < 0xC0
-            | c when b = 0xED -> c >= 0x80 && c < 0xA0
-            | c -> c >= 0x80 && c < 0xC0)
-        && Char.code s.[i + 2] >= 0x80 && Char.code s.[i + 2] < 0xC0
+          | c when b = 0xE0 -> c >= 0xA0 && c < 0xC0
+          | c when b = 0xED -> c >= 0x80 && c < 0xA0
+          | c -> c >= 0x80 && c < 0xC0)
+        && Char.code s.[i + 2] >= 0x80
+        && Char.code s.[i + 2] < 0xC0
         && go (i + 3)
       else if b < 0xF5 then
         i + 3 < n
         && (match Char.code s.[i + 1] with
-            | c when b = 0xF0 -> c >= 0x90 && c < 0xC0
-            | c when b = 0xF4 -> c >= 0x80 && c < 0x90
-            | c -> c >= 0x80 && c < 0xC0)
-        && Char.code s.[i + 2] >= 0x80 && Char.code s.[i + 2] < 0xC0
-        && Char.code s.[i + 3] >= 0x80 && Char.code s.[i + 3] < 0xC0
+          | c when b = 0xF0 -> c >= 0x90 && c < 0xC0
+          | c when b = 0xF4 -> c >= 0x80 && c < 0x90
+          | c -> c >= 0x80 && c < 0xC0)
+        && Char.code s.[i + 2] >= 0x80
+        && Char.code s.[i + 2] < 0xC0
+        && Char.code s.[i + 3] >= 0x80
+        && Char.code s.[i + 3] < 0xC0
         && go (i + 4)
       else false
   in
@@ -242,27 +208,33 @@ let replace_utf8 (s : string) : string =
       let seq_len, ok =
         if b < 0x80 then (1, true)
         else if b < 0xC2 then (1, false)
-        else if b < 0xE0 then (2, i + 1 < n && Char.code s.[i + 1] >= 0x80 && Char.code s.[i + 1] < 0xC0)
+        else if b < 0xE0 then
+          (2, i + 1 < n && Char.code s.[i + 1] >= 0x80 && Char.code s.[i + 1] < 0xC0)
         else if b < 0xF0 then
           ( 3,
             i + 2 < n
             && (match Char.code s.[i + 1] with
-                | c when b = 0xE0 -> c >= 0xA0 && c < 0xC0
-                | c when b = 0xED -> c >= 0x80 && c < 0xA0
-                | c -> c >= 0x80 && c < 0xC0)
-            && Char.code s.[i + 2] >= 0x80 && Char.code s.[i + 2] < 0xC0 )
+              | c when b = 0xE0 -> c >= 0xA0 && c < 0xC0
+              | c when b = 0xED -> c >= 0x80 && c < 0xA0
+              | c -> c >= 0x80 && c < 0xC0)
+            && Char.code s.[i + 2] >= 0x80
+            && Char.code s.[i + 2] < 0xC0 )
         else if b < 0xF5 then
           ( 4,
             i + 3 < n
             && (match Char.code s.[i + 1] with
-                | c when b = 0xF0 -> c >= 0x90 && c < 0xC0
-                | c when b = 0xF4 -> c >= 0x80 && c < 0x90
-                | c -> c >= 0x80 && c < 0xC0)
-            && Char.code s.[i + 2] >= 0x80 && Char.code s.[i + 2] < 0xC0
-            && Char.code s.[i + 3] >= 0x80 && Char.code s.[i + 3] < 0xC0 )
+              | c when b = 0xF0 -> c >= 0x90 && c < 0xC0
+              | c when b = 0xF4 -> c >= 0x80 && c < 0x90
+              | c -> c >= 0x80 && c < 0xC0)
+            && Char.code s.[i + 2] >= 0x80
+            && Char.code s.[i + 2] < 0xC0
+            && Char.code s.[i + 3] >= 0x80
+            && Char.code s.[i + 3] < 0xC0 )
         else (1, false)
       in
-      if ok && seq_len = 1 then (Buffer.add_char buf s.[i]; go (i + 1))
+      if ok && seq_len = 1 then (
+        Buffer.add_char buf s.[i];
+        go (i + 1))
       else if ok then (
         Buffer.add_substring buf s i seq_len;
         go (i + seq_len))
@@ -283,6 +255,9 @@ let decode_with (f : int -> int) (s : string) : string option =
     s;
   Some (Buffer.contents buf)
 
+(** Decode a response body to text, preferring the server's declared charset. Never raises: a page
+    with a few mojibake characters is still useful, whereas an exception loses the whole page over
+    one bad byte. *)
 let decode (body : string) (content_type : string option) : string =
   let utf8 () = if valid_utf8 body then body else replace_utf8 body in
   match charset_of content_type with
@@ -292,23 +267,21 @@ let decode (body : string) (content_type : string option) : string =
       | "iso-8859-1" | "latin-1" | "latin1" | "l1" -> (
           match decode_with (fun b -> b) body with Some s -> s | None -> utf8 ())
       | "windows-1252" | "cp1252" | "windows_1252" -> (
-          match decode_with windows_1252_special body with
-          | Some s -> s
-          | None -> utf8 ())
+          match decode_with windows_1252_special body with Some s -> s | None -> utf8 ())
       | _ -> utf8 ())
   | None -> utf8 ()
-  (** Decode a response body to text, preferring the server's declared charset.
-      Never raises: a page with a few mojibake characters is still useful,
-      whereas an exception loses the whole page over one bad byte. *)
 
+(** Treat a missing Content-Type as HTML only if the bytes look like it. The rule belongs to the
+    absent header, not to any one engine. *)
 let sniffs_html (body : string) : bool =
   let head_bytes = min (String.length body) 512 in
   let head = String.sub body 0 head_bytes in
   let stripped =
     let n = String.length head in
     let rec start i =
-      if i < n
-         && (match head.[i] with ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true | _ -> false)
+      if
+        i < n
+        && match head.[i] with ' ' | '\t' | '\n' | '\r' | '\011' | '\012' -> true | _ -> false
       then start (i + 1)
       else i
     in
@@ -321,8 +294,6 @@ let sniffs_html (body : string) : bool =
     && String.sub lower 0 (String.length prefix) = prefix
   in
   starts "<!doctype html" || starts "<html"
-  (** Treat a missing Content-Type as HTML only if the bytes look like it. The
-      rule belongs to the absent header, not to any one engine. *)
 
 (* Collapses [ \t]+ to " ", "\n{3,}" to "\n\n", and strips leading/trailing
    whitespace. Runs on text produced by any backend. *)
@@ -395,16 +366,10 @@ let json_extraction (text : string) : extract_result =
      bytes are the answer, so they come back as text rather than as an
      [Extraction_failed]. [normalise] never runs here — its whitespace rules
      are for prose, and in a JSON value the spaces are the data. *)
-
   match Jsondoc.render_json text with
   | None -> { text; title = None; total_chars = Utf8.count text; path_addressable = false }
   | Some rendered ->
-      {
-        text = rendered;
-        title = None;
-        total_chars = Utf8.count rendered;
-        path_addressable = true;
-      }
+      { text = rendered; title = None; total_chars = Utf8.count rendered; path_addressable = true }
 
 let table_extraction ~(text : string) ~(kind : string) : extract_result =
   (* A delimited body as the table it is, or as its own text when it is not
@@ -413,16 +378,10 @@ let table_extraction ~(text : string) ~(kind : string) : extract_result =
      walked partway keeps the rows it read, and the rendering names where the
      reader stopped. [normalise] never runs here either; in a quoted cell the
      whitespace is the data. *)
-
   match Tabledoc.render_table text ~delimiter:(Tabledoc.table_delimiter ~kind ~text) with
   | None -> { text; title = None; total_chars = Utf8.count text; path_addressable = false }
   | Some rendered ->
-      {
-        text = rendered;
-        title = None;
-        total_chars = Utf8.count rendered;
-        path_addressable = true;
-      }
+      { text = rendered; title = None; total_chars = Utf8.count rendered; path_addressable = true }
 
 (* Families render in a fixed order and an unclaimed type is appended verbatim
    and sorted, so a given set always reads the same way. The phrase is
@@ -435,15 +394,12 @@ let describe_types (types : string list) : string =
       ("HTML", html_types);
       (* The XML media types ride with plain text: a backend reads them decoded
          and passed through, not walked as a structure. *)
-
       ("plain text", text_types);
       (* JSON is a family of its own because it is read as a structure, not as
          text; the [+json] suffix types ride with it, through [is_supported]. *)
-
       ("JSON", json_types);
       (* CSV is a family of its own because it is read as rows, not as text:
          the types are claimed only when the header names them, never sniffed. *)
-
       ("CSV", table_types);
       ("PDF", pdf_types);
     ]
@@ -455,9 +411,7 @@ let describe_types (types : string list) : string =
         if List.exists (fun k -> List.mem k members) types then Some label else None)
       families
   in
-  let extras =
-    List.sort compare (List.filter (fun k -> not (List.mem k claimed)) types)
-  in
+  let extras = List.sort compare (List.filter (fun k -> not (List.mem k claimed)) types) in
   let labels = labels @ extras in
   let rec phrase = function
     | [] -> "nothing"
@@ -467,19 +421,17 @@ let describe_types (types : string list) : string =
   in
   phrase labels
 
-let chunk_chars = 1500
 (** Granularity of passage selection: roughly one to three paragraphs. *)
+let chunk_chars = 1500
 
+(** Python's [\w] is Unicode-wide; this port carries the ASCII members plus every non-ASCII
+    codepoint, the approximation [Seekwright_text.Utf8.ascii_lower] already records for [casefold] —
+    queries and pages are matched under the same normal form, which is what the scorer needs. *)
 let is_word_char (c : int) : bool =
   (c >= 0x30 && c <= 0x39)
   || (c >= 0x41 && c <= 0x5A)
   || (c >= 0x61 && c <= 0x7A)
-  || c = 0x5F
-  || c >= 0x80
-  (** Python's [\w] is Unicode-wide; this port carries the ASCII members plus
-      every non-ASCII codepoint, the approximation [Seekwright_text.Utf8.ascii_lower]
-      already records for [casefold] — queries and pages are matched under the same
-      normal form, which is what the scorer needs. *)
+  || c = 0x5F || c >= 0x80
 
 let contains (needle : Utf8.t) (hay : Utf8.t) : bool =
   let m = Array.length needle and n = Array.length hay in
@@ -495,8 +447,7 @@ let contains (needle : Utf8.t) (hay : Utf8.t) : bool =
     in
     go 0
 
-let select_passages ~(text : string) ~(query : string) ~max_chars :
-    (int * string) list * int =
+let select_passages ~(text : string) ~(query : string) ~max_chars : (int * string) list * int =
   (* Pick the passages of a full extraction that answer [query].
 
      Deterministic term overlap — not an embedding or a provider call, so it
@@ -512,7 +463,6 @@ let select_passages ~(text : string) ~(query : string) ~max_chars :
      (score, then position) while the budget lasts, and the first that does not
      fit ends selection rather than letting a smaller one queue-jump. Selected
      chunks are re-sorted by offset and adjacent ones merged. *)
-
   let q = Utf8.ascii_lower (Utf8.of_string query) in
   let tokens =
     let n = Array.length q in
@@ -528,8 +478,7 @@ let select_passages ~(text : string) ~(query : string) ~max_chars :
     in
     let all = runs 0 [] in
     let dedup (seen, acc) tok =
-      if List.exists (fun s -> s = tok) seen then (seen, acc)
-      else (tok :: seen, tok :: acc)
+      if List.exists (fun s -> s = tok) seen then (seen, acc) else (tok :: seen, tok :: acc)
     in
     List.filter (fun t -> Array.length t >= 2) (snd (List.fold_left dedup ([], []) all))
   in
@@ -546,14 +495,14 @@ let select_passages ~(text : string) ~(query : string) ~max_chars :
       let pos = ref 0 and start = ref 0 in
       let flush upto =
         let para = Array.sub t !start (upto - !start) in
-        if upto > !start then (
-          let plen = upto - !start in
-          let k = ref 0 in
-          while !k < plen do
-            let stop = min (!k + chunk_chars) plen in
-            out := (!pos + !k, Array.sub para !k (stop - !k)) :: !out;
-            k := !k + chunk_chars
-          done);
+        (if upto > !start then
+           let plen = upto - !start in
+           let k = ref 0 in
+           while !k < plen do
+             let stop = min (!k + chunk_chars) plen in
+             out := (!pos + !k, Array.sub para !k (stop - !k)) :: !out;
+             k := !k + chunk_chars
+           done);
         pos := !pos + (upto - !start) + 2;
         start := upto + 2
       in
@@ -590,7 +539,7 @@ let select_passages ~(text : string) ~(query : string) ~max_chars :
           out := chunk_of !start_i i :: !out;
           start_i := i;
           buf_chars := 0);
-        buf_chars := !buf_chars + plen + (if i > !start_i then 2 else 0)
+        buf_chars := !buf_chars + plen + if i > !start_i then 2 else 0
       done;
       if !start_i < count then out := chunk_of !start_i count :: !out;
       List.rev !out
@@ -600,9 +549,7 @@ let select_passages ~(text : string) ~(query : string) ~max_chars :
         (fun (offset, body) ->
           let folded = Utf8.ascii_lower (Utf8.of_string body) in
           let score =
-            List.fold_left
-              (fun acc tok -> if contains tok folded then acc + 1 else acc)
-              0 tokens
+            List.fold_left (fun acc tok -> if contains tok folded then acc + 1 else acc) 0 tokens
           in
           (score, offset, body))
         chunks
@@ -610,12 +557,11 @@ let select_passages ~(text : string) ~(query : string) ~max_chars :
     let ranked =
       List.filter (fun (s, _, _) -> s > 0) scored
       |> List.sort (fun (s1, o1, _) (s2, o2, _) ->
-             if s1 <> s2 then compare s2 s1 else compare o1 o2)
+          if s1 <> s2 then compare s2 s1 else compare o1 o2)
     in
     let selected =
       (* The first candidate that does not fit ends selection: no smaller one
          queue-jumps ahead of it. *)
-
       let rec take acc used = function
         | [] -> List.rev acc
         | (_, offset, body) :: rest ->
@@ -634,12 +580,10 @@ let select_passages ~(text : string) ~(query : string) ~max_chars :
           | [] -> List.rev acc
           | (offset, body) :: rest -> (
               match acc with
-              | (poff, pbody) :: tl
-                when offset = poff + Utf8.count pbody + 2 ->
+              | (poff, pbody) :: tl when offset = poff + Utf8.count pbody + 2 ->
                   (* Adjacent chunks sit exactly one "\n\n" apart; merging them
                      yields a contiguous span at the earlier offset, joiner
                      included. *)
-
                   merge ((poff, pbody ^ "\n\n" ^ body) :: tl) rest
               | _ -> merge ((offset, body) :: acc) rest)
         in

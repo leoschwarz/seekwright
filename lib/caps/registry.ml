@@ -37,8 +37,7 @@ let add registry tool ~grant =
 
 let entries registry = List.rev registry
 
-let find registry name =
-  List.find_opt (fun entry -> String.equal entry.name name) registry
+let find registry name = List.find_opt (fun entry -> String.equal entry.name name) registry
 
 let entry_name entry = entry.name
 let entry_title entry = entry.title

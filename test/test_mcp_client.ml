@@ -67,18 +67,14 @@ let header_value headers name =
     (fun (key, value) -> if String.lowercase_ascii key = wanted then Some value else None)
     headers
 
-let member key = function
-  | `Assoc fields -> List.assoc_opt key fields
-  | _ -> None
+let member key = function `Assoc fields -> List.assoc_opt key fields | _ -> None
 
 let string_member key json =
   match member key json with Some (`String value) -> Some value | _ -> None
 
-let int_member key json =
-  match member key json with Some (`Int value) -> Some value | _ -> None
+let int_member key json = match member key json with Some (`Int value) -> Some value | _ -> None
 
-let json_of_body body =
-  try Some (Yojson.Safe.from_string body) with Yojson.Json_error _ -> None
+let json_of_body body = try Some (Yojson.Safe.from_string body) with Yojson.Json_error _ -> None
 
 let respond ?(headers = []) ~status ~content_type body =
   Cohttp_eio.Server.respond_string
@@ -88,8 +84,7 @@ let respond ?(headers = []) ~status ~content_type body =
 let json ?headers ~status body = respond ?headers ~status ~content_type:"application/json" body
 let sse ?headers ~status body = respond ?headers ~status ~content_type:"text/event-stream" body
 
-let acknowledged () =
-  Cohttp_eio.Server.respond_string ~status:(Http.Status.of_int 202) ~body:"" ()
+let acknowledged () = Cohttp_eio.Server.respond_string ~status:(Http.Status.of_int 202) ~body:"" ()
 
 let sse_frame json = "data: " ^ Yojson.Safe.to_string json ^ "\n\n"
 
@@ -135,8 +130,7 @@ let session_is_current state headers =
   | None -> true
   | Some id -> header_value headers "mcp-session-id" = Some id
 
-let is_sse path =
-  List.mem path [ "/sse"; "/sse-progress"; "/oversized" ]
+let is_sse path = List.mem path [ "/sse"; "/sse-progress"; "/oversized" ]
 
 (* The one route table. [rpc_method] is [None] for a body that is not a
    JSON-RPC message, which is itself a case. *)
@@ -181,7 +175,8 @@ let handle ~state ~clock ~path ~http_method ~headers ~body_json =
             match path with
             | "/json" -> reply (text_content "parallel answer")
             | "/json-stateless" -> reply (text_content "stateless answer")
-            | "/sse" -> sse ~status:200 (sse_frame (rpc_result ~id (text_content "streamed answer")))
+            | "/sse" ->
+                sse ~status:200 (sse_frame (rpc_result ~id (text_content "streamed answer")))
             | "/sse-progress" ->
                 let progress =
                   `Assoc
@@ -206,8 +201,7 @@ let handle ~state ~clock ~path ~http_method ~headers ~body_json =
             | "/malformed" -> json ~status:200 "not a json document"
             | "/oversized" ->
                 sse ~status:200 (sse_frame (rpc_result ~id (text_content (String.make 4096 'x'))))
-            | "/oversized-json" ->
-                reply (text_content (String.make 4096 'y'))
+            | "/oversized-json" -> reply (text_content (String.make 4096 'y'))
             | "/status-401" ->
                 json ~status:401 (Printf.sprintf {|{"message":"invalid API key: %s"}|} probe_key)
             | "/dead-once" ->
@@ -236,9 +230,7 @@ let handle ~state ~clock ~path ~http_method ~headers ~body_json =
 let fixture ~state ~clock _env request body =
   let resource = Http.Request.resource request in
   let path =
-    match String.index_opt resource '?' with
-    | Some i -> String.sub resource 0 i
-    | None -> resource
+    match String.index_opt resource '?' with Some i -> String.sub resource 0 i | None -> resource
   in
   let headers = Http.Header.to_list (Http.Request.headers request) in
   let http_method = Http.Method.to_string (Http.Request.meth request) in
@@ -261,8 +253,7 @@ let fixture ~state ~clock _env request body =
   handle ~state ~clock ~path ~http_method ~headers ~body_json
 
 let rpc_requests state meth =
-  List.filter (fun recorded -> recorded.rpc_method = Some meth) state.requests
-  |> List.rev
+  List.filter (fun recorded -> recorded.rpc_method = Some meth) state.requests |> List.rev
 
 let count_rpc state meth = List.length (rpc_requests state meth)
 
@@ -274,9 +265,7 @@ let only_rpc label state meth =
 let with_client ?auth ?max_frame_bytes ?max_events ?timeout ?(provider = "exa") ~path f =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  let socket =
-    Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -369,7 +358,8 @@ let test_a_json_answer_is_read () =
       A.check (A.option A.string) "the call carries the negotiated version"
         (Some negotiated_version)
         (header_value call.headers "mcp-protocol-version");
-      A.check (A.option A.string) "the call asks for both framings" (Some "application/json, text/event-stream")
+      A.check (A.option A.string) "the call asks for both framings"
+        (Some "application/json, text/event-stream")
         (header_value call.headers "accept");
       A.check A.int "one handshake" 1 (count_rpc state "initialize"))
 
@@ -389,9 +379,7 @@ let test_frames_without_the_calls_id_are_skipped () =
 
 let test_a_stateless_endpoint_is_accepted () =
   with_client ~path:"/json-stateless" (fun client state ->
-      let text =
-        ok_text "call" (Mcp.call_tool client ~name:"web_search" ~arguments:(`Assoc []))
-      in
+      let text = ok_text "call" (Mcp.call_tool client ~name:"web_search" ~arguments:(`Assoc [])) in
       A.check A.string "text" "stateless answer" text;
       let call = only_rpc "call" state "tools/call" in
       A.check (A.option A.string) "no session header" None
@@ -428,7 +416,8 @@ let test_a_quota_shaped_tool_error_is_the_quota_row () =
 let test_an_exa_invalid_key_is_a_tool_error_without_the_upstream_text () =
   with_client ~path:"/iserror-key" (fun client state ->
       expect_failure ~message:"upstream MCP tool reported an error"
-        ~forbidden:[ probe_key; "Invalid API key"; "401" ] "invalid key"
+        ~forbidden:[ probe_key; "Invalid API key"; "401" ]
+        "invalid key"
         (Mcp.call_tool client ~name:"web_search_exa" ~arguments:(`Assoc []));
       A.check A.int "a valid tool error is not retried" 1 (count_rpc state "tools/call"))
 
@@ -468,13 +457,10 @@ let test_concurrent_calls_get_distinct_ids () =
       | Error error -> A.failf "connect: %s" (Provider.render_error error));
       let answer question =
         ok_text question
-          (Mcp.call_tool client ~name:"web_search"
-             ~arguments:(`Assoc [ ("q", `String question) ]))
+          (Mcp.call_tool client ~name:"web_search" ~arguments:(`Assoc [ ("q", `String question) ]))
       in
       let left = ref "" and right = ref "" in
-      Eio.Fiber.both
-        (fun () -> left := answer "alpha")
-        (fun () -> right := answer "beta");
+      Eio.Fiber.both (fun () -> left := answer "alpha") (fun () -> right := answer "beta");
       A.check A.string "the first call's answer" "alpha" !left;
       A.check A.string "the second call's answer" "beta" !right;
       let ids =
@@ -487,8 +473,7 @@ let test_concurrent_calls_get_distinct_ids () =
 let test_a_dead_session_is_reconnected_exactly_once () =
   with_client ~path:"/dead-once" (fun client state ->
       let text =
-        ok_text "reconnect"
-          (Mcp.call_tool client ~name:"web_search_exa" ~arguments:(`Assoc []))
+        ok_text "reconnect" (Mcp.call_tool client ~name:"web_search_exa" ~arguments:(`Assoc []))
       in
       A.check A.string "the retried call answered" "reconnected" text;
       A.check A.int "two handshakes" 2 (count_rpc state "initialize");
@@ -515,9 +500,7 @@ let test_a_tool_timeout_is_not_retried () =
 
 let test_close_marks_the_client_and_terminates_the_session () =
   with_client ~path:"/close" (fun client state ->
-      let _ =
-        ok_text "call" (Mcp.call_tool client ~name:"web_search" ~arguments:(`Assoc []))
-      in
+      let _ = ok_text "call" (Mcp.call_tool client ~name:"web_search" ~arguments:(`Assoc [])) in
       Mcp.aclose client;
       A.check A.int "one delete" 1 (List.length state.deletes);
       let delete = List.hd state.deletes in
@@ -583,8 +566,7 @@ let () =
             test_a_dead_session_is_reconnected_exactly_once;
           A.test_case "a second dead session is unavailable" `Quick
             test_a_second_dead_session_is_unavailable;
-          A.test_case "a tool timeout is not retried" `Quick
-            test_a_tool_timeout_is_not_retried;
+          A.test_case "a tool timeout is not retried" `Quick test_a_tool_timeout_is_not_retried;
           A.test_case "close marks the client and terminates the session" `Quick
             test_close_marks_the_client_and_terminates_the_session;
         ] );

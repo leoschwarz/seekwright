@@ -33,8 +33,8 @@ module Parallel = Seekwright_providers.Parallel
 module A = Alcotest
 open Test_support
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = [])
-    ?country ?language ?recency ?safe_search () : Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -53,14 +53,10 @@ let test_key = "test-key"
    same frozen clock the differential uses. *)
 let fixed_now = 1_700_000_000.
 
-let hd label = function
-  | x :: _ -> x
-  | [] -> A.failf "%s was empty" label
+let hd label = function x :: _ -> x | [] -> A.failf "%s was empty" label
 
 let nth label index xs =
-  match List.nth_opt xs index with
-  | Some x -> x
-  | None -> A.failf "%s has no item %d" label index
+  match List.nth_opt xs index with Some x -> x | None -> A.failf "%s has no item %d" label index
 
 (* Copied from the oracle's suite, which captured it from the Search API: the
    [search_id] and [session_id] are the vendor's bookkeeping and never reach the
@@ -90,7 +86,9 @@ let sample =
 }|}
 
 let sample_json =
-  match Yojson.Safe.from_string sample with `Assoc _ as json -> json | _ -> A.failf "the fixture is not an object"
+  match Yojson.Safe.from_string sample with
+  | `Assoc _ as json -> json
+  | _ -> A.failf "the fixture is not an object"
 
 let dial ?(status = 200) ?(body = sample) ?text_chars ?cost_per_1k ?mode () =
   let sent = ref None in
@@ -122,7 +120,8 @@ let field name json = Provider.Json.string_field name json
 
 let nested path json =
   List.fold_left
-    (fun acc key -> match acc with None -> None | Some value -> Some (Provider.Json.field key value))
+    (fun acc key ->
+      match acc with None -> None | Some value -> Some (Provider.Json.field key value))
     (Some json) path
 
 let strings_of path json =
@@ -157,20 +156,30 @@ let the_cap_bites_and_says_so () =
   let capped =
     parse ~text_chars:40
       (`Assoc
-          [
-            ("results", `List [ `Assoc [
-              ("url", `String "https://x.example/");
-              ("title", `String "T");
-              ("excerpts", `List [ `String "A first excerpt that runs on.";
-                                   `String "and a second one that keeps going." ]);
-            ] ]);
-          ])
+         [
+           ( "results",
+             `List
+               [
+                 `Assoc
+                   [
+                     ("url", `String "https://x.example/");
+                     ("title", `String "T");
+                     ( "excerpts",
+                       `List
+                         [
+                           `String "A first excerpt that runs on.";
+                           `String "and a second one that keeps going.";
+                         ] );
+                   ];
+               ] );
+         ])
   in
   let hit = hd "results" capped in
   check_bool "one ellipsis, one cap" true (String.length (Option.get hit.result.text) <= 41);
   A.(check (option bool) "the flag rides" (Some true) hit.result.text_truncated);
-  A.(check (option bool) "a short extract is not flagged" None
-    (hd "results" (parse ~text_chars:2000 sample_json)).result.text_truncated)
+  A.(
+    check (option bool) "a short extract is not flagged" None
+      (hd "results" (parse ~text_chars:2000 sample_json)).result.text_truncated)
 
 let a_date_passes_through_and_is_never_invented () =
   let hits = parse sample_json in
@@ -214,8 +223,7 @@ let post_with_the_key_header_and_a_body () =
   check_string "the endpoint" (Uri.to_string Parallel.endpoint)
     (Uri.to_string request.Caps.Authority.Net.uri);
   check_string "the credential rides x-api-key" "test-key"
-    (Option.get
-       (List.assoc_opt "x-api-key" request.Caps.Authority.Net.headers));
+    (Option.get (List.assoc_opt "x-api-key" request.Caps.Authority.Net.headers));
   let body = body_of request in
   check_strings "one query, verbatim" [ "python 3.14" ]
     (Option.get (strings_of [ "search_queries" ] body));
@@ -238,12 +246,15 @@ let the_preset_is_the_operators () =
 let domains_go_to_source_policy_and_the_query_stays_verbatim () =
   let _outcome, request =
     search_of
-      ~query:(query ~text:"wal mode" ~include_domains:[ "sqlite.org" ] ~exclude_domains:[ "spam.example" ] ())
+      ~query:
+        (query ~text:"wal mode" ~include_domains:[ "sqlite.org" ]
+           ~exclude_domains:[ "spam.example" ] ())
       ()
   in
   let body = body_of request in
   let policy = Option.get (nested [ "advanced_settings"; "source_policy" ] body) in
-  check_strings "include_domains" [ "sqlite.org" ] (Option.get (strings_of [ "include_domains" ] policy));
+  check_strings "include_domains" [ "sqlite.org" ]
+    (Option.get (strings_of [ "include_domains" ] policy));
   check_strings "exclude_domains" [ "spam.example" ]
     (Option.get (strings_of [ "exclude_domains" ] policy));
   (* A native filter: the query is never folded into [site:] operators. *)
@@ -254,7 +265,10 @@ let recency_sets_after_date_at_the_injected_clock () =
     (fun (period, date, word) ->
       let _outcome, request = search_of ~query:(query ~recency:period ()) () in
       let policy = Option.get (nested [ "advanced_settings"; "source_policy" ] (body_of request)) in
-      check_string (Printf.sprintf "%s sets after_date" word) date (Option.get (field "after_date" policy)))
+      check_string
+        (Printf.sprintf "%s sets after_date" word)
+        date
+        (Option.get (field "after_date" policy)))
     [
       (Model.Day, "2023-11-13", "day");
       (Model.Week, "2023-11-07", "week");
@@ -280,7 +294,8 @@ let exclude_is_sent_and_its_ignoring_is_noticed () =
      set — the request stays an honest description of what was asked — and the
      caller is told rather than left believing it applied. *)
   let outcome, request =
-    search_of ~query:(query ~include_domains:[ "python.org" ] ~exclude_domains:[ "spam.example" ] ())
+    search_of
+      ~query:(query ~include_domains:[ "python.org" ] ~exclude_domains:[ "spam.example" ] ())
       ()
   in
   let policy = Option.get (nested [ "advanced_settings"; "source_policy" ] (body_of request)) in
@@ -298,20 +313,22 @@ let language_is_noticed_while_country_is_honoured () =
   check_string "the country applied" "de"
     (Option.get (field "location" (Option.get (nested [ "advanced_settings" ] (body_of request)))));
   includes "the language did not" "cannot filter by language" (Option.get outcome.notice);
-  excludes "and the honoured half is not named" "country" (String.lowercase_ascii (Option.get outcome.notice))
+  excludes "and the honoured half is not named" "country"
+    (String.lowercase_ascii (Option.get outcome.notice))
 
 let safe_search_is_noticed_at_both_values () =
   List.iter
     (fun value ->
       let outcome, _request = search_of ~query:(query ~safe_search:value ()) () in
       check_string "the safe-search sentence"
-        "cannot filter by safe-search; that constraint was ignored"
-        (Option.get outcome.notice))
+        "cannot filter by safe-search; that constraint was ignored" (Option.get outcome.notice))
     [ true; false ]
 
 let a_fully_honoured_query_carries_no_notice () =
   let outcome, _request =
-    search_of ~query:(query ~include_domains:[ "python.org" ] ~country:"de" ~recency:Model.Week ()) ()
+    search_of
+      ~query:(query ~include_domains:[ "python.org" ] ~country:"de" ~recency:Model.Week ())
+      ()
   in
   check_opt_string "every constraint applied, so nothing is said" None outcome.notice
 
@@ -325,7 +342,8 @@ let upstream_warnings_are_echoed () =
 }|}
   in
   let outcome, _request = search_of ~body:warned () in
-  check_string "the warning rides through" "upstream warnings: thin index" (Option.get outcome.notice)
+  check_string "the warning rides through" "upstream warnings: thin index"
+    (Option.get outcome.notice)
 
 let the_notices_join_in_one_sentence () =
   let warned =
@@ -338,8 +356,8 @@ let the_notices_join_in_one_sentence () =
     search_of ~body:warned ~query:(query ~language:"de" ~safe_search:true ()) ()
   in
   check_string "each half named once, in the order the adapter composes them"
-    "cannot filter by language; that constraint was ignored; cannot filter by safe-search; \
-     that constraint was ignored; upstream warnings: thin index; no dates"
+    "cannot filter by language; that constraint was ignored; cannot filter by safe-search; that \
+     constraint was ignored; upstream warnings: thin index; no dates"
     (Option.get outcome.notice)
 
 (* The rows every HTTP adapter owes are pinned once for all of them by
@@ -354,7 +372,8 @@ let payment_and_rate_limit_are_one_quota_row () =
       match Provider.search adapter (query ()) with
       | Ok _ -> A.failf "HTTP %d was accepted" status
       | Error failure ->
-          check_string (Printf.sprintf "HTTP %d says what ran out" status)
+          check_string
+            (Printf.sprintf "HTTP %d says what ran out" status)
             "rate limited or out of credits" failure.message;
           check_bool "and it is quota" true (failure.kind = Provider.Quota))
     [ 402; 429 ]
@@ -363,7 +382,9 @@ let a_network_failure_does_not_echo_the_request () =
   let net =
     {
       Provider.Net.request =
-        (fun _ -> Error (Caps.Error.make Caps.Error.Denied ~message:"connection refused to x-api-key: test-key"));
+        (fun _ ->
+          Error
+            (Caps.Error.make Caps.Error.Denied ~message:"connection refused to x-api-key: test-key"));
     }
   in
   let adapter = Parallel.make ~key:test_key ~now:(fun () -> fixed_now) ~net () in
@@ -405,13 +426,14 @@ let the_endpoints_are_the_two_halves () =
    recorded, which is where the tool surface gets pinned. *)
 let calls = ref []
 
-let mcp_endpoint ~text () =  let net =
+let mcp_endpoint ~text () =
+  let net =
     {
       Provider.Net.request =
         (fun (request : Caps.Authority.Net.request) ->
           match request.Caps.Authority.Net.body with
           | None -> Ok { Caps.Authority.Net.status = 204; headers = []; body = "" }
-          | Some raw ->
+          | Some raw -> (
               let message = Yojson.Safe.from_string raw in
               let id = match Provider.Json.field "id" message with `Int id -> id | _ -> 0 in
               let reply body =
@@ -430,12 +452,14 @@ let mcp_endpoint ~text () =  let net =
                           [
                             ("jsonrpc", `String "2.0");
                             ("id", `Int id);
-                            ( "result"
-                            , `Assoc
+                            ( "result",
+                              `Assoc
                                 [
                                   ("protocolVersion", `String "2025-06-18");
                                   ("capabilities", `Assoc []);
-                                  ("serverInfo", `Assoc [("name", `String "fixture"); ("version", `String "0")]);
+                                  ( "serverInfo",
+                                    `Assoc [ ("name", `String "fixture"); ("version", `String "0") ]
+                                  );
                                 ] );
                           ]))
               | Some "notifications/initialized" ->
@@ -447,21 +471,23 @@ let mcp_endpoint ~text () =  let net =
                   let envelope =
                     Yojson.Safe.to_string
                       (`Assoc
-                          [
-                            ("jsonrpc", `String "2.0");
-                            ("id", `Int id);
-                            ( "result"
-                            , `Assoc
-                                [
-                                  ( "content"
-                                  , `List [ `Assoc [ ("type", `String "text"); ("text", `String text) ] ] );
-                                  ("isError", `Bool false);
-                                ] );
-                          ])
+                         [
+                           ("jsonrpc", `String "2.0");
+                           ("id", `Int id);
+                           ( "result",
+                             `Assoc
+                               [
+                                 ( "content",
+                                   `List
+                                     [ `Assoc [ ("type", `String "text"); ("text", `String text) ] ]
+                                 );
+                                 ("isError", `Bool false);
+                               ] );
+                         ])
                   in
                   calls := (arguments, request) :: !calls;
                   reply envelope
-              | _ -> Ok { Caps.Authority.Net.status = 202; headers = []; body = "" });
+              | _ -> Ok { Caps.Authority.Net.status = 202; headers = []; body = "" }));
     }
   in
   net
@@ -498,7 +524,8 @@ let the_free_half_reports_a_malformed_text_block () =
   let session = free_half "not json" in
   match Provider.search session.Provider.adapter (query ()) with
   | Ok _ -> A.failf "a text block that is not JSON was accepted"
-  | Error failure -> includes "the same sentence the REST half uses" "malformed JSON" failure.message
+  | Error failure ->
+      includes "the same sentence the REST half uses" "malformed JSON" failure.message
 
 let the_free_half_notices_a_filter_it_cannot_reach () =
   (* The tool arguments are [objective] and [search_queries]: no filter field at
@@ -510,8 +537,7 @@ let the_free_half_notices_a_filter_it_cannot_reach () =
     | Error failure -> A.failf "the free half failed: %s" (Provider.render_error failure)
   in
   check_string "the joined geo bucket"
-    "cannot filter by country/language; that constraint was ignored"
-    (Option.get outcome.notice)
+    "cannot filter by country/language; that constraint was ignored" (Option.get outcome.notice)
 
 let the_free_half_owns_a_session () =
   let session = free_half sample in
@@ -519,83 +545,80 @@ let the_free_half_owns_a_session () =
   Provider.aclose session.Provider.adapter
 
 let () =
-  A.
-    (run "seekwright/parallel"
-       [
-         ( "the parser both halves share"
-         , [
-             test_case "the result list becomes results" `Quick the_result_list_becomes_results;
-             test_case "excerpts join into the text" `Quick excerpts_join_into_the_text;
-             test_case "the limit slices the result list" `Quick the_limit_slices_the_result_list;
-             test_case "the cap bites and says so" `Quick the_cap_bites_and_says_so;
-             test_case "a date passes through and is never invented" `Quick
-               a_date_passes_through_and_is_never_invented;
-             test_case "a null title falls back to the url" `Quick
-               a_null_title_falls_back_to_the_url;
-             test_case "a content backend never fills a snippet" `Quick
-               a_content_backend_never_fills_a_snippet;
-             test_case "a record without a url is dropped" `Quick
-               a_record_without_a_url_is_dropped;
-             test_case "a record that is not an object is skipped" `Quick
-               a_record_that_is_not_an_object_is_skipped;
-             test_case "a missing result list is empty, not an error" `Quick
-               a_missing_result_list_is_empty_not_an_error;
-             test_case "a document that is not an object is empty, not an error" `Quick
-               a_document_that_is_not_an_object_is_empty_not_an_error;
-           ] );
-         ( "the REST request"
-         , [
-             test_case "POST with the key header and a body" `Quick
-               post_with_the_key_header_and_a_body;
-             test_case "the key never rides the URL" `Quick the_key_never_rides_the_url;
-             test_case "the preset is the operator's" `Quick the_preset_is_the_operators;
-             test_case "domains go to source_policy, the query stays verbatim" `Quick
-               domains_go_to_source_policy_and_the_query_stays_verbatim;
-             test_case "recency sets after_date at the injected clock" `Quick
-               recency_sets_after_date_at_the_injected_clock;
-             test_case "country sets location" `Quick country_sets_location;
-             test_case "an unasked filter leaves the policy out entirely" `Quick
-               an_unasked_filter_leaves_the_policy_out_entirely;
-           ] );
-         ( "the hand-composed notices"
-         , [
-             test_case "exclude is sent and its ignoring is noticed" `Quick
-               exclude_is_sent_and_its_ignoring_is_noticed;
-             test_case "language is noticed while country is honoured" `Quick
-               language_is_noticed_while_country_is_honoured;
-             test_case "safe-search is noticed at both values" `Quick
-               safe_search_is_noticed_at_both_values;
-             test_case "a fully honoured query carries no notice" `Quick
-               a_fully_honoured_query_carries_no_notice;
-             test_case "upstream warnings are echoed" `Quick upstream_warnings_are_echoed;
-             test_case "the notices join in one sentence" `Quick the_notices_join_in_one_sentence;
-           ] );
-         ( "the failures this adapter owns"
-         , [
-             test_case "payment and rate limit are one quota row" `Quick
-               payment_and_rate_limit_are_one_quota_row;
-             test_case "a network failure does not echo the request" `Quick
-               a_network_failure_does_not_echo_the_request;
-             test_case "malformed JSON is the adapter's own sentence" `Quick
-               malformed_json_is_the_adapters_own_sentence;
-           ] );
-         ( "cost and endpoints"
-         , [
-             test_case "the price tracks the preset, not the count" `Quick
-               the_price_tracks_the_preset_not_the_count;
-             test_case "the result carries the flat figure" `Quick
-               the_result_carries_the_flat_figure;
-             test_case "the endpoints are the two halves" `Quick the_endpoints_are_the_two_halves;
-           ] );
-         ( "the free half"
-         , [
-             test_case "its tool is asked with the query twice" `Quick
-               the_free_half_asks_its_tool_with_the_query_twice;
-             test_case "it answers zero" `Quick the_free_half_answers_zero;
-             test_case "it reports a malformed text block" `Quick
-               the_free_half_reports_a_malformed_text_block;
-             test_case "it notices a filter it cannot reach" `Quick
-               the_free_half_notices_a_filter_it_cannot_reach;
-             test_case "it owns a session" `Quick the_free_half_owns_a_session;
-           ] );
-       ])
+  A.(
+    run "seekwright/parallel"
+      [
+        ( "the parser both halves share",
+          [
+            test_case "the result list becomes results" `Quick the_result_list_becomes_results;
+            test_case "excerpts join into the text" `Quick excerpts_join_into_the_text;
+            test_case "the limit slices the result list" `Quick the_limit_slices_the_result_list;
+            test_case "the cap bites and says so" `Quick the_cap_bites_and_says_so;
+            test_case "a date passes through and is never invented" `Quick
+              a_date_passes_through_and_is_never_invented;
+            test_case "a null title falls back to the url" `Quick a_null_title_falls_back_to_the_url;
+            test_case "a content backend never fills a snippet" `Quick
+              a_content_backend_never_fills_a_snippet;
+            test_case "a record without a url is dropped" `Quick a_record_without_a_url_is_dropped;
+            test_case "a record that is not an object is skipped" `Quick
+              a_record_that_is_not_an_object_is_skipped;
+            test_case "a missing result list is empty, not an error" `Quick
+              a_missing_result_list_is_empty_not_an_error;
+            test_case "a document that is not an object is empty, not an error" `Quick
+              a_document_that_is_not_an_object_is_empty_not_an_error;
+          ] );
+        ( "the REST request",
+          [
+            test_case "POST with the key header and a body" `Quick
+              post_with_the_key_header_and_a_body;
+            test_case "the key never rides the URL" `Quick the_key_never_rides_the_url;
+            test_case "the preset is the operator's" `Quick the_preset_is_the_operators;
+            test_case "domains go to source_policy, the query stays verbatim" `Quick
+              domains_go_to_source_policy_and_the_query_stays_verbatim;
+            test_case "recency sets after_date at the injected clock" `Quick
+              recency_sets_after_date_at_the_injected_clock;
+            test_case "country sets location" `Quick country_sets_location;
+            test_case "an unasked filter leaves the policy out entirely" `Quick
+              an_unasked_filter_leaves_the_policy_out_entirely;
+          ] );
+        ( "the hand-composed notices",
+          [
+            test_case "exclude is sent and its ignoring is noticed" `Quick
+              exclude_is_sent_and_its_ignoring_is_noticed;
+            test_case "language is noticed while country is honoured" `Quick
+              language_is_noticed_while_country_is_honoured;
+            test_case "safe-search is noticed at both values" `Quick
+              safe_search_is_noticed_at_both_values;
+            test_case "a fully honoured query carries no notice" `Quick
+              a_fully_honoured_query_carries_no_notice;
+            test_case "upstream warnings are echoed" `Quick upstream_warnings_are_echoed;
+            test_case "the notices join in one sentence" `Quick the_notices_join_in_one_sentence;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "payment and rate limit are one quota row" `Quick
+              payment_and_rate_limit_are_one_quota_row;
+            test_case "a network failure does not echo the request" `Quick
+              a_network_failure_does_not_echo_the_request;
+            test_case "malformed JSON is the adapter's own sentence" `Quick
+              malformed_json_is_the_adapters_own_sentence;
+          ] );
+        ( "cost and endpoints",
+          [
+            test_case "the price tracks the preset, not the count" `Quick
+              the_price_tracks_the_preset_not_the_count;
+            test_case "the result carries the flat figure" `Quick the_result_carries_the_flat_figure;
+            test_case "the endpoints are the two halves" `Quick the_endpoints_are_the_two_halves;
+          ] );
+        ( "the free half",
+          [
+            test_case "its tool is asked with the query twice" `Quick
+              the_free_half_asks_its_tool_with_the_query_twice;
+            test_case "it answers zero" `Quick the_free_half_answers_zero;
+            test_case "it reports a malformed text block" `Quick
+              the_free_half_reports_a_malformed_text_block;
+            test_case "it notices a filter it cannot reach" `Quick
+              the_free_half_notices_a_filter_it_cannot_reach;
+            test_case "it owns a session" `Quick the_free_half_owns_a_session;
+          ] );
+      ])

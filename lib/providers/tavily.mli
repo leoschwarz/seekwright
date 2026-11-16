@@ -1,12 +1,11 @@
 (** Tavily — content-style web search returning full page extracts.
 
-    Endpoint: [POST https://api.tavily.com/search] with bearer token.
-    Extract text is returned in [Result.text] rather than snippets.
-    Optional vendor answer prose is returned in [Provider.outcome.answer].
+    Endpoint: [POST https://api.tavily.com/search] with bearer token. Extract text is returned in
+    [Result.text] rather than snippets. Optional vendor answer prose is returned in
+    [Provider.outcome.answer].
 
-    Supports domains, recency ([time_range]), language, safe search, and
-    country (via closed English-name enum). 432 or 429 indicates credit exhaustion
-    or rate limit. *)
+    Supports domains, recency ([time_range]), language, safe search, and country (via closed
+    English-name enum). 432 or 429 indicates credit exhaustion or rate limit. *)
 
 val name : string
 (** ["tavily"], the config key and the [provider] every response names. *)
@@ -26,8 +25,7 @@ val country_param : string -> string option
 val request_body : country:string option -> Seekwright.Provider.search_query -> string
 (** Serialises the request JSON with filters. *)
 
-val parse :
-  text_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
+val parse : text_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** Parses hits from [results[]] into hits with extracts in [text]. *)
 
 val answer : Yojson.Safe.t -> string option

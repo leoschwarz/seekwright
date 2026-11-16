@@ -1,7 +1,7 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 step 1 (S-005) is landed; everything else on this page is a
-proposal.** Tree read at `6e4ad90`;
+Status: **§5 step 0 (D-G, formatting) and step 1 (S-005) are landed; everything
+else on this page is a proposal.** Tree read at `6e4ad90`;
 reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
 unchanged between the two commits — the diff is plans only). The corrections are
 recorded in §8; the §4 decisions remain the maintainer's.
@@ -420,7 +420,8 @@ D-B — and land only if those decisions do. The last row is a keep, not a remov
 
 ## 4. Decisions the maintainer owns
 
-Each has a recommendation; none is applied.
+Each carries a recommendation. D-G is decided and applied, below; D-A … D-F stay
+the maintainer's.
 
 **D-A — the differential harness's posture.** Keep the 413 goldens and the
 properties, delete `drive.exe` and the oracle README, and rename the suite's own
@@ -513,6 +514,22 @@ whole cost, which is the re-pin of every `test/should_not_compile` diagnostic
 (their `.expected` files pin line numbers) plus a large one-shot diff. Do not
 adopt it after the adapter commits, or the same files churn twice.
 
+**Decided and applied, ahead of S-001.** `.ocamlformat` pins ocamlformat 0.29.0
+with `margin = 100`, `break-cases = fit`, `module-item-spacing = preserve` and
+`sequence-blank-line = preserve-one`; margin 100 and the two spacing options are
+what keep the reformat close to the style the tree already has (only 1,550 of
+its lines were longer). One commit reformatted all 272 `.ml`/`.mli` files:
+about 15,800 lines each way over 251 files. No `.expected` golden moved and no
+`test/should_not_compile` diagnostic moved — the snippets' line numbers survived.
+What did move is one class of test: `test_caps_audit`'s source needles quoted a
+call across a line break and one ended in `)`, which is the formatter's paren
+docking, not the code's. `Test_support` now matches source needles with
+whitespace collapsed (`source_includes`, `source_excludes`,
+`source_count_occurrences`) and the `)` is gone from that needle; the
+`includes`/`excludes` pair still matches prose byte-for-byte. The formatter is
+not a gate target — no `dune` rule runs it — so the pin is an instruction,
+recorded in `AGENTS.md`, `CONTRIBUTING.md` and the `ocaml` skill.
+
 ## 5. Landing order
 
 Each step is one reviewable commit, gate green on its own, with the plan updated
@@ -520,6 +537,7 @@ in the same commit.
 
 |Order|Step|Expected effect|
 |---|---|---|
+|0|D-G formatting: pin `.ocamlformat`, reformat the tree — the maintainer's call, taken ahead of step 1|**landed** — one-shot reformat of 272 files, ~15,800 lines each way; no golden moved; `Test_support`'s source needles made whitespace-insensitive|
 |1|S-005 micro-duplication: the percent-encoder, `base64`/`grouped`, the `Utf8` re-export shim|**landed** — small, no golden, no re-pin|
 |2|S-001 adapter skeleton, `take` landing in `Provider`|−700 to −900 lines in `lib/providers/`; `parallel`'s notices move onto the shared sentence|
 |3|S-002 test harness|−~1,800 test lines, no production change|
@@ -528,7 +546,7 @@ in the same commit.
 |6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|
 |7|S-010 fallback readers, lifting D2|the `'tag` goes, one `Fallback.run` owns the tail, and the factory builds the host check once|
 |8|§3 table + D-A/D-B docs|`context`, `settings`, `cost_model`, the façade and the extractor duality go; the driver and the two matrix tables only if D-A/D-B decide so; `AGENTS.md`, `ocaml-docs/testing.md`, `test/differential/README.md` and the port plan move in the same commit|
-|9|D-C … D-G, one decision at a time|each needs its own page section and, for D-E, an operator-visible behaviour change|
+|9|D-C … D-F, one decision at a time (D-G landed as step 0)|each needs its own page section and, for D-E, an operator-visible behaviour change|
 
 ## 6. Verification
 

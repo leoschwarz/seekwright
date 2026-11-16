@@ -74,7 +74,8 @@ let test_the_arrow_type_is_declared_once () =
       let path = Filename.concat "../lib" name in
       let source = read path in
       let aliased = name <> "log.mli" in
-      A.(check int) (name ^ (if aliased then " aliases the sink" else " owns the sink"))
+      A.(check int)
+        (name ^ if aliased then " aliases the sink" else " owns the sink")
         (if aliased then 1 else 0)
         (count_occurrences ~haystack:source ~needle:the_alias);
       A.(check int)
@@ -90,7 +91,9 @@ let test_the_owner_declares_no_siblings () =
   let source = read (Filename.concat "../lib" "log.mli") in
   List.iter
     (fun name ->
-      A.(check int) ("log.mli mentions " ^ name ^ " nowhere") 0
+      A.(check int)
+        ("log.mli mentions " ^ name ^ " nowhere")
+        0
         (count_occurrences ~haystack:source ~needle:(name ^ ".")))
     [ "Engine"; "Health"; "Usage"; "Provider" ]
 
@@ -98,9 +101,7 @@ let test_the_board_hands_its_levels_and_fields_to_the_sink () =
   (* The behaviour the alias carries unchanged: a module calling a sink passes a
      level, a constant dotted event name, and every value as a named field. *)
   let seen = ref [] in
-  let capture : Health.log =
-    fun level event fields -> seen := (level, event, fields) :: !seen
-  in
+  let capture : Health.log = fun level event fields -> seen := (level, event, fields) :: !seen in
   let board =
     Health.create ~now:(fun () -> 0.0) ~failure_threshold:2 ~cooldown_seconds:60.0 ~log:capture ()
   in
@@ -122,8 +123,8 @@ let test_one_function_records_from_the_engine_and_the_board () =
      above and still leave the server writing its lines in two places. *)
   let seen = ref [] in
   let capture : Log.log =
-    fun level event fields ->
-      seen := (Config.show_log_level level, event, List.map fst fields) :: !seen
+   fun level event fields ->
+    seen := (Config.show_log_level level, event, List.map fst fields) :: !seen
   in
   let board =
     Health.create ~now:(fun () -> 0.0) ~failure_threshold:1 ~cooldown_seconds:60.0 ~log:capture ()
@@ -152,7 +153,8 @@ let test_one_function_records_from_the_engine_and_the_board () =
   | Ok _ -> A.fail "an empty registry answered a search"
   | Error (Engine.Search.Failed message) -> A.failf "a refusal became a failure: %s" message);
   let events = List.rev (List.map (fun (_level, event, _fields) -> event) !seen) in
-  A.(check (list string)) "both modules wrote through it"
+  A.(check (list string))
+    "both modules wrote through it"
     [ "health.open"; "search.rejected" ]
     events;
   (* And the field discipline survives the trip: a constant dotted name, every
@@ -162,9 +164,11 @@ let test_one_function_records_from_the_engine_and_the_board () =
     | Some (_level, _name, fields) -> fields
     | None -> A.failf "no %s line reached the sink" event
   in
-  A.(check bool) "the health line names its provider" true
+  A.(check bool)
+    "the health line names its provider" true
     (List.mem "provider" (field_names "health.open"));
-  A.(check bool) "and the engine line names what was asked for" true
+  A.(check bool)
+    "and the engine line names what was asked for" true
     (List.mem "requested" (field_names "search.rejected"))
 
 let test_an_exception_is_classified_never_rendered () =
@@ -172,17 +176,18 @@ let test_an_exception_is_classified_never_rendered () =
      of constants, and a payload that looks like a key or a URL never gets a
      second chance to become a log field. *)
   let secret = "sk-live-not-for-the-log" in
-  A.(check string) "a failure is its family" "failure"
+  A.(check string)
+    "a failure is its family" "failure"
     (Log.classify_exn (Failure ("the endpoint said " ^ secret)));
-  A.(check string) "a missing file is a syscall fact" "sys_error"
+  A.(check string)
+    "a missing file is a syscall fact" "sys_error"
     (Log.classify_exn (Sys_error ("/home/operator/" ^ secret)));
-  A.(check string) "not_found is its own constant" "not_found"
-    (Log.classify_exn Not_found);
-  A.(check string) "an unknown constructor is just other" "other"
-    (Log.classify_exn (Opaque secret));
+  A.(check string) "not_found is its own constant" "not_found" (Log.classify_exn Not_found);
+  A.(check string) "an unknown constructor is just other" "other" (Log.classify_exn (Opaque secret));
   List.iter
     (fun exn ->
-      A.(check bool) "the classification never carries the payload" false
+      A.(check bool)
+        "the classification never carries the payload" false
         (contains ~haystack:(Log.classify_exn exn) ~needle:secret))
     [ Failure ("the endpoint said " ^ secret); Sys_error ("/home/operator/" ^ secret) ]
 
@@ -190,15 +195,15 @@ let () =
   A.run "log"
     [
       ( "one sink type",
-          [
-            A.test_case "the sink type pin compiles" `Quick test_the_sink_type_pin_compiles;
-            A.test_case "the arrow type is declared once" `Quick test_the_arrow_type_is_declared_once;
-            A.test_case "the owner mentions no siblings" `Quick test_the_owner_declares_no_siblings;
-            A.test_case "the board hands its levels and fields to the sink" `Quick
-              test_the_board_hands_its_levels_and_fields_to_the_sink;
-            A.test_case "one function records from the engine and the board" `Quick
-              test_one_function_records_from_the_engine_and_the_board;
-          ] );
+        [
+          A.test_case "the sink type pin compiles" `Quick test_the_sink_type_pin_compiles;
+          A.test_case "the arrow type is declared once" `Quick test_the_arrow_type_is_declared_once;
+          A.test_case "the owner mentions no siblings" `Quick test_the_owner_declares_no_siblings;
+          A.test_case "the board hands its levels and fields to the sink" `Quick
+            test_the_board_hands_its_levels_and_fields_to_the_sink;
+          A.test_case "one function records from the engine and the board" `Quick
+            test_one_function_records_from_the_engine_and_the_board;
+        ] );
       ( "exception classification",
         [
           A.test_case "an exception is classified, never rendered" `Quick

@@ -19,20 +19,14 @@ let credit_over = 10
 
 let credits max_results = if max_results > credit_over then 2 else 1
 
-let cost_for ~cost_per_1k max_results =
-  (cost_per_1k /. 1000.) *. float_of_int (credits max_results)
+let cost_for ~cost_per_1k max_results = cost_per_1k /. 1000. *. float_of_int (credits max_results)
 
 let request_body (q : Provider.search_query) =
   let fields =
-    [
-      ("q", `String (Provider.site_filtered_query q));
-      ("num", `Int q.Model.max_results);
-    ]
+    [ ("q", `String (Provider.site_filtered_query q)); ("num", `Int q.Model.max_results) ]
   in
   let fields =
-    match q.Model.country with
-    | Some code -> fields @ [ ("gl", `String code) ]
-    | None -> fields
+    match q.Model.country with Some code -> fields @ [ ("gl", `String code) ] | None -> fields
   in
   let fields =
     match q.Model.language with
@@ -56,18 +50,14 @@ let parse ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->
       match (Provider.Json.string_field "link" item, Provider.Json.string_field "title" item) with
       | Some url, Some title when url <> "" && title <> "" ->
           let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "snippet" item)
-              snippet_chars
+            Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
           in
           Some
             {
@@ -116,8 +106,8 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
           answer = None;
           cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
           notice =
-            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true
-              ~language:None ~safety:false;
+            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:None
+              ~safety:false;
         }
 
 let make ?(cost_per_1k = 1.00) ?(snippet_chars = 500) ~key ~net () : Provider.t =

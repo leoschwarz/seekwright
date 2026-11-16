@@ -3,59 +3,67 @@
    a helper copied into five files drifts in five directions — which is exactly
    what the argument orders here had done. *)
 
-(** [find_sub ~haystack ~needle ()] is the byte index of the first occurrence
-    of [needle] in [haystack] at or after [start] (default [0]), or [None].
-
-    The trailing [()] is what makes [start] erasable: every other argument is
-    labelled, so an optional one would be warning 16. A byte index, so a caller
-    that needs a codepoint index is reading an ASCII fixture — say so where it
-    does. *)
 val find_sub : ?start:int -> haystack:string -> needle:string -> unit -> int option
+(** [find_sub ~haystack ~needle ()] is the byte index of the first occurrence of [needle] in
+    [haystack] at or after [start] (default [0]), or [None].
 
-(** [contains ~haystack ~needle] is [true] when {!find_sub} answers [Some _].
-    The empty needle occurs in every haystack. *)
+    The trailing [()] is what makes [start] erasable: every other argument is labelled, so an
+    optional one would be warning 16. A byte index, so a caller that needs a codepoint index is
+    reading an ASCII fixture — say so where it does. *)
+
 val contains : haystack:string -> needle:string -> bool
+(** [contains ~haystack ~needle] is [true] when {!find_sub} answers [Some _]. The empty needle
+    occurs in every haystack. *)
 
-(** [read_file path] is the whole file, read in binary so no newline is
-    translated. A missing file raises [Sys_error], which is what a broken
-    fixture should do. *)
 val read_file : string -> string
+(** [read_file path] is the whole file, read in binary so no newline is translated. A missing file
+    raises [Sys_error], which is what a broken fixture should do. *)
 
-(** [factory_sources ()] is every OCaml source of [lib/factory] — each [.ml] and
-    each [.mli] — as [(name, text)] pairs named from the repo root
-    ([lib/factory/factory.ml]) and sorted by name.
-
-    A function, never a top-level value: [test_support] is linked by suites whose
-    sandbox carries no factory sources, and a module-load [read_file] would raise
-    [Sys_error] in every one of them. Only the pin suites call it, and only where
-    [test/dune] has filled their sandbox with [(glob_files ../lib/factory/*.mli)]
-    and [(glob_files ../lib/factory/*.ml)].
-
-    The directory is read with [Sys.readdir] rather than kept as a hand-maintained
-    list, so a new factory module joins the scan on its own and a pin can never
-    be left reading a stale file list — which is what lets a source pin count a
-    library-wide total instead of one file's. An empty directory fails, so a glob
-    that matched nothing cannot pass vacuously; a file the sandbox is missing
-    raises [Sys_error]. *)
 val factory_sources : unit -> (string * string) list
+(** [factory_sources ()] is every OCaml source of [lib/factory] — each [.ml] and each [.mli] — as
+    [(name, text)] pairs named from the repo root ([lib/factory/factory.ml]) and sorted by name.
 
-(** [replace_all ~haystack ~needle ~with_] replaces every non-overlapping
-    occurrence of [needle], left to right. An empty needle leaves the haystack
-    unchanged. *)
+    A function, never a top-level value: [test_support] is linked by suites whose sandbox carries no
+    factory sources, and a module-load [read_file] would raise [Sys_error] in every one of them.
+    Only the pin suites call it, and only where [test/dune] has filled their sandbox with
+    [(glob_files ../lib/factory/*.mli)] and [(glob_files ../lib/factory/*.ml)].
+
+    The directory is read with [Sys.readdir] rather than kept as a hand-maintained list, so a new
+    factory module joins the scan on its own and a pin can never be left reading a stale file list —
+    which is what lets a source pin count a library-wide total instead of one file's. An empty
+    directory fails, so a glob that matched nothing cannot pass vacuously; a file the sandbox is
+    missing raises [Sys_error]. *)
+
 val replace_all : haystack:string -> needle:string -> with_:string -> string
+(** [replace_all ~haystack ~needle ~with_] replaces every non-overlapping occurrence of [needle],
+    left to right. An empty needle leaves the haystack unchanged. *)
 
-(** [count_occurrences ~haystack ~needle] is the number of non-overlapping
-    occurrences of [needle], counted left to right. An empty needle counts zero. *)
 val count_occurrences : haystack:string -> needle:string -> int
+(** [count_occurrences ~haystack ~needle] is the number of non-overlapping occurrences of [needle],
+    counted left to right. An empty needle counts zero. *)
 
-(** [includes label needle haystack] passes when [haystack] contains [needle],
-    and otherwise fails with the label, the needle and the text it searched.
-    The order is the failure message's: what was asserted, then what was looked
-    for, then where. *)
 val includes : string -> string -> string -> unit
+(** [includes label needle haystack] passes when [haystack] contains [needle], and otherwise fails
+    with the label, the needle and the text it searched. The order is the failure message's: what
+    was asserted, then what was looked for, then where. *)
 
-(** [excludes label needle haystack] is the negative of {!includes}. *)
 val excludes : string -> string -> string -> unit
+(** [excludes label needle haystack] is the negative of {!includes}. *)
+
+val flatten : string -> string
+(** [flatten text] is [text] with every run of whitespace collapsed to one space and leading
+    whitespace dropped. *)
+
+val source_includes : string -> string -> string -> unit
+(** [source_includes label needle haystack] is {!includes} over {!flatten}-ed inputs, for a needle
+    that names code rather than prose: the tree is formatter-pinned, so the line breaks inside the
+    code a needle quotes are not the needle's claim. *)
+
+val source_excludes : string -> string -> string -> unit
+(** [source_excludes label needle haystack] is {!source_includes}'s negative. *)
+
+val source_count_occurrences : haystack:string -> needle:string -> int
+(** [source_count_occurrences] is {!count_occurrences} over {!flatten}-ed inputs. *)
 
 val check_string : string -> string -> string -> unit
 val check_int : string -> int -> int -> unit
@@ -65,9 +73,8 @@ val check_ints : string -> int list -> int list -> unit
 val check_opt_string : string -> string option -> string option -> unit
 val check_opt_int : string -> int option -> int option -> unit
 
-(** [Alcotest.float 1e-9], the tolerance every suite compared a duration or a
-    price with. *)
 val number : float Alcotest.testable
+(** [Alcotest.float 1e-9], the tolerance every suite compared a duration or a price with. *)
 
 val check_number : string -> float -> float -> unit
 val check_opt_number : string -> float option -> float option -> unit

@@ -20,17 +20,16 @@ let to_page cfg target body ~offset ~max_chars =
     | Some ((`Assoc _ as first) :: _) -> first
     | _ -> `Assoc []
   in
-  let text =
-    match Fallback.Json.string_field "raw_content" entry with Some s -> s | None -> ""
-  in
+  let text = match Fallback.Json.string_field "raw_content" entry with Some s -> s | None -> "" in
   (* The entry's own landing URL when the vendor names one; this fallback
      sends one URL, so the array order does not matter. *)
   let url =
     match Fallback.Json.string_field "url" entry with Some s when s <> "" -> s | _ -> target
   in
   Ok
-    (Fallback.windowed text ~url ~max_text_chars:cfg.max_text_chars ~offset ~max_chars
-       (* Extract reports no title, and inventing one out of the markdown's
+    (Fallback.windowed text ~url ~max_text_chars:cfg.max_text_chars ~offset
+       ~max_chars
+         (* Extract reports no title, and inventing one out of the markdown's
           first heading would be a guess the caller cannot tell from the
           page's own title. *)
        ~title:None ~status_code:200)
@@ -55,19 +54,19 @@ let fetch cfg raw ~offset ~max_chars =
                ("timeout", `Float (Float.min 60.0 (Float.max 1.0 cfg.timeout_seconds)));
              ])
       in
-      let request : Caps.Authority.Net.request = {
-        meth = `POST;
-        uri = Uri.of_string tavily_extract_endpoint;
-        headers = [ ("Authorization", "Bearer " ^ cfg.api_key) ];
-        body = Some body;
-      } in
+      let request : Caps.Authority.Net.request =
+        {
+          meth = `POST;
+          uri = Uri.of_string tavily_extract_endpoint;
+          headers = [ ("Authorization", "Bearer " ^ cfg.api_key) ];
+          body = Some body;
+        }
+      in
       match cfg.net.request ~max_response_bytes:None request with
       | Error caps_error -> Error (Fallback.transport_error caps_error)
       | Ok response -> (
-          if response.Caps.Authority.Net.status = 401
-          || response.Caps.Authority.Net.status = 403
-          then
-            Error (Fallback.Rejected "authentication rejected (check API key)")
+          if response.Caps.Authority.Net.status = 401 || response.Caps.Authority.Net.status = 403
+          then Error (Fallback.Rejected "authentication rejected (check API key)")
             (* 432 is this vendor's monthly-credits-exhausted code and 429
                its short-term limit, the same reading the search adapter on
                this key takes. *)

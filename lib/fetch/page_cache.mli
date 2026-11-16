@@ -1,5 +1,5 @@
-(** Disk page cache: atomic storage and windowed retrieval
-    of fetched pages behind an Authority.Fs grant. *)
+(** Disk page cache: atomic storage and windowed retrieval of fetched pages behind an Authority.Fs
+    grant. *)
 
 type cached_page = {
   url : string;
@@ -31,13 +31,7 @@ val to_page : cached_page -> Seekwright_wire.Page.page
 
 val get : t -> rung:string -> url:string -> cached_page option
 
-val get_window :
-  t ->
-  rung:string ->
-  url:string ->
-  offset:int ->
-  max_chars:int ->
-  cached_page option
+val get_window : t -> rung:string -> url:string -> offset:int -> max_chars:int -> cached_page option
 
 val put : t -> rung:string -> url:string -> page:cached_page -> bool
 

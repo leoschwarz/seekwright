@@ -35,15 +35,10 @@ let fold_operators ~(now : unit -> float) (q : Provider.search_query) =
   let parts =
     if q.Model.include_domains <> [] then
       parts
-      @ [
-          String.concat " OR "
-            (List.map (fun domain -> "site:" ^ domain) q.Model.include_domains);
-        ]
+      @ [ String.concat " OR " (List.map (fun domain -> "site:" ^ domain) q.Model.include_domains) ]
     else parts
   in
-  let parts =
-    parts @ List.map (fun domain -> "-site:" ^ domain) q.Model.exclude_domains
-  in
+  let parts = parts @ List.map (fun domain -> "-site:" ^ domain) q.Model.exclude_domains in
   let parts =
     match q.Model.language with
     | Some code -> parts @ [ "lang:" ^ String.lowercase_ascii code ]
@@ -59,10 +54,7 @@ let fold_operators ~(now : unit -> float) (q : Provider.search_query) =
 let request_body ~(query : string) (q : Provider.search_query) =
   Yojson.Safe.to_string
     (`Assoc
-      [
-        ("query", `String query);
-        ("count", `Int (Stdlib.min q.Model.max_results max_results));
-      ])
+       [ ("query", `String query); ("count", `Int (Stdlib.min q.Model.max_results max_results)) ])
 
 let score item = Provider.Json.number_field "rerank_score" item
 
@@ -75,10 +67,7 @@ let parse ~snippet_chars ~text_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->
@@ -158,11 +147,12 @@ let search ~cost_per_1k ~snippet_chars ~text_chars ~key ~(now : unit -> float)
               (if results <> [] then Some (cost_for ~cost_per_1k q.Model.max_results) else Some 0.0);
             notice =
               Provider.ignored_constraints q ~domains:folded_fits ~dates:folded_fits ~geo:false
-                ~language:(Some (folded_fits || q.Model.language = None)) ~safety:false;
+                ~language:(Some (folded_fits || q.Model.language = None))
+                ~safety:false;
           }
 
-let make ?(cost_per_1k = 0.75) ?(snippet_chars = 500) ?(text_chars = 2000) ~key ~now ~net ()
-    : Provider.t =
+let make ?(cost_per_1k = 0.75) ?(snippet_chars = 500) ?(text_chars = 2000) ~key ~now ~net () :
+    Provider.t =
   (module struct
     let name = name
     let cost_per_1k = cost_per_1k

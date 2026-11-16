@@ -44,7 +44,7 @@ let now () = 1768478400.
 (* [Usage.snapshot] and the REST bodies are [Yojson.Safe.t]; these are the loose
    reads the Python suite gets from dicts. *)
 let get key = function
-  | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
+  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
   | _ -> `Null
 
 let items = function `List xs -> xs | _ -> []
@@ -82,11 +82,7 @@ let answer_query i = marker "answer" i
    stubs read, not like a vendor's: the stubs are the fake adapters, and this is
    the endpoint they dial. *)
 
-type fixture = {
-  port : int;
-  stop : unit Eio.Promise.u;
-  stopped : unit Eio.Promise.t;
-}
+type fixture = { port : int; stop : unit Eio.Promise.u; stopped : unit Eio.Promise.t }
 
 let json_headers = Http.Header.of_list [ ("content-type", "application/json") ]
 
@@ -96,24 +92,24 @@ let user_turn body =
      caller's. *)
   match Yojson.Safe.from_string body with
   | `Assoc fields -> (
-    match List.assoc_opt "messages" fields with
-    | Some (`List messages) -> (
-      match List.rev messages with
-      | `Assoc message :: _ -> (
-        match List.assoc_opt "content" message with Some (`String s) -> s | _ -> "")
+      match List.assoc_opt "messages" fields with
+      | Some (`List messages) -> (
+          match List.rev messages with
+          | `Assoc message :: _ -> (
+              match List.assoc_opt "content" message with Some (`String s) -> s | _ -> "")
+          | _ -> "")
       | _ -> "")
-    | _ -> "")
   | _ -> ""
 
 let question_of_turn turn =
   match find_sub ~haystack:turn ~needle:"\n\nQuestion: " () with
   | None -> "unknown"
-  | Some at ->
-    let start = at + String.length "\n\nQuestion: " in
-    let rest = String.sub turn start (String.length turn - start) in
-    (match find_sub ~haystack:rest ~needle:"\n" () with
-    | None -> rest
-    | Some stop -> String.sub rest 0 stop)
+  | Some at -> (
+      let start = at + String.length "\n\nQuestion: " in
+      let rest = String.sub turn start (String.length turn - start) in
+      match find_sub ~haystack:rest ~needle:"\n" () with
+      | None -> rest
+      | Some stop -> String.sub rest 0 stop)
 
 let completion_body question =
   let content = Printf.sprintf "An answer for %s, citing [1]." question in
@@ -128,8 +124,7 @@ let completion_body question =
                 ("finish_reason", `String "stop");
               ];
           ] );
-      ( "usage",
-        `Assoc [ ("prompt_tokens", `Int 11); ("completion_tokens", `Int 7) ] );
+      ("usage", `Assoc [ ("prompt_tokens", `Int 11); ("completion_tokens", `Int 7) ]);
     ]
 
 let fixture_callback _conn request body =
@@ -143,12 +138,11 @@ let fixture_callback _conn request body =
   end
   else
     Cohttp_eio.Server.respond_string ~headers:json_headers ~status:`OK
-      ~body:(if String.ends_with ~suffix:"/probe" path then "ok" else "") ()
+      ~body:(if String.ends_with ~suffix:"/probe" path then "ok" else "")
+      ()
 
 let start_fixture ~env ~sw =
-  let socket =
-    Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -158,10 +152,9 @@ let start_fixture ~env ~sw =
   let stopped, fill_stopped = Eio.Promise.create () in
   let server = Cohttp_eio.Server.make ~callback:fixture_callback () in
   Eio.Fiber.fork ~sw (fun () ->
-    Fun.protect
-      ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-      (fun () ->
-        Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
+      Fun.protect
+        ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+        (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
   { port; stop = fill_stop; stopped }
 
 let stop_fixture fixture =
@@ -173,12 +166,7 @@ let stop_fixture fixture =
    request, so "one audit event per low-level operation" is a real property of
    the run rather than a log line this file invented. *)
 
-type search_stub = {
-  name : string;
-  net : Provider.Net.t;
-  port : int;
-  calls : int Atomic.t;
-}
+type search_stub = { name : string; net : Provider.Net.t; port : int; calls : int Atomic.t }
 
 let search_stub ~name ~net ~port = { name; net; port; calls = Atomic.make 0 }
 
@@ -216,16 +204,16 @@ let provider_of_search_stub (s : search_stub) : Provider.t =
       match s.net.Provider.Net.request request with
       | Error _ -> Error (Provider.provider_error ~provider:s.name "the fake endpoint refused")
       | Ok response when response.Caps.Authority.Net.status = 200 ->
-        Ok
-          {
-            Provider.provider = s.name;
-            results = [ result_of_query q ];
-            answer = None;
-            (* One thousandth of a dollar per call: the aggregate case's money
+          Ok
+            {
+              Provider.provider = s.name;
+              results = [ result_of_query q ];
+              answer = None;
+              (* One thousandth of a dollar per call: the aggregate case's money
                is then exact arithmetic over the call count. *)
-            cost_usd = Some 0.001;
-            notice = None;
-          }
+              cost_usd = Some 0.001;
+              notice = None;
+            }
       | Ok _ -> Error (Provider.provider_error ~provider:s.name "the fake endpoint answered oddly")
 
     let aclose () = ()
@@ -258,30 +246,31 @@ let fetcher_of_stub (s : fetch_stub) : Engine.Fetch.fetcher =
             meth = `GET;
             uri =
               Uri.of_string
-                (Printf.sprintf "http://127.0.0.1:%d/page?tag=%s" s.port
-                   (Uri.pct_encode tag));
+                (Printf.sprintf "http://127.0.0.1:%d/page?tag=%s" s.port (Uri.pct_encode tag));
             headers = [];
             body = None;
           }
         in
         match s.net.Provider.Net.request request with
-        | Error _ -> Error (Engine.Fetch.Provider (Provider.provider_error ~provider:s.name "refused"))
+        | Error _ ->
+            Error (Engine.Fetch.Provider (Provider.provider_error ~provider:s.name "refused"))
         | Ok response when response.Caps.Authority.Net.status = 200 ->
-          let text = Printf.sprintf "Page body for %s. %s" tag page_padding in
-          Ok
-            {
-              Engine.Fetch.url = url;
-              title = Some ("Title for " ^ tag);
-              text;
-              content_type = Some "text/html";
-              status_code = 200;
-              truncated = false;
-              total_chars = String.length text;
-              path_addressable = false;
-              image = None;
-            }
+            let text = Printf.sprintf "Page body for %s. %s" tag page_padding in
+            Ok
+              {
+                Engine.Fetch.url;
+                title = Some ("Title for " ^ tag);
+                text;
+                content_type = Some "text/html";
+                status_code = 200;
+                truncated = false;
+                total_chars = String.length text;
+                path_addressable = false;
+                image = None;
+              }
         | Ok _ ->
-          Error (Engine.Fetch.Provider (Provider.provider_error ~provider:s.name "answered oddly")));
+            Error
+              (Engine.Fetch.Provider (Provider.provider_error ~provider:s.name "answered oddly")));
     aclose = (fun () -> ());
   }
 
@@ -304,18 +293,13 @@ let config ~provider_port =
   let dashboard = { Config.default_dashboard_config with Config.enabled = true } in
   match
     Config.resolve
-      ~providers:
-        [ ("serper", { Config.default_provider_config with Config.enabled = true }) ]
+      ~providers:[ ("serper", { Config.default_provider_config with Config.enabled = true }) ]
       ~default_provider:"serper" ~agent ~dashboard ()
   with
   | Ok config -> config
   | Error message -> A.failf "the fixture config was refused: %s" message
 
-type captured = {
-  level : Config.log_level;
-  event : string;
-  fields : (string * Yojson.Safe.t) list;
-}
+type captured = { level : Config.log_level; event : string; fields : (string * Yojson.Safe.t) list }
 
 (* The one sink every layer shares, as production shares it: the engines, the
    agents and [Factory.audit_sink] all render into this list. Cooperative
@@ -360,7 +344,8 @@ let build_rig ~env ~sw ~provider_port ~journal =
     | Error message -> A.failf "the fixture grant was refused: %s" message
   in
   let search_stub =
-    search_stub ~name:"serper" ~net:(Provider.Net.of_grant (audited provider_port))
+    search_stub ~name:"serper"
+      ~net:(Provider.Net.of_grant (audited provider_port))
       ~port:provider_port
   in
   let board = Health.create ~now:clock ~log () in
@@ -370,8 +355,7 @@ let build_rig ~env ~sw ~provider_port ~journal =
       ~clock ~now ()
   in
   let fetch_stub =
-    fetch_stub ~name:"http" ~net:(Provider.Net.of_grant (audited provider_port))
-      ~port:provider_port
+    fetch_stub ~name:"http" ~net:(Provider.Net.of_grant (audited provider_port)) ~port:provider_port
   in
   let fetch =
     match
@@ -399,8 +383,10 @@ let build_rig ~env ~sw ~provider_port ~journal =
               headers = (fun _config _key -> []);
             } );
         ];
-      net = Factory.probe_net ~sw ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env)
-              ~timeout_seconds:5.0 ~audit [ endpoint provider_port ];
+      net =
+        Factory.probe_net ~sw ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env)
+          ~timeout_seconds:5.0 ~audit
+          [ endpoint provider_port ];
     }
   in
   let app =
@@ -416,14 +402,7 @@ let build_rig ~env ~sw ~provider_port ~journal =
       health = Some health;
     }
   in
-  {
-    app;
-    usage;
-    board;
-    searches_seen = search_stub.calls;
-    fetches_seen = fetch_stub.calls;
-    events;
-  }
+  { app; usage; board; searches_seen = search_stub.calls; fetches_seen = fetch_stub.calls; events }
 
 (* [serve_http] binds its own port, and the suite needs the number, so this is
    its accept loop: one accepted socket enters the same [serve_connection] the
@@ -438,9 +417,7 @@ type served = {
 }
 
 let serve ~env ~sw ~log ~app ~server =
-  let socket =
-    Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -450,18 +427,18 @@ let serve ~env ~sw ~log ~app ~server =
   let stopped, fill_stopped = Eio.Promise.create () in
   let active = Atomic.make 0 in
   Eio.Fiber.fork ~sw (fun () ->
-    Fun.protect
-      ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-      (fun () ->
-        Eio.Net.run_server socket ~stop
-          ~on_error:(fun _exn -> ())
-          (fun flow peer ->
-            ignore (Atomic.fetch_and_add active 1);
-            Fun.protect
-              ~finally:(fun () -> ignore (Atomic.fetch_and_add active (-1)))
-              (fun () ->
-                Server.serve_connection ~clock:(Eio.Stdenv.mono_clock env) ~log ~app ~server
-                  ~flow ~peer ()))));
+      Fun.protect
+        ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+        (fun () ->
+          Eio.Net.run_server socket ~stop
+            ~on_error:(fun _exn -> ())
+            (fun flow peer ->
+              ignore (Atomic.fetch_and_add active 1);
+              Fun.protect
+                ~finally:(fun () -> ignore (Atomic.fetch_and_add active (-1)))
+                (fun () ->
+                  Server.serve_connection ~clock:(Eio.Stdenv.mono_clock env) ~log ~app ~server ~flow
+                    ~peer ()))));
   { port; stop = fill_stop; stopped; active }
 
 let stop_served served =
@@ -474,22 +451,20 @@ let stop_served served =
 
 let request ~env ~port ~meth ~path ~body =
   Eio.Switch.run (fun sw ->
-    let client = Cohttp_eio.Client.make ~https:None env#net in
-    let uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d%s" port path) in
-    let headers =
-      Http.Header.of_list
-        [ ("content-type", "application/json"); ("accept", "application/json") ]
-    in
-    let response, response_body =
-      match meth with
-      | `POST ->
-        Cohttp_eio.Client.post client ~sw ~headers
-          ~body:(Cohttp_eio.Body.of_string body) uri
-      | _ -> Cohttp_eio.Client.get client ~sw ~headers uri
-    in
-    let status = Http.Status.to_int (Http.Response.status response) in
-    let text = Eio.Buf_read.(take_all (of_flow ~max_size:1_000_000 response_body)) in
-    (status, text))
+      let client = Cohttp_eio.Client.make ~https:None env#net in
+      let uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d%s" port path) in
+      let headers =
+        Http.Header.of_list [ ("content-type", "application/json"); ("accept", "application/json") ]
+      in
+      let response, response_body =
+        match meth with
+        | `POST ->
+            Cohttp_eio.Client.post client ~sw ~headers ~body:(Cohttp_eio.Body.of_string body) uri
+        | _ -> Cohttp_eio.Client.get client ~sw ~headers uri
+      in
+      let status = Http.Status.to_int (Http.Response.status response) in
+      let text = Eio.Buf_read.(take_all (of_flow ~max_size:1_000_000 response_body)) in
+      (status, text))
 
 let query_json key value = Yojson.Safe.to_string (`Assoc [ (key, `String value) ])
 
@@ -503,19 +478,13 @@ let consistent_snapshot json =
   let fetches = int (get "fetches" totals) in
   let answer_calls = int (get "calls" (get "answers" json)) in
   let provider_calls =
-    List.fold_left
-      (fun sum row -> sum + int (get "calls" row))
-      0 (items (get "providers" json))
+    List.fold_left (fun sum row -> sum + int (get "calls" row)) 0 (items (get "providers" json))
   in
   let window_searches =
-    List.fold_left
-      (fun sum day -> sum + int (get "searches" day))
-      0 (items (get "days" json))
+    List.fold_left (fun sum day -> sum + int (get "searches" day)) 0 (items (get "days" json))
   in
   let window_errors =
-    List.fold_left
-      (fun sum day -> sum + int (get "errors" day))
-      0 (items (get "days" json))
+    List.fold_left (fun sum day -> sum + int (get "errors" day)) 0 (items (get "days" json))
   in
   let recent = List.length (items (get "recent" json)) in
   A.(check int) "lifetime searches are the provider rows' sum" lifetime provider_calls;
@@ -557,13 +526,16 @@ let concurrent_operations_share_one_record () =
   let health_done, resolve_health_done = Eio.Promise.create () in
   let ticked = ref 0 in
   Eio.Fiber.fork ~sw (fun () ->
-    let sleep () =
-      if !ticked >= ticks then raise Exit;
-      incr ticked;
-      Eio.Fiber.yield ()
-    in
-    try Server.run_health_monitor (Option.get rig.app.Server.health) ~config:rig.app.Server.config ~sleep
-    with Exit -> Eio.Promise.resolve resolve_health_done ());
+      let sleep () =
+        if !ticked >= ticks then raise Exit;
+        incr ticked;
+        Eio.Fiber.yield ()
+      in
+      try
+        Server.run_health_monitor
+          (Option.get rig.app.Server.health)
+          ~config:rig.app.Server.config ~sleep
+      with Exit -> Eio.Promise.resolve resolve_health_done ());
   (* The requests. Every array slot is written by exactly one fiber and read
      after [Fiber.all] joins them, so the array needs no lock. *)
   let search_results = Array.make searches (0, "") in
@@ -577,16 +549,15 @@ let concurrent_operations_share_one_record () =
             request ~env ~port ~meth:`POST ~path:"/api/v1/search"
               ~body:(query_json "query" (search_query i)))
       @ List.init fetches (fun i () ->
-            fetch_results.(i) <-
-              request ~env ~port ~meth:`POST ~path:"/api/v1/fetch"
-                ~body:(query_json "url" (fetch_url i)))
+          fetch_results.(i) <-
+            request ~env ~port ~meth:`POST ~path:"/api/v1/fetch"
+              ~body:(query_json "url" (fetch_url i)))
       @ List.init answers (fun i () ->
-            answer_results.(i) <-
-              request ~env ~port ~meth:`POST ~path:"/api/v1/answer"
-                ~body:(query_json "query" (answer_query i)))
+          answer_results.(i) <-
+            request ~env ~port ~meth:`POST ~path:"/api/v1/answer"
+              ~body:(query_json "query" (answer_query i)))
       @ List.init 3 (fun i () ->
-            dashboard_results.(i) <-
-              request ~env ~port ~meth:`GET ~path:"/dashboard/data" ~body:"")
+          dashboard_results.(i) <- request ~env ~port ~meth:`GET ~path:"/dashboard/data" ~body:"")
     in
     Eio.Fiber.all work
   in
@@ -605,24 +576,34 @@ let concurrent_operations_share_one_record () =
     (fun i (status, body) ->
       A.(check int) (Printf.sprintf "search %d status" i) 200 status;
       let json = Yojson.Safe.from_string body in
-      A.(check string) (Printf.sprintf "search %d answers its own query" i)
-        (search_query i) (str (get "query" json));
-      A.(check string) (Printf.sprintf "search %d names the provider" i)
-        "serper" (str (get "provider" json));
+      A.(check string)
+        (Printf.sprintf "search %d answers its own query" i)
+        (search_query i)
+        (str (get "query" json));
+      A.(check string)
+        (Printf.sprintf "search %d names the provider" i)
+        "serper"
+        (str (get "provider" json));
       match items (get "results" json) with
       | first :: _ ->
-        A.(check string) (Printf.sprintf "search %d carries its own result" i)
-          ("About " ^ search_query i) (str (get "title" first))
+          A.(check string)
+            (Printf.sprintf "search %d carries its own result" i)
+            ("About " ^ search_query i)
+            (str (get "title" first))
       | [] -> A.failf "search %d returned no results" i)
     (Array.to_list search_results);
   List.iteri
     (fun i (status, body) ->
       A.(check int) (Printf.sprintf "fetch %d status" i) 200 status;
       let json = Yojson.Safe.from_string body in
-      A.(check string) (Printf.sprintf "fetch %d answers its own url" i)
-        (fetch_url i) (str (get "requested_url" json));
-      A.(check string) (Printf.sprintf "fetch %d names what landed" i)
-        (fetch_url i) (str (get "url" json));
+      A.(check string)
+        (Printf.sprintf "fetch %d answers its own url" i)
+        (fetch_url i)
+        (str (get "requested_url" json));
+      A.(check string)
+        (Printf.sprintf "fetch %d names what landed" i)
+        (fetch_url i)
+        (str (get "url" json));
       A.(check bool)
         (Printf.sprintf "fetch %d carries its own marker in the page" i)
         true
@@ -632,8 +613,10 @@ let concurrent_operations_share_one_record () =
     (fun i (status, body) ->
       A.(check int) (Printf.sprintf "answer %d status: %s" i body) 200 status;
       let json = Yojson.Safe.from_string body in
-      A.(check string) (Printf.sprintf "answer %d answers its own question" i)
-        (answer_query i) (str (get "query" json));
+      A.(check string)
+        (Printf.sprintf "answer %d answers its own question" i)
+        (answer_query i)
+        (str (get "query" json));
       A.(check bool)
         (Printf.sprintf "answer %d carries its own question into the prose" i)
         true
@@ -653,29 +636,36 @@ let concurrent_operations_share_one_record () =
   let expected_lines = searches + fetches + (2 * answers) in
   let snapshot = Usage.snapshot rig.usage in
   let totals = get "totals" snapshot in
-  A.(check int) "every search, including the answers' retrieval steps"
-    expected_searches (int (get "searches" totals));
+  A.(check int)
+    "every search, including the answers' retrieval steps" expected_searches
+    (int (get "searches" totals));
   A.(check int) "every fetch" fetches (int (get "fetches" totals));
   A.(check int) "no errors" 0 (int (get "errors" totals));
-  A.(check int) "one answer line per answer call" answers
+  A.(check int)
+    "one answer line per answer call" answers
     (int (get "calls" (get "answers" snapshot)));
-  A.(check (float 1e-9) "the search spend is the call count at the stub's price"
-     (0.001 *. float_of_int expected_searches)
-     (money (get "search_cost_usd" totals)));
+  A.(
+    check (float 1e-9) "the search spend is the call count at the stub's price"
+      (0.001 *. float_of_int expected_searches)
+      (money (get "search_cost_usd" totals)));
   let serper =
-    List.find_opt (fun row -> str (get "provider" row) = "serper")
+    List.find_opt
+      (fun row -> str (get "provider" row) = "serper")
       (items (get "providers" snapshot))
   in
   (match serper with
   | Some row ->
-    A.(check int) "the provider row counts every dispatch" expected_searches
-      (int (get "calls" row))
+      A.(check int)
+        "the provider row counts every dispatch" expected_searches
+        (int (get "calls" row))
   | None -> A.fail "the provider row is missing");
-  A.(check int) "the fake provider was dispatched once per search" expected_searches
+  A.(check int)
+    "the fake provider was dispatched once per search" expected_searches
     (Atomic.get rig.searches_seen);
-  A.(check int) "the fake fetcher was dispatched once per fetch" fetches
-    (Atomic.get rig.fetches_seen);
-  A.(check bool) "the board gates nobody after only successes" false
+  A.(check int)
+    "the fake fetcher was dispatched once per fetch" fetches (Atomic.get rig.fetches_seen);
+  A.(check bool)
+    "the board gates nobody after only successes" false
     (Health.is_open rig.board "serper");
   consistent_snapshot snapshot;
 
@@ -684,11 +674,10 @@ let concurrent_operations_share_one_record () =
      three declared shapes; an interleaved pair fails to parse or arrives with
      the wrong tool count. *)
   let raw = read_file journal_native in
-  A.(check bool) "the journal ends its last line" true
+  A.(check bool)
+    "the journal ends its last line" true
     (String.length raw > 0 && raw.[String.length raw - 1] = '\n');
-  let lines =
-    String.split_on_char '\n' raw |> List.filter (fun line -> line <> "")
-  in
+  let lines = String.split_on_char '\n' raw |> List.filter (fun line -> line <> "") in
   A.(check int) "one line per terminal call" expected_lines (List.length lines);
   let line_of line =
     match Yojson.Safe.from_string line with
@@ -700,15 +689,15 @@ let concurrent_operations_share_one_record () =
   A.(check int) "search lines" expected_searches (count_tool "search");
   A.(check int) "fetch lines" fetches (count_tool "fetch");
   A.(check int) "answer lines" answers (count_tool "answer");
-  A.(check (list string)) "no line declares an unknown tool"
-    []
+  A.(check (list string))
+    "no line declares an unknown tool" []
     (List.filter (fun tool -> not (List.mem tool [ "search"; "fetch"; "answer" ])) tools);
   (* Every search line carries its provider, so the file's count and the
      snapshot's provider row cannot disagree. *)
-  A.(check int) "every search line is attributable" expected_searches
+  A.(check int)
+    "every search line is attributable" expected_searches
     (List.fold_left
-       (fun n line ->
-         match get "provider" (line_of line) with `String _ -> n + 1 | _ -> n)
+       (fun n line -> match get "provider" (line_of line) with `String _ -> n + 1 | _ -> n)
        0 lines);
 
   (* [Factory.audit_sink] is the production sink, so every request the audited
@@ -716,8 +705,7 @@ let concurrent_operations_share_one_record () =
      retrieval steps included), the fetches, the model calls and the probe
      ticks. *)
   let audit_events =
-    rig.events ()
-    |> List.filter (fun (event : captured) -> event.event = "caps.operation")
+    rig.events () |> List.filter (fun (event : captured) -> event.event = "caps.operation")
   in
   A.(check int)
     "one audit event per provider, fetch, model and probe request"
@@ -725,18 +713,17 @@ let concurrent_operations_share_one_record () =
     (List.length audit_events);
   List.iter
     (fun (event : captured) ->
-      A.(check bool) "an audit line names its operation" true
+      A.(check bool)
+        "an audit line names its operation" true
         (List.mem_assoc "operation" event.fields);
-      A.(check bool) "an audit line names its outcome" true
-        (List.mem_assoc "outcome" event.fields);
+      A.(check bool) "an audit line names its outcome" true (List.mem_assoc "outcome" event.fields);
       match event.level with
       | Config.Log_info -> ()
       | _ -> A.fail "an audit line was not written at INFO")
     audit_events;
   A.(check int) "every health tick ran" ticks !ticked;
   let probe_events =
-    rig.events ()
-    |> List.filter (fun (event : captured) -> event.event = "health.probe")
+    rig.events () |> List.filter (fun (event : captured) -> event.event = "health.probe")
   in
   A.(check int) "one probe event per tick" ticks (List.length probe_events)
 
@@ -745,7 +732,7 @@ let () =
     [
       ( "serving shared state",
         [
-          A.test_case "search, fetch, answer and health ticks share one record"
-            `Quick concurrent_operations_share_one_record;
+          A.test_case "search, fetch, answer and health ticks share one record" `Quick
+            concurrent_operations_share_one_record;
         ] );
     ]

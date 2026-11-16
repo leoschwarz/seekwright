@@ -45,6 +45,10 @@ opam install . --deps-only --with-test --with-doc -y
 links `-lgmp`. No API key is needed for the default suite: keys are opt-in per
 provider, and the live harness refuses to run without an explicit opt-in.
 
+`ocamlformat` 0.29.0 is the pinned formatter (`.ocamlformat`). It is a dev tool
+and not a package dependency, so it is its own install step:
+`opam install ocamlformat -y`.
+
 ## The gate a change has to pass
 
 These are the commands CI runs, in order
@@ -56,6 +60,11 @@ dune build @install       # the executables, the images' input, version.txt
 dune runtest --force      # the suites, the property tests, and every pin
 dune build @doc
 ```
+
+Formatting is not one of those commands: the pin in `.ocamlformat` is honoured
+by running `ocamlformat --inplace` over the files you changed before opening the
+pull request. A source file that drifts from it reads as style churn beside the
+change, and the whole tree is checked clean at every commit on `ocaml-port`.
 
 `dune runtest` is where the frozen facts live, not beside them. It re-renders
 the surface manifest and diffs it against `ocaml-tools/surface.expected`; it

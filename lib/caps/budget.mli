@@ -1,6 +1,5 @@
-(** Counted ceiling on authority operations, owned by the caller.
-    [t] is an atomic counter shared across concurrent fibers, bounding operation
-    count rather than data size. *)
+(** Counted ceiling on authority operations, owned by the caller. [t] is an atomic counter shared
+    across concurrent fibers, bounding operation count rather than data size. *)
 
 type t
 

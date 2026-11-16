@@ -27,9 +27,8 @@ module Algolia = Seekwright_providers.Algolia
 module A = Alcotest
 open Test_support
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -54,14 +53,10 @@ let deployment = Algolia.endpoint_of_deployment ~app_id ~index
 
 (* The list accessors, so a missing record fails with its label rather than
    [Stdlib.Failure("hd")]. *)
-let hd label = function
-  | x :: _ -> x
-  | [] -> A.failf "%s was empty" label
+let hd label = function x :: _ -> x | [] -> A.failf "%s was empty" label
 
 let nth label index xs =
-  match List.nth_opt xs index with
-  | Some x -> x
-  | None -> A.failf "%s has no item %d" label index
+  match List.nth_opt xs index with Some x -> x | None -> A.failf "%s has no item %d" label index
 
 (* Five hits: the [title/url/description] chain, the [name/link/summary] chain,
    the DocSearch hierarchy (whose [lvl2] is null and whose title is [lvl2]'s
@@ -114,8 +109,8 @@ let sample_json =
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?title_attr ?url_attr ?snippet_attr () =
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?title_attr ?url_attr
+    ?snippet_attr () =
   let sent = ref None in
   let net =
     {
@@ -126,24 +121,19 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
     }
   in
   let provider =
-    Algolia.make ?cost_per_1k ~snippet_chars ?title_attr ?url_attr ?snippet_attr
-      ~app_id ~key:test_key ~endpoint:deployment ~net ()
+    Algolia.make ?cost_per_1k ~snippet_chars ?title_attr ?url_attr ?snippet_attr ~app_id
+      ~key:test_key ~endpoint:deployment ~net ()
   in
   (provider, fun () -> Option.get !sent)
 
 let refusal kind ~message =
-  let net =
-    {
-      Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message));
-    }
-  in
+  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
   Algolia.make ~app_id ~key:test_key ~endpoint:deployment ~net ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?title_attr ?url_attr ?snippet_attr ?(query = query ()) () =
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?title_attr
+    ?url_attr ?snippet_attr ?(query = query ()) () =
   let provider, sent =
-    dial ~status ~body ~snippet_chars ?cost_per_1k ?title_attr ?url_attr
-      ?snippet_attr ()
+    dial ~status ~body ~snippet_chars ?cost_per_1k ?title_attr ?url_attr ?snippet_attr ()
   in
   match Provider.search provider query with
   | Ok outcome -> (outcome, sent ())
@@ -178,9 +168,7 @@ let the_default_chains_fill_all_three_fields () =
   check_string "the first title" "Write-Ahead Logging" first.Provider.result.title;
   check_string "the first url" "https://www.sqlite.org/wal.html" first.Provider.result.url;
   check_opt_string "the first snippet"
-    (Some
-       "The default method by which SQLite implements atomic commit is a rollback \
-        journal.")
+    (Some "The default method by which SQLite implements atomic commit is a rollback journal.")
     first.Provider.result.snippet;
   let second = nth "results" 1 hits in
   check_string "the name/link/summary chain" "SQLite WAL mode explained"
@@ -193,8 +181,7 @@ let the_default_chains_fill_all_three_fields () =
 let the_hierarchy_title_uses_the_deepest_level () =
   let hit = nth "results" 2 (parse sample_json) in
   check_string "lvl1, the most specific non-empty level" "Search" hit.Provider.result.title;
-  check_string "the url rides through" "https://docs.example.com/search"
-    hit.Provider.result.url;
+  check_string "the url rides through" "https://docs.example.com/search" hit.Provider.result.url;
   check_opt_string "content is part of the snippet chain"
     (Some "How full-text search works in this index.") hit.Provider.result.snippet;
   (* An empty [lvl6] does not win over a filled [lvl5]: the fallback is the most
@@ -203,8 +190,8 @@ let the_hierarchy_title_uses_the_deepest_level () =
     (Algolia.hierarchy_title
        (`Assoc
           [
-            ( "hierarchy"
-            , `Assoc
+            ( "hierarchy",
+              `Assoc
                 [
                   ("lvl0", `String "Docs");
                   ("lvl1", `Null);
@@ -239,8 +226,8 @@ let a_single_named_snippet_attr_replaces_the_chain () =
     parse ~snippet_attr:"hierarchy"
       (`Assoc
          [
-           ( "hits"
-           , `List
+           ( "hits",
+             `List
                [
                  `Assoc
                    [
@@ -264,12 +251,12 @@ let hits_missing_a_title_or_url_are_dropped () =
     parse
       (`Assoc
          [
-           ( "hits"
-         , `List
-             [
-               `Assoc [ ("title", `String ""); ("url", `String "https://a/x") ];
-               `Assoc [ ("title", `String "t"); ("url", `String "") ];
-             ] );
+           ( "hits",
+             `List
+               [
+                 `Assoc [ ("title", `String ""); ("url", `String "https://a/x") ];
+                 `Assoc [ ("title", `String "t"); ("url", `String "") ];
+               ] );
          ])
   in
   check_int "empty strings are missing strings" 0 (List.length hits)
@@ -280,7 +267,12 @@ let non_object_records_are_skipped () =
        (parse
           (`Assoc
              [
-               ("hits", `List [ `String "nonsense"; `Assoc [ ("title", `String "t"); ("url", `String "https://x") ] ]);
+               ( "hits",
+                 `List
+                   [
+                     `String "nonsense";
+                     `Assoc [ ("title", `String "t"); ("url", `String "https://x") ];
+                   ] );
              ])))
 
 let missing_hits_container_is_empty_not_an_error () =
@@ -293,12 +285,12 @@ let missing_hits_container_is_empty_not_an_error () =
        (parse ~limit:1
           (`Assoc
              [
-               ( "hits"
-           , `List
-               [
-                 `Assoc [ ("title", `String "no url") ];
-                 `Assoc [ ("title", `String "t"); ("url", `String "https://kept/x") ];
-               ] );
+               ( "hits",
+                 `List
+                   [
+                     `Assoc [ ("title", `String "no url") ];
+                     `Assoc [ ("title", `String "t"); ("url", `String "https://kept/x") ];
+                   ] );
              ])))
 
 let the_limit_is_honoured () =
@@ -326,16 +318,16 @@ let a_non_string_snippet_attribute_is_dropped_and_the_call_succeeds () =
         Yojson.Safe.to_string
           (`Assoc
              [
-               ( "hits"
-           , `List
-               [
-                 `Assoc
+               ( "hits",
+                 `List
                    [
-                     ("title", `String "t");
-                     ("url", `String "https://example.com/a");
-                     ("description", value);
-                   ];
-               ] );
+                     `Assoc
+                       [
+                         ("title", `String "t");
+                         ("url", `String "https://example.com/a");
+                         ("description", value);
+                       ];
+                   ] );
              ])
       in
       let outcome, _ = search_of ~body () in
@@ -354,16 +346,16 @@ let a_numeric_snippet_attribute_is_still_coerced () =
         Yojson.Safe.to_string
           (`Assoc
              [
-               ( "hits"
-           , `List
-               [
-                 `Assoc
+               ( "hits",
+                 `List
                    [
-                     ("title", `String "t");
-                     ("url", `String "https://example.com/a");
-                     ("description", value);
-                   ];
-               ] );
+                     `Assoc
+                       [
+                         ("title", `String "t");
+                         ("url", `String "https://example.com/a");
+                         ("description", value);
+                       ];
+                   ] );
              ])
       in
       let outcome, _ = search_of ~body () in
@@ -377,11 +369,8 @@ let a_numeric_snippet_attribute_is_still_coerced () =
 
 let a_string_snippet_still_reaches_the_model () =
   let outcome, _ = search_of () in
-  check_opt_string
-    "the guard must not change a well-formed payload"
-    (Some
-       "The default method by which SQLite implements atomic commit is a rollback \
-        journal.")
+  check_opt_string "the guard must not change a well-formed payload"
+    (Some "The default method by which SQLite implements atomic commit is a rollback journal.")
     (hd "results" outcome.results).result.snippet
 
 let post_with_both_headers_and_the_body () =
@@ -397,16 +386,14 @@ let post_with_both_headers_and_the_body () =
   check_opt_string "and a JSON body needs its content type" (Some "application/json")
     (List.assoc_opt "Content-Type" request.Caps.Authority.Net.headers);
   check_opt_string "the query" (Some "wal mode") (body_field "query" request);
-  check_opt_string "hitsPerPage follows max_results" (Some "3")
-    (body_field "hitsPerPage" request)
+  check_opt_string "hitsPerPage follows max_results" (Some "3") (body_field "hitsPerPage" request)
 
 let the_index_is_percent_encoded_in_the_path () =
   (* The slash is encoded so it cannot escape the index segment; the host stays
      the deployment's. *)
   let encoded = Algolia.endpoint_of_deployment ~app_id ~index:"products/2026" in
   check_string "the encoded segment"
-    "https://app123-dsn.algolia.net/1/indexes/products%2F2026/query"
-    (Uri.to_string encoded);
+    "https://app123-dsn.algolia.net/1/indexes/products%2F2026/query" (Uri.to_string encoded);
   check_string "and the host is still the deployment" "app123-dsn.algolia.net"
     (Option.value ~default:"?" (Uri.host encoded));
   let request =
@@ -453,8 +440,8 @@ let dropped_constraints_are_noticed_and_not_sent () =
   let outcome, request =
     search_of
       ~query:
-        (query ~include_domains:["sqlite.org"] ~recency:Model.Day ~country:"de"
-           ~language:"de" ~safe_search:true ())
+        (query ~include_domains:[ "sqlite.org" ] ~recency:Model.Day ~country:"de" ~language:"de"
+           ~safe_search:true ())
       ()
   in
   let notice = Option.get outcome.notice in
@@ -467,8 +454,7 @@ let dropped_constraints_are_noticed_and_not_sent () =
     (fun name ->
       check_bool ("no " ^ name ^ " field is invented") false (has_body_field name request))
     [ "filters"; "facetFilters"; "numericFilters"; "tagFilters"; "restrictSearchableAttributes" ];
-  check_string "the whole document, even constrained"
-    "{\"query\":\"q\",\"hitsPerPage\":5}"
+  check_string "the whole document, even constrained" "{\"query\":\"q\",\"hitsPerPage\":5}"
     (Yojson.Safe.to_string (body_of request))
 
 let safe_search_false_is_noticed_too () =
@@ -479,8 +465,7 @@ let safe_search_false_is_noticed_too () =
     (fun value ->
       let outcome, _ = search_of ~query:(query ~safe_search:value ()) () in
       check_string "the safe-search sentence"
-        "cannot filter by safe-search; that constraint was ignored"
-        (Option.get outcome.notice))
+        "cannot filter by safe-search; that constraint was ignored" (Option.get outcome.notice))
     [ true; false ]
 
 (* The rows every HTTP adapter owes are pinned once for all of them by
@@ -496,15 +481,16 @@ let the_plan_and_the_rate_limit_are_quota () =
       | Ok _ -> A.failf "HTTP %d was accepted" status
       | Error failure ->
           check_string "the house sentence" "quota exhausted" failure.message;
-          check_string (Printf.sprintf "HTTP %d is quota" status) "quota"
+          check_string
+            (Printf.sprintf "HTTP %d is quota" status)
+            "quota"
             (match failure.kind with Provider.Quota -> "quota" | Provider.Failure -> "failure");
           check_bool "a spent quota is not transient" false failure.retryable)
     [ 402; 429 ]
 
 let a_network_failure_does_not_echo_the_request () =
   let provider =
-    refusal Caps.Error.Denied
-      ~message:"connection refused, x-algolia-api-key: test-key"
+    refusal Caps.Error.Denied ~message:"connection refused, x-algolia-api-key: test-key"
   in
   match Provider.search provider (query ()) with
   | Ok _ -> A.failf "a refused grant was accepted"
@@ -539,22 +525,21 @@ let the_snippet_cap_follows_the_policy () =
     Yojson.Safe.to_string
       (`Assoc
          [
-           ( "hits"
-       , `List
-           [
-             `Assoc
+           ( "hits",
+             `List
                [
-                 ("title", `String "t");
-                 ("url", `String "https://example.com/a");
-                 ("description", `String (String.make 40 'x'));
-               ];
-           ] );
+                 `Assoc
+                   [
+                     ("title", `String "t");
+                     ("url", `String "https://example.com/a");
+                     ("description", `String (String.make 40 'x'));
+                   ];
+               ] );
          ])
   in
   let outcome, _ = search_of ~snippet_chars:10 ~body () in
   let hit = hd "results" outcome.results in
-  check_opt_string "clipped with the ellipsis" (Some (String.make 10 'x' ^ "…"))
-    hit.result.snippet;
+  check_opt_string "clipped with the ellipsis" (Some (String.make 10 'x' ^ "…")) hit.result.snippet;
   check_bool "the pre-cap length is reported" true (hit.uncapped_chars = Some 40)
 
 let the_endpoint_is_the_deployment_the_grant_allows () =
@@ -565,73 +550,70 @@ let the_endpoint_is_the_deployment_the_grant_allows () =
     (Uri.to_string request.Caps.Authority.Net.uri)
 
 let () =
-  A.
-    (run "seekwright/algolia"
-       [
-         ( "parsing schemaless records"
-         , [
-             test_case "the default chains fill all three fields" `Quick
-               the_default_chains_fill_all_three_fields;
-             test_case "the hierarchy title uses the deepest non-empty level" `Quick
-               the_hierarchy_title_uses_the_deepest_level;
-             test_case "explicit attrs win over the default chain" `Quick
-               explicit_attrs_win_over_the_default_chain;
-             test_case "a single named snippet attr replaces the chain" `Quick
-               a_single_named_snippet_attr_replaces_the_chain;
-             test_case "hits missing a title or url are dropped" `Quick
-               hits_missing_a_title_or_url_are_dropped;
-             test_case "non-object records are skipped" `Quick
-               non_object_records_are_skipped;
-             test_case "missing hits container is empty, not an error" `Quick
-               missing_hits_container_is_empty_not_an_error;
-             test_case "the limit is honoured" `Quick the_limit_is_honoured;
-             test_case "nothing is invented per hit" `Quick nothing_is_invented_per_hit;
-           ] );
-         ( "the upstream field guards"
-         , [
-             test_case "a non-string snippet attribute is dropped and the call succeeds"
-               `Quick a_non_string_snippet_attribute_is_dropped_and_the_call_succeeds;
-             test_case "a numeric snippet attribute is still coerced" `Quick
-               a_numeric_snippet_attribute_is_still_coerced;
-             test_case "a string snippet still reaches the model" `Quick
-               a_string_snippet_still_reaches_the_model;
-           ] );
-         ( "the request"
-         , [
-             test_case "POST with both headers and the body" `Quick
-               post_with_both_headers_and_the_body;
-             test_case "the index is percent-encoded in the path" `Quick
-               the_index_is_percent_encoded_in_the_path;
-             test_case "the app id rides the header and the host" `Quick
-               the_app_id_rides_the_header_and_the_host;
-           ] );
-         ( "the constraint report"
-         , [
-             test_case "an unconstrained query has no notice" `Quick
-               an_unconstrained_query_has_no_notice;
-             test_case "dropped constraints are noticed and not sent" `Quick
-               dropped_constraints_are_noticed_and_not_sent;
-             test_case "safe-search false is noticed too" `Quick
-               safe_search_false_is_noticed_too;
-           ] );
-         ( "the failures this adapter owns"
-         , [
-             test_case "the plan and the rate limit are quota" `Quick
-               the_plan_and_the_rate_limit_are_quota;
-             test_case "a network failure does not echo the request" `Quick
-               a_network_failure_does_not_echo_the_request;
-           ] );
-         ( "cost and endpoint"
-         , [
-             test_case "the cost does not scale with result count" `Quick
-               the_cost_does_not_scale_with_result_count;
-             test_case "the default price is the Grow overage rate" `Quick
-               the_default_price_is_the_grow_overage_rate;
-             test_case "a search that returns nothing still costs" `Quick
-               a_search_that_returns_nothing_still_costs;
-             test_case "the snippet cap follows the policy" `Quick
-               the_snippet_cap_follows_the_policy;
-             test_case "the endpoint is the deployment the grant allows" `Quick
-               the_endpoint_is_the_deployment_the_grant_allows;
-           ] );
-       ])
+  A.(
+    run "seekwright/algolia"
+      [
+        ( "parsing schemaless records",
+          [
+            test_case "the default chains fill all three fields" `Quick
+              the_default_chains_fill_all_three_fields;
+            test_case "the hierarchy title uses the deepest non-empty level" `Quick
+              the_hierarchy_title_uses_the_deepest_level;
+            test_case "explicit attrs win over the default chain" `Quick
+              explicit_attrs_win_over_the_default_chain;
+            test_case "a single named snippet attr replaces the chain" `Quick
+              a_single_named_snippet_attr_replaces_the_chain;
+            test_case "hits missing a title or url are dropped" `Quick
+              hits_missing_a_title_or_url_are_dropped;
+            test_case "non-object records are skipped" `Quick non_object_records_are_skipped;
+            test_case "missing hits container is empty, not an error" `Quick
+              missing_hits_container_is_empty_not_an_error;
+            test_case "the limit is honoured" `Quick the_limit_is_honoured;
+            test_case "nothing is invented per hit" `Quick nothing_is_invented_per_hit;
+          ] );
+        ( "the upstream field guards",
+          [
+            test_case "a non-string snippet attribute is dropped and the call succeeds" `Quick
+              a_non_string_snippet_attribute_is_dropped_and_the_call_succeeds;
+            test_case "a numeric snippet attribute is still coerced" `Quick
+              a_numeric_snippet_attribute_is_still_coerced;
+            test_case "a string snippet still reaches the model" `Quick
+              a_string_snippet_still_reaches_the_model;
+          ] );
+        ( "the request",
+          [
+            test_case "POST with both headers and the body" `Quick
+              post_with_both_headers_and_the_body;
+            test_case "the index is percent-encoded in the path" `Quick
+              the_index_is_percent_encoded_in_the_path;
+            test_case "the app id rides the header and the host" `Quick
+              the_app_id_rides_the_header_and_the_host;
+          ] );
+        ( "the constraint report",
+          [
+            test_case "an unconstrained query has no notice" `Quick
+              an_unconstrained_query_has_no_notice;
+            test_case "dropped constraints are noticed and not sent" `Quick
+              dropped_constraints_are_noticed_and_not_sent;
+            test_case "safe-search false is noticed too" `Quick safe_search_false_is_noticed_too;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "the plan and the rate limit are quota" `Quick
+              the_plan_and_the_rate_limit_are_quota;
+            test_case "a network failure does not echo the request" `Quick
+              a_network_failure_does_not_echo_the_request;
+          ] );
+        ( "cost and endpoint",
+          [
+            test_case "the cost does not scale with result count" `Quick
+              the_cost_does_not_scale_with_result_count;
+            test_case "the default price is the Grow overage rate" `Quick
+              the_default_price_is_the_grow_overage_rate;
+            test_case "a search that returns nothing still costs" `Quick
+              a_search_that_returns_nothing_still_costs;
+            test_case "the snippet cap follows the policy" `Quick the_snippet_cap_follows_the_policy;
+            test_case "the endpoint is the deployment the grant allows" `Quick
+              the_endpoint_is_the_deployment_the_grant_allows;
+          ] );
+      ])

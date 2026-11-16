@@ -69,15 +69,15 @@ let parse argv =
             else Error ("unexpected argument " ^ flag)
         | Some spec -> (
             match spec.Server.arity with
-            | Server.Boolean ->
-                (match apply_boolean opts ~key:spec.key ~flag with
+            | Server.Boolean -> (
+                match apply_boolean opts ~key:spec.key ~flag with
                 | Error _ as e -> e
                 | Ok opts -> go opts rest)
             | Server.Value -> (
                 match rest with
                 | [] -> Error (flag ^ " needs a value")
-                | value :: rest' ->
-                    (match apply_value opts ~key:spec.key ~flag value with
+                | value :: rest' -> (
+                    match apply_value opts ~key:spec.key ~flag value with
                     | Error _ as e -> e
                     | Ok opts -> go opts rest'))))
   in
@@ -97,9 +97,14 @@ let parse argv =
       }
       argv
   in
-  if opts.metrics && (opts.check || opts.live || opts.http || opts.host <> None || opts.port <> None || opts.allowed_hosts <> []) then
+  if
+    opts.metrics
+    && (opts.check || opts.live || opts.http || opts.host <> None || opts.port <> None
+      || opts.allowed_hosts <> [])
+  then
     Error
-      "--metrics reports and exits; it cannot be combined with --check, --live, --http, --host, --port or --allowed-host"
+      "--metrics reports and exits; it cannot be combined with --check, --live, --http, --host, \
+       --port or --allowed-host"
   else if opts.json && not opts.metrics then Error "--json only makes sense together with --metrics"
   else if opts.live && not opts.check then Error "--live only makes sense together with --check"
   else if (opts.host <> None || opts.port <> None || opts.allowed_hosts <> []) && not opts.http then
@@ -109,12 +114,12 @@ let parse argv =
 (** The startup refusals: test_p8_server.ml pins this marker to slice the scanner. *)
 let startup_refusal config _opts =
   match Config.missing_api_keys config with
-  | _ when config.Config.fetch.Config.enabled
-           && config.Config.fetch.Config.primary <> "http" ->
+  | _ when config.Config.fetch.Config.enabled && config.Config.fetch.Config.primary <> "http" ->
       (* An unbuildable primary must refuse before keys: prevents falling back to local IP. *)
       Error
         (Printf.sprintf
-           "fetch.primary names %S, which this deployment cannot build (see `seekwright --check` for why); refusing to start rather than read from this server's own IP unasked"
+           "fetch.primary names %S, which this deployment cannot build (see `seekwright --check` \
+            for why); refusing to start rather than read from this server's own IP unasked"
            config.Config.fetch.Config.primary)
   | missing when missing <> [] ->
       Error

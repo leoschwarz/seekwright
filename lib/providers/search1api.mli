@@ -2,9 +2,8 @@
 
     Endpoint: [POST https://api.search1api.com/search] with bearer token.
 
-    Billed flat per basic search request. Supports domains, language, and
-    recency window words ("day", "week", "month", "year"). 402/429 indicates credit
-    exhaustion or rate limit. *)
+    Billed flat per basic search request. Supports domains, language, and recency window words
+    ("day", "week", "month", "year"). 402/429 indicates credit exhaustion or rate limit. *)
 
 val name : string
 (** ["search1api"], the config key and the [provider] every response names. *)

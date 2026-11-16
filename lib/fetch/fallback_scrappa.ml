@@ -53,19 +53,14 @@ let fetch cfg raw ~offset ~max_chars =
           (Uri.of_string scrappa_scraper_endpoint)
           [ ("url", target); ("javascript", "1"); ("include_html", "0") ]
       in
-      let request : Caps.Authority.Net.request = {
-        meth = `GET;
-        uri;
-        headers = [ ("x-api-key", cfg.api_key) ];
-        body = None;
-      } in
+      let request : Caps.Authority.Net.request =
+        { meth = `GET; uri; headers = [ ("x-api-key", cfg.api_key) ]; body = None }
+      in
       match cfg.net.request ~max_response_bytes:None request with
       | Error caps_error -> Error (Fallback.transport_error caps_error)
       | Ok response -> (
-          if response.Caps.Authority.Net.status = 401
-          || response.Caps.Authority.Net.status = 403
-          then
-            Error (Fallback.Rejected "authentication rejected (check API key)")
+          if response.Caps.Authority.Net.status = 401 || response.Caps.Authority.Net.status = 403
+          then Error (Fallback.Rejected "authentication rejected (check API key)")
           else if response.status = 402 || response.status = 429 then
             Error (Fallback.Quota "rate limited or out of credits")
           else if response.status >= 400 then

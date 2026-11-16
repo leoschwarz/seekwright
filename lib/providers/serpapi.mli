@@ -1,11 +1,10 @@
 (** SerpAPI — Google SERP backend with query-parameter credentials.
 
-    Endpoint: [GET https://serpapi.com/search]. API key is sent as [api_key] query
-    parameter; URLs are treated as sensitive.
+    Endpoint: [GET https://serpapi.com/search]. API key is sent as [api_key] query parameter; URLs
+    are treated as sensitive.
 
-    Honours all query constraints: domains, country ([gl]), language ([hl]),
-    recency ([tbs]), and safe search ([safe]). 402/429 indicates quota exhaustion
-    or rate limiting. *)
+    Honours all query constraints: domains, country ([gl]), language ([hl]), recency ([tbs]), and
+    safe search ([safe]). 402/429 indicates quota exhaustion or rate limiting. *)
 
 val name : string
 (** ["serpapi"], the config key and the [provider] every response names. *)

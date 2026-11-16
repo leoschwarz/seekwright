@@ -22,25 +22,23 @@ module Fs = struct
 
   let of_confinement ~mono_clock decision =
     Fs
-      (decision,
+      ( decision,
         Controls_raw.with_operation_timeout
           (Eio.Time.Timeout.seconds mono_clock Policy_fs.default_operation_timeout_seconds)
-          Controls_raw.none)
+          Controls_raw.none )
 
   let read_file ?max_bytes grant path =
     match grant with Fs (policy, controls) -> Policy_fs.read_file ?max_bytes ~controls policy path
 
   let list_dir ?max_entries grant path =
-    match grant with Fs (policy, controls) -> Policy_fs.list_dir ?max_entries ~controls policy path
+    match grant with
+    | Fs (policy, controls) -> Policy_fs.list_dir ?max_entries ~controls policy path
 
   let read_range ?max_bytes grant ~offset path =
     match grant with
     | Fs (policy, controls) -> Policy_fs.read_range ?max_bytes ~controls ~offset policy path
 
-  type entry_info = {
-    size_bytes : int;
-    accessed_at : float;
-  }
+  type entry_info = { size_bytes : int; accessed_at : float }
 
   let stat grant path =
     match grant with
@@ -51,8 +49,7 @@ module Fs = struct
 
   let atomic_write ?max_bytes grant ~path ~contents =
     match grant with
-    | Fs (policy, controls) ->
-        Policy_fs.atomic_write ?max_bytes ~controls policy ~path ~contents
+    | Fs (policy, controls) -> Policy_fs.atomic_write ?max_bytes ~controls policy ~path ~contents
 
   let unlink grant path =
     match grant with Fs (policy, controls) -> Policy_fs.unlink ~controls policy path
@@ -78,18 +75,17 @@ module Net = struct
 
   let of_confinement ~mono_clock decision =
     Net
-      (decision,
+      ( decision,
         Controls_raw.with_operation_timeout
           (Eio.Time.Timeout.seconds mono_clock Policy_net.default_operation_timeout_seconds)
-          Controls_raw.none)
+          Controls_raw.none )
 
   let request ?max_response_bytes grant request =
     match grant with
     | Net (policy, controls) -> Policy_net.request ?max_response_bytes ~controls policy request
 end
 
-let with_log ~sink grant =
-  with_controls grant (Controls_raw.with_log ~sink (controls grant))
+let with_log ~sink grant = with_controls grant (Controls_raw.with_log ~sink (controls grant))
 
 let with_operation_timeout timeout grant =
   with_controls grant (Controls_raw.with_operation_timeout timeout (controls grant))

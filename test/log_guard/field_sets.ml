@@ -45,26 +45,18 @@ let sentinels =
     answer_sentinel;
   ]
 
-type captured = {
-  level : Config.log_level;
-  event : string;
-  fields : (string * Yojson.Safe.t) list;
-}
+type captured = { level : Config.log_level; event : string; fields : (string * Yojson.Safe.t) list }
 
-let sink lines : Engine.log =
- fun level event fields -> lines := { level; event; fields } :: !lines
+let sink lines : Engine.log = fun level event fields -> lines := { level; event; fields } :: !lines
 
-let events lines name =
-  List.filter (fun (line : captured) -> line.event = name) lines
+let events lines name = List.filter (fun (line : captured) -> line.event = name) lines
 
 let only lines name =
   match events lines name with
   | [ line ] -> line
-  | many ->
-      A.failf "expected exactly one %s event, got %d" name (List.length many)
+  | many -> A.failf "expected exactly one %s event, got %d" name (List.length many)
 
-let keys (line : captured) =
-  List.map fst line.fields |> List.sort String.compare
+let keys (line : captured) = List.map fst line.fields |> List.sort String.compare
 
 let rendered (line : captured) = Yojson.Safe.to_string (`Assoc line.fields)
 
@@ -84,16 +76,9 @@ let check_present label text sentinel =
     (contains ~haystack:text ~needle:sentinel)
 
 let search_config ~log_content =
-  let providers =
-    [
-      ( "exa"
-      , { Config.default_provider_config with Config.enabled = true } );
-    ]
-  in
+  let providers = [ ("exa", { Config.default_provider_config with Config.enabled = true }) ] in
   match
-    Config.resolve ~providers
-      ~logging:{ Config.default_logging_config with Config.log_content }
-      ()
+    Config.resolve ~providers ~logging:{ Config.default_logging_config with Config.log_content } ()
   with
   | Ok config -> config
   | Error message -> A.failf "the search fixture config was refused: %s" message
@@ -125,10 +110,8 @@ let search_provider () : Provider.t =
           Provider.provider = name;
           results =
             [
-              hit ~snippet:snippet_sentinel title_sentinel
-                ("https://example.test/" ^ url_sentinel);
-              hit ~text:body_sentinel ("Second " ^ title_sentinel)
-                "https://example.test/second";
+              hit ~snippet:snippet_sentinel title_sentinel ("https://example.test/" ^ url_sentinel);
+              hit ~text:body_sentinel ("Second " ^ title_sentinel) "https://example.test/second";
             ];
           answer = Some answer_sentinel;
           cost_usd = Some 0.0;
@@ -154,12 +137,9 @@ let search_events ~log_content =
   let lines = ref [] in
   let config = search_config ~log_content in
   let engine =
-    Engine.Search.create config ~log:(sink lines)
-      [ ("exa", search_provider ()) ] ~clock ~now ()
+    Engine.Search.create config ~log:(sink lines) [ ("exa", search_provider ()) ] ~clock ~now ()
   in
-  (match
-     Engine.Search.search engine ~provider:"exa" (query query_sentinel)
-   with
+  (match Engine.Search.search engine ~provider:"exa" (query query_sentinel) with
   | Ok _ -> ()
   | Error _ -> A.fail "the stub search failed");
   !lines
@@ -183,27 +163,23 @@ let search_ok_keys =
 let test_search_ok_field_set_with_content_off () =
   let lines = search_events ~log_content:false in
   let ok = only lines "search.ok" in
-  A.(check string) "search.ok stays at INFO" "INFO"
-    (Config.show_log_level ok.level);
-  A.(check (list string)) "search.ok has exactly its fixed fields" search_ok_keys
-    (keys ok);
-  A.(check int) "no content event is emitted when the setting is off" 0
-    (List.length (events lines "search.result")
-    + List.length (events lines "search.answer"));
+  A.(check string) "search.ok stays at INFO" "INFO" (Config.show_log_level ok.level);
+  A.(check (list string)) "search.ok has exactly its fixed fields" search_ok_keys (keys ok);
+  A.(check int)
+    "no content event is emitted when the setting is off" 0
+    (List.length (events lines "search.result") + List.length (events lines "search.answer"));
   check_absent "search.ok" (rendered ok)
 
 let test_search_ok_field_set_with_content_on () =
   let lines = search_events ~log_content:true in
   let ok = only lines "search.ok" in
-  A.(check (list string)) "search.ok keeps the same fixed fields" search_ok_keys
-    (keys ok);
+  A.(check (list string)) "search.ok keeps the same fixed fields" search_ok_keys (keys ok);
   check_absent "search.ok" (rendered ok);
   (* The other half of the assertion: the sentinels exist, and the content
      events — not the decision line — are where they go. *)
   let content =
     String.concat "\n"
-      (List.map rendered
-         (events lines "search.result" @ events lines "search.answer"))
+      (List.map rendered (events lines "search.result" @ events lines "search.answer"))
   in
   check_present "search.result" content title_sentinel;
   check_present "search.result" content url_sentinel;
@@ -253,58 +229,40 @@ let readers : Engine.Fetch.Readers.t =
   }
 
 let fetch_url =
-  "https://example.test/" ^ url_sentinel ^ "/" ^ path_sentinel
-  ^ "?token=" ^ query_sentinel
+  "https://example.test/" ^ url_sentinel ^ "/" ^ path_sentinel ^ "?token=" ^ query_sentinel
 
 let fetch_events ~log_content =
   let lines = ref [] in
   let config = fetch_config ~log_content in
   let engine =
-    match
-      Engine.Fetch.create config fetch_fixture ~readers ~log:(sink lines)
-        ~clock ~now ()
-    with
+    match Engine.Fetch.create config fetch_fixture ~readers ~log:(sink lines) ~clock ~now () with
     | Ok engine -> engine
     | Error message -> A.failf "the fetch engine refused the fixture: %s" message
   in
   (match Engine.Fetch.fetch engine ~structure:false fetch_url with
   | Ok _ -> ()
-  | Error (Engine.Fetch.Refused message) ->
-      A.failf "the fixture fetch was refused: %s" message
-  | Error (Engine.Fetch.Failed message) ->
-      A.failf "the fixture fetch failed: %s" message);
+  | Error (Engine.Fetch.Refused message) -> A.failf "the fixture fetch was refused: %s" message
+  | Error (Engine.Fetch.Failed message) -> A.failf "the fixture fetch failed: %s" message);
   !lines
 
 let fetch_ok_keys =
-  [
-    "cached";
-    "chars";
-    "fell_back";
-    "host";
-    "ms";
-    "sanitized";
-    "status";
-    "truncated";
-  ]
+  [ "cached"; "chars"; "fell_back"; "host"; "ms"; "sanitized"; "status"; "truncated" ]
 
 let test_fetch_ok_field_set_with_content_off () =
   let lines = fetch_events ~log_content:false in
   let ok = only lines "fetch.ok" in
-  A.(check (list string)) "fetch.ok has exactly its fixed fields" fetch_ok_keys
-    (keys ok);
-  A.(check int) "no content event is emitted when the setting is off" 0
+  A.(check (list string)) "fetch.ok has exactly its fixed fields" fetch_ok_keys (keys ok);
+  A.(check int)
+    "no content event is emitted when the setting is off" 0
     (List.length (events lines "fetch.content"));
   check_absent "fetch.ok" (rendered ok)
 
 let test_fetch_ok_field_set_with_content_on () =
   let lines = fetch_events ~log_content:true in
   let ok = only lines "fetch.ok" in
-  A.(check (list string)) "fetch.ok keeps the same fixed fields" fetch_ok_keys
-    (keys ok);
+  A.(check (list string)) "fetch.ok keeps the same fixed fields" fetch_ok_keys (keys ok);
   check_absent "fetch.ok" (rendered ok);
-  let content =
-    String.concat "\n" (List.map rendered (events lines "fetch.content"))
-  in
+  let content = String.concat "\n" (List.map rendered (events lines "fetch.content")) in
   check_present "fetch.content" content title_sentinel;
   check_present "fetch.content" content body_sentinel
 

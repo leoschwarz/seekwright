@@ -11,9 +11,7 @@ let time ~name f =
   let sink = ref 0 in
   for _ = 1 to 5 do
     let t0 = Sys.time () in
-    (match f () with
-    | n -> sink := !sink + n
-    | exception _ -> ());
+    (match f () with n -> sink := !sink + n | exception _ -> ());
     best := Float.min !best (Sys.time () -. t0)
   done;
   Printf.printf "%-34s %8.1f ms   (sink %d)\n" name (!best *. 1000.0) !sink
@@ -34,7 +32,8 @@ let phases path =
   Printf.printf "bytes=%d\n" (String.length body);
   time ~name:"decode only" (fun () -> String.length (E.decode body html));
   time ~name:"extract as plain text" (fun () -> chars_of (S.extract body plain));
-  time ~name:"normalise only (decoded, plain)" (fun () -> chars_of (E.normalise (E.decode body html) None));
+  time ~name:"normalise only (decoded, plain)" (fun () ->
+      chars_of (E.normalise (E.decode body html) None));
   time ~name:"extract as html" (fun () -> chars_of (S.extract body html))
 
 let digests dir =
@@ -42,11 +41,9 @@ let digests dir =
     (fun (c : M.case) ->
       match S.extract c.body c.content_type with
       | r ->
-          Printf.printf "%-26s text=%s chars=%d title=%s\n" c.M.id
-            (digest r.E.text) r.E.total_chars
+          Printf.printf "%-26s text=%s chars=%d title=%s\n" c.M.id (digest r.E.text) r.E.total_chars
             (match r.E.title with Some t -> digest t | None -> "-")
-      | exception E.Extraction_failed m ->
-          Printf.printf "%-26s refusal=%s\n" c.M.id m)
+      | exception E.Extraction_failed m -> Printf.printf "%-26s refusal=%s\n" c.M.id m)
     (Extract_metrics.load_cases dir)
 
 (* [--check <corpus> <parity-file>] is a gate rule: the same digests, compared
@@ -57,9 +54,7 @@ let check_parity dir file =
   let expected =
     let ic = open_in file in
     let rec go acc =
-      match input_line ic with
-      | line -> go (line :: acc)
-      | exception End_of_file -> List.rev acc
+      match input_line ic with line -> go (line :: acc) | exception End_of_file -> List.rev acc
     in
     go []
   in
@@ -69,32 +64,29 @@ let check_parity dir file =
       (fun (c : M.case) ->
         match S.extract c.body c.content_type with
         | r ->
-            lines
-              := Printf.sprintf "%-26s text=%s chars=%d title=%s" c.M.id
-                   (digest r.E.text) r.E.total_chars
-                   (match r.E.title with Some t -> digest t | None -> "-")
-                 :: !lines
+            lines :=
+              Printf.sprintf "%-26s text=%s chars=%d title=%s" c.M.id (digest r.E.text)
+                r.E.total_chars
+                (match r.E.title with Some t -> digest t | None -> "-")
+              :: !lines
         | exception E.Extraction_failed m ->
             lines := Printf.sprintf "%-26s refusal=%s" c.M.id m :: !lines)
       (Extract_metrics.load_cases dir);
     List.rev !lines
   in
   let differs =
-    List.filteri
-      (fun i line -> i >= List.length expected || List.nth expected i <> line)
-      got
+    List.filteri (fun i line -> i >= List.length expected || List.nth expected i <> line) got
   in
   let missing = List.length expected - List.length got in
   if differs = [] && missing <= 0 then 0
   else (
     List.iter (fun line -> prerr_endline ("parity drift: " ^ line)) differs;
     if missing > 0 then
-      prerr_endline
-        (Printf.sprintf "parity drift: %d recorded line(s) no longer produced" missing);
+      prerr_endline (Printf.sprintf "parity drift: %d recorded line(s) no longer produced" missing);
     prerr_endline
       (Printf.sprintf
-         "%s no longer matches the recorded extraction digests: the backend's answer \
-          changed, and the recorded file has to be re-generated in the same change"
+         "%s no longer matches the recorded extraction digests: the backend's answer changed, and \
+          the recorded file has to be re-generated in the same change"
          file);
     1)
 
@@ -105,6 +97,6 @@ let () =
   | [ _; "--check-parity"; dir; file ] -> exit (check_parity dir file)
   | _ ->
       prerr_endline
-        "usage: digest_cases --phases <file> | --digest <corpus-dir> | --check-parity \
-         <corpus-dir> <parity-file>";
+        "usage: digest_cases --phases <file> | --digest <corpus-dir> | --check-parity <corpus-dir> \
+         <parity-file>";
       exit 2

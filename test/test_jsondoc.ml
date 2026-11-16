@@ -18,7 +18,15 @@ module A = Alcotest
 open Test_support
 
 let doc =
-  "\n{\n  \"total_count\": 1615,\n  \"items\": [\n    {\"id\": 1, \"name\": \"first\", \"tags\": [\"a\", \"b\"], \"meta\": {\"score\": 1.5}},\n    {\"id\": 2, \"name\": \"second\", \"tags\": [], \"meta\": {}}\n  ],\n  \"next\": null\n}\n"
+  "\n\
+   {\n\
+  \  \"total_count\": 1615,\n\
+  \  \"items\": [\n\
+  \    {\"id\": 1, \"name\": \"first\", \"tags\": [\"a\", \"b\"], \"meta\": {\"score\": 1.5}},\n\
+  \    {\"id\": 2, \"name\": \"second\", \"tags\": [], \"meta\": {}}\n\
+  \  ],\n\
+  \  \"next\": null\n\
+   }\n"
 
 let lines t = String.split_on_char '\n' t
 
@@ -35,13 +43,12 @@ let rendered () = render doc
    broken fixture, and the failure names the needle. *)
 let require_offset text needle =
   (* The fixtures are ASCII, so the byte index is the codepoint index. *)
-  match find_sub ~haystack:text ~needle:needle () with
+  match find_sub ~haystack:text ~needle () with
   | Some i -> i
   | None -> A.failf "needle %S not found" needle ()
 
 let assert_in needle ls =
-  if not (List.mem needle ls) then
-    A.failf "no line %S among %d lines" needle (List.length ls) ()
+  if not (List.mem needle ls) then A.failf "no line %S among %d lines" needle (List.length ls) ()
 
 let step_eq a b =
   match (a, b) with
@@ -74,16 +81,14 @@ let assert_path_syntax ?(match_ = None) f =
   match f () with
   | exception J.Path_syntax msg -> (
       match match_ with
-      | Some needle when not (contains ~haystack:msg ~needle:needle) ->
+      | Some needle when not (contains ~haystack:msg ~needle) ->
           A.failf "message %S lacks %S" msg needle ()
       | _ -> ())
   | _ -> A.fail "expected Path_syntax"
 
 let json_dumps_items n =
   (* json.dumps({"items": [{"n": 1}] * n}) *)
-  "{\"items\": ["
-  ^ String.concat ", " (List.init n (fun _ -> "{\"n\": 1}"))
-  ^ "]}"
+  "{\"items\": [" ^ String.concat ", " (List.init n (fun _ -> "{\"n\": 1}")) ^ "]}"
 
 let test_the_bare_types_are_json () =
   A.check A.bool "application/json is json" true (J.is_json_media "application/json");
@@ -120,9 +125,7 @@ let test_a_leaf_is_compact_json_at_its_own_path () =
 let test_kinds_survive_the_rendering () =
   (* A number, a string, a boolean and a null have to stay tellable apart, or
      the map lies. *)
-  let ls =
-    lines (render "{\"a\": 1, \"b\": \"1\", \"c\": true, \"d\": \"true\", \"e\": null}")
-  in
+  let ls = lines (render "{\"a\": 1, \"b\": \"1\", \"c\": true, \"d\": \"true\", \"e\": null}") in
   A.check (A.list A.string) "kinds"
     [ "$.a  1"; "$.b  \"1\""; "$.c  true"; "$.d  \"true\""; "$.e  null" ]
     (List.tl ls)
@@ -133,7 +136,8 @@ let test_float_and_out_of_range_integers_are_leaves_too () =
      [Intlit] and is printed verbatim. *)
   let ls = lines (render "{\"f\": 1.5, \"big\": 123456789012345678901234567890}") in
   A.check (A.list A.string) "leaf kinds"
-    [ "$  object(2)"; "$.f  1.5"; "$.big  123456789012345678901234567890" ] ls
+    [ "$  object(2)"; "$.f  1.5"; "$.big  123456789012345678901234567890" ]
+    ls
 
 (* F8: the renderer and the media-type phrase stay total. [dump_leaf]'s domain
    is the [leaf] type, so it needs no unreachable arm; [describe_types] walks
@@ -148,9 +152,11 @@ let test_no_unreachable_arm_or_partial_list_accessor () =
       List.iter
         (fun needle -> excludes (Printf.sprintf "%s has no %S" name needle) needle source)
         forbidden)
-    [ ("jsondoc.ml", "../lib/fetch/jsondoc.ml");
+    [
+      ("jsondoc.ml", "../lib/fetch/jsondoc.ml");
       ("tabledoc.ml", "../lib/fetch/tabledoc.ml");
-      ("extractor.ml", "../lib/fetch/extractor.ml") ]
+      ("extractor.ml", "../lib/fetch/extractor.ml");
+    ]
 
 let test_document_order_is_kept () =
   let ls = lines (render "{\"z\": 1, \"a\": 2}") in
@@ -233,14 +239,14 @@ let test_a_wide_document_inside_the_depth_cap_is_cut_by_size () =
      budget. 99 levels is *inside* the cap, and 200k leaves under it each print
      a path label. *)
   let body =
-    String.make 99 '['
-    ^ String.concat "," (List.init 200_000 (fun _ -> "1"))
-    ^ String.make 99 ']'
+    String.make 99 '[' ^ String.concat "," (List.init 200_000 (fun _ -> "1")) ^ String.make 99 ']'
   in
   match J.render_json body with
   | None -> A.fail "wide document did not render"
   | Some text ->
-      if not (contains ~haystack:text ~needle:"not rendered: the document expands past the budget of")
+      if
+        not
+          (contains ~haystack:text ~needle:"not rendered: the document expands past the budget of")
       then A.fail "no budget cut line";
       A.check A.bool "within a small multiple of the body" true
         (String.length text < 5 * String.length body)
@@ -253,7 +259,7 @@ let test_a_document_people_publish_is_never_cut () =
   | None -> A.fail "api response did not render"
   | Some text ->
       if contains ~haystack:text ~needle:"not rendered" then A.fail "response was cut";
-      A.check A.int "line count" (3000 * 3 + 2) (List.length (lines text))
+      A.check A.int "line count" ((3000 * 3) + 2) (List.length (lines text))
 
 let test_every_rendered_path_reads_back_through_the_grammar () =
   (* The rendering and the grammar are one contract: a path off a page is a
@@ -312,22 +318,23 @@ let test_a_path_refusal_keeps_printable_non_ascii_readable () =
   (* The oracle's refusal messages use [repr], which leaves a printable
      non-ASCII token readable. The ASCII-only escape stays for the path
      rendering itself, not for what a refusal quotes back (F1.5). *)
-  assert_path_syntax
-    ~match_:(Some "cannot read the bracketed step ['caf\xc3\xa9']")
-    (fun () -> J.parse_path "$.items[caf\xc3\xa9]")
+  assert_path_syntax ~match_:(Some "cannot read the bracketed step ['caf\xc3\xa9']") (fun () ->
+      J.parse_path "$.items[caf\xc3\xa9]")
 
 let test_a_sloppy_dot_before_a_bracket_is_tolerated () =
   check_steps (J.parse_path "$[\"a b\"]") (J.parse_path "$[\"a b\"]")
 
 let bad_paths =
-  [ "$.items[";
+  [
+    "$.items[";
     "$.items[]";
     "$.items[-1]";
     "$.a[1:x]";
     "$.a[0:-1]";
     "$..name";
     "$.items[?(@.id)]";
-    "$.a]b" ]
+    "$.a]b";
+  ]
 
 let test_a_path_this_grammar_cannot_honour_is_refused_by_name () =
   List.iter (fun bad -> assert_path_syntax (fun () -> J.parse_path bad)) bad_paths
@@ -343,9 +350,8 @@ let test_negative_indices_are_refused_with_the_alternative () =
 let test_a_leaf_is_one_span () =
   let text = rendered () in
   let needle = "$.items[0].name  \"first\"" in
-  let spans, dropped = J.select_paths ~text:text ~path:"$.items[0].name" ~max_chars:6000 in
-  A.check (A.list (A.pair A.int A.string)) "one span"
-    [ (require_offset text needle, needle) ] spans;
+  let spans, dropped = J.select_paths ~text ~path:"$.items[0].name" ~max_chars:6000 in
+  A.check (A.list (A.pair A.int A.string)) "one span" [ (require_offset text needle, needle) ] spans;
   A.check A.int "nothing dropped" 0 dropped
 
 let test_a_container_is_its_whole_subtree () =
@@ -354,10 +360,8 @@ let test_a_container_is_its_whole_subtree () =
   let text = snd (List.nth spans 0) in
   A.check A.bool "starts at the row object" true
     (String.starts_with ~prefix:"$.items[1]  object(4)" text);
-  if not (contains ~haystack:text ~needle:"$.items[1].name") then
-    A.fail "subtree lost its member";
-  if contains ~haystack:text ~needle:"$.total_count" then
-    A.fail "took more than the subtree"
+  if not (contains ~haystack:text ~needle:"$.items[1].name") then A.fail "subtree lost its member";
+  if contains ~haystack:text ~needle:"$.total_count" then A.fail "took more than the subtree"
 
 let test_a_wildcard_selects_one_line_per_element () =
   let spans, _ = J.select_paths ~text:(rendered ()) ~path:"$.items[*].name" ~max_chars:6000 in
@@ -378,11 +382,11 @@ let test_an_index_segment_is_a_step_not_a_character_prefix () =
 
 let test_offsets_index_the_full_rendering () =
   let text = rendered () in
-  let spans, _ = J.select_paths ~text:text ~path:"$.items[*].tags" ~max_chars:6000 in
+  let spans, _ = J.select_paths ~text ~path:"$.items[*].tags" ~max_chars:6000 in
   List.iter
     (fun (offset, span) ->
-      A.check A.string "offset indexes the rendering"
-        span (String.sub text offset (String.length span)))
+      A.check A.string "offset indexes the rendering" span
+        (String.sub text offset (String.length span)))
     spans
 
 let test_a_path_that_matches_nothing_reports_nothing () =
@@ -399,9 +403,7 @@ let test_the_whole_document_is_the_root () =
 let test_the_budget_cuts_a_subtree_at_a_line_boundary_and_counts_the_rest () =
   let spans, dropped = J.select_paths ~text:(rendered ()) ~path:"$.items" ~max_chars:60 in
   if spans = [] then A.fail "the head of the subtree is an answer";
-  List.iter
-    (fun (_, t) -> A.check A.bool "span within budget" true (String.length t <= 60))
-    spans;
+  List.iter (fun (_, t) -> A.check A.bool "span within budget" true (String.length t <= 60)) spans;
   A.check A.bool "the rest is counted" true (dropped > 0)
 
 let test_the_budget_stops_at_the_first_span_that_does_not_fit () =
@@ -414,7 +416,7 @@ let test_the_budget_stops_at_the_first_span_that_does_not_fit () =
 
 let test_a_value_line_bigger_than_the_budget_is_counted_not_returned () =
   let text = render ("{\"a\": \"" ^ String.make 300 'x' ^ "\"}") in
-  let spans, dropped = J.select_paths ~text:text ~path:"$.a" ~max_chars:100 in
+  let spans, dropped = J.select_paths ~text ~path:"$.a" ~max_chars:100 in
   A.check A.int "no span" 0 (List.length spans);
   A.check A.int "counted" 1 dropped
 
@@ -465,11 +467,10 @@ let test_a_value_that_is_its_own_type_word_is_still_withheld () =
      spells. The first-byte rule is what makes that so, and what keeps the
      rule cheap; a value that happens to spell its own type is the one place
      the withholding is not a shortening. *)
-  A.check A.string "null leaf"
-    "$  object(1)\n$.x  null"
+  A.check A.string "null leaf" "$  object(1)\n$.x  null"
     (match J.render_schema (render "{\"x\": null}") with
-     | Some s -> s
-     | None -> A.fail "schema refused")
+    | Some s -> s
+    | None -> A.fail "schema refused")
 
 let test_a_uniform_array_collapses_to_one_star_subtree () =
   let body = render "{\"items\": [{\"id\": 1, \"name\": \"a\"}, {\"id\": 2, \"name\": \"b\"}]}" in
@@ -498,19 +499,22 @@ let test_uniformity_is_checked_recursively () =
   in
   match J.render_schema body with
   | None -> A.fail "schema refused"
-  | Some schema ->
+  | Some schema -> (
       assert_in "$.rows[*]  object(2)" (lines schema);
       assert_in "$.rows[*].b.c  string" (lines schema);
-  (* One of the members evolves a member the other does not have and the
+      (* One of the members evolves a member the other does not have and the
      collapse is refused, because [[*]] would name a member some lack. *)
-  let body = render "{\"rows\": [{\"a\": 1}, {\"a\": 2, \"b\": 3}]}" in
-  match J.render_schema body with
-  | None -> A.fail "schema refused"
-  | Some schema ->
-      if contains ~haystack:(replace_all ~haystack:schema ~needle:"$  object" ~with_:"") ~needle:"$.rows[*]" then
-        A.fail "collapse happened";
-      assert_in "$.rows[0].a  number" (lines schema);
-      assert_in "$.rows[1].b  number" (lines schema)
+      let body = render "{\"rows\": [{\"a\": 1}, {\"a\": 2, \"b\": 3}]}" in
+      match J.render_schema body with
+      | None -> A.fail "schema refused"
+      | Some schema ->
+          if
+            contains
+              ~haystack:(replace_all ~haystack:schema ~needle:"$  object" ~with_:"")
+              ~needle:"$.rows[*]"
+          then A.fail "collapse happened";
+          assert_in "$.rows[0].a  number" (lines schema);
+          assert_in "$.rows[1].b  number" (lines schema))
 
 let test_sizes_survive_the_collapse_so_a_slice_is_addressable () =
   let body = render (json_dumps_items 200) in
@@ -519,11 +523,10 @@ let test_sizes_survive_the_collapse_so_a_slice_is_addressable () =
   | Some schema -> assert_in "$.items  array(200)" (lines schema)
 
 let test_empty_containers_report_their_zero () =
-  A.check A.string "empty containers"
-    "$  object(2)\n$.a  array(0)\n$.b  object(0)"
+  A.check A.string "empty containers" "$  object(2)\n$.a  array(0)\n$.b  object(0)"
     (match J.render_schema (render "{\"a\": [], \"b\": {}}") with
-     | Some s -> s
-     | None -> A.fail "schema refused")
+    | Some s -> s
+    | None -> A.fail "schema refused")
 
 let test_annotations_ride_through_verbatim () =
   let text = rendered () ^ "\n$.items[1]  array(0) not expanded: nested past depth 100" in
@@ -568,18 +571,20 @@ let () =
   Alcotest.run "jsondoc"
     [
       ( "recognising",
-        [ Alcotest.test_case "the bare types are json" `Quick test_the_bare_types_are_json;
+        [
+          Alcotest.test_case "the bare types are json" `Quick test_the_bare_types_are_json;
           Alcotest.test_case "the structured syntax suffix is json" `Quick
             test_the_structured_syntax_suffix_is_json_whatever_it_is_about;
           Alcotest.test_case "only a document shape sniffs as json" `Quick
-            test_only_a_document_shape_sniffs_as_json ] );
+            test_only_a_document_shape_sniffs_as_json;
+        ] );
       ( "rendering",
-        [ Alcotest.test_case "a container names itself before its members" `Quick
+        [
+          Alcotest.test_case "a container names itself before its members" `Quick
             test_a_container_names_itself_before_its_members;
           Alcotest.test_case "a leaf is compact json at its own path" `Quick
             test_a_leaf_is_compact_json_at_its_own_path;
-          Alcotest.test_case "kinds survive the rendering" `Quick
-            test_kinds_survive_the_rendering;
+          Alcotest.test_case "kinds survive the rendering" `Quick test_kinds_survive_the_rendering;
           Alcotest.test_case "float and out-of-range integer leaves render" `Quick
             test_float_and_out_of_range_integers_are_leaves_too;
           Alcotest.test_case "no unreachable arm or partial list accessor" `Quick
@@ -603,10 +608,11 @@ let () =
           Alcotest.test_case "a document people publish is never cut" `Quick
             test_a_document_people_publish_is_never_cut;
           Alcotest.test_case "every rendered path reads back through the grammar" `Quick
-            test_every_rendered_path_reads_back_through_the_grammar ] );
+            test_every_rendered_path_reads_back_through_the_grammar;
+        ] );
       ( "grammar",
-        [ Alcotest.test_case "the shapes the grammar reads" `Quick
-            test_the_shapes_the_grammar_reads;
+        [
+          Alcotest.test_case "the shapes the grammar reads" `Quick test_the_shapes_the_grammar_reads;
           Alcotest.test_case "the root is optional" `Quick test_the_root_is_optional;
           Alcotest.test_case "a bracketed key is read in either quoting" `Quick
             test_a_bracketed_key_is_read_in_either_quoting;
@@ -623,9 +629,11 @@ let () =
           Alcotest.test_case "a filter says so rather than matching nothing" `Quick
             test_a_filter_says_so_rather_than_matching_nothing;
           Alcotest.test_case "negative indices are refused with the alternative" `Quick
-            test_negative_indices_are_refused_with_the_alternative ] );
+            test_negative_indices_are_refused_with_the_alternative;
+        ] );
       ( "selecting",
-        [ Alcotest.test_case "a leaf is one span" `Quick test_a_leaf_is_one_span;
+        [
+          Alcotest.test_case "a leaf is one span" `Quick test_a_leaf_is_one_span;
           Alcotest.test_case "a container is its whole subtree" `Quick
             test_a_container_is_its_whole_subtree;
           Alcotest.test_case "a wildcard selects one line per element" `Quick
@@ -649,9 +657,11 @@ let () =
           Alcotest.test_case "a page that was never rendered has no paths to match" `Quick
             test_a_page_that_was_never_rendered_has_no_paths_to_match;
           Alcotest.test_case "a document media type is told from a stream" `Quick
-            test_a_document_media_type_is_told_from_a_stream ] );
+            test_a_document_media_type_is_told_from_a_stream;
+        ] );
       ( "shaping",
-        [ Alcotest.test_case "the shape round trips through the grammar" `Quick
+        [
+          Alcotest.test_case "the shape round trips through the grammar" `Quick
             test_the_shape_round_trips_through_the_grammar;
           Alcotest.test_case "leaves read as types not values" `Quick
             test_leaves_read_as_types_not_values;
@@ -674,5 +684,6 @@ let () =
           Alcotest.test_case "a member line before the root is refused" `Quick
             test_a_member_line_before_the_root_is_refused;
           Alcotest.test_case "the schema is small where the rendering is big" `Quick
-            test_the_schema_is_small_where_the_rendering_is_big ] );
+            test_the_schema_is_small_where_the_rendering_is_big;
+        ] );
     ]

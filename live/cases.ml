@@ -44,14 +44,7 @@ let name = function
   | Agent Model.Report -> "agent:report"
 
 let mk ?(max_results = 3) ?(include_domains = []) ?country ?recency query =
-  {
-    query;
-    max_results;
-    include_domains;
-    exclude_domains = [];
-    country;
-    recency;
-  }
+  { query; max_results; include_domains; exclude_domains = []; country; recency }
 
 let step label spec = { label; spec }
 
@@ -114,12 +107,12 @@ let provider_config name =
       | Some url -> Ok { base with Config.url = Some url }
       | None -> Error "SEEKWRIGHT_SEARXNG_URL is not set")
   | "algolia" -> (
-      match (non_empty_env "SEEKWRIGHT_ALGOLIA_APP_ID", non_empty_env "SEEKWRIGHT_ALGOLIA_INDEX") with
+      match
+        (non_empty_env "SEEKWRIGHT_ALGOLIA_APP_ID", non_empty_env "SEEKWRIGHT_ALGOLIA_INDEX")
+      with
       | Some app_id, Some index -> Ok { base with Config.app_id = Some app_id; index = Some index }
-      | None, _ ->
-          Error "SEEKWRIGHT_ALGOLIA_APP_ID and SEEKWRIGHT_ALGOLIA_INDEX are not set"
-      | _, None ->
-          Error "SEEKWRIGHT_ALGOLIA_APP_ID and SEEKWRIGHT_ALGOLIA_INDEX are not set")
+      | None, _ -> Error "SEEKWRIGHT_ALGOLIA_APP_ID and SEEKWRIGHT_ALGOLIA_INDEX are not set"
+      | _, None -> Error "SEEKWRIGHT_ALGOLIA_APP_ID and SEEKWRIGHT_ALGOLIA_INDEX are not set")
   | _ -> Ok base
 
 let build_status = function
@@ -142,11 +135,10 @@ let price_note row =
     match row.Registry.cost_model with
     | Registry.Flat -> Printf.sprintf "$%.2f per 1k" price
     | Registry.Extra_results { first; per_extra_1k } ->
-        Printf.sprintf "$%.2f per 1k for the first %d results, then $%.2f per 1k"
-          price first per_extra_1k
+        Printf.sprintf "$%.2f per 1k for the first %d results, then $%.2f per 1k" price first
+          per_extra_1k
     | Registry.Credit_multiplier { over; multiplier } ->
-        Printf.sprintf "$%.2f per 1k credits, x%d past %d results" price multiplier
-          over
+        Printf.sprintf "$%.2f per 1k credits, x%d past %d results" price multiplier over
 
 let cost_class selector =
   match selector with
@@ -175,20 +167,18 @@ let cost_prose selector =
             if keyless row then Printf.sprintf "unbilled — keyless, %s" calls
             else
               Printf.sprintf
-                "unbilled — the vendor charges nothing for a call, but the key names whose quota; %s"
+                "unbilled — the vendor charges nothing for a call, but the key names whose quota; \
+                 %s"
                 calls
           else
             let note = price_note row in
             let extra = if name = "exa" then "; " ^ free_tier_first else "" in
             Printf.sprintf "billed at %s%s; %s" note extra calls)
   | Fetch (Scrappa | Tavily | Linkup) ->
-      Printf.sprintf
-        "billed — the vendor's per-call price applies; %s"
-        (calls_note selector)
+      Printf.sprintf "billed — the vendor's per-call price applies; %s" (calls_note selector)
   | Fetch (Local | Metadata | Jina) -> Printf.sprintf "unbilled — %s" (calls_note selector)
   | Agent _ ->
-      Printf.sprintf
-        "billed — one model call at the operator's endpoint, retrieval keyless; %s"
+      Printf.sprintf "billed — one model call at the operator's endpoint, retrieval keyless; %s"
         (calls_note selector)
 
 let fetch_api_key name = Config.api_key_env_var name
@@ -209,12 +199,7 @@ let needs = function
           if names = [] then [ "nothing" ] else names)
   | Fetch ((Scrappa | Tavily | Linkup) as case) -> [ fetch_api_key (fetch_case_name case) ]
   | Fetch (Local | Metadata | Jina) -> [ "nothing" ]
-  | Agent _ ->
-      [
-        "SEEKWRIGHT_AGENT_BASE_URL";
-        "SEEKWRIGHT_AGENT_MODEL";
-        "SEEKWRIGHT_AGENT_API_KEY";
-      ]
+  | Agent _ -> [ "SEEKWRIGHT_AGENT_BASE_URL"; "SEEKWRIGHT_AGENT_MODEL"; "SEEKWRIGHT_AGENT_API_KEY" ]
 
 let uri_route uri =
   let scheme = Option.value ~default:"https" (Uri.scheme uri) in
@@ -224,11 +209,18 @@ let uri_route uri =
   | None -> Printf.sprintf "%s://%s" scheme host
 
 let endpoint_of_fallback name =
-  match List.find_opt (fun (row : Config.fetch_fallback) -> row.Config.name = name) Config.known_fetch_fallbacks with
+  match
+    List.find_opt
+      (fun (row : Config.fetch_fallback) -> row.Config.name = name)
+      Config.known_fetch_fallbacks
+  with
   | Some row -> (
       match row.Config.endpoint with
       | Some endpoint -> uri_route (Uri.of_string endpoint)
-      | None -> "a self-hosted endpoint ([fetch] " ^ Option.value ~default:"url" row.Config.fetch_key ^ ")")
+      | None ->
+          "a self-hosted endpoint ([fetch] "
+          ^ Option.value ~default:"url" row.Config.fetch_key
+          ^ ")")
   | None -> "?"
 
 let route = function
@@ -265,8 +257,11 @@ let recorded_non_provider_runs = [ "fetch:local"; "fetch:metadata" ]
 let live_status selector =
   match selector with
   | Provider name -> (
-      match Registry.row name with Some row when row.Registry.ocaml_live_tested -> `Tested | _ -> `Untested)
-  | Fetch _ | Agent _ -> if List.mem (name selector) recorded_non_provider_runs then `Tested else `Untested
+      match Registry.row name with
+      | Some row when row.Registry.ocaml_live_tested -> `Tested
+      | _ -> `Untested)
+  | Fetch _ | Agent _ ->
+      if List.mem (name selector) recorded_non_provider_runs then `Tested else `Untested
 
 let fetch_of_name = function
   | "local" -> Some Local
@@ -285,15 +280,15 @@ let parse raw =
     | Some split ->
         let namespace = String.sub spelling 0 split in
         let rest = String.sub spelling (split + 1) (String.length spelling - split - 1) in
-        if namespace = "fetch" then (
+        if namespace = "fetch" then
           match fetch_of_name rest with
           | Some case -> Ok (Fetch case)
-          | None -> Error (Printf.sprintf "no fetch case is named %S" rest))
-        else if namespace = "agent" then (
+          | None -> Error (Printf.sprintf "no fetch case is named %S" rest)
+        else if namespace = "agent" then
           match rest with
           | "brief" -> Ok (Agent Model.Brief)
           | "report" -> Ok (Agent Model.Report)
-          | _ -> Error (Printf.sprintf "no agent case is named %S" rest))
+          | _ -> Error (Printf.sprintf "no agent case is named %S" rest)
         else Error (Printf.sprintf "no case is named %S" spelling)
     | None ->
         if spelling = "" then Error "no case was named"

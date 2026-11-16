@@ -1,11 +1,7 @@
 module Caps = Mcp_caps
 module Utf8 = Seekwright_text.Utf8
 
-type error =
-  | Url_blocked of string
-  | Rejected of string
-  | Quota of string
-  | Failed of string
+type error = Url_blocked of string | Rejected of string | Quota of string | Failed of string
 
 type page = Seekwright_wire.Page.page
 
@@ -13,7 +9,7 @@ type net = {
   request :
     max_response_bytes:int option ->
     Caps.Authority.Net.request ->
-    (Caps.Authority.Net.response, Caps.Error.t) result
+    (Caps.Authority.Net.response, Caps.Error.t) result;
 }
 
 let of_grant grant =
@@ -35,36 +31,33 @@ module Json = struct
   let decode_object body =
     match Yojson.Safe.from_string body with
     | exception Yojson.Json_error _ -> Error (malformed ())
-    | (`Assoc _ as value) -> Ok value
+    | `Assoc _ as value -> Ok value
     | _ -> Error (malformed ())
 
   let field key = function
-    | `Assoc members -> (try List.assoc key members with Not_found -> `Null)
+    | `Assoc members -> ( try List.assoc key members with Not_found -> `Null)
     | _ -> `Null
 
-  let string_field key value =
-    match field key value with `String s -> Some s | _ -> None
+  let string_field key value = match field key value with `String s -> Some s | _ -> None
 
-  let int_field key value =
-    match field key value with `Int n -> Some n | _ -> None
+  let int_field key value = match field key value with `Int n -> Some n | _ -> None
 
-  let list_field key value =
-    match field key value with `List items -> Some items | _ -> None
+  let list_field key value = match field key value with `List items -> Some items | _ -> None
 
-  let is_false = (( = ) (`Bool false))
+  let is_false = ( = ) (`Bool false)
 end
 
 let or_string a b =
   match a with
   | Some s when s <> "" -> Some s
-  | _ -> (match b with Some s when s <> "" -> Some s | _ -> None)
+  | _ -> ( match b with Some s when s <> "" -> Some s | _ -> None)
 
 let windowed text ~url ~max_text_chars ~offset ~max_chars ~title ~status_code =
   let window, truncated =
     Fetcher.window_text text ~offset ~max_chars:(Fetcher.resolved_cap max_text_chars max_chars)
   in
-  { Seekwright_wire.Page.
-    url;
+  {
+    Seekwright_wire.Page.url;
     title;
     text = window;
     content_type = None;

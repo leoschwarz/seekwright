@@ -5,8 +5,4 @@
    outside the library, so "which bounds did this operation run under" always has
    an answer in the code. *)
 let forged =
-  {
-    Mcp_caps.Controls.log = None;
-    operation_timeout = Eio.Time.Timeout.none;
-    budget = None;
-  }
+  { Mcp_caps.Controls.log = None; operation_timeout = Eio.Time.Timeout.none; budget = None }

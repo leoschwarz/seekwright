@@ -7,5 +7,4 @@
    Expected: no [Fs] constructor for the grant type. *)
 
 let contents (grant : Mcp_caps.Authority.fs Mcp_caps.Authority.t) =
-  match grant with
-    Mcp_caps.Authority.Fs confinement -> confinement
+  match grant with Mcp_caps.Authority.Fs confinement -> confinement

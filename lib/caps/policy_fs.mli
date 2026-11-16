@@ -1,6 +1,6 @@
-(** Filesystem confinement record and bounded operations.
-    Confinement uses [Eio.Path.open_subtree] to prevent escapes via symlinks or [".."].
-    [t] is abstract and constructed only via [with_root] or [with_written_root]. *)
+(** Filesystem confinement record and bounded operations. Confinement uses [Eio.Path.open_subtree]
+    to prevent escapes via symlinks or [".."]. [t] is abstract and constructed only via [with_root]
+    or [with_written_root]. *)
 
 type t
 
@@ -15,8 +15,8 @@ val with_root :
   parent:_ Eio.Path.t ->
   string ->
   (t, Error.t) result
-(** [with_root ~sw ~parent name] opens [parent / name] confined via [open_subtree].
-    Root is read-only: writes and unlinks return [Denied]. *)
+(** [with_root ~sw ~parent name] opens [parent / name] confined via [open_subtree]. Root is
+    read-only: writes and unlinks return [Denied]. *)
 
 val default_max_write_bytes : int
 
@@ -28,12 +28,13 @@ val with_written_root :
   parent:_ Eio.Path.t ->
   string ->
   (t, Error.t) result
-(** [with_written_root ~sw ~parent name] creates [parent / name] if missing (mode 0o700)
-    and opens a writable confined root supporting atomic writes and unlinks. *)
+(** [with_written_root ~sw ~parent name] creates [parent / name] if missing (mode 0o700) and opens a
+    writable confined root supporting atomic writes and unlinks. *)
 
 val read_file : controls:Controls_raw.t -> ?max_bytes:int -> t -> string -> (string, Error.t) result
 
-val list_dir : controls:Controls_raw.t -> ?max_entries:int -> t -> string -> (string list, Error.t) result
+val list_dir :
+  controls:Controls_raw.t -> ?max_entries:int -> t -> string -> (string list, Error.t) result
 
 val read_range :
   controls:Controls_raw.t ->

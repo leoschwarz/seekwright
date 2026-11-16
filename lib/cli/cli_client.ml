@@ -7,10 +7,7 @@ type rendered =
   | R_fetch of Model.fetch_response
   | R_answer of Model.answer_response
 
-type verb =
-  | Search
-  | Fetch
-  | Answer
+type verb = Search | Fetch | Answer
 
 let verb_of_string = function
   | "search" -> Some Search
@@ -28,9 +25,10 @@ let error_message status text =
       Printf.sprintf "HTTP %d%s" status (if text = "" then "" else ": " ^ String.trim text)
   | json -> (
       match
-        (match json with
-        | `Assoc fields -> ( match List.assoc_opt "error" fields with Some (`String m) -> Some m | _ -> None)
-        | _ -> None)
+        match json with
+        | `Assoc fields -> (
+            match List.assoc_opt "error" fields with Some (`String m) -> Some m | _ -> None)
+        | _ -> None
       with
       | Some message -> Printf.sprintf "HTTP %d: %s" status message
       | _ ->
@@ -39,7 +37,7 @@ let error_message status text =
 
 let human_lines response =
   match response with
-  | R_search sresp ->
+  | R_search sresp -> (
       [
         "seekwright search";
         "=================";
@@ -58,22 +56,29 @@ let human_lines response =
               Printf.sprintf "%d. %s" (index + 1) result.Model.title;
               Printf.sprintf "   %s" result.Model.url;
             ]
-            @ (match content with
-              | Some text -> List.map (fun line -> "   " ^ line) (String.split_on_char '\n' text)
-              | None -> []))
+            @
+            match content with
+            | Some text -> List.map (fun line -> "   " ^ line) (String.split_on_char '\n' text)
+            | None -> [])
           (List.mapi (fun i r -> (i, r)) sresp.Model.results)
-      @ (match sresp.Model.notice with
-        | Some notice -> [ ""; Printf.sprintf "notice: %s" notice ]
-        | None -> [])
-  | R_fetch fresp ->
+      @
+      match sresp.Model.notice with
+      | Some notice -> [ ""; Printf.sprintf "notice: %s" notice ]
+      | None -> [])
+  | R_fetch fresp -> (
       [ "seekwright fetch"; "================"; Printf.sprintf "url       %s" fresp.Model.url ]
       @ (if fresp.Model.requested_url <> fresp.Model.url then
            [ Printf.sprintf "requested %s" fresp.Model.requested_url ]
          else [])
-      @ (match fresp.Model.title with Some title -> [ Printf.sprintf "title     %s" title ] | None -> [])
+      @ (match fresp.Model.title with
+        | Some title -> [ Printf.sprintf "title     %s" title ]
+        | None -> [])
       @ (match fresp.Model.total_chars with
         | Some total ->
-            [ Printf.sprintf "chars     %d%s" total (if fresp.Model.truncated then ", truncated" else "") ]
+            [
+              Printf.sprintf "chars     %d%s" total
+                (if fresp.Model.truncated then ", truncated" else "");
+            ]
         | None -> [])
       @ (match fresp.Model.image with
         | Some image ->
@@ -94,10 +99,11 @@ let human_lines response =
                 @ String.split_on_char '\n' match_.Model.text)
               matches
         | None -> [])
-      @ (match fresp.Model.notice with
-        | Some notice -> [ ""; Printf.sprintf "notice: %s" notice ]
-        | None -> [])
-  | R_answer aresp ->
+      @
+      match fresp.Model.notice with
+      | Some notice -> [ ""; Printf.sprintf "notice: %s" notice ]
+      | None -> [])
+  | R_answer aresp -> (
       [
         "seekwright answer";
         "==================";
@@ -123,9 +129,10 @@ let human_lines response =
                     Printf.sprintf "   via %s" source.Model.source_provider;
                   ])
                 (List.mapi (fun i s -> (i, s)) aresp.Model.sources))
-      @ (match aresp.Model.notice with
-        | Some notice -> [ ""; Printf.sprintf "notice: %s" notice ]
-        | None -> [])
+      @
+      match aresp.Model.notice with
+      | Some notice -> [ ""; Printf.sprintf "notice: %s" notice ]
+      | None -> [])
 
 let decode verb text =
   let open Yojson.Safe in
@@ -163,20 +170,21 @@ let run : post:post -> verb:verb -> argv:string list -> (string option, string *
       in
       match body_result with
       | Error sentence -> Error (sentence, 2)
-      | Ok body ->
+      | Ok body -> (
           let json = Cli_extract.flag_bool scanned "--json" in
           let server =
             match Cli_extract.flag_one scanned "--server" with
             | Some url -> strip_trailing_slash url
             | None -> "http://127.0.0.1:8000"
           in
-          match post ~path:(server ^ "/api/v1/" ^ route_of_verb verb) (Yojson.Safe.to_string body) with
+          match
+            post ~path:(server ^ "/api/v1/" ^ route_of_verb verb) (Yojson.Safe.to_string body)
+          with
           | Error sentence -> Error (sentence, 1)
-          | Ok (status, text) ->
+          | Ok (status, text) -> (
               if status <> 200 then Error (error_message status text, 1)
               else if json then Ok (Some text)
-              else (
+              else
                 match decode verb text with
                 | None -> Error ("the response is not a " ^ model_name verb, 1)
-                | Some response -> Ok (Some (String.concat "\n" (human_lines response))))
-      )
+                | Some response -> Ok (Some (String.concat "\n" (human_lines response))))))

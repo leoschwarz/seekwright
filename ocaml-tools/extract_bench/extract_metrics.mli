@@ -30,9 +30,7 @@ val codepoints : string -> int
 val replacement_chars : string -> int
 val searchable : string -> string option -> string
 
-type outcome =
-  | Text of { text : string; title : string option; chars : int }
-  | Refusal of string
+type outcome = Text of { text : string; title : string option; chars : int } | Refusal of string
 
 val run : case -> outcome
 

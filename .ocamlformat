@@ -1,0 +1,12 @@
+# One pinned formatter for the tree: the version line is the pin, so a second
+# version's output is a diff a reader has to notice rather than a silent style
+# drift. No gate target runs the formatter, so this is honoured by running
+# `ocamlformat --inplace` over the files you touch before committing. margin is
+# 100 because the tree already wraps there (98% of its lines are shorter), and
+# the two spacing options preserve the blank-line grouping the code uses.
+version = 0.29.0
+profile = default
+margin = 100
+break-cases = fit
+module-item-spacing = preserve
+sequence-blank-line = preserve-one

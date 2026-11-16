@@ -56,10 +56,7 @@ let parse ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   (* Upstream lacks result-count parameter; slicing happens here. *)
   List.filter_map
@@ -121,8 +118,8 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
           answer = None;
           cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
           notice =
-            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true
-              ~language:None ~safety:false;
+            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:None
+              ~safety:false;
         }
 
 let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~key ~net () : Provider.t =

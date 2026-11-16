@@ -12,9 +12,8 @@
 (* A filesystem grant, read through, with every operation reported. *)
 let read_under_root
     ~(env :
-      < fs : Eio.Fs.dir_ty Eio.Path.t;
-        mono_clock : [> Eio.Time.Mono.ty] Eio.Resource.t;
-        .. >) ~sw ~name =
+       < fs : Eio.Fs.dir_ty Eio.Path.t ; mono_clock : [> Eio.Time.Mono.ty ] Eio.Resource.t ; .. >)
+    ~sw ~name =
   let sink event = ignore (Mcp_caps.Event.render event) in
   match Mcp_caps.Policy.with_root ~sw ~parent:env#fs "src" with
   | Error error -> Error error
@@ -29,12 +28,10 @@ let read_under_root
    counted by a counter its caller owns. *)
 let search_one_endpoint
     ~(env :
-      < mono_clock : [> Eio.Time.Mono.ty] Eio.Resource.t;
-        net : [> [> `Generic ] Eio.Net.ty] Eio.Resource.t;
-        .. >) ~sw ~query =
-  let endpoint =
-    { Mcp_caps.Policy.scheme = `Https; host = "example.org"; port = None }
-  in
+       < mono_clock : [> Eio.Time.Mono.ty ] Eio.Resource.t
+       ; net : [> [> `Generic ] Eio.Net.ty ] Eio.Resource.t
+       ; .. >) ~sw ~query =
+  let endpoint = { Mcp_caps.Policy.scheme = `Https; host = "example.org"; port = None } in
   match
     Mcp_caps.Policy.with_endpoints ~sw ~net:env#net
       ~max_response_bytes:Mcp_caps.Policy.default_max_response_bytes [ endpoint ]
@@ -42,8 +39,7 @@ let search_one_endpoint
   | Error error -> Error error
   | Ok decision ->
       let grant =
-        Mcp_caps.Authority.with_operation_budget
-          (Mcp_caps.Budget.make 4)
+        Mcp_caps.Authority.with_operation_budget (Mcp_caps.Budget.make 4)
           (Mcp_caps.Authority.with_operation_timeout
              (Eio.Time.Timeout.seconds env#mono_clock 10.)
              (Mcp_caps.Authority.Net.of_confinement ~mono_clock:env#mono_clock decision))
@@ -62,18 +58,15 @@ let search_one_endpoint
    them can be called without the grant [Policy.with_written_root] produced. *)
 let write_under_root
     ~(env :
-      < fs : Eio.Fs.dir_ty Eio.Path.t;
-        mono_clock : [> Eio.Time.Mono.ty] Eio.Resource.t;
-        .. >) ~sw ~name =
+       < fs : Eio.Fs.dir_ty Eio.Path.t ; mono_clock : [> Eio.Time.Mono.ty ] Eio.Resource.t ; .. >)
+    ~sw ~name =
   match
     Mcp_caps.Policy.with_written_root ~sw ~max_read_bytes:16_384 ~max_write_bytes:4_194_304
       ~max_entries:5000 ~parent:env#fs ".cache"
   with
   | Error error -> Error error
   | Ok decision ->
-      let grant =
-        Mcp_caps.Authority.Fs.of_confinement ~mono_clock:env#mono_clock decision
-      in
+      let grant = Mcp_caps.Authority.Fs.of_confinement ~mono_clock:env#mono_clock decision in
       Ok
         ( Mcp_caps.Authority.Fs.atomic_write grant ~path:name ~contents:"page",
           Mcp_caps.Authority.Fs.read_range ~max_bytes:64 grant ~offset:0 name,

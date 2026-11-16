@@ -103,28 +103,24 @@ let meta_field meta key =
   let field = "\"" ^ key ^ "\":" in
   match Test_support.find_sub ~haystack:meta ~needle:field () with
   | None -> Alcotest.failf "no %S in the sidecar: %s" key meta
-  | Some start ->
+  | Some start -> (
       let from = start + String.length field in
       let stop =
         let rec go i =
           if i >= String.length meta then i
-          else
-            match meta.[i] with
-            | ',' | '}' | ']' | ' ' -> i
-            | _ -> go (i + 1)
+          else match meta.[i] with ',' | '}' | ']' | ' ' -> i | _ -> go (i + 1)
         in
         go from
       in
       try float_of_string (String.sub meta from (stop - from))
-      with Failure _ -> Alcotest.failf "bad %S in the sidecar: %s" key meta
+      with Failure _ -> Alcotest.failf "bad %S in the sidecar: %s" key meta)
 
 let the_key_is_the_rungs_and_the_urls_hash () =
   (* The digests are the oracle's, computed over ["http\0" ^ url] and
      ["tavily\0" ^ url]: the key is the pair, hashed so a model-supplied URL never
      becomes a path. *)
   Alcotest.(check string)
-    "the local reader's entry"
-    "1f2fddb7f8b5ae44d895fa8edf4875cd156f2f5305c222b24bb00f9324937217"
+    "the local reader's entry" "1f2fddb7f8b5ae44d895fa8edf4875cd156f2f5305c222b24bb00f9324937217"
     (Page_cache.entry_name ~rung:"http" ~url:(url "/a"));
   Alcotest.(check string)
     "a fallback's entry is a different file"
@@ -135,24 +131,29 @@ let rungs_do_not_share_an_entry () =
   with_cache () (fun h ->
       ignore (Page_cache.put h.cache ~rung:"http" ~url:(url "/a") ~page:(page "local text"));
       ignore (Page_cache.put h.cache ~rung:"tavily" ~url:(url "/a") ~page:(page "vendor text"));
-      Alcotest.(check (option string)) "the local read keeps its own answer" (Some "local text")
+      Alcotest.(check (option string))
+        "the local read keeps its own answer" (Some "local text")
         (entry_text (Page_cache.get h.cache ~rung:"http" ~url:(url "/a")));
-      Alcotest.(check (option string)) "the vendor keeps its own answer" (Some "vendor text")
+      Alcotest.(check (option string))
+        "the vendor keeps its own answer" (Some "vendor text")
         (entry_text (Page_cache.get h.cache ~rung:"tavily" ~url:(url "/a"))))
 
 let a_stored_page_reads_back_whole () =
   with_cache () (fun h ->
-      Alcotest.(check bool) "the store succeeds" true
+      Alcotest.(check bool)
+        "the store succeeds" true
         (Page_cache.put h.cache ~rung:"http" ~url:(url "/a")
-           ~page:(page ~title:(Some "Ünicode tıtle") ~content_type:(Some "application/json")
-                    ~status_code:201 ~path_addressable:true "{\"a\":1}\n"));
+           ~page:
+             (page ~title:(Some "Ünicode tıtle") ~content_type:(Some "application/json")
+                ~status_code:201 ~path_addressable:true "{\"a\":1}\n"));
       match Page_cache.get h.cache ~rung:"http" ~url:(url "/a") with
       | None -> Alcotest.fail "the entry is a miss"
       | Some (entry : Page_cache.cached_page) ->
           Alcotest.(check string) "url" (url "/a") entry.url;
           Alcotest.(check (option string)) "title" (Some "Ünicode tıtle") entry.title;
           Alcotest.(check string) "text" "{\"a\":1}\n" entry.text;
-          Alcotest.(check (option string)) "content type" (Some "application/json") entry.content_type;
+          Alcotest.(check (option string))
+            "content type" (Some "application/json") entry.content_type;
           Alcotest.(check int) "status" 201 entry.status_code;
           Alcotest.(check bool) "path addressable" true entry.path_addressable;
           Alcotest.(check int) "total chars" 8 entry.total_chars;
@@ -160,53 +161,65 @@ let a_stored_page_reads_back_whole () =
 
 let an_absent_entry_is_a_miss () =
   with_cache () (fun h ->
-      Alcotest.(check bool) "get" false
+      Alcotest.(check bool)
+        "get" false
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/nothing") <> None);
-      Alcotest.(check bool) "get_window" false
-        (Page_cache.get_window h.cache ~rung:"http" ~url:(url "/nothing") ~offset:0 ~max_chars:10 <> None))
+      Alcotest.(check bool)
+        "get_window" false
+        (Page_cache.get_window h.cache ~rung:"http" ~url:(url "/nothing") ~offset:0 ~max_chars:10
+        <> None))
 
 let an_expired_entry_is_a_miss_and_its_files_go () =
   with_cache ~ttl_seconds:60.0 () (fun h ->
       ignore (Page_cache.put h.cache ~rung:"http" ~url:(url "/a") ~page:(page "some text"));
       let name = Page_cache.entry_name ~rung:"http" ~url:(url "/a") in
       clock := !clock +. 61.0;
-      Alcotest.(check bool) "the expired entry is a miss" false
+      Alcotest.(check bool)
+        "the expired entry is a miss" false
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/a") <> None);
       Alcotest.(check bool) "the body went with it" false (read_through h (body_name name) <> None);
-      Alcotest.(check bool) "the sidecar went with it" false (read_through h (meta_name name) <> None))
+      Alcotest.(check bool)
+        "the sidecar went with it" false
+        (read_through h (meta_name name) <> None))
 
 let a_corrupt_sidecar_is_a_miss () =
   with_cache () (fun h ->
       ignore (Page_cache.put h.cache ~rung:"http" ~url:(url "/a") ~page:(page "some text"));
       let name = Page_cache.entry_name ~rung:"http" ~url:(url "/a") in
       write_through h (meta_name name) "{\"created\": not json at all";
-      Alcotest.(check bool) "a sidecar that does not parse is absent" false
+      Alcotest.(check bool)
+        "a sidecar that does not parse is absent" false
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/a") <> None);
       (* A sidecar of the wrong shape is the same miss: the read paths treat a
          foreign file as an absent one rather than serving a page built out of
          nothing. *)
       write_through h (meta_name name) "{\"created\": 1000, \"total_chars\": \"nine\"}";
-      Alcotest.(check bool) "a foreign shape is a miss too" false
+      Alcotest.(check bool)
+        "a foreign shape is a miss too" false
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/a") <> None);
       (* And a body that is not UTF-8 at all is a miss, whatever its sidecar
          says — the fault that reads as [UnicodeDecodeError] in the oracle. *)
       write_through h (meta_name name) "{\"created\": 1000, \"total_chars\": 3, \"url\": \"x\"}";
       write_through h (body_name name) "\xff\xfe broken bytes";
-      Alcotest.(check bool) "an undecodable body is a miss" false
+      Alcotest.(check bool)
+        "an undecodable body is a miss" false
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/a") <> None))
 
 let half_an_entry_is_a_miss () =
   with_cache () (fun h ->
       let a = Page_cache.entry_name ~rung:"http" ~url:(url "/a") in
       write_through h (body_name a) "a body with no sidecar";
-      Alcotest.(check bool) "a body alone is a miss" false
+      Alcotest.(check bool)
+        "a body alone is a miss" false
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/a") <> None);
-      Alcotest.(check bool) "and it is a miss for the windowed path too" false
+      Alcotest.(check bool)
+        "and it is a miss for the windowed path too" false
         (Page_cache.get_window h.cache ~rung:"http" ~url:(url "/a") ~offset:0 ~max_chars:4 <> None);
       ignore (Page_cache.put h.cache ~rung:"http" ~url:(url "/b") ~page:(page "whole"));
       let b = Page_cache.entry_name ~rung:"http" ~url:(url "/b") in
       remove_through h (body_name b);
-      Alcotest.(check bool) "a sidecar alone is a miss" false
+      Alcotest.(check bool)
+        "a sidecar alone is a miss" false
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/b") <> None))
 
 (* A half write that survived a crash reads as a miss to the next process, which
@@ -218,8 +231,9 @@ let a_restart_reads_the_directory_not_a_previous_process () =
   let body_only, durable =
     Eio_main.run @@ fun env ->
     Eio.Switch.run @@ fun sw ->
-    match Policy.with_written_root ~sw ~max_read_bytes:entry_cap ~max_write_bytes:entry_cap
-            ~parent:(Eio.Stdenv.fs env) dir
+    match
+      Policy.with_written_root ~sw ~max_read_bytes:entry_cap ~max_write_bytes:entry_cap
+        ~parent:(Eio.Stdenv.fs env) dir
     with
     | Error error -> Alcotest.failf "with_written_root: %s" (Error.render error)
     | Ok confinement ->
@@ -242,11 +256,13 @@ let a_restart_reads_the_directory_not_a_previous_process () =
 
 let an_entry_over_the_entry_cap_is_never_stored () =
   with_cache ~max_entry_bytes:64 () (fun h ->
-      Alcotest.(check bool) "the store refuses" false
+      Alcotest.(check bool)
+        "the store refuses" false
         (Page_cache.put h.cache ~rung:"http" ~url:(url "/a") ~page:(page (String.make 65 'x')));
       Alcotest.(check (pair int int) "nothing was written") (0, 0) (Page_cache.stats h.cache);
       (* A page exactly at the cap is stored: the bound is "above", not "at". *)
-      Alcotest.(check bool) "a page at the cap is stored" true
+      Alcotest.(check bool)
+        "a page at the cap is stored" true
         (Page_cache.put h.cache ~rung:"http" ~url:(url "/b") ~page:(page (String.make 64 'x'))))
 
 let the_directory_cap_evicts_the_least_recently_read () =
@@ -259,18 +275,23 @@ let the_directory_cap_evicts_the_least_recently_read () =
       clock := !clock +. 1.0;
       ignore (Page_cache.put h.cache ~rung:"http" ~url:(url "/b") ~page:(page (text 'b')));
       clock := !clock +. 1.0;
-      Alcotest.(check bool) "[a] is read, so it becomes the newest" true
+      Alcotest.(check bool)
+        "[a] is read, so it becomes the newest" true
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/a") <> None);
       clock := !clock +. 1.0;
       ignore (Page_cache.put h.cache ~rung:"http" ~url:(url "/c") ~page:(page (text 'c')));
       let read path = entry_text (Page_cache.get h.cache ~rung:"http" ~url:(url path)) in
-      Alcotest.(check (option string)) "the caller's own entry survived" (Some (text 'c'))
+      Alcotest.(check (option string))
+        "the caller's own entry survived"
+        (Some (text 'c'))
         (read "/c");
-      Alcotest.(check (option string)) "the most recently read entry survived" (Some (text 'a'))
+      Alcotest.(check (option string))
+        "the most recently read entry survived"
+        (Some (text 'a'))
         (read "/a");
       Alcotest.(check (option string)) "the least recently read entry went" None (read "/b");
-      Alcotest.(check (pair int int) "the directory is back inside its cap") (2, 200)
-        (Page_cache.stats h.cache))
+      Alcotest.(check (pair int int) "the directory is back inside its cap")
+        (2, 200) (Page_cache.stats h.cache))
 
 let a_hit_touches_the_sidecar_not_the_body () =
   (* The divergence pin. Eio has no [utimes], and a mount's [relatime] would not
@@ -284,12 +305,15 @@ let a_hit_touches_the_sidecar_not_the_body () =
       let body_before = Unix.stat body_path in
       let meta_before = Unix.stat meta_path in
       clock := !clock +. 30.0;
-      Alcotest.(check bool) "the hit" true
+      Alcotest.(check bool)
+        "the hit" true
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/a") <> None);
       let body_after = Unix.stat body_path in
-      Alcotest.(check bool) "the body is the same inode" true
+      Alcotest.(check bool)
+        "the body is the same inode" true
         (body_before.Unix.st_ino = body_after.Unix.st_ino);
-      Alcotest.(check bool) "the body was not rewritten" true
+      Alcotest.(check bool)
+        "the body was not rewritten" true
         (body_before.Unix.st_mtime = body_after.Unix.st_mtime);
       let meta_after = Unix.stat meta_path in
       (* The rewrite is pinned by the inode, not the timestamp: [atomic_write] places
@@ -298,9 +322,10 @@ let a_hit_touches_the_sidecar_not_the_body () =
          comparison flaky. The body's own inode is the other half — a body rewrite
          would replace that inode too. *)
       Alcotest.(check bool)
-        (Printf.sprintf "the sidecar is a different inode (%d -> %d)"
-           meta_before.Unix.st_ino meta_after.Unix.st_ino)
-        true (meta_before.Unix.st_ino <> meta_after.Unix.st_ino);
+        (Printf.sprintf "the sidecar is a different inode (%d -> %d)" meta_before.Unix.st_ino
+           meta_after.Unix.st_ino)
+        true
+        (meta_before.Unix.st_ino <> meta_after.Unix.st_ino);
       match read_through h (meta_name name) with
       | None -> Alcotest.fail "the sidecar vanished"
       | Some meta ->
@@ -322,15 +347,16 @@ let a_read_only_root_refuses_the_store () =
     | Error error -> Alcotest.failf "with_root: %s" (Error.render error)
     | Ok confinement ->
         let fs = Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement in
-        Page_cache.put (Page_cache.create ~fs ~now ()) ~rung:"http" ~url:(url "/a") ~page:(page "text")
+        Page_cache.put (Page_cache.create ~fs ~now ()) ~rung:"http" ~url:(url "/a")
+          ~page:(page "text")
   in
   Alcotest.(check bool) "the store refuses, and no page fails" false stored
 
 (* A cached window is the window a live read serves, because it is the same
    function cutting it. The sweep covers a body larger than the streaming chunk
    and offsets past its end, which is where a chunked walk splits a codepoint. *)
-let window_text = Alcotest.testable (fun ppf (text, more) ->
-    Format.fprintf ppf "%S more=%b" text more) ( = )
+let window_text =
+  Alcotest.testable (fun ppf (text, more) -> Format.fprintf ppf "%S more=%b" text more) ( = )
 
 let window_parity () =
   let build n seed =
@@ -361,8 +387,8 @@ let window_parity () =
                       Alcotest.(check window_text)
                         (Printf.sprintf "the window at offset %d, %d chars" offset max_chars)
                         expected (entry.text, entry.truncated);
-                      Alcotest.(check int) "the total is the whole extraction"
-                        (String.length text) entry.total_chars)
+                      Alcotest.(check int)
+                        "the total is the whole extraction" (String.length text) entry.total_chars)
                 [ 0; 1; 7; 33; 400; String.length text; String.length text + 500 ])
             [ 1; 5; 20; 300; 5_000; String.length text + 10 ];
           (* The whole-document read serves the entry entire, with no window
@@ -409,7 +435,7 @@ let a_windowed_read_never_loads_the_whole_body () =
     in
     let before = sample () in
     let result = f () in
-    result, sample () -. before
+    (result, sample () -. before)
   in
   (* One body's costs and windows. [~live] also measures the live cut of the two
      windows — [Fetcher.window_text] over the whole body, which is what a live read
@@ -446,12 +472,20 @@ let a_windowed_read_never_loads_the_whole_body () =
           w_deep,
           w_full ))
   in
-  let ( short_len, short_front, short_deep, live_front, live_deep, live_words, whole_ok,
-        front_words, deep_words, full_words ) =
+  let ( short_len,
+        short_front,
+        short_deep,
+        live_front,
+        live_deep,
+        live_words,
+        whole_ok,
+        front_words,
+        deep_words,
+        full_words ) =
     measure ~live:true 400_000
   in
-  let ( long_len, long_front, long_deep, _, _, _, long_whole_ok, long_front_words, long_deep_words, _
-        ) =
+  let long_len, long_front, long_deep, _, _, _, long_whole_ok, long_front_words, long_deep_words, _
+      =
     measure ~live:false 1_200_000
   in
   Alcotest.(check bool) "the body is over 5 MB" true (short_len > 5_000_000);
@@ -464,26 +498,37 @@ let a_windowed_read_never_loads_the_whole_body () =
   Alcotest.(check bool) "the whole entry is the whole extraction" true whole_ok;
   Alcotest.(check bool) "the long body's whole entry is its extraction too" true long_whole_ok;
   Alcotest.(check bool)
-    (Printf.sprintf "the front window of a %d-byte body costs %.0f words, a rounding error next to \
-                     the document" short_len front_words)
-    true (front_words < float_of_int short_len /. 64.0);
+    (Printf.sprintf
+       "the front window of a %d-byte body costs %.0f words, a rounding error next to the document"
+       short_len front_words)
+    true
+    (front_words < float_of_int short_len /. 64.0);
   Alcotest.(check bool)
-    (Printf.sprintf "the same window against a body three times as long costs %.0f words against %.0f: \
-                     its cost follows the window, not the document" long_front_words front_words)
-    true (long_front_words <= front_words *. 1.05);
+    (Printf.sprintf
+       "the same window against a body three times as long costs %.0f words against %.0f: its cost \
+        follows the window, not the document"
+       long_front_words front_words)
+    true
+    (long_front_words <= front_words *. 1.05);
   Alcotest.(check bool)
-    (Printf.sprintf "the window at offset 200 000 costs %.0f words, under an eighth of the %.0f a live \
-                     read of the same page pays for the same window" deep_words live_words)
-    true (deep_words < live_words /. 8.0);
+    (Printf.sprintf
+       "the window at offset 200 000 costs %.0f words, under an eighth of the %.0f a live read of \
+        the same page pays for the same window"
+       deep_words live_words)
+    true
+    (deep_words < live_words /. 8.0);
   Alcotest.(check bool)
     (Printf.sprintf "and the same window costs the same at either body length: %.0f against %.0f"
        long_deep_words deep_words)
-    true (long_deep_words <= deep_words *. 1.5);
+    true
+    (long_deep_words <= deep_words *. 1.5);
   Alcotest.(check bool)
-    (Printf.sprintf "the whole-document read of the entry costs %.0f words against the body's %d bytes, \
-                     and %.0f times the front window" full_words short_len
-        (full_words /. front_words))
-    true (full_words > float_of_int short_len /. 16.0 && full_words > front_words *. 4.0)
+    (Printf.sprintf
+       "the whole-document read of the entry costs %.0f words against the body's %d bytes, and \
+        %.0f times the front window"
+       full_words short_len (full_words /. front_words))
+    true
+    (full_words > float_of_int short_len /. 16.0 && full_words > front_words *. 4.0)
 
 (* The chunked walk's own boundary case. The cache reads a body in 64 KiB pieces,
    and a codepoint that straddles a piece boundary is what a naive walk calls
@@ -496,9 +541,7 @@ let a_window_across_a_chunk_boundary_is_still_the_live_window () =
   List.iter
     (fun (lead, width) ->
       with_cache () (fun h ->
-          let body =
-            String.make (boundary - width) 'a' ^ lead ^ String.make 70_000 'b'
-          in
+          let body = String.make (boundary - width) 'a' ^ lead ^ String.make 70_000 'b' in
           (* The lead starts [width] bytes before the boundary, so its last byte is
              the first byte of the second chunk. *)
           Alcotest.(check bool)
@@ -523,7 +566,7 @@ let a_window_across_a_chunk_boundary_is_still_the_live_window () =
                         (entry.text, entry.truncated))
                 [ boundary - width - 3; boundary - width; boundary - width + 1; boundary + 10 ])
             [ 1; 5; 200 ]))
-    [ "é", 2; "☃", 3; "😀", 4 ]
+    [ ("é", 2); ("☃", 3); ("😀", 4) ]
 
 let range a b = List.init (b - a + 1) (fun i -> i + a)
 
@@ -569,7 +612,8 @@ let concurrent_reads_writes_and_evictions_agree () =
                let key = url ("/" ^ string_of_int i) in
                [
                  (fun () ->
-                   ignore (Page_cache.put cache ~rung:"http" ~url:key ~page:(page ~url:key (entry i))));
+                   ignore
+                     (Page_cache.put cache ~rung:"http" ~url:key ~page:(page ~url:key (entry i))));
                  (fun () ->
                    (* One read per key, at an arbitrary point in the writes' and
                       evictions' progress: what it sees must be whole or absent. *)
@@ -588,7 +632,8 @@ let concurrent_reads_writes_and_evictions_agree () =
         List.iter
           (fun i ->
             match
-              Page_cache.get_window cache ~rung:"http" ~url:(url ("/" ^ string_of_int i))
+              Page_cache.get_window cache ~rung:"http"
+                ~url:(url ("/" ^ string_of_int i))
                 ~offset:0 ~max_chars:4_000
             with
             | Some (found : Page_cache.cached_page) ->
@@ -600,12 +645,15 @@ let concurrent_reads_writes_and_evictions_agree () =
         (!raced, !whole, !gone, !partials, entries, bytes)
   in
   Alcotest.(check bool)
-    (Printf.sprintf "no read saw a page out of two generations, of %d hits during the race and %d \
-                     keys read at rest" raced (whole + gone))
+    (Printf.sprintf
+       "no read saw a page out of two generations, of %d hits during the race and %d keys read at \
+        rest"
+       raced (whole + gone))
     false (partials > 0);
-  Alcotest.(check bool) "the cap kept entries: the settled directory has whole pages" true
-    (whole > 0);
-  Alcotest.(check int) "each key is either there whole or not at all" (List.length keys) (whole + gone);
+  Alcotest.(check bool)
+    "the cap kept entries: the settled directory has whole pages" true (whole > 0);
+  Alcotest.(check int)
+    "each key is either there whole or not at all" (List.length keys) (whole + gone);
   Alcotest.(check bool) "the eviction pass kept the directory inside its cap" true (bytes <= cap);
   Alcotest.(check bool) "and it left entries behind" true (entries > 0)
 
@@ -616,11 +664,14 @@ let stats_count_bodies () =
       write_through h (body_name b) "an orphan body counts";
       let entries, bytes = Page_cache.stats h.cache in
       Alcotest.(check int) "bodies, whatever their sidecars" 2 entries;
-      Alcotest.(check int) "the bytes are the bodies' own"
-        (5 + String.length "an orphan body counts") bytes)
+      Alcotest.(check int)
+        "the bytes are the bodies' own"
+        (5 + String.length "an orphan body counts")
+        bytes)
 
 let stats_of_an_empty_directory () =
-  with_cache () (fun h -> Alcotest.(check (pair int int) "nothing cached") (0, 0) (Page_cache.stats h.cache))
+  with_cache () (fun h ->
+      Alcotest.(check (pair int int) "nothing cached") (0, 0) (Page_cache.stats h.cache))
 
 let () =
   let open Alcotest in

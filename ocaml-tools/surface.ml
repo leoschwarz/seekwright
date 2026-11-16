@@ -42,8 +42,7 @@ let record_fields lines type_name =
           else
             match String.trim line with
             | "" -> scan true acc rest
-            | trimmed when String.starts_with ~prefix:"(*" trimmed ->
-                scan true acc rest
+            | trimmed when String.starts_with ~prefix:"(*" trimmed -> scan true acc rest
             | trimmed -> (
                 match String.index_opt trimmed ':' with
                 | Some colon ->
@@ -54,11 +53,12 @@ let record_fields lines type_name =
                 | None -> scan true acc rest)
         else if
           String.starts_with ~prefix:"type " line
-          && (match String.index_opt line '=' with
-             | Some eq ->
-                 String.trim (String.sub line 5 (eq - 5)) = type_name
-                 && String.trim (String.sub line (eq + 1) (String.length line - eq - 1)) = "{"
-             | None -> false)
+          &&
+          match String.index_opt line '=' with
+          | Some eq ->
+              String.trim (String.sub line 5 (eq - 5)) = type_name
+              && String.trim (String.sub line (eq + 1) (String.length line - eq - 1)) = "{"
+          | None -> false
         then scan true [] rest
         else scan false acc rest
   in
@@ -75,7 +75,9 @@ type config_keys = {
 let read_config_keys path =
   let lines = String.split_on_char '\n' (In_channel.with_open_text path In_channel.input_all) in
   let section_keys =
-    List.map (fun (table, _model, record) -> (table, List.sort compare (record_fields lines record))) sections
+    List.map
+      (fun (table, _model, record) -> (table, List.sort compare (record_fields lines record)))
+      sections
   in
   let per_provider = List.sort compare (record_fields lines "provider_config") in
   (* [providers_defaulted] is a computed report, not a key the file carries —
@@ -89,11 +91,7 @@ let read_config_keys path =
 let strip_trailing_blanks lines =
   (* The manifest ends at its last name: a trailing separator moves on every
      regeneration. *)
-  let rec go lines =
-    match List.rev lines with
-    | "" :: rest -> go (List.rev rest)
-    | _ -> lines
-  in
+  let rec go lines = match List.rev lines with "" :: rest -> go (List.rev rest) | _ -> lines in
   go lines
 
 let entry label = "- `" ^ label ^ "`"
@@ -131,7 +129,18 @@ let count_lines { section_keys; per_provider; top_level } =
   }
 
 let render_body ({ section_keys; per_provider; top_level } as config_keys) =
-  let { tools; routes; verbs; flags; providers; section_total; section_count; per_provider_count; operational; top_level_count } =
+  let {
+    tools;
+    routes;
+    verbs;
+    flags;
+    providers;
+    section_total;
+    section_count;
+    per_provider_count;
+    operational;
+    top_level_count;
+  } =
     count_lines config_keys
   in
   let lines = [ ""; Printf.sprintf "## MCP tools (%d)" tools; "" ] in
@@ -148,7 +157,9 @@ let render_body ({ section_keys; per_provider; top_level } as config_keys) =
     List.fold_left
       (fun lines (meth, path, model, keys) ->
         lines
-        @ [ Printf.sprintf "### `%s %s` (`%s`, %d body keys)" meth path model (List.length keys); "" ]
+        @ [
+            Printf.sprintf "### `%s %s` (`%s`, %d body keys)" meth path model (List.length keys); "";
+          ]
         @ List.map entry keys @ [ "" ])
       lines Server.rest_routes
   in
@@ -162,10 +173,18 @@ let render_body ({ section_keys; per_provider; top_level } as config_keys) =
       ]
     @ List.map (fun (meth, path) -> entry (meth ^ " " ^ path)) Server.operational_routes
   in
-  let lines = lines @ [ ""; Printf.sprintf "## CLI verbs (%d)" verbs; "" ] @ List.map entry Server.cli_verbs in
-  let lines = lines @ [ ""; Printf.sprintf "## Server flags (%d)" flags; "" ] @ List.map entry Server.server_flags in
   let lines =
-    lines @ [ ""; Printf.sprintf "## Provider names (%d)" providers; "" ] @ List.map entry Config.known_providers
+    lines @ [ ""; Printf.sprintf "## CLI verbs (%d)" verbs; "" ] @ List.map entry Server.cli_verbs
+  in
+  let lines =
+    lines
+    @ [ ""; Printf.sprintf "## Server flags (%d)" flags; "" ]
+    @ List.map entry Server.server_flags
+  in
+  let lines =
+    lines
+    @ [ ""; Printf.sprintf "## Provider names (%d)" providers; "" ]
+    @ List.map entry Config.known_providers
   in
   let lines =
     lines
@@ -178,9 +197,7 @@ let render_body ({ section_keys; per_provider; top_level } as config_keys) =
   let lines =
     List.fold_left
       (fun lines (table, keys) ->
-        let model =
-          List.assoc table (List.map (fun (t, m, _) -> (t, m)) sections)
-        in
+        let model = List.assoc table (List.map (fun (t, m, _) -> (t, m)) sections) in
         lines
         @ [ Printf.sprintf "### `[%s]` -- `%s` (%d)" table model (List.length keys); "" ]
         @ List.map entry keys @ [ "" ])
@@ -188,12 +205,8 @@ let render_body ({ section_keys; per_provider; top_level } as config_keys) =
   in
   let lines =
     lines
-    @ [
-        Printf.sprintf "### Per-provider keys -- `ProviderConfig` (%d)" per_provider_count;
-        "";
-      ]
-    @ List.map entry per_provider
-    @ [ "" ]
+    @ [ Printf.sprintf "### Per-provider keys -- `ProviderConfig` (%d)" per_provider_count; "" ]
+    @ List.map entry per_provider @ [ "" ]
   in
   let lines =
     lines
@@ -203,10 +216,10 @@ let render_body ({ section_keys; per_provider; top_level } as config_keys) =
   strip_trailing_blanks lines
 
 let render_journal () =
-  let total = List.fold_left (fun acc (_, fields) -> acc + List.length fields) 0 Server.journal_fields in
-  let lines =
-    [ ""; Printf.sprintf "## Usage-journal fields (%d)" total; "" ]
+  let total =
+    List.fold_left (fun acc (_, fields) -> acc + List.length fields) 0 Server.journal_fields
   in
+  let lines = [ ""; Printf.sprintf "## Usage-journal fields (%d)" total; "" ] in
   List.fold_left
     (fun lines (kind, fields) ->
       lines
@@ -216,7 +229,18 @@ let render_journal () =
   |> strip_trailing_blanks
 
 let render_full config_keys =
-  let { tools; routes; verbs; flags; providers; section_total; section_count; per_provider_count; operational; top_level_count = _ } =
+  let {
+    tools;
+    routes;
+    verbs;
+    flags;
+    providers;
+    section_total;
+    section_count;
+    per_provider_count;
+    operational;
+    top_level_count = _;
+  } =
     count_lines config_keys
   in
   let journal_total =
@@ -232,9 +256,11 @@ let render_full config_keys =
       "fails the build on any drift, journal fields included.";
       "";
       Printf.sprintf
-        "%d MCP tools, %d REST routes, %d CLI verbs, %d server flags, %d provider names, %d section config keys over %d tables, %d per-provider config keys, %d operational routes, %d usage-journal fields."
-        tools routes verbs flags providers section_total section_count per_provider_count operational
-        journal_total;
+        "%d MCP tools, %d REST routes, %d CLI verbs, %d server flags, %d provider names, %d \
+         section config keys over %d tables, %d per-provider config keys, %d operational routes, \
+         %d usage-journal fields."
+        tools routes verbs flags providers section_total section_count per_provider_count
+        operational journal_total;
       "";
       "<!-- surface:body -->";
     ]
@@ -246,15 +272,9 @@ let print lines = List.iter print_endline lines
 let () =
   (* argv always carries the executable name, but reading the tail by pattern
      keeps the scan total. *)
-  let args =
-    match Array.to_list Sys.argv with _ :: args -> args | [] -> []
-  in
+  let args = match Array.to_list Sys.argv with _ :: args -> args | [] -> [] in
   let python_body = List.mem "--python-body" args in
   let path_args = List.filter (fun a -> a <> "--python-body") args in
-  let config_mli =
-    match path_args with
-    | path :: _ -> path
-    | [] -> ".." // "lib" // "config.mli"
-  in
+  let config_mli = match path_args with path :: _ -> path | [] -> ".." // "lib" // "config.mli" in
   let config_keys = read_config_keys config_mli in
   if python_body then print (render_body config_keys) else print (render_full config_keys)

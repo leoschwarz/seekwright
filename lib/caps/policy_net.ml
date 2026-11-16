@@ -7,17 +7,9 @@ type request = {
   body : string option;
 }
 
-type response = {
-  status : int;
-  headers : (string * string) list;
-  body : string;
-}
+type response = { status : int; headers : (string * string) list; body : string }
 
-type endpoint = {
-  scheme : [ `Http | `Https ];
-  host : string;
-  port : int option;
-}
+type endpoint = { scheme : [ `Http | `Https ]; host : string; port : int option }
 
 type destination = {
   scheme : [ `Http | `Https ];
@@ -27,9 +19,7 @@ type destination = {
   peer_ip : Ipaddr.t option;
 }
 
-type port_policy =
-  | Default_ports
-  | Any_port
+type port_policy = Default_ports | Any_port
 
 type policy =
   | Endpoints of destination list
@@ -78,8 +68,9 @@ let host_rejected host =
   Error
     (Error.make Error.Invalid
        ~message:
-         (Printf.sprintf "%s is neither a domain name nor an IP address, so it cannot be an \
-                          endpoint or a request target"
+         (Printf.sprintf
+            "%s is neither a domain name nor an IP address, so it cannot be an endpoint or a \
+             request target"
             (Error.sanitize host)))
 
 let classify_host host =
@@ -106,9 +97,7 @@ let normalise_host raw =
   else if String.length host > 253 then
     Error (Error.make Error.Invalid ~message:"a host is longer than 253 characters")
   else if
-    String.contains host '/'
-    || String.contains host '@'
-    || String.contains host '\\'
+    String.contains host '/' || String.contains host '@' || String.contains host '\\'
     || String.contains host ' '
   then
     (* [Uri.host] should not hand these over, so this is defence in depth
@@ -135,8 +124,7 @@ let normalise_endpoint (entry : endpoint) =
 (* The host is what an auditor greps for, so a duplicate entry — one written
    [Api.test], one [api.test] — is a startup mistake worth refusing rather than
    a first-match rule a reader has to remember. *)
-let same_destination a b =
-  String.equal a.host b.host && a.port = b.port && a.scheme = b.scheme
+let same_destination a b = String.equal a.host b.host && a.port = b.port && a.scheme = b.scheme
 
 let normalise_endpoints endpoints =
   if endpoints = [] then
@@ -211,7 +199,7 @@ let decide_destination (t : 'tag confinement) uri =
              ~message:
                (Printf.sprintf "%s://%s:%d is not one of the endpoints this grant allows"
                   (scheme_name scheme) (Error.sanitize host) port))
-  | ((Public_web port_policy | Private_web port_policy) as web) -> (
+  | (Public_web port_policy | Private_web port_policy) as web -> (
       (* The port half of the policy is a mode, not a second allow-list: the
          safe default pins the scheme's own port, and [Any_port] is the
          seekwright mode that matches Python. The address half is
@@ -227,26 +215,34 @@ let decide_destination (t : 'tag confinement) uri =
             (Error.make Error.Denied
                ~message:
                  (Printf.sprintf
-                    "%s://%s:%d is refused: the %s grant uses port %d for %s, and an \
-                     explicit port needs an endpoint list or the any-port mode"
+                    "%s://%s:%d is refused: the %s grant uses port %d for %s, and an explicit port \
+                     needs an endpoint list or the any-port mode"
                     (scheme_name scheme) (Error.sanitize host) port (web_mode_name web)
                     (scheme_port scheme) (scheme_name scheme)))
-      | Default_ports | Any_port ->
-          Ok candidate)
+      | Default_ports | Any_port -> Ok candidate)
 
 let special_use : (string * int) list =
   [
     (* IANA special-purpose registry, IPv4. *)
-    ("0.0.0.0", 8); (* "this host on this network" — ipaddr treats only the
+    ("0.0.0.0", 8);
+    (* "this host on this network" — ipaddr treats only the
                        exact address as non-global, so the whole block goes here *)
-    ("128.0.0.0", 16); (* future use, reserved (RFC 6890) *)
-    ("100.64.0.0", 10); (* shared address space (CGNAT) *)
-    ("192.0.0.0", 24); (* IETF protocol assignments *)
-    ("192.0.2.0", 24); (* documentation (TEST-NET-1) *)
-    ("198.18.0.0", 15); (* benchmarking *)
-    ("198.51.100.0", 24); (* documentation (TEST-NET-2) *)
-    ("203.0.113.0", 24); (* documentation (TEST-NET-3) *)
-    ("240.0.0.0", 4); (* reserved for future use *)
+    ("128.0.0.0", 16);
+    (* future use, reserved (RFC 6890) *)
+    ("100.64.0.0", 10);
+    (* shared address space (CGNAT) *)
+    ("192.0.0.0", 24);
+    (* IETF protocol assignments *)
+    ("192.0.2.0", 24);
+    (* documentation (TEST-NET-1) *)
+    ("198.18.0.0", 15);
+    (* benchmarking *)
+    ("198.51.100.0", 24);
+    (* documentation (TEST-NET-2) *)
+    ("203.0.113.0", 24);
+    (* documentation (TEST-NET-3) *)
+    ("240.0.0.0", 4);
+    (* reserved for future use *)
     (* IPv6. [fc00::/7] is unique-local, and ipaddr reports its scope as global;
        the rest are the documentation and transition ranges, which name
        addresses that are not publicly routable by construction. [fe80::/10]
@@ -256,9 +252,12 @@ let special_use : (string * int) list =
     ("fc00::", 7);
     ("fe80::", 10);
     ("2001:db8::", 32);
-    ("2001::", 32); (* Teredo *)
-    ("2002::", 16); (* 6to4 *)
-    ("100::", 64); (* discard *)
+    ("2001::", 32);
+    (* Teredo *)
+    ("2002::", 16);
+    (* 6to4 *)
+    ("100::", 64);
+    (* discard *)
     (* Transition prefixes that carry an IPv4 destination in their low 32 bits.
        An IP literal skips DNS, so the address policy is the only check it meets —
        and [is_global] calls every one of these global ([64:ff9b::10.0.0.1],
@@ -267,9 +266,12 @@ let special_use : (string * int) list =
        which computes its scope from the embedded v4 address; the IPv4-translated
        prefix ([0::ffff:0:a.b.c.d], RFC 2765) sits one [ffff] group earlier and
        gets no such treatment. *)
-    ("64:ff9b::", 96); (* NAT64 well-known prefix, RFC 6052 *)
-    ("64:ff9b:1::", 48); (* NAT64 local-use prefix, RFC 8215 *)
-    ("::ffff:0:0:0", 96); (* IPv4-translated, RFC 2765 *)
+    ("64:ff9b::", 96);
+    (* NAT64 well-known prefix, RFC 6052 *)
+    ("64:ff9b:1::", 48);
+    (* NAT64 local-use prefix, RFC 8215 *)
+    ("::ffff:0:0:0", 96);
+    (* IPv4-translated, RFC 2765 *)
   ]
 
 (* [mem_network "100.64.0.0" 10 ip] compares the leading [bits] of the two
@@ -294,12 +296,11 @@ let mem_network network bits ip =
              mask is [0xff] shifted left, not right: [fc00::/7] must cover
              [fd12:3456::1] as well as [fc00::1]. *)
           let mask = (0xff lsl (8 - rest)) land 0xff in
-          (Char.code a.[index] land mask) = (Char.code b.[index] land mask)
+          Char.code a.[index] land mask = Char.code b.[index] land mask
       in
       check 0
 
-let in_special_use ip =
-  List.exists (fun (network, bits) -> mem_network network bits ip) special_use
+let in_special_use ip = List.exists (fun (network, bits) -> mem_network network bits ip) special_use
 
 (* The three addresses that are not hosts: [0.0.0.0] and [::] name "any local
    address" (something to bind, not something to dial — Linux routes a connect to
@@ -333,9 +334,8 @@ let not_a_host ip =
 let satisfies_address policy ip =
   match policy with
   | Endpoints _ -> true
-  | Public_web _ ->
-      Ipaddr.is_global ip && not (Ipaddr.is_multicast ip) && not (in_special_use ip)
-  | Private_web _ -> not (Ipaddr.is_multicast ip) && not (not_a_host ip)
+  | Public_web _ -> Ipaddr.is_global ip && (not (Ipaddr.is_multicast ip)) && not (in_special_use ip)
+  | Private_web _ -> (not (Ipaddr.is_multicast ip)) && not (not_a_host ip)
 
 (* The same refusal sentence has to describe the right policy: telling an
    operator who approved intranet reads that "the public-web policy" blocked a
@@ -344,8 +344,8 @@ let address_policy_note = function
   | Endpoints _ -> "the endpoint list pins the destinations this grant may dial"
   | Public_web _ -> "the public-web policy allows only globally routable unicast addresses"
   | Private_web _ ->
-      "the private-web policy reaches the operator's own network, but not a multicast \
-       group, a broadcast address or the unspecified address"
+      "the private-web policy reaches the operator's own network, but not a multicast group, a \
+       broadcast address or the unspecified address"
 
 let classify exn =
   match exn with
@@ -355,10 +355,10 @@ let classify exn =
       Error
         (Error.make Error.Unavailable
            ~message:
-             ("the host could not be resolved ("
-             ^ Eio.Net.Getaddrinfo_error.to_tag code ^ ")"))
+             ("the host could not be resolved (" ^ Eio.Net.Getaddrinfo_error.to_tag code ^ ")"))
   | Eio.Io (Eio.Net.E (Eio.Net.Connection_failure Eio.Net.Timeout), _) ->
-      Error (Error.make Error.Timeout ~message:"connecting to the vetted address exceeded its bound")
+      Error
+        (Error.make Error.Timeout ~message:"connecting to the vetted address exceeded its bound")
   | Eio.Io (Eio.Net.E (Eio.Net.Connection_failure _), _) ->
       Error (Error.make Error.Unavailable ~message:"the endpoint refused the connection")
   | Eio.Io (Eio.Net.E (Eio.Net.Connection_reset _), _) ->
@@ -377,7 +377,8 @@ let classify exn =
      peer-controlled text in a tool result, which is what [Error] exists to
      stop. *)
   | Failure _ | Invalid_argument _ ->
-      Error (Error.make Error.Failed ~message:"the endpoint sent a response this client could not read")
+      Error
+        (Error.make Error.Failed ~message:"the endpoint sent a response this client could not read")
   (* Any other Eio fault is reported by kind, without its payload: the detail of
      an [Eio.Io] names the flow and sometimes the peer, and a tool has no use for
      either. Anything that is not an [Eio.Io] is a bug in this tree or in the
@@ -404,9 +405,7 @@ let resolve (t : 'tag confinement) destination =
   let* answers =
     try
       Ok
-        (Eio.Net.getaddrinfo_stream
-           ~service:(string_of_int destination.port)
-           t.net destination.host)
+        (Eio.Net.getaddrinfo_stream ~service:(string_of_int destination.port) t.net destination.host)
     with ex -> classify ex
   in
   let on_port =
@@ -424,18 +423,18 @@ let resolve (t : 'tag confinement) destination =
     let vetted = List.filter (policy_address t.policy) on_port in
     match vetted with
     | [] ->
-      Error
-        (Error.make Error.Denied
-           ~message:
-             (Printf.sprintf
-                "%s resolved to %d address(es), none of which this grant may connect to (%s)"
-                (Error.sanitize destination.host) (List.length on_port)
-                (address_policy_note t.policy)))
+        Error
+          (Error.make Error.Denied
+             ~message:
+               (Printf.sprintf
+                  "%s resolved to %d address(es), none of which this grant may connect to (%s)"
+                  (Error.sanitize destination.host) (List.length on_port)
+                  (address_policy_note t.policy)))
     | address :: _ ->
-      (* The [Eio] form, because that is what [Eio.Net.connect] takes: the
+        (* The [Eio] form, because that is what [Eio.Net.connect] takes: the
          vetting and the connection name the same address, which is the whole
          point of resolving here rather than letting the HTTP client do it. *)
-      Ok address
+        Ok address
 
 (* The target check a fetch fallback runs on a URL it is about to hand to a
    third party. A fallback's grant decides the {i vendor} it dials; the target
@@ -462,10 +461,9 @@ let vet_public_host ~net ~host =
         Error
           (Error.make Error.Denied
              ~message:(Printf.sprintf "%s is not a public address" (Error.sanitize host)))
-  | Error _ ->
+  | Error _ -> (
       let answers =
-        try Ok (Eio.Net.getaddrinfo_stream ~service:"0" net host)
-        with ex -> classify ex
+        try Ok (Eio.Net.getaddrinfo_stream ~service:"0" net host) with ex -> classify ex
       in
       let addresses =
         match answers with
@@ -479,8 +477,7 @@ let vet_public_host ~net ~host =
               (function
                 | `Tcp (ip, _) ->
                     let (ip : Eio.Net.Ipaddr.v4v6) = ip in
-                    Option.map Ipaddr.to_string
-                      (Result.to_option (Ipaddr.of_octets (ip :> string)))
+                    Option.map Ipaddr.to_string (Result.to_option (Ipaddr.of_octets (ip :> string)))
                 | _ -> None)
               answers
       in
@@ -508,11 +505,11 @@ let vet_public_host ~net ~host =
                    (Printf.sprintf
                       "%s resolves to a non-public address (%s); fetching private, loopback and \
                        link-local addresses is disabled"
-                      (Error.sanitize host) (Error.sanitize first)))
+                      (Error.sanitize host) (Error.sanitize first))))
 
 (* Reserved headers: authority owns host/framing; caller cannot override. *)
 let authority_owned_headers =
-  ["host"; "content-length"; "transfer-encoding"; "connection"; "upgrade"; "keep-alive"]
+  [ "host"; "content-length"; "transfer-encoding"; "connection"; "upgrade"; "keep-alive" ]
 
 (* RFC 7230 tchar, minus the colon that would turn a name into a value. *)
 let is_token_character char =
@@ -534,7 +531,9 @@ let prepare_headers (request : request) =
   let headers = request.headers in
   let count = List.length headers in
   let bytes =
-    List.fold_left (fun acc (name, value) -> acc + String.length name + String.length value) 0 headers
+    List.fold_left
+      (fun acc (name, value) -> acc + String.length name + String.length value)
+      0 headers
   in
   if count > max_request_headers then
     Error
@@ -558,15 +557,13 @@ let prepare_headers (request : request) =
                       "%s is set by the authority, not by the caller: this grant fixes the Host \
                        header, the framing of the body, and one connection per request"
                       (Error.sanitize name)))
-          else if
-            not (String.for_all is_token_character name && header_value_is_valid value)
-          then
+          else if not (String.for_all is_token_character name && header_value_is_valid value) then
             Error
               (Error.make Error.Invalid
                  ~message:
                    (Printf.sprintf
-                      "the %s header is not a valid HTTP header: a name is token characters and \
-                       a value carries no control characters"
+                      "the %s header is not a valid HTTP header: a name is token characters and a \
+                       value carries no control characters"
                       (Error.sanitize name)))
           else walk rest
     in
@@ -654,7 +651,8 @@ let check_redirect (t : 'tag confinement) response =
                      (Printf.sprintf
                         "the endpoint answered %d with a redirect to a host this grant does not \
                          allow (%s); nothing was followed"
-                        status (Error.sanitize (Uri.host_with_default ~default:"?" target)))))
+                        status
+                        (Error.sanitize (Uri.host_with_default ~default:"?" target)))))
 
 (* The body of one request, inside the ceiling the operator and the caller
    agreed on. *)
@@ -670,48 +668,57 @@ let send (t : 'tag confinement) ~destination ?max_response_bytes request vetted 
   (* One switch per operation, which is what closes the socket on every result
      path — the ceiling and the timeout both unwind out of this body (§5). *)
   Eio.Switch.run (fun sw ->
-    let client =
-      Cohttp_eio.Client.make_generic (fun ~sw:_ (_uri : Uri.t) ->
-        open_connection t ~destination ~vetted sw)
-    in
-    let response, body_flow =
-      Cohttp_eio.Client.call client ~sw ~headers ?body (request.meth :> Http.Method.t) uri
-    in
-    let status = Http.Status.to_int (Http.Response.status response) in
-    let* () = check_redirect t response in
-    (* The ceiling is enforced on the bytes actually read. [Content-Length] is
+      let client =
+        Cohttp_eio.Client.make_generic (fun ~sw:_ (_uri : Uri.t) ->
+            open_connection t ~destination ~vetted sw)
+      in
+      let response, body_flow =
+        Cohttp_eio.Client.call client ~sw ~headers ?body (request.meth :> Http.Method.t) uri
+      in
+      let status = Http.Status.to_int (Http.Response.status response) in
+      let* () = check_redirect t response in
+      (* The ceiling is enforced on the bytes actually read. [Content-Length] is
        trusted in neither direction: a server that lies about it, in either
        direction, meets the read limit rather than a comparison (§5). *)
-    try
-      let content = Eio.Buf_read.(take_all (of_flow body_flow ~max_size:(limit + 1))) in
-      Ok ({ status; headers = Http.Header.to_list (Http.Response.headers response); body = content } : response)
-    with Eio.Buf_read.Buffer_limit_exceeded ->
-      Error
-        (Error.make Error.Denied
-           ~message:
-             (Printf.sprintf
-                "the response is larger than the %d-byte ceiling (max_response_bytes may lower \
-                 it, never raise it); the body was not read"
-                limit)))
+      try
+        let content = Eio.Buf_read.(take_all (of_flow body_flow ~max_size:(limit + 1))) in
+        Ok
+          ({
+             status;
+             headers = Http.Header.to_list (Http.Response.headers response);
+             body = content;
+           }
+            : response)
+      with Eio.Buf_read.Buffer_limit_exceeded ->
+        Error
+          (Error.make Error.Denied
+             ~message:
+               (Printf.sprintf
+                  "the response is larger than the %d-byte ceiling (max_response_bytes may lower \
+                   it, never raise it); the body was not read"
+                  limit)))
 
 let request ~controls ?max_response_bytes (T t) request =
   Controls_raw.run controls ~operation:"net.request"
     ~measure:(fun response -> Some (String.length response.body))
-    ~notes:(fun response -> [("status", string_of_int response.status)])
+    ~notes:(fun response -> [ ("status", string_of_int response.status) ])
     (fun () ->
       let* destination = decide_destination t request.uri in
       let* vetted = resolve t destination in
-      try send t ~destination ?max_response_bytes request vetted
-      with Refusal error -> Error error | ex -> classify ex)
+      try send t ~destination ?max_response_bytes request vetted with
+      | Refusal error -> Error error
+      | ex -> classify ex)
 
 let ensure_rng () =
-  try (ignore (Mirage_crypto_rng.default_generator ()); Ok ()) with
-  | Mirage_crypto_rng.No_default_generator ->
-      Error
-        (Error.make Error.Failed
-           ~message:
-             "https needs a random generator: the application must install one (for example \
-              Mirage_crypto_rng_unix.use_default ()) before a network grant is built")
+  try
+    ignore (Mirage_crypto_rng.default_generator ());
+    Ok ()
+  with Mirage_crypto_rng.No_default_generator ->
+    Error
+      (Error.make Error.Failed
+         ~message:
+           "https needs a random generator: the application must install one (for example \
+            Mirage_crypto_rng_unix.use_default ()) before a network grant is built")
 
 let tls_config () =
   let* () = ensure_rng () in
@@ -721,7 +728,7 @@ let tls_config () =
         (Error.make Error.Unavailable
            ~message:
              ("the system trust anchors could not be read (" ^ Error.sanitize message
-             ^ "); ca-certs looks in the OS store, or at SSL_CERT_FILE when it is set"))
+            ^ "); ca-certs looks in the OS store, or at SSL_CERT_FILE when it is set"))
   | Ok authenticator -> (
       (* [~authenticator] is the trust anchor store and nothing else: no
          [accept_any] / no bypass. The validity instant is captured here, once,
@@ -730,14 +737,13 @@ let tls_config () =
       | Error (`Msg message) ->
           Error
             (Error.make Error.Failed
-               ~message:("the TLS client configuration was rejected (" ^ Error.sanitize message ^ ")"))
+               ~message:
+                 ("the TLS client configuration was rejected (" ^ Error.sanitize message ^ ")"))
       | Ok config -> Ok config)
 
 let response_ceiling max_response_bytes =
   if max_response_bytes <= 0 then
-    Error
-      (Error.make Error.Invalid
-         ~message:"max_response_bytes must be a positive count of bytes")
+    Error (Error.make Error.Invalid ~message:"max_response_bytes must be a positive count of bytes")
   else if max_response_bytes > max_configurable_response_bytes then
     Error
       (Error.make Error.Invalid

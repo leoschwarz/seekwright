@@ -73,9 +73,7 @@ let page_request port : Authority.Net.request =
 let with_fixture f =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  let socket =
-    Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0))
-  in
+  let socket = Eio.Net.listen ~backlog:16 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, 0)) in
   let port =
     match Eio.Net.listening_addr socket with
     | `Tcp (_, port) -> port
@@ -85,9 +83,9 @@ let with_fixture f =
   let stop, fill_stop = Eio.Promise.create () in
   let stopped, fill_stopped = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
-    Fun.protect
-      ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
-      (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
+      Fun.protect
+        ~finally:(fun () -> Eio.Promise.resolve fill_stopped ())
+        (fun () -> Cohttp_eio.Server.run ~stop ~on_error:(fun _exn -> ()) socket server));
   Fun.protect
     ~finally:(fun () ->
       Eio.Promise.resolve fill_stop ();
@@ -103,9 +101,8 @@ let capture () =
 
 let factory_grant ~audit env sw port =
   match
-    Factory.grant_of_endpoint ~sw ~net:env#net
-      ~mono_clock:(Eio.Stdenv.mono_clock env) ~timeout_seconds:5.0 ~audit
-      (endpoint port)
+    Factory.grant_of_endpoint ~sw ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env)
+      ~timeout_seconds:5.0 ~audit (endpoint port)
   with
   | Error message -> A.failf "the fixture grant was refused: %s" message
   | Ok grant -> grant
@@ -115,8 +112,8 @@ let factory_grant ~audit env sw port =
    optional argument comes last, so a positional call cannot skip it. *)
 let factory_grant_without_a_sink env sw port =
   match
-    Factory.grant_of_endpoint ~sw ~net:env#net
-      ~mono_clock:(Eio.Stdenv.mono_clock env) ~timeout_seconds:5.0 (endpoint port)
+    Factory.grant_of_endpoint ~sw ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env)
+      ~timeout_seconds:5.0 (endpoint port)
   with
   | Error message -> A.failf "the fixture grant was refused: %s" message
   | Ok grant -> grant
@@ -132,16 +129,21 @@ let test_a_granted_operation_records_one_event () =
           let recorded = events () in
           A.(check int "one event per operation" 1 (List.length recorded));
           let event = List.hd recorded in
-          A.(check string "the operation is named by the layer" "net.request"
-               (Event.operation event));
-          A.(check string "the outcome is ok" "ok"
-               (Event.outcome_to_string (Event.outcome event)));
-          A.(check (A.option A.int) "the byte count is the body's size"
-               (Some (String.length response_body)) (Event.bytes event));
+          A.(
+            check string "the operation is named by the layer" "net.request" (Event.operation event));
+          A.(check string "the outcome is ok" "ok" (Event.outcome_to_string (Event.outcome event)));
+          A.(
+            check (A.option A.int) "the byte count is the body's size"
+              (Some (String.length response_body))
+              (Event.bytes event));
           (* the operation's own note: a non-2xx that arrives is an ok transport
              outcome, so the line has to say which answer it was *)
-          A.(check (A.list A.(pair string string)) "the notes are the operation's"
-               [ ("status", "200") ] (Event.notes event)))
+          A.(
+            check
+              (A.list A.(pair string string))
+              "the notes are the operation's"
+              [ ("status", "200") ]
+              (Event.notes event)))
 
 (* The bound is per operation and so is the line: a grant that makes four
    requests is four records, which is what makes a fan-out visible in the log. *)
@@ -156,8 +158,7 @@ let test_a_second_operation_records_a_second_event () =
   List.iter
     (fun event ->
       A.(check string "the same operation name each time" "net.request" (Event.operation event));
-      A.(check string "each of them answered" "ok"
-           (Event.outcome_to_string (Event.outcome event))))
+      A.(check string "each of them answered" "ok" (Event.outcome_to_string (Event.outcome event))))
     (events ())
 
 let test_a_status_answer_records_its_status () =
@@ -165,8 +166,9 @@ let test_a_status_answer_records_its_status () =
   with_fixture (fun env sw port ->
       let grant = factory_grant ~audit env sw port in
       let off_list =
-        { (page_request port) with
-          uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/missing" port)
+        {
+          (page_request port) with
+          uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/missing" port);
         }
       in
       match Authority.Net.request grant off_list with
@@ -175,19 +177,20 @@ let test_a_status_answer_records_its_status () =
   let recorded = events () in
   A.(check int "one event for the 404" 1 (List.length recorded));
   let event = List.hd recorded in
-  A.(check string "an answer is an ok outcome" "ok"
-       (Event.outcome_to_string (Event.outcome event)));
-  A.(check (A.list A.(pair string string)) "the status note says which answer"
-       [ ("status", "404") ] (Event.notes event));
+  A.(check string "an answer is an ok outcome" "ok" (Event.outcome_to_string (Event.outcome event)));
+  A.(
+    check
+      (A.list A.(pair string string))
+      "the status note says which answer"
+      [ ("status", "404") ]
+      (Event.notes event));
   A.(check (A.option A.int) "the byte count is what arrived" (Some 12) (Event.bytes event))
 
 (* A refusal inside the grant is the case the trail exists for: nothing reached
    the network, and only the record says so. The fetch stack's primary route is
    the public-web grant, so a loopback URL is refused by the grant itself. *)
 let fetch_config () =
-  match
-    Config.resolve ~fetch:{ Config.default_fetch_config with Config.enabled = true } ()
-  with
+  match Config.resolve ~fetch:{ Config.default_fetch_config with Config.enabled = true } () with
   | Error message -> A.failf "the fixture config was refused: %s" message
   | Ok config -> config
 
@@ -195,8 +198,8 @@ let test_a_refused_operation_records_one_event () =
   let audit, events = capture () in
   with_fixture (fun env sw port ->
       match
-        Factory.build_fetch_stack ~sw ~net:env#net
-          ~mono_clock:(Eio.Stdenv.mono_clock env) ~audit (fetch_config ())
+        Factory.build_fetch_stack ~sw ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env) ~audit
+          (fetch_config ())
       with
       | None -> A.fail "the fixture config left fetch disabled"
       | Some (Error message) -> A.failf "build_fetch_stack: %s" message
@@ -211,23 +214,28 @@ let test_a_refused_operation_records_one_event () =
               A.failf "the public-web grant fetched a loopback URL: %d"
                 page.Engine.Fetch.status_code
           | Error reason ->
-              A.(check bool "a private address is a policy refusal, not a failure" true
-                   (match reason with
-                   | Engine.Fetch.Url_blocked _ | Engine.Fetch.Redirect_blocked _
-                   | Engine.Fetch.Fetch_blocked _ -> true
-                   | Engine.Fetch.Provider _ -> false)));
+              A.(
+                check bool "a private address is a policy refusal, not a failure" true
+                  (match reason with
+                  | Engine.Fetch.Url_blocked _ | Engine.Fetch.Redirect_blocked _
+                  | Engine.Fetch.Fetch_blocked _ ->
+                      true
+                  | Engine.Fetch.Provider _ -> false)));
           let recorded = events () in
           A.(check int "one event for the refusal" 1 (List.length recorded));
           let event = List.hd recorded in
           A.(check string "the operation is still named" "net.request" (Event.operation event));
-          A.(check string "the outcome names the class" "failed:denied"
-               (Event.outcome_to_string (Event.outcome event)));
+          A.(
+            check string "the outcome names the class" "failed:denied"
+              (Event.outcome_to_string (Event.outcome event)));
           (* nothing is measured for a body that was never read, and no note is
              attached to a failure: the address that tripped the policy is not
              something the line may carry *)
           A.(check (A.option A.int) "a refusal measures nothing" None (Event.bytes event));
-          A.(check (A.list A.(pair string string)) "a refusal carries no notes" []
-               (Event.notes event)))
+          A.(
+            check
+              (A.list A.(pair string string))
+              "a refusal carries no notes" [] (Event.notes event)))
 
 (* A grant built without a sink is a diagnostic grant — [--check] probing a
    deployment — and it still works: the sink is optional at the builder so that
@@ -265,24 +273,34 @@ let test_a_filesystem_operation_records_its_own_name () =
       | Ok text -> A.(check string "the file was read" "audited\n" text));
       (match Authority.Fs.read_file grant "no-such-file" with
       | Ok _ -> A.fail "the missing file was read"
-      | Error error -> A.(check string "the missing file is reported by kind" "unavailable"
-                            (Error.kind_to_string (Error.kind error))));
+      | Error error ->
+          A.(
+            check string "the missing file is reported by kind" "unavailable"
+              (Error.kind_to_string (Error.kind error))));
       (match Authority.Fs.list_dir grant "" with
       | Error error -> A.failf "list_dir: %s" (Error.render error)
       | Ok names -> A.(check (A.list A.string) "the listing came back" [ "note.md" ] names));
       let recorded = events () in
-      A.(check (A.list A.string) "one event per filesystem operation"
-           [ "fs.read_file"; "fs.read_file"; "fs.list_dir" ]
-           (List.map Event.operation recorded));
-      A.(check string "a result is a result, whatever the kind" "failed:unavailable"
-           (Event.outcome_to_string (Event.outcome (List.nth recorded 1))));
-      A.(check (A.option A.int) "a read measures what it read" (Some 8)
-           (Event.bytes (List.nth recorded 0)));
+      A.(
+        check (A.list A.string) "one event per filesystem operation"
+          [ "fs.read_file"; "fs.read_file"; "fs.list_dir" ]
+          (List.map Event.operation recorded));
+      A.(
+        check string "a result is a result, whatever the kind" "failed:unavailable"
+          (Event.outcome_to_string (Event.outcome (List.nth recorded 1))));
+      A.(
+        check (A.option A.int) "a read measures what it read" (Some 8)
+          (Event.bytes (List.nth recorded 0)));
       (* a listing is counted, never quoted: the names in a directory are content *)
-      A.(check (A.list A.(pair string string)) "a listing reports a count, not its names"
-           [ ("entries", "1") ] (Event.notes (List.nth recorded 2)));
-      A.(check bool "the rendered line carries no path" false
-           (contains ~haystack:(Event.render (List.nth recorded 2)) ~needle:root))
+      A.(
+        check
+          (A.list A.(pair string string))
+          "a listing reports a count, not its names"
+          [ ("entries", "1") ]
+          (Event.notes (List.nth recorded 2)));
+      A.(
+        check bool "the rendered line carries no path" false
+          (contains ~haystack:(Event.render (List.nth recorded 2)) ~needle:root))
 
 (* [audit_sink] through a capturing [Engine.log]: the field dictionary is pinned
    here without driving a socket, so a renamed or widened field set fails on the
@@ -310,16 +328,14 @@ let test_the_line_is_a_constant_event_with_a_fixed_field_set () =
   in
   A.(check string "the event name is a constant dotted name" "caps.operation" name);
   A.(check bool "an operation is logged at info" true (level = Config.Log_info));
-  A.(check (A.list A.string) "the field set is fixed"
-       [ "bytes"; "operation"; "outcome"; "status" ] (field_keys fields));
-  A.(check (A.list A.string) "the values render as the dictionary says"
-       [
-         "bytes=4096";
-         "operation=\"net.request\"";
-         "outcome=\"ok\"";
-         "status=\"200\"";
-       ]
-       (rendered fields))
+  A.(
+    check (A.list A.string) "the field set is fixed"
+      [ "bytes"; "operation"; "outcome"; "status" ]
+      (field_keys fields));
+  A.(
+    check (A.list A.string) "the values render as the dictionary says"
+      [ "bytes=4096"; "operation=\"net.request\""; "outcome=\"ok\""; "status=\"200\"" ]
+      (rendered fields))
 
 (* The names the line owns cannot be overwritten by an operation's note: the
    shape is what a log shipper keys on, so a colliding note rides under a
@@ -330,9 +346,10 @@ let test_a_note_cannot_overwrite_a_fixed_field () =
       ~notes:[ ("operation", "forged"); ("outcome", "forged"); ("bytes", "forged") ]
       "fs.read_file"
   in
-  A.(check (A.list A.string) "the fixed fields keep their names"
-       [ "bytes"; "note_bytes"; "note_operation"; "note_outcome"; "operation"; "outcome" ]
-       (field_keys fields));
+  A.(
+    check (A.list A.string) "the fixed fields keep their names"
+      [ "bytes"; "note_bytes"; "note_operation"; "note_outcome"; "operation"; "outcome" ]
+      (field_keys fields));
   let lookup key = List.assoc key fields in
   (* the field values are JSON, and the dictionary's strings are quoted in them:
      read a string field as the string a log line would show *)
@@ -342,18 +359,18 @@ let test_a_note_cannot_overwrite_a_fixed_field () =
   A.(check string "the operation name is the layer's" "fs.read_file" (as_string "operation"));
   A.(check string "the outcome is the layer's" "ok" (as_string "outcome"));
   A.(check bool "the byte count is the layer's" true (lookup "bytes" = `Int 12));
-  A.(check string "a colliding note survives under a prefix" "forged"
-       (as_string "note_operation"));
-  A.(check string "so does a colliding outcome note" "forged"
-       (as_string "note_outcome"))
+  A.(check string "a colliding note survives under a prefix" "forged" (as_string "note_operation"));
+  A.(check string "so does a colliding outcome note" "forged" (as_string "note_outcome"))
 
 (* A failure line names the class and nothing else. *)
 let test_a_failure_line_names_only_the_class () =
   let _level, _name, fields = through_sink ~outcome:(Event.Failed Error.Denied) "net.request" in
-  A.(check (A.list A.string) "a failure line has no byte count" [ "operation"; "outcome" ]
-       (field_keys fields));
-  A.(check string "the outcome carries the kind" "\"failed:denied\""
-       (Yojson.Safe.to_string (List.assoc "outcome" fields)))
+  A.(
+    check (A.list A.string) "a failure line has no byte count" [ "operation"; "outcome" ]
+      (field_keys fields));
+  A.(
+    check string "the outcome carries the kind" "\"failed:denied\""
+      (Yojson.Safe.to_string (List.assoc "outcome" fields)))
 
 (* The line's length comes from the field set, never from what an operation
    reported: [Event] sanitises and caps what it will hold, so a smuggled newline
@@ -365,21 +382,23 @@ let test_the_line_stays_one_line_and_bounded () =
     |> Event.add_note ~key:"long" ~value:(String.make 4000 'x')
     |> Event.add_note ~key:"control" ~value:"a\tb\nc"
   in
-  A.(check bool "the operation name holds no newline" true
-       (not (String.contains (Event.operation event) '\n')));
+  A.(
+    check bool "the operation name holds no newline" true
+      (not (String.contains (Event.operation event) '\n')));
   A.(check bool "the operation name is bounded" true (String.length (Event.operation event) < 300));
-  A.(check bool "a note value is sanitised too" true
-       (List.for_all
-          (fun (_key, value) -> not (String.contains value '\n'))
-          (Event.notes event)));
+  A.(
+    check bool "a note value is sanitised too" true
+      (List.for_all (fun (_key, value) -> not (String.contains value '\n')) (Event.notes event)));
   let line = Event.render event in
   A.(check int "one event, one line" 1 (List.length (String.split_on_char '\n' line)));
   let _level, _name, fields =
-    through_sink ~bytes:(Some 1) ~notes:(List.init 12 (fun i -> ("k" ^ string_of_int i, "v")))
+    through_sink ~bytes:(Some 1)
+      ~notes:(List.init 12 (fun i -> ("k" ^ string_of_int i, "v")))
       "net.request"
   in
-  A.(check int "the note list is capped at the layer's own ceiling"
-       (3 + Event.max_notes) (List.length fields))
+  A.(
+    check int "the note list is capped at the layer's own ceiling" (3 + Event.max_notes)
+      (List.length fields))
 
 (* Nothing in the record's vocabulary names a request. [Event.t] has no field
    for a URL, a header or a body, so the sink cannot invent one — this is the
@@ -394,27 +413,19 @@ let test_no_field_names_request_data () =
   let check label fields =
     List.iter
       (fun key ->
-        A.(check bool (label ^ ": the line carries the field " ^ key) false
-             (List.mem_assoc key fields)))
+        A.(
+          check bool
+            (label ^ ": the line carries the field " ^ key)
+            false (List.mem_assoc key fields)))
       forbidden
   in
-  let ( _level,
-        _name,
-        fields ) =
+  let _level, _name, fields =
     through_sink ~bytes:(Some 1) ~notes:[ ("status", "200"); ("attempts", "2") ] "net.request"
   in
   check "a successful request" fields;
-  let ( _level,
-        _name,
-        fields ) =
-    through_sink ~notes:[ ("entries", "4") ] "fs.list_dir"
-  in
+  let _level, _name, fields = through_sink ~notes:[ ("entries", "4") ] "fs.list_dir" in
   check "a directory listing" fields;
-  let ( _level,
-        _name,
-        fields ) =
-    through_sink ~outcome:(Event.Failed Error.Denied) "net.request"
-  in
+  let _level, _name, fields = through_sink ~outcome:(Event.Failed Error.Denied) "net.request" in
   check "a refusal" fields
 
 (* The other provider-shaped path: [probe_net] is the seam the readiness probes
@@ -447,31 +458,30 @@ let test_a_probe_operation_is_audited () =
       in
       let net =
         Factory.probe_net ~sw ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env)
-          ~timeout_seconds:5.0 ~audit [ endpoint port ]
+          ~timeout_seconds:5.0 ~audit
+          [ endpoint port ]
       in
-      A.(check string "the probe reached the fixture" "reachable_no_key"
-             (Health.show_outcome (Health.probe ~net ~table config "freeserp"))));
+      A.(
+        check string "the probe reached the fixture" "reachable_no_key"
+          (Health.show_outcome (Health.probe ~net ~table config "freeserp"))));
   let recorded = events () in
   A.(check int "a probe is one operation, one record" 1 (List.length recorded));
-  A.(check string "the operation is the network one" "net.request"
-       (Event.operation (List.hd recorded)));
-  A.(check string "and it answered" "ok"
-       (Event.outcome_to_string (Event.outcome (List.hd recorded))))
+  A.(
+    check string "the operation is the network one" "net.request"
+      (Event.operation (List.hd recorded)));
+  A.(
+    check string "and it answered" "ok" (Event.outcome_to_string (Event.outcome (List.hd recorded))))
 
 (* stdout is the JSON-RPC channel under stdio, so an audit line that reached it
    would corrupt the protocol. What the sink writes goes to stderr; this drives
    the real [Log] sink — not a capturing one — and reads the descriptor back. *)
 let test_nothing_reaches_stdout () =
-  let logger =
-    Log.make { Config.default_logging_config with Config.level = Config.Log_info }
-  in
+  let logger = Log.make { Config.default_logging_config with Config.level = Config.Log_info } in
   let audit = Factory.audit_sink (Log.sink logger) in
   let path = Filename.temp_file "caps-audit-stdout" ".txt" in
   with_fixture (fun env sw port ->
       let saved = Unix.dup Unix.stdout in
-      let file =
-        Unix.openfile path [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o600
-      in
+      let file = Unix.openfile path [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o600 in
       Unix.dup2 file Unix.stdout;
       Unix.close file;
       Fun.protect
@@ -499,8 +509,7 @@ let mirror_source = read_file "../test/should_not_compile/mcp_caps.ml"
    name the funnel it describes. *)
 let factory_all = factory_sources ()
 
-let factory_impls =
-  List.filter (fun (name, _) -> Filename.check_suffix name ".ml") factory_all
+let factory_impls = List.filter (fun (name, _) -> Filename.check_suffix name ".ml") factory_all
 
 let factory_source name =
   match List.assoc_opt name factory_all with
@@ -516,7 +525,7 @@ let funnel_source = "lib/factory/grants.ml"
 
 let count_in sources needle =
   List.fold_left
-    (fun total (_name, text) -> total + count_occurrences ~haystack:text ~needle)
+    (fun total (_name, text) -> total + source_count_occurrences ~haystack:text ~needle)
     0 sources
 
 (* One audit wrapper and one grant construction in the factory: the funnel every
@@ -525,19 +534,26 @@ let count_in sources needle =
    library-wide totals, not one file's: a per-file count would let a split put a
    wrap in each new file and still read one. *)
 let test_the_factory_builds_grants_through_one_funnel () =
-  A.(check int "one audit wrapper across lib/factory" 1
-        (count_in factory_impls "Authority.with_log"));
-  A.(check int "one grant construction across lib/factory" 1
-        (count_in factory_impls "Authority.Net.of_confinement"));
+  A.(
+    check int "one audit wrapper across lib/factory" 1 (count_in factory_impls "Authority.with_log"));
+  A.(
+    check int "one grant construction across lib/factory" 1
+      (count_in factory_impls "Authority.Net.of_confinement"));
   let funnel = factory_source funnel_source in
-  A.(check int (funnel_source ^ " holds the audit wrapper") 1
-        (count_occurrences ~haystack:funnel ~needle:"Authority.with_log"));
-  A.(check int (funnel_source ^ " holds the grant construction") 1
-        (count_occurrences ~haystack:funnel ~needle:"Authority.Net.of_confinement"));
+  A.(
+    check int
+      (funnel_source ^ " holds the audit wrapper")
+      1
+      (source_count_occurrences ~haystack:funnel ~needle:"Authority.with_log"));
+  A.(
+    check int
+      (funnel_source ^ " holds the grant construction")
+      1
+      (source_count_occurrences ~haystack:funnel ~needle:"Authority.Net.of_confinement"));
   (* Each needle is asserted against the file that owns the code it names, so a
      later move fails here rather than passing on another file's text. *)
   List.iter
-    (fun (file, call) -> includes (file ^ " calls " ^ call) call (factory_source file))
+    (fun (file, call) -> source_includes (file ^ " calls " ^ call) call (factory_source file))
     [
       (funnel_source, "grant_of_decision ~mono_clock ~timeout_seconds ?audit decision");
       ("lib/factory/app.ml", "let audit = audit_sink log in");
@@ -547,7 +563,7 @@ let test_the_factory_builds_grants_through_one_funnel () =
       ("lib/factory/providers_build.ml", "?audit adapter.endpoint");
       (funnel_source, "?audit decision");
       ("lib/factory/fetch_stack.ml", "?audit decision");
-      ("lib/factory/app.ml", "?audit endpoint)");
+      ("lib/factory/app.ml", "?audit endpoint");
     ]
 
 (* The two rules the split exists to keep, now that the construction code sits in
@@ -564,8 +580,7 @@ let test_the_verdict_runs_before_the_engine () =
       find_sub ~haystack:app ~needle:"Engine.Search.create" () )
   with
   | Some verdict_at, Some engine_at ->
-      A.(check bool "the verdict runs before the engine construction" true
-           (verdict_at < engine_at))
+      A.(check bool "the verdict runs before the engine construction" true (verdict_at < engine_at))
   | _ -> Alcotest.fail "app.ml lost the verdict call or the engine construction"
 
 (* The second is the boundary that keeps the diagnosis cheap: [--check] answers
@@ -580,11 +595,11 @@ let cli_flags_source = read_file "../lib/cli/cli_flags.ml"
 let test_the_diagnosis_never_builds_an_app () =
   List.iter
     (fun (file, source) ->
-      excludes (file ^ " does not name the App module") "App." source;
-      excludes (file ^ " does not call build_app") "build_app" source)
+      source_excludes (file ^ " does not name the App module") "App." source;
+      source_excludes (file ^ " does not call build_app") "build_app" source)
     [ ("lib/cli/cli_check.ml", cli_check_source); ("lib/cli/cli_flags.ml", cli_flags_source) ];
-  includes "bin/main.ml builds the app through the facade" "Factory.build_app" main_source;
-  includes "factory.ml re-exports the app build" "let build_app = App.build_app"
+  source_includes "bin/main.ml builds the app through the facade" "Factory.build_app" main_source;
+  source_includes "factory.ml re-exports the app build" "let build_app = App.build_app"
     (factory_source "lib/factory/factory.ml")
 
 (* The layer's per-operation counter is a caller's ceiling. Server construction
@@ -595,11 +610,16 @@ let test_the_diagnosis_never_builds_an_app () =
 let test_no_operation_budget_on_the_serving_path () =
   List.iter
     (fun (file, source) ->
-      A.(check int (file ^ " mentions the budget only to refuse it")
-             (count_occurrences ~haystack:source ~needle:"Authority.with_operation_budget")
-             (count_occurrences ~haystack:source ~needle:"[Authority.with_operation_budget]"));
-      A.(check int (file ^ " does not take a budget argument") 0
-            (count_occurrences ~haystack:source ~needle:"?budget")))
+      A.(
+        check int
+          (file ^ " mentions the budget only to refuse it")
+          (source_count_occurrences ~haystack:source ~needle:"Authority.with_operation_budget")
+          (source_count_occurrences ~haystack:source ~needle:"[Authority.with_operation_budget]"));
+      A.(
+        check int
+          (file ^ " does not take a budget argument")
+          0
+          (source_count_occurrences ~haystack:source ~needle:"?budget")))
     (factory_all @ [ ("lib/server.ml", server_source) ])
 
 (* A grant built outside the factory is a grant outside the audit trail. These are
@@ -611,12 +631,15 @@ let test_production_modules_obtain_grants_from_the_factory () =
   let outside_funnel = List.filter (fun (name, _) -> name <> funnel_source) factory_impls in
   List.iter
     (fun (file, source) ->
-      A.(check int (file ^ " does not construct a grant") 0
-            (count_occurrences ~haystack:source ~needle:"of_confinement"));
-      A.(check int (file ^ " does not wrap a grant") 0
-            (count_occurrences ~haystack:source ~needle:"Authority.with_log")))
-    (outside_funnel
-    @ [ ("lib/server.ml", server_source); ("bin/main.ml", main_source) ])
+      A.(
+        check int
+          (file ^ " does not construct a grant")
+          0
+          (source_count_occurrences ~haystack:source ~needle:"of_confinement"));
+      A.(
+        check int (file ^ " does not wrap a grant") 0
+          (source_count_occurrences ~haystack:source ~needle:"Authority.with_log")))
+    (outside_funnel @ [ ("lib/server.ml", server_source); ("bin/main.ml", main_source) ])
 
 (* Nothing outside [lib/caps] may name the sealed layer: if a production module
    named the bounds record or the raw operations, a consumer could follow the
@@ -626,11 +649,13 @@ let test_nothing_outside_caps_names_the_sealed_layer () =
     (fun (file, source) ->
       List.iter
         (fun name ->
-          A.(check int (file ^ " does not name " ^ name) 0
-                (count_occurrences ~haystack:source ~needle:name)))
+          A.(
+            check int
+              (file ^ " does not name " ^ name)
+              0
+              (source_count_occurrences ~haystack:source ~needle:name)))
         [ "Policy_fs"; "Controls_raw" ])
-    (factory_all
-    @ [ ("lib/server.ml", server_source); ("bin/main.ml", main_source) ])
+    (factory_all @ [ ("lib/server.ml", server_source); ("bin/main.ml", main_source) ])
 
 (* Which modules a consumer can name is a property of this one configuration
    line, and only a change to it could widen the surface: reading the file is
@@ -639,7 +664,8 @@ let test_nothing_outside_caps_names_the_sealed_layer () =
    that proof honest. *)
 let private_modules () =
   match
-    List.find_opt (fun line -> contains ~haystack:line ~needle:"(private_modules")
+    List.find_opt
+      (fun line -> contains ~haystack:line ~needle:"(private_modules")
       (String.split_on_char '\n' caps_dune)
   with
   | None -> A.fail "lib/caps/dune declares no private_modules"
@@ -650,13 +676,14 @@ let private_modules () =
       |> List.filter (fun word -> word <> "" && word <> "private_modules")
 
 let test_caps_keeps_its_low_level_modules_private () =
-  A.(check (A.list A.string) "the two modules the layer refuses to expose"
-       [ "policy_fs"; "controls_raw" ] (private_modules ()));
+  A.(
+    check (A.list A.string) "the two modules the layer refuses to expose"
+      [ "policy_fs"; "controls_raw" ] (private_modules ()));
   (* policy_net stays public on purpose: its records are the vocabulary a [Net]
      call is written in, and hiding it breaks the grant path rather than the
      bypass — see the comment in lib/caps/dune. What seals it is the [~controls]
      argument its operations take, whose type is the private module's. *)
-  includes "policy_net's seal is its controls argument" "controls:Controls_raw.t ->"
+  source_includes "policy_net's seal is its controls argument" "controls:Controls_raw.t ->"
     (read_file "../lib/caps/policy_net.mli")
 
 (* The negative fixtures compile against a mirror of the package's public view.
@@ -669,11 +696,11 @@ let test_the_negative_fixture_mirror_matches_the_package () =
       let capitalised =
         String.concat "_" (List.map String.capitalize_ascii (String.split_on_char '_' module_))
       in
-      excludes "the mirror exposes the same surface as the package" ("module " ^ capitalised)
+      source_excludes "the mirror exposes the same surface as the package" ("module " ^ capitalised)
         mirror_source)
     (private_modules ());
-  includes "the mirror keeps the grant layer" "module Authority" mirror_source;
-  includes "the mirror keeps the policy producers" "module Policy" mirror_source
+  source_includes "the mirror keeps the grant layer" "module Authority" mirror_source;
+  source_includes "the mirror keeps the policy producers" "module Policy" mirror_source
 
 let () =
   Mirage_crypto_rng_unix.use_default ();
@@ -706,10 +733,8 @@ let () =
             test_a_failure_line_names_only_the_class;
           A.test_case "the line stays one line and bounded" `Quick
             test_the_line_stays_one_line_and_bounded;
-          A.test_case "no field names request data" `Quick
-            test_no_field_names_request_data;
-          A.test_case "descriptor 1 stays empty" `Quick
-            test_nothing_reaches_stdout;
+          A.test_case "no field names request data" `Quick test_no_field_names_request_data;
+          A.test_case "descriptor 1 stays empty" `Quick test_nothing_reaches_stdout;
         ] );
       ( "the wiring",
         [

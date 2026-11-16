@@ -23,7 +23,9 @@ open Test_support
 let now () = 1768478400.
 let clock () = 1768478400.
 
-let with_env f = Eio_main.run @@ fun env -> Eio.Switch.run @@ fun sw -> f ~env ~sw
+let with_env f =
+  Eio_main.run @@ fun env ->
+  Eio.Switch.run @@ fun sw -> f ~env ~sw
 
 (* An explicit [providers] table — [providers_defaulted] is false for every
    config built here unless noted — with the given names enabled. *)
@@ -37,7 +39,7 @@ let config ?default ?permitted names =
   | Ok config -> config
 
 let build ~env ~sw config =
-  Factory.build_providers ~sw ~net:(env#net) ~mono_clock:(env#mono_clock) ~now config
+  Factory.build_providers ~sw ~net:env#net ~mono_clock:env#mono_clock ~now config
 
 let refusal = function
   | Ok () -> A.fail "the verdict was expected to refuse"
@@ -45,25 +47,30 @@ let refusal = function
 
 let the_default_config_starts_over_its_built_remainder () =
   with_env (fun ~env ~sw ->
-    let built = build ~env ~sw Config.default in
-    let sets = Factory.classify Config.default built in
-    (* The implicit keyless default is the whole keyless set, and every name in
+      let built = build ~env ~sw Config.default in
+      let sets = Factory.classify Config.default built in
+      (* The implicit keyless default is the whole keyless set, and every name in
        it is now built on this port: the transition's exception has nothing left
        to skip. *)
-    A.(check (list string) "the implicit default dispatches every keyless adapter it carries"
-         [ "exa:free"; "freeserp"; "parallel:free" ] sets.Factory.built);
-    (* The skip lane is where an unported keyless default would be disclosed by
+      A.(
+        check (list string) "the implicit default dispatches every keyless adapter it carries"
+          [ "exa:free"; "freeserp"; "parallel:free" ]
+          sets.Factory.built);
+      (* The skip lane is where an unported keyless default would be disclosed by
        name — that is what keeps the exception honest — and it is empty because
        no keyless default is unported. The pin's job is that emptiness: a name
        that moved to [unsupported] under an implicit config would turn a
        config the operator never wrote into a startup failure. *)
-    A.(check (list string) "no keyless default is left to skip" [] sets.Factory.skipped);
-    A.(check (list string) "nothing is startup-fatal under an implicit config"
-         [] sets.Factory.unsupported);
-    A.(check (list string) "and the build pass discloses nothing beside the startup line"
-         [] built.Factory.unsupported);
-    A.(check bool "and the default config may start" true
-         (Result.is_ok (Factory.startup_verdict Config.default built))))
+      A.(check (list string) "no keyless default is left to skip" [] sets.Factory.skipped);
+      A.(
+        check (list string) "nothing is startup-fatal under an implicit config" []
+          sets.Factory.unsupported);
+      A.(
+        check (list string) "and the build pass discloses nothing beside the startup line" []
+          built.Factory.unsupported);
+      A.(
+        check bool "and the default config may start" true
+          (Result.is_ok (Factory.startup_verdict Config.default built))))
 
 let the_keyless_default_set_is_ocaml_live_tested () =
   (* OCaml-untested is this port's own status: a name leaves it only in the
@@ -73,12 +80,13 @@ let the_keyless_default_set_is_ocaml_live_tested () =
      so the implicit config now dispatches three names and reports none of them
      as untested. A name that loses its recorded run would come back here. *)
   with_env (fun ~env ~sw ->
-    let built = build ~env ~sw Config.default in
-    let sets = Factory.classify Config.default built in
-    A.(check (list string) "the dispatched set is the keyless default"
-         [ "exa:free"; "freeserp"; "parallel:free" ] sets.Factory.built);
-    A.(check (list string) "no keyless default name is left untested"
-         [] sets.Factory.untested))
+      let built = build ~env ~sw Config.default in
+      let sets = Factory.classify Config.default built in
+      A.(
+        check (list string) "the dispatched set is the keyless default"
+          [ "exa:free"; "freeserp"; "parallel:free" ]
+          sets.Factory.built);
+      A.(check (list string) "no keyless default name is left untested" [] sets.Factory.untested))
 
 let no_keyless_adapter_left_refuses_the_implicit_config () =
   (* The transition exception stops applying when it would serve nothing: a
@@ -122,22 +130,20 @@ let only_exa_free_is_startup_fatal () =
   in
   let sets = Factory.classify cfg unbuilt in
   A.(check (list string) "built: nothing" [] sets.Factory.built);
-  A.(check (list string) "unsupported: the explicit name" [ "exa:free" ]
-       sets.Factory.unsupported);
-  A.(check (list string) "skipped: the skip lane is not for explicit names"
-       [] sets.Factory.skipped);
+  A.(check (list string) "unsupported: the explicit name" [ "exa:free" ] sets.Factory.unsupported);
+  A.(check (list string) "skipped: the skip lane is not for explicit names" [] sets.Factory.skipped);
   let text = refusal (Factory.startup_verdict cfg unbuilt) in
   includes "the phrase the operator searches for" "not built on this port" text;
   includes "the offending name" "exa:free" text
 
 let stub (n : string) : Provider.t =
   (module struct
-     let name = n
-     let cost_per_1k = 0.001
-     let cost_for n = float_of_int n /. 1000.
-     let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
-     let aclose () = ()
-   end)
+    let name = n
+    let cost_per_1k = 0.001
+    let cost_for n = float_of_int n /. 1000.
+    let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
+    let aclose () = ()
+  end)
 
 let an_explicit_mix_names_every_offender_sorted_in_one_line () =
   (* Enabled: a built name and two this build cannot dispatch. Since the F5.1
@@ -162,8 +168,7 @@ let an_explicit_mix_names_every_offender_sorted_in_one_line () =
     }
   in
   let sets = Factory.classify cfg unbuilt in
-  A.(check (list string) "the built half of the mix still builds" [ "freeserp" ]
-         sets.Factory.built);
+  A.(check (list string) "the built half of the mix still builds" [ "freeserp" ] sets.Factory.built);
   let text = refusal (Factory.startup_verdict cfg unbuilt) in
   includes "both in one line, sorted" "search1api, serpapi" text;
   includes "the phrase" "not built on this port" text;
@@ -192,26 +197,28 @@ let permission_narrowing_narrows_the_sets_not_the_startup () =
      startup fact: the verdict passes, [enabled] still lists both, and
      [effective] is where the narrowing shows. *)
   with_env (fun ~env ~sw ->
-    let cfg = config ~permitted:[ "freeserp" ] [ "freeserp"; "anysearch" ] in
-    let built = build ~env ~sw cfg in
-    let sets = Factory.classify cfg built in
-    A.(check (list string) "enabled is what the file asks" [ "anysearch"; "freeserp" ]
-         sets.Factory.enabled);
-    A.(check (list string) "built is what this process has" [ "anysearch"; "freeserp" ]
-         sets.Factory.built);
-    A.(check (list string) "effective is where permitted bites" [ "freeserp" ]
-         sets.Factory.effective);
-    A.(check bool "and the server starts" true
-         (Result.is_ok (Factory.startup_verdict cfg built))))
+      let cfg = config ~permitted:[ "freeserp" ] [ "freeserp"; "anysearch" ] in
+      let built = build ~env ~sw cfg in
+      let sets = Factory.classify cfg built in
+      A.(
+        check (list string) "enabled is what the file asks" [ "anysearch"; "freeserp" ]
+          sets.Factory.enabled);
+      A.(
+        check (list string) "built is what this process has" [ "anysearch"; "freeserp" ]
+          sets.Factory.built);
+      A.(
+        check (list string) "effective is where permitted bites" [ "freeserp" ]
+          sets.Factory.effective);
+      A.(check bool "and the server starts" true (Result.is_ok (Factory.startup_verdict cfg built))))
 
 let stub (n : string) : Provider.t =
   (module struct
-     let name = n
-     let cost_per_1k = 0.001
-     let cost_for n = float_of_int n /. 1000.
-     let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
-     let aclose () = ()
-   end)
+    let name = n
+    let cost_per_1k = 0.001
+    let cost_for n = float_of_int n /. 1000.
+    let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
+    let aclose () = ()
+  end)
 
 let the_five_sets_are_reported_apart () =
   (* One config that touches all five categories at once: [serper] is enabled
@@ -227,27 +234,28 @@ let the_five_sets_are_reported_apart () =
      the probe's, printed elsewhere. *)
   Unix.putenv (Config.api_key_env_var "search1api") "fixture-key";
   with_env (fun ~env ~sw ->
-    let cfg =
-      config ~permitted:[ "freeserp"; "search1api" ] [ "freeserp"; "serper"; "search1api" ]
-    in
-    let real = build ~env ~sw cfg in
-    let unbuilt_serper =
-      {
-        real with
-        Factory.built = List.filter (fun (name, _) -> name <> "serper") real.Factory.built;
-        unsupported = [ "serper" ];
-      }
-    in
-    let sets = Factory.classify cfg unbuilt_serper in
-    A.(check (list string) "enabled" [ "freeserp"; "search1api"; "serper" ]
-         sets.Factory.enabled);
-    A.(check (list string) "effective" [ "freeserp"; "search1api" ] sets.Factory.effective);
-    A.(check (list string) "built" [ "freeserp"; "search1api" ] sets.Factory.built);
-    A.(check (list string) "unsupported" [ "serper" ] sets.Factory.unsupported);
-    A.(check (list string) "OCaml-untested, built names included"
-         [ "search1api" ] sets.Factory.untested);
-    A.(check bool "and the verdict is the startup-fatal reading" false
-         (Result.is_ok (Factory.startup_verdict cfg unbuilt_serper))));
+      let cfg =
+        config ~permitted:[ "freeserp"; "search1api" ] [ "freeserp"; "serper"; "search1api" ]
+      in
+      let real = build ~env ~sw cfg in
+      let unbuilt_serper =
+        {
+          real with
+          Factory.built = List.filter (fun (name, _) -> name <> "serper") real.Factory.built;
+          unsupported = [ "serper" ];
+        }
+      in
+      let sets = Factory.classify cfg unbuilt_serper in
+      A.(check (list string) "enabled" [ "freeserp"; "search1api"; "serper" ] sets.Factory.enabled);
+      A.(check (list string) "effective" [ "freeserp"; "search1api" ] sets.Factory.effective);
+      A.(check (list string) "built" [ "freeserp"; "search1api" ] sets.Factory.built);
+      A.(check (list string) "unsupported" [ "serper" ] sets.Factory.unsupported);
+      A.(
+        check (list string) "OCaml-untested, built names included" [ "search1api" ]
+          sets.Factory.untested);
+      A.(
+        check bool "and the verdict is the startup-fatal reading" false
+          (Result.is_ok (Factory.startup_verdict cfg unbuilt_serper))));
   (* [Unix] has no unsetenv, and [Config.api_key] reads an empty value as
      absent, so restoring means writing the empty form. *)
   Unix.putenv (Config.api_key_env_var "search1api") ""
@@ -282,7 +290,7 @@ let healthz_body app =
 
 let field json name =
   match json with
-  | `Assoc fields -> (try List.assoc name fields with Not_found -> `Null)
+  | `Assoc fields -> ( try List.assoc name fields with Not_found -> `Null)
   | _ -> `Null
 
 let names = function
@@ -307,47 +315,49 @@ let healthz_drops_a_default_with_no_adapter_behind_it () =
      rather than advertised as a route. *)
   let app = make_app ~enabled:[ "exa:free"; "freeserp" ] ~default:"exa:free" [ "freeserp" ] in
   let body = healthz_body app in
-  A.(check (list string) "the registry is still the whole answer" [ "freeserp" ]
-       (names (field body "providers")));
-  A.(check bool "and the unreachable default is not advertised" true
-       (field body "default_provider" = `Null))
+  A.(
+    check (list string) "the registry is still the whole answer" [ "freeserp" ]
+      (names (field body "providers")));
+  A.(
+    check bool "and the unreachable default is not advertised" true
+      (field body "default_provider" = `Null))
 
 let () =
   Mirage_crypto_rng_unix.use_default ();
   A.run "routing sets"
     [
       ( "the implicit default",
-          [
-            A.test_case "the default config starts over its built remainder" `Quick
-              the_default_config_starts_over_its_built_remainder;
-            A.test_case "the built free remainder is OCaml-live-tested" `Quick
-              the_keyless_default_set_is_ocaml_live_tested;
-            A.test_case "no keyless adapter left refuses the implicit config" `Quick
-              no_keyless_adapter_left_refuses_the_implicit_config;
-          ] );
+        [
+          A.test_case "the default config starts over its built remainder" `Quick
+            the_default_config_starts_over_its_built_remainder;
+          A.test_case "the built free remainder is OCaml-live-tested" `Quick
+            the_keyless_default_set_is_ocaml_live_tested;
+          A.test_case "no keyless adapter left refuses the implicit config" `Quick
+            no_keyless_adapter_left_refuses_the_implicit_config;
+        ] );
       ( "explicitly unbuilt names",
-          [
-            A.test_case "only-exa:free is startup-fatal" `Quick only_exa_free_is_startup_fatal;
-            A.test_case "an explicit mix names every offender sorted in one line" `Quick
-              an_explicit_mix_names_every_offender_sorted_in_one_line;
-            A.test_case "a default outside the built set is refused" `Quick
-              a_default_outside_the_built_set_is_refused_wherever_it_came_from;
-          ] );
+        [
+          A.test_case "only-exa:free is startup-fatal" `Quick only_exa_free_is_startup_fatal;
+          A.test_case "an explicit mix names every offender sorted in one line" `Quick
+            an_explicit_mix_names_every_offender_sorted_in_one_line;
+          A.test_case "a default outside the built set is refused" `Quick
+            a_default_outside_the_built_set_is_refused_wherever_it_came_from;
+        ] );
       ( "permission narrowing",
-          [
-            A.test_case "narrowing narrows the sets, not the startup" `Quick
-              permission_narrowing_narrows_the_sets_not_the_startup;
-          ] );
+        [
+          A.test_case "narrowing narrows the sets, not the startup" `Quick
+            permission_narrowing_narrows_the_sets_not_the_startup;
+        ] );
       ( "the check's five-way distinction",
-          [
-            A.test_case "enabled, effective, built, unsupported and untested are apart" `Quick
-              the_five_sets_are_reported_apart;
-          ] );
+        [
+          A.test_case "enabled, effective, built, unsupported and untested are apart" `Quick
+            the_five_sets_are_reported_apart;
+        ] );
       ( "the built set in reports",
-          [
-            A.test_case "healthz advertises only the built registry" `Quick
-              healthz_advertises_only_the_built_registry;
-            A.test_case "healthz drops a default with no adapter behind it" `Quick
-              healthz_drops_a_default_with_no_adapter_behind_it;
-          ] );
+        [
+          A.test_case "healthz advertises only the built registry" `Quick
+            healthz_advertises_only_the_built_registry;
+          A.test_case "healthz drops a default with no adapter behind it" `Quick
+            healthz_drops_a_default_with_no_adapter_behind_it;
+        ] );
     ]

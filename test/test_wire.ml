@@ -62,13 +62,13 @@ let test_a_page_travels_from_the_fetcher_to_the_engine () =
   A.(check string) "url" sample_page.Wire.url via_engine.Fetch.url;
   A.(check (option string)) "title" sample_page.Wire.title via_engine.Fetch.title;
   A.(check string) "text" sample_page.Wire.text via_engine.Fetch.text;
-  A.(check (option string)) "content type" sample_page.Wire.content_type
-    via_engine.Fetch.content_type;
+  A.(check (option string))
+    "content type" sample_page.Wire.content_type via_engine.Fetch.content_type;
   A.(check int) "status" sample_page.Wire.status_code via_engine.Fetch.status_code;
   A.(check bool) "truncated" sample_page.Wire.truncated via_engine.Fetch.truncated;
   A.(check int) "total chars" sample_page.Wire.total_chars via_engine.Fetch.total_chars;
-  A.(check bool) "path addressable" sample_page.Wire.path_addressable
-    via_engine.Fetch.path_addressable;
+  A.(check bool)
+    "path addressable" sample_page.Wire.path_addressable via_engine.Fetch.path_addressable;
   (* The nested record travelled too. This is the field the copier's second copy
      existed for, and the one whose loss would have looked like a page that
      simply had no picture. *)
@@ -87,12 +87,12 @@ let () =
   A.run "wire"
     [
       ( "one page record",
-          [
-            A.test_case "the record identities are well typed" `Quick
-              test_the_identities_are_well_typed;
-            A.test_case "a page travels from the fetcher to the engine" `Quick
-              test_a_page_travels_from_the_fetcher_to_the_engine;
-            A.test_case "a page with no image stays empty" `Quick
-              test_a_page_with_no_image_stays_empty;
-          ] );
+        [
+          A.test_case "the record identities are well typed" `Quick
+            test_the_identities_are_well_typed;
+          A.test_case "a page travels from the fetcher to the engine" `Quick
+            test_a_page_travels_from_the_fetcher_to_the_engine;
+          A.test_case "a page with no image stays empty" `Quick
+            test_a_page_with_no_image_stays_empty;
+        ] );
     ]

@@ -1,6 +1,4 @@
-type build_error =
-  | Duplicate_tool of string
-  | Invalid_declaration of string
+type build_error = Duplicate_tool of string | Invalid_declaration of string
 
 let ( let* ) = Result.bind
 
@@ -17,8 +15,7 @@ let name_is_usable name =
   String.length name > 0 && String.length name <= max_name_bytes && String.for_all usable name
 
 let schema_error ~name errors =
-  Invalid_declaration
-    (name ^ ": " ^ Mcp_kit.Schema.validation_errors_to_string ~root:name errors)
+  Invalid_declaration (name ^ ": " ^ Mcp_kit.Schema.validation_errors_to_string ~root:name errors)
 
 (* [require_input_object] raises on non-object root schema; caught and returned as Error. *)
 let input_schema entry =
@@ -39,13 +36,9 @@ let mcp_tool entry input_schema output_schema =
           }
     | Error error -> Ok (Mcp_kit.Tool.error_text (Error.render error))
   in
-  Mcp_kit.Tool.make
-    ?title:(Registry.entry_title entry)
+  Mcp_kit.Tool.make ?title:(Registry.entry_title entry)
     ?description:(Registry.entry_description entry)
-    ~input_schema
-    ?output_schema
-    (Registry.entry_name entry)
-    handler
+    ~input_schema ?output_schema (Registry.entry_name entry) handler
 
 let checked_tool entry =
   let name = Registry.entry_name entry in
@@ -76,8 +69,7 @@ let add_all server tools =
       | Ok server -> Ok server
       | Error (Mcp_kit.Server.Duplicate_tool name) -> Error (Duplicate_tool name)
       | Error _ -> Error (Invalid_declaration (Mcp_kit.Tool.name tool ^ " could not be registered")))
-    (Ok server)
-    tools
+    (Ok server) tools
 
 (* Consed and reversed once: [add_all] adds in list order, and that order is
    what [tools/list] advertises — the registry's registration order. *)
@@ -88,7 +80,6 @@ let of_registry ~name ~version registry =
         let* tools = built in
         let* tool = checked_tool entry in
         Ok (tool :: tools))
-      (Ok [])
-      (Registry.entries registry)
+      (Ok []) (Registry.entries registry)
   in
   add_all (Mcp_kit.Server.create ~name ~version ()) (List.rev tools)

@@ -2,9 +2,8 @@
 
     Endpoint: [POST https://google.serper.dev/search] with [X-API-KEY] header.
 
-    Pricing: bills 1 credit when [max_results <= 10], and 2 credits above 10.
-    Supports domains via site operators, country ([gl]), language ([hl]), and
-    recency ([tbs]). Safe search is unhonoured.
+    Pricing: bills 1 credit when [max_results <= 10], and 2 credits above 10. Supports domains via
+    site operators, country ([gl]), language ([hl]), and recency ([tbs]). Safe search is unhonoured.
 
     402/429 indicates credit exhaustion or rate limit. *)
 

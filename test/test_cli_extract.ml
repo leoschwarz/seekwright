@@ -7,7 +7,8 @@ module Extract = Cli_extract
 
 let body_equals ~label body fields =
   let fields = List.map (fun (k, v) -> (k, v)) fields in
-  Alcotest.(check string) label
+  Alcotest.(check string)
+    label
     (Yojson.Safe.pretty_to_string body)
     (Yojson.Safe.pretty_to_string (`Assoc fields))
 
@@ -37,8 +38,7 @@ let str key body =
       match List.assoc_opt key fields with Some (`String v) -> Some v | _ -> None)
   | _ -> None
 
-let has key body =
-  match body with `Assoc fields -> List.mem_assoc key fields | _ -> false
+let has key body = match body with `Assoc fields -> List.mem_assoc key fields | _ -> false
 
 let int_field key body =
   match body with
@@ -62,8 +62,7 @@ let test_search_flag_becomes_field () =
 let test_search_inline_equals () =
   let via_eq = search "qq" ~extra:[ "--provider=parallel" ] in
   let via_space = search "qq" ~extra:[ "--provider"; "parallel" ] in
-  Alcotest.check Alcotest.string
-    "--flag=value matches --flag value"
+  Alcotest.check Alcotest.string "--flag=value matches --flag value"
     (Yojson.Safe.pretty_to_string via_eq)
     (Yojson.Safe.pretty_to_string via_space)
 
@@ -71,7 +70,8 @@ let test_search_no_safe_search () =
   let body = search "qq" ~extra:[ "--no-safe-search" ] in
   match body with
   | `Assoc fields ->
-      Alcotest.(check bool) "safe_search is false" true
+      Alcotest.(check bool)
+        "safe_search is false" true
         (match List.assoc_opt "safe_search" fields with Some (`Bool false) -> true | _ -> false)
   | _ -> Alcotest.fail "not an object"
 
@@ -81,12 +81,12 @@ let test_search_safe_search_takes_no_value () =
      sentence is the refusal. The inline spelling is refused outright. *)
   (match Extract.scan_args [ "qq"; "--safe-search"; "true" ] with
   | Ok scanned ->
-      Alcotest.(check string) "a stray value is a second QUERY"
-        "search takes exactly one QUERY"
+      Alcotest.(check string)
+        "a stray value is a second QUERY" "search takes exactly one QUERY"
         (match Extract.search_body scanned with Error m -> m | Ok _ -> "accepted")
   | Error message ->
-      Alcotest.(check string) "a stray value is a second QUERY"
-        "search takes exactly one QUERY" message);
+      Alcotest.(check string)
+        "a stray value is a second QUERY" "search takes exactly one QUERY" message);
   match Extract.scan_args [ "qq"; "--safe-search=true" ] with
   | Error message ->
       Alcotest.(check string) "an inline value is refused" "--safe-search takes no value" message
@@ -96,7 +96,8 @@ let test_search_safe_search_bare () =
   let body = search "qq" ~extra:[ "--safe-search" ] in
   match body with
   | `Assoc fields ->
-      Alcotest.(check bool) "safe_search is true" true
+      Alcotest.(check bool)
+        "safe_search is true" true
         (match List.assoc_opt "safe_search" fields with Some (`Bool true) -> true | _ -> false)
   | _ -> Alcotest.fail "not an object"
 
@@ -104,27 +105,30 @@ let test_search_domains_repeat () =
   (* A repeated flag is a list only where the request says the field is a
      list. *)
   let body =
-    search "qq" ~extra:[ "--include-domain"; "a.org"; "--include-domain"; "b.org"; "--exclude-domain"; "c.org" ]
+    search "qq"
+      ~extra:
+        [ "--include-domain"; "a.org"; "--include-domain"; "b.org"; "--exclude-domain"; "c.org" ]
   in
-  (match body with
+  match body with
   | `Assoc fields ->
-      Alcotest.(check (list string)) "include_domains" [ "a.org"; "b.org" ]
+      Alcotest.(check (list string))
+        "include_domains" [ "a.org"; "b.org" ]
         (match List.assoc_opt "include_domains" fields with
         | Some (`List items) -> List.map (fun x -> match x with `String s -> s | _ -> "") items
         | _ -> []);
-      Alcotest.(check (list string)) "exclude_domains" [ "c.org" ]
+      Alcotest.(check (list string))
+        "exclude_domains" [ "c.org" ]
         (match List.assoc_opt "exclude_domains" fields with
         | Some (`List items) -> List.map (fun x -> match x with `String s -> s | _ -> "") items
         | _ -> [])
-  | _ -> Alcotest.fail "not an object")
+  | _ -> Alcotest.fail "not an object"
 
 let test_search_unset_fields_absent () =
   (* exclude_none: a field the caller did not pass is absent from the body,
      never present as null. *)
   let body = search "qq" in
   List.iter
-    (fun key ->
-      Alcotest.(check bool) (key ^ " absent") false (has key body))
+    (fun key -> Alcotest.(check bool) (key ^ " absent") false (has key body))
     [ "provider"; "include_domains"; "exclude_domains"; "recency"; "language"; "safe_search" ]
 
 let test_search_recency_values () =
@@ -141,15 +145,28 @@ let test_fetch_minimal () =
 let test_fetch_all_fields () =
   let body =
     fetch "http://x.example/a"
-      ~extra:[ "--query"; "budget"; "--offset"; "4000"; "--path"; ".results[]"; "--structure"; "--provider"; "jina" ]
+      ~extra:
+        [
+          "--query";
+          "budget";
+          "--offset";
+          "4000";
+          "--path";
+          ".results[]";
+          "--structure";
+          "--provider";
+          "jina";
+        ]
   in
   Alcotest.(check string) "query" "budget" (Option.value ~default:"" (str "query" body));
-  Alcotest.(check bool) "offset 4000" true
+  Alcotest.(check bool)
+    "offset 4000" true
     (match int_field "offset" body with Some 4000 -> true | _ -> false);
   Alcotest.(check string) "path" ".results[]" (Option.value ~default:"" (str "path" body));
   let structure_true body =
     match body with
-    | `Assoc f -> ( match List.assoc_opt "structure" f with Some (`Bool true) -> true | _ -> false)
+    | `Assoc f -> (
+        match List.assoc_opt "structure" f with Some (`Bool true) -> true | _ -> false)
     | _ -> false
   in
   Alcotest.(check bool) "structure true" true (structure_true body);
@@ -160,10 +177,12 @@ let test_fetch_structure_absent_when_unset () =
 
 let test_answer_extra_queries_repeat () =
   let body =
-    answer "why" ~extra:[ "--extra-query"; "because"; "--extra-query"; "since"; "--depth"; "report" ]
+    answer "why"
+      ~extra:[ "--extra-query"; "because"; "--extra-query"; "since"; "--depth"; "report" ]
   in
   Alcotest.(check string) "depth" "report" (Option.value ~default:"" (str "depth" body));
-  Alcotest.(check (list string)) "extra_queries" [ "because"; "since" ]
+  Alcotest.(check (list string))
+    "extra_queries" [ "because"; "since" ]
     (match body with
     | `Assoc fields -> (
         match List.assoc_opt "extra_queries" fields with
@@ -181,12 +200,10 @@ let test_needs_a_query () =
 
 let test_exactly_one_query () =
   match Extract.scan_args [ "one"; "two" ] with
-  | Error message ->
-      Alcotest.(check string) "sentence" "search takes exactly one QUERY" message
+  | Error message -> Alcotest.(check string) "sentence" "search takes exactly one QUERY" message
   | Ok scanned -> (
       match Extract.search_body scanned with
-      | Error message ->
-          Alcotest.(check string) "sentence" "search takes exactly one QUERY" message
+      | Error message -> Alcotest.(check string) "sentence" "search takes exactly one QUERY" message
       | Ok _ -> Alcotest.fail "two queries were accepted")
 
 let test_bad_recency () =
@@ -204,8 +221,7 @@ let test_bad_max_results () =
   | Error message -> Alcotest.(check string) "sentence" "--max-results needs a number" message
   | Ok scanned -> (
       match Extract.search_body scanned with
-      | Error message ->
-          Alcotest.(check string) "sentence" "--max-results needs a number" message
+      | Error message -> Alcotest.(check string) "sentence" "--max-results needs a number" message
       | Ok _ -> Alcotest.fail "a non-numeric max-results was accepted")
 
 let test_flag_needs_value () =
@@ -225,8 +241,7 @@ let test_negative_offset_refused () =
   (* the request model is the validator: the CLI never sends a body the REST
      route would refuse. *)
   match Extract.scan_args [ "http://x.example"; "--offset"; "-1" ] with
-  | Error message ->
-      Alcotest.(check bool) ("refused: " ^ message) true (String.length message > 0)
+  | Error message -> Alcotest.(check bool) ("refused: " ^ message) true (String.length message > 0)
   | Ok scanned -> (
       match Extract.fetch_body scanned with
       | Error message ->
@@ -242,15 +257,19 @@ let () =
           Alcotest.test_case "search: flags become fields" `Quick test_search_flag_becomes_field;
           Alcotest.test_case "search: --flag=value" `Quick test_search_inline_equals;
           Alcotest.test_case "search: --no-safe-search" `Quick test_search_no_safe_search;
-          Alcotest.test_case "search: --safe-search fills the field" `Quick test_search_safe_search_bare;
-          Alcotest.test_case "search: --safe-search takes no value" `Quick test_search_safe_search_takes_no_value;
+          Alcotest.test_case "search: --safe-search fills the field" `Quick
+            test_search_safe_search_bare;
+          Alcotest.test_case "search: --safe-search takes no value" `Quick
+            test_search_safe_search_takes_no_value;
           Alcotest.test_case "search: repeated domain flags" `Quick test_search_domains_repeat;
           Alcotest.test_case "search: unset fields absent" `Quick test_search_unset_fields_absent;
           Alcotest.test_case "search: recency values" `Quick test_search_recency_values;
           Alcotest.test_case "fetch: url only" `Quick test_fetch_minimal;
           Alcotest.test_case "fetch: every field" `Quick test_fetch_all_fields;
-          Alcotest.test_case "fetch: structure only when true" `Quick test_fetch_structure_absent_when_unset;
-          Alcotest.test_case "answer: extra queries and depth" `Quick test_answer_extra_queries_repeat;
+          Alcotest.test_case "fetch: structure only when true" `Quick
+            test_fetch_structure_absent_when_unset;
+          Alcotest.test_case "answer: extra queries and depth" `Quick
+            test_answer_extra_queries_repeat;
         ] );
       ( "usage errors",
         [

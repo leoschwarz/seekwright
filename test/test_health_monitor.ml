@@ -22,9 +22,7 @@ let config ?(interval = 60.0) () =
   let search = { Config.default_search_config with Config.health_interval_seconds = interval } in
   match
     Config.resolve
-      ~providers:
-        [ ( "freeserp",
-            { Config.default_provider_config with Config.enabled = true } ) ]
+      ~providers:[ ("freeserp", { Config.default_provider_config with Config.enabled = true }) ]
       ~search ()
   with
   | Ok config -> config
@@ -33,11 +31,13 @@ let config ?(interval = 60.0) () =
 (* The probe row for the one enabled name: a loopback endpoint the fake seam
    never dials, so only the row's shape matters. *)
 let probes =
-  [ ( "freeserp",
+  [
+    ( "freeserp",
       {
         Health.endpoint = Health.probe_endpoint_const "http://127.0.0.1:9/probe";
         headers = (fun _config _key -> []);
-      } ) ]
+      } );
+  ]
 
 let fake_net on_request =
   {
@@ -77,16 +77,14 @@ let test_the_monitor_sleeps_first_and_repeats () =
     events := "sleep" :: !events;
     if List.length !events >= 5 then raise Stop_monitor
   in
-  let net =
-    fake_net (fun _ -> events := "probe" :: !events)
-  in
+  let net = fake_net (fun _ -> events := "probe" :: !events) in
   let board = dummy_board () in
-  (try
-     Server.run_health_monitor (health ~net board) ~config:(config ()) ~sleep
+  (try Server.run_health_monitor (health ~net board) ~config:(config ()) ~sleep
    with Stop_monitor -> ());
-  A.(check (list string) "sleep, probe, repeat with no probe at t=0"
-       [ "sleep"; "probe"; "sleep"; "probe"; "sleep" ]
-       (List.rev !events))
+  A.(
+    check (list string) "sleep, probe, repeat with no probe at t=0"
+      [ "sleep"; "probe"; "sleep"; "probe"; "sleep" ]
+      (List.rev !events))
 
 let test_the_listener_starts_and_stops_the_monitor () =
   Eio_main.run @@ fun env ->
@@ -95,7 +93,7 @@ let test_the_listener_starts_and_stops_the_monitor () =
   let net =
     fake_net (fun _ ->
         incr probes_seen;
-        (try Eio.Promise.resolve resolve_first () with Invalid_argument _ -> ()))
+        try Eio.Promise.resolve resolve_first () with Invalid_argument _ -> ())
   in
   let config = config ~interval:0.01 () in
   let app = app ~health:(Some (health ~net (dummy_board ()))) config in
@@ -107,21 +105,21 @@ let test_the_listener_starts_and_stops_the_monitor () =
   let stop, _resolve_stop = Eio.Promise.create () in
   (try
      Eio.Switch.run (fun sw ->
-       Eio.Fiber.fork ~sw (fun () ->
-           ignore
-             (Server.serve_http ~env ~sw ~log:(fun _ _ _ -> ()) app server
-                ~host:"127.0.0.1" ~port:0 ~stop ()));
-       Eio.Time.with_timeout_exn (Eio.Stdenv.clock env) 2.0 (fun () ->
-           Eio.Promise.await first_probe);
-       (* End the switch the way a shutdown does: an exception cancels every
+         Eio.Fiber.fork ~sw (fun () ->
+             ignore
+               (Server.serve_http ~env ~sw
+                  ~log:(fun _ _ _ -> ())
+                  app server ~host:"127.0.0.1" ~port:0 ~stop ()));
+         Eio.Time.with_timeout_exn (Eio.Stdenv.clock env) 2.0 (fun () ->
+             Eio.Promise.await first_probe);
+         (* End the switch the way a shutdown does: an exception cancels every
           child, the listener and the monitor fiber among them. *)
-       raise Stop_monitor)
+         raise Stop_monitor)
    with Stop_monitor -> ());
   (* Both children have been cancelled and joined by now. *)
   let after_cancel = !probes_seen in
   Eio.Time.sleep (Eio.Stdenv.clock env) 0.1;
-  A.(check int "no probe after the listener's switch ended" after_cancel
-       !probes_seen)
+  A.(check int "no probe after the listener's switch ended" after_cancel !probes_seen)
 
 let () =
   Mirage_crypto_rng_unix.use_default ();
@@ -129,8 +127,7 @@ let () =
     [
       ( "the loop",
         [
-          A.test_case "sleeps first, then repeats" `Quick
-            test_the_monitor_sleeps_first_and_repeats;
+          A.test_case "sleeps first, then repeats" `Quick test_the_monitor_sleeps_first_and_repeats;
           A.test_case "starts and stops with the listener" `Quick
             test_the_listener_starts_and_stops_the_monitor;
         ] );

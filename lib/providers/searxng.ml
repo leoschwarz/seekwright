@@ -19,9 +19,7 @@ let search_uri (instance : Uri.t) =
   Uri.with_path instance (rstrip_slashes (Uri.path instance) ^ "/search")
 
 let base_params (q : Provider.search_query) =
-  let params =
-    [ ("q", [ Provider.site_filtered_query q ]); ("format", [ "json" ]) ]
-  in
+  let params = [ ("q", [ Provider.site_filtered_query q ]); ("format", [ "json" ]) ] in
   let params =
     match q.Model.recency with
     | Some period ->
@@ -51,18 +49,14 @@ let parse ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->
       match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
       | Some url, Some title when url <> "" && title <> "" ->
           let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "content" item)
-              snippet_chars
+            Provider.truncate_snippet (Provider.Json.string_field "content" item) snippet_chars
           in
           Some
             {
@@ -94,9 +88,7 @@ let check_status status =
   else Ok ()
 
 let get_strict (net : Provider.Net.t) (uri : Uri.t) =
-  let request =
-    { Caps.Authority.Net.meth = `GET; uri; headers = []; body = None }
-  in
+  let request = { Caps.Authority.Net.meth = `GET; uri; headers = []; body = None } in
   match net.request request with
   | Error failure -> Error (Provider.transport_error ~provider:name failure)
   | Ok response ->
@@ -111,8 +103,8 @@ let get_page net uri ~required =
 
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
-let search ~cost_per_1k ~snippet_chars ~endpoint (net : Provider.Net.t)
-    (q : Provider.search_query) =
+let search ~cost_per_1k ~snippet_chars ~endpoint (net : Provider.Net.t) (q : Provider.search_query)
+    =
   let search = search_uri endpoint in
   let page_uri pageno =
     Uri.with_query search (base_params q @ [ ("pageno", [ string_of_int pageno ]) ])
@@ -143,8 +135,8 @@ let search ~cost_per_1k ~snippet_chars ~endpoint (net : Provider.Net.t)
       answer = None;
       cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
       notice =
-        Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false
-          ~language:(Some true) ~safety:true;
+        Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:(Some true)
+          ~safety:true;
     }
 
 let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~endpoint ~net () : Provider.t =

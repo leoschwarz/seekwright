@@ -33,7 +33,7 @@ open Test_support
 let zwsp = Sanitize.zwsp
 
 let get key = function
-  | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
+  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
   | _ -> `Null
 
 let items = function `List xs -> xs | _ -> []
@@ -45,7 +45,7 @@ let int = function
   | v -> A.failf "not a count: %s" (Yojson.Safe.to_string v)
 
 let bool = function `Bool b -> b | v -> A.failf "not a flag: %s" (Yojson.Safe.to_string v)
-let is_null = (( = ) `Null)
+let is_null = ( = ) `Null
 
 let float_of = function
   | `Int n -> float_of_int n
@@ -61,36 +61,30 @@ let split_once separator text =
   match find_sub ~haystack:text ~needle:separator () with
   | None -> None
   | Some i ->
-    Some
-      ( String.sub text 0 i,
-        String.sub text (i + String.length separator) (String.length text - i - String.length separator) )
+      Some
+        ( String.sub text 0 i,
+          String.sub text
+            (i + String.length separator)
+            (String.length text - i - String.length separator) )
 
 let rsplit_once separator text =
   let rec go from =
     match find_sub ~start:from ~haystack:text ~needle:separator () with
     | None -> None
     | Some i -> (
-      match find_sub ~start:(i + String.length separator) ~haystack:text ~needle:separator () with
-      | Some _ -> go i
-      | None ->
-        Some
-          ( String.sub text 0 i,
-            String.sub text (i + String.length separator) (String.length text - i - String.length separator) ))
+        match find_sub ~start:(i + String.length separator) ~haystack:text ~needle:separator () with
+        | Some _ -> go i
+        | None ->
+            Some
+              ( String.sub text 0 i,
+                String.sub text
+                  (i + String.length separator)
+                  (String.length text - i - String.length separator) ))
   in
-  match find_sub ~haystack:text ~needle:separator () with
-  | None -> None
-  | Some first -> go first
+  match find_sub ~haystack:text ~needle:separator () with None -> None | Some first -> go first
 
 let result ?snippet ?text ?(url = "https://example.com/a") title =
-  {
-    Model.title;
-    url;
-    snippet;
-    text;
-    text_truncated = None;
-    published_date = None;
-    score = None;
-  }
+  { Model.title; url; snippet; text; text_truncated = None; published_date = None; score = None }
 
 (* [Provider.t] is a packaged module, so the stub is a record of mutable state
    plus a [behavior] field the module's [search] delegates to; a case that
@@ -103,42 +97,41 @@ type stub = {
   behavior : (Model.search_query -> (Provider.outcome, Provider.error) result) ref;
 }
 
-let stub ?(name = "serper") ?(results : [ `Default | `List of Model.result list ] = `Default)
-    ?fail ?(cost_usd = Some 0.007) () =
+let stub ?(name = "serper") ?(results : [ `Default | `List of Model.result list ] = `Default) ?fail
+    ?(cost_usd = Some 0.007) () =
   let s =
     {
       name;
       calls = ref 0;
       seen = ref [];
-      behavior =
-        ref (fun _q -> Error (Provider.provider_error ~provider:name "not configured"));
+      behavior = ref (fun _q -> Error (Provider.provider_error ~provider:name "not configured"));
     }
   in
-  s.behavior
-  := (fun q ->
+  (s.behavior :=
+     fun q ->
        incr s.calls;
        s.seen := !(s.seen) @ [ q ];
        match fail with
        | Some failure -> Error failure
        | None ->
-         let hits =
-           match results with
-           | `Default ->
-             [
-               result ~snippet:"a snippet"
-                 ~url:(Printf.sprintf "https://example.com/%d" !(s.calls))
-                 (Printf.sprintf "About %s" q.Model.query);
-             ]
-           | `List hits -> hits
-         in
-         Ok
-           {
-             Provider.provider = s.name;
-             results = List.map (fun hit -> { Provider.result = hit; uncapped_chars = None }) hits;
-             answer = None;
-             cost_usd;
-             notice = None;
-           });
+           let hits =
+             match results with
+             | `Default ->
+                 [
+                   result ~snippet:"a snippet"
+                     ~url:(Printf.sprintf "https://example.com/%d" !(s.calls))
+                     (Printf.sprintf "About %s" q.Model.query);
+                 ]
+             | `List hits -> hits
+           in
+           Ok
+             {
+               Provider.provider = s.name;
+               results = List.map (fun hit -> { Provider.result = hit; uncapped_chars = None }) hits;
+               answer = None;
+               cost_usd;
+               notice = None;
+             });
   s
 
 let provider_of (s : stub) : Provider.t =
@@ -166,19 +159,9 @@ type model_stub = {
   timeout : bool;
 }
 
-let stub_model ?(content = Some "An answer, cited [1].") ?(finish_reason = "stop") ?(status = 200) ?(body = None)
-    ?(usage = Some (11, 7)) ?(delay = 0.0) ?(timeout = false) () =
-  {
-    calls = ref 0;
-    payloads = ref [];
-    content;
-    finish_reason;
-    status;
-    body;
-    usage;
-    delay;
-    timeout;
-  }
+let stub_model ?(content = Some "An answer, cited [1].") ?(finish_reason = "stop") ?(status = 200)
+    ?(body = None) ?(usage = Some (11, 7)) ?(delay = 0.0) ?(timeout = false) () =
+  { calls = ref 0; payloads = ref []; content; finish_reason; status; body; usage; delay; timeout }
 
 let model_net mono (m : model_stub) : Provider.Net.t =
   {
@@ -187,8 +170,8 @@ let model_net mono (m : model_stub) : Provider.Net.t =
         incr m.calls;
         (match request.body with
         | Some body -> (
-          try m.payloads := Yojson.Safe.from_string body :: !(m.payloads)
-          with Yojson.Json_error _ -> ())
+            try m.payloads := Yojson.Safe.from_string body :: !(m.payloads)
+            with Yojson.Json_error _ -> ())
         | None -> ());
         if m.timeout then
           (* The grant's [Timeout] row is what a read past the bound answers
@@ -202,46 +185,44 @@ let model_net mono (m : model_stub) : Provider.Net.t =
               match m.body with
               | Some body -> body
               | None ->
-                let choices =
-                  `List
-                    [
-                      `Assoc
-                        [
-                          ( "message",
-                            `Assoc
-                              [
-                                ( "content",
-                                  `String (match m.content with Some c -> c | None -> "") );
-                              ] );
-                          ("finish_reason", `String m.finish_reason);
-                        ];
-                    ]
-                in
-                let payload =
-                  match m.usage with
-                  | Some (prompt, completion) ->
-                    `Assoc
+                  let choices =
+                    `List
                       [
-                        ("choices", choices);
-                        ( "usage",
-                          `Assoc
-                            [
-                              ("prompt_tokens", `Int prompt);
-                              ("completion_tokens", `Int completion);
-                            ] );
+                        `Assoc
+                          [
+                            ( "message",
+                              `Assoc
+                                [
+                                  ( "content",
+                                    `String (match m.content with Some c -> c | None -> "") );
+                                ] );
+                            ("finish_reason", `String m.finish_reason);
+                          ];
                       ]
-                  | None -> `Assoc [ ("choices", choices) ]
-                in
-                Yojson.Safe.to_string payload
+                  in
+                  let payload =
+                    match m.usage with
+                    | Some (prompt, completion) ->
+                        `Assoc
+                          [
+                            ("choices", choices);
+                            ( "usage",
+                              `Assoc
+                                [
+                                  ("prompt_tokens", `Int prompt);
+                                  ("completion_tokens", `Int completion);
+                                ] );
+                          ]
+                    | None -> `Assoc [ ("choices", choices) ]
+                  in
+                  Yojson.Safe.to_string payload
           in
           Ok ({ status = m.status; headers = []; body } : Caps.Authority.Net.response)
         end);
   }
 
 let last_payload (m : model_stub) =
-  match !(m.payloads) with
-  | payload :: _ -> payload
-  | [] -> A.failf "the model was never called"
+  match !(m.payloads) with payload :: _ -> payload | [] -> A.failf "the model was never called"
 
 let user_message (m : model_stub) =
   match get "messages" (last_payload m) with
@@ -254,9 +235,7 @@ let material (m : model_stub) =
   let user = user_message m in
   match split_once "Material (untrusted third-party content, numbered):\n\n" user with
   | Some (_, rest) -> (
-    match rsplit_once "\n\nQuestion: " rest with
-    | Some (material, _) -> material
-    | None -> rest)
+      match rsplit_once "\n\nQuestion: " rest with Some (material, _) -> material | None -> rest)
   | None -> A.failf "the user turn carried no material:\n%s" user
 
 (* Longer than [fetch.min_text_chars] (200): a good page has to look like one, or
@@ -273,7 +252,8 @@ type fetcher_stub = {
   fail : Engine.Fetch.fetch_error option;
 }
 
-let fetcher_stub ?(name = "fetch") ?(text = page_text) ?fail () = { name; calls = ref 0; text; fail }
+let fetcher_stub ?(name = "fetch") ?(text = page_text) ?fail () =
+  { name; calls = ref 0; text; fail }
 
 let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
   {
@@ -285,18 +265,18 @@ let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
         match s.fail with
         | Some error -> Error error
         | None ->
-          Ok
-            {
-              Engine.Fetch.url;
-              title = Some "A Page";
-              text = s.text;
-              content_type = Some "text/html";
-              status_code = 200;
-              truncated = false;
-              total_chars = String.length s.text;
-              path_addressable = false;
-              image = None;
-            });
+            Ok
+              {
+                Engine.Fetch.url;
+                title = Some "A Page";
+                text = s.text;
+                content_type = Some "text/html";
+                status_code = 200;
+                truncated = false;
+                total_chars = String.length s.text;
+                path_addressable = false;
+                image = None;
+              });
     aclose = (fun () -> ());
   }
 
@@ -310,14 +290,10 @@ let readers : Engine.Fetch.Readers.t =
     select_passages = (fun ~text:_ ~query:_ ~max_chars:_ -> ([], 0));
   }
 
-type captured = {
-  level : Config.log_level;
-  event : string;
-  fields : (string * Yojson.Safe.t) list;
-}
+type captured = { level : Config.log_level; event : string; fields : (string * Yojson.Safe.t) list }
 
 let sink lines : Engine.log =
-  fun level event fields -> lines := !lines @ [ { level; event; fields } ]
+ fun level event fields -> lines := !lines @ [ { level; event; fields } ]
 
 let events lines name =
   List.filter_map (fun (c : captured) -> if c.event = name then Some c.fields else None) !lines
@@ -355,7 +331,7 @@ let make_config ?permitted ?(log_content = false) ?(tweak_agent = fun a -> a) ()
         model = Some "test-model";
       }
   in
-  let logging = { Config.default_logging_config with Config.log_content = log_content } in
+  let logging = { Config.default_logging_config with Config.log_content } in
   match
     Config.resolve
       ~providers:[ ("serper", { Config.default_provider_config with Config.enabled = true }) ]
@@ -384,31 +360,32 @@ let build ?permitted ?log_content ?tweak_agent ?provider ?fetcher ?model ?(fetch
       [ (provider.name, provider_of provider) ]
       ~clock ~now ()
   in
-  let local = match fetcher with Some f -> Some f | None -> if fetch then Some (fetcher_stub ()) else None in
+  let local =
+    match fetcher with Some f -> Some f | None -> if fetch then Some (fetcher_stub ()) else None
+  in
   let fetch_engine =
     if fetch then
       match local with
       | None -> None
       | Some local -> (
-        match
-          Engine.Fetch.create config (make_fetcher local) ~readers ~usage ~log:(sink lines)
-            ~fallbacks:(List.map make_fetcher fallbacks)
-            ~clock ~now ()
-        with
-        | Ok engine -> Some engine
-        | Error message -> A.failf "the fetch engine refused the fixture: %s" message)
+          match
+            Engine.Fetch.create config (make_fetcher local) ~readers ~usage ~log:(sink lines)
+              ~fallbacks:(List.map make_fetcher fallbacks) ~clock ~now ()
+          with
+          | Ok engine -> Some engine
+          | Error message -> A.failf "the fetch engine refused the fixture: %s" message)
     else None
   in
   let agent =
-    Agent.create config ~net:(model_net mono model) engine ?fetch_engine ~usage
-      ~log:(sink lines) ~clock ~now ()
+    Agent.create config ~net:(model_net mono model) engine ?fetch_engine ~usage ~log:(sink lines)
+      ~clock ~now ()
   in
   { agent; provider; model; lines; usage; mono; local; fallbacks }
 
 (* Answers and failures: the Python suite reads [str(raised.value)]; here the
    [Error] payload is that same sentence. *)
-let answered rig ?extra_queries ?depth ?provider ?include_domains ?exclude_domains ?recency ?language
-    ?safe_search () =
+let answered rig ?extra_queries ?depth ?provider ?include_domains ?exclude_domains ?recency
+    ?language ?safe_search () =
   match
     Agent.answer rig.agent ~query:"why is the sky blue" ?extra_queries ?depth ?provider
       ?include_domains ?exclude_domains ?recency ?language ?safe_search ()
@@ -429,8 +406,7 @@ let failed rig ?extra_queries ?depth ?provider ?include_domains ?exclude_domains
    holds the same lines the JSONL file would. *)
 let recent rig = items (get "recent" (Usage.snapshot rig.usage))
 
-let lines_of rig tool =
-  List.filter (fun line -> str (get "tool" line) = tool) (recent rig)
+let lines_of rig tool = List.filter (fun line -> str (get "tool" line) = tool) (recent rig)
 
 let one_answer_line rig =
   match lines_of rig "answer" with
@@ -446,22 +422,22 @@ let a_brief_answer_runs_one_search_and_reads_no_pages () =
   check_int "one search" 1 !(rig.provider.calls);
   check_int "searches" 1 r.Model.searches;
   check_int "no pages read" 0 r.Model.fetched;
-  check_string "depth" "brief" (match r.Model.depth with Model.Brief -> "brief" | Report -> "report");
+  check_string "depth" "brief"
+    (match r.Model.depth with Model.Brief -> "brief" | Report -> "report");
   check_int "one model call" 1 !(rig.model.calls)
 
 let a_brief_answer_does_not_run_the_extra_queries () =
   (* [brief] is one search by contract: it is the depth's whole promise. *)
   let rig = build () in
-  let r =
-    answered rig ~extra_queries:[ "rayleigh scattering"; "sky colour physics" ] ()
-  in
+  let r = answered rig ~extra_queries:[ "rayleigh scattering"; "sky colour physics" ] () in
   check_int "one search" 1 !(rig.provider.calls);
   check_int "searches" 1 r.Model.searches
 
 let a_report_runs_every_query_in_order () =
   let rig = build () in
   let r =
-    answered rig ~extra_queries:[ "rayleigh scattering"; "sky colour physics" ]
+    answered rig
+      ~extra_queries:[ "rayleigh scattering"; "sky colour physics" ]
       ~depth:Model.Report ()
   in
   check_strings "the queries, in order"
@@ -504,8 +480,9 @@ let a_report_reads_at_most_three_pages () =
   (* The page count is a constant, not a function of what came back. *)
   let results =
     List.init 5 (fun i ->
-      result ~snippet:"s" ~url:(Printf.sprintf "https://example.com/%d" (i + 1))
-        (Printf.sprintf "r%d" (i + 1)))
+        result ~snippet:"s"
+          ~url:(Printf.sprintf "https://example.com/%d" (i + 1))
+          (Printf.sprintf "r%d" (i + 1)))
   in
   let local = fetcher_stub () in
   let rig = build ~provider:(stub ~results:(`List results) ()) ~fetcher:local () in
@@ -520,7 +497,15 @@ let a_result_that_already_carries_text_is_not_fetched () =
   let local = fetcher_stub () in
   let rig =
     build
-      ~provider:(stub ~results:(`List [ result ~text:"An extract the backend returned." ~url:"https://example.com/1" "About why is the sky blue" ]) ())
+      ~provider:
+        (stub
+           ~results:
+             (`List
+                [
+                  result ~text:"An extract the backend returned." ~url:"https://example.com/1"
+                    "About why is the sky blue";
+                ])
+           ())
       ~fetcher:local ()
   in
   let r = answered rig ~depth:Model.Report () in
@@ -534,7 +519,15 @@ let a_brief_is_grounded_in_a_content_backends_extract () =
      pages, so that extract is the only body it has. *)
   let rig =
     build
-      ~provider:(stub ~results:(`List [ result ~text:"An extract the backend returned." ~url:"https://example.com/1" "About why is the sky blue" ]) ())
+      ~provider:
+        (stub
+           ~results:
+             (`List
+                [
+                  result ~text:"An extract the backend returned." ~url:"https://example.com/1"
+                    "About why is the sky blue";
+                ])
+           ())
       ()
   in
   let r = answered rig () in
@@ -545,7 +538,9 @@ let a_brief_is_grounded_in_a_content_backends_extract () =
 let the_extract_is_the_body_when_a_backend_sends_both () =
   (* [text] before [snippet], the order [report] already uses to skip a fetch. *)
   let results =
-    [ result ~snippet:"a snippet" ~text:"the fuller extract" ~url:"https://example.com/both" "both" ]
+    [
+      result ~snippet:"a snippet" ~text:"the fuller extract" ~url:"https://example.com/both" "both";
+    ]
   in
   let rig = build ~provider:(stub ~results:(`List results) ()) () in
   ignore (answered rig ());
@@ -565,7 +560,8 @@ let the_material_is_bounded_by_max_material_chars () =
   let rig = build ~tweak_agent:(fun a -> { a with Config.max_material_chars = cap }) () in
   ignore (answered rig ());
   let m = material rig.model in
-  if String.length m > cap then A.failf "the material was %d chars, over the cap %d" (String.length m) cap;
+  if String.length m > cap then
+    A.failf "the material was %d chars, over the cap %d" (String.length m) cap;
   let has tag = contains ~haystack:m ~needle:tag in
   if not (has "[1]") then A.failf "no [1] in %S" m;
   if has "[2]" then A.failf "the numbering did not stop at the cap: %S" m
@@ -586,10 +582,10 @@ let the_model_call_carries_the_servers_own_settings () =
   A.(check (float 1e-12)) "temperature" (float_of (get "temperature" payload)) Agent.temperature;
   check_int "the brief output cap" 500 (int (get "max_tokens" payload));
   check_bool "never streamed" false (bool (get "stream" payload));
-  (match get "messages" payload with
+  match get "messages" payload with
   | `List (system :: _ :: _) ->
-    includes "the system prompt" "untrusted third-party content" (str (get "content" system))
-  | _ -> A.failf "the payload carried no system turn")
+      includes "the system prompt" "untrusted third-party content" (str (get "content" system))
+  | _ -> A.failf "the payload carried no system turn"
 
 let the_report_output_cap_is_the_reports () =
   let rig = build () in
@@ -607,7 +603,9 @@ let sources_hold_only_what_the_prose_cited () =
 let an_invented_index_is_dropped_counted_and_named () =
   (* A 200, not a failure: the defect is in the prose, not the retrieval. *)
   let rig =
-    build ~model:(stub_model ~content:(Some "Scattering does it [1] and the moon does too [9].") ()) ()
+    build
+      ~model:(stub_model ~content:(Some "Scattering does it [1] and the moon does too [9].") ())
+      ()
   in
   let r = answered rig () in
   check_strings "sources" [ "https://example.com/1" ] (source_urls r);
@@ -624,9 +622,7 @@ let an_uncited_answer_is_returned_with_a_notice () =
 
 let an_answer_whose_only_markers_are_invented_names_the_count () =
   (* Both citation rows hold at once: nothing valid, and two invented. *)
-  let rig =
-    build ~model:(stub_model ~content:(Some "The moon does it [7] and also [8].") ()) ()
-  in
+  let rig = build ~model:(stub_model ~content:(Some "The moon does it [7] and also [8].") ()) () in
   let r = answered rig () in
   check_string "answer" "The moon does it [7] and also [8]." r.Model.answer;
   check_strings "no sources" [] (source_urls r);
@@ -649,7 +645,8 @@ let markdown_link_text_is_not_a_citation_marker () =
   (* The one false positive worth excluding: [[text](url)] is not an index. *)
   let rig =
     build
-      ~model:(stub_model ~content:(Some "Scattering [see the note](https://x.test/n) does it [1].") ())
+      ~model:
+        (stub_model ~content:(Some "Scattering [see the note](https://x.test/n) does it [1].") ())
       ()
   in
   let r = answered rig () in
@@ -665,8 +662,10 @@ let two_indices_for_one_url_collapse_in_sources () =
     ]
   in
   let rig =
-    build ~provider:(stub ~results:(`List results) ())
-      ~model:(stub_model ~content:(Some "Both say it [1][2].") ()) ()
+    build
+      ~provider:(stub ~results:(`List results) ())
+      ~model:(stub_model ~content:(Some "Both say it [1][2].") ())
+      ()
   in
   let r = answered rig () in
   check_strings "sources" [ "https://example.com/same" ] (source_urls r)
@@ -679,11 +678,14 @@ let sources_are_in_first_citation_order () =
     ]
   in
   let rig =
-    build ~provider:(stub ~results:(`List results) ())
-      ~model:(stub_model ~content:(Some "Second [2], then first [1].") ()) ()
+    build
+      ~provider:(stub ~results:(`List results) ())
+      ~model:(stub_model ~content:(Some "Second [2], then first [1].") ())
+      ()
   in
   let r = answered rig () in
-  check_strings "first-citation order" [ "https://example.com/b"; "https://example.com/a" ]
+  check_strings "first-citation order"
+    [ "https://example.com/b"; "https://example.com/a" ]
     (source_urls r)
 
 let no_results_at_all_fails_without_calling_the_model () =
@@ -719,8 +721,8 @@ let a_partial_walk_continues_and_says_which_steps_came_back_empty () =
   (* One empty step is a notice, not a failure: the rest of the walk ran. *)
   let flaky = stub () in
   let inner = !(flaky.behavior) in
-  flaky.behavior
-  := (fun q ->
+  (flaky.behavior :=
+     fun q ->
        if q.Model.query = "rayleigh scattering" then
          Error (Provider.provider_error ~provider:"serper" "upstream 503")
        else if q.Model.query = "sky colour physics" then begin
@@ -738,7 +740,8 @@ let a_partial_walk_continues_and_says_which_steps_came_back_empty () =
        else inner q);
   let rig = build ~provider:flaky () in
   let r =
-    answered rig ~extra_queries:[ "rayleigh scattering"; "sky colour physics" ]
+    answered rig
+      ~extra_queries:[ "rayleigh scattering"; "sky colour physics" ]
       ~depth:Model.Report ()
   in
   check_int "the model was called once" 1 !(rig.model.calls);
@@ -750,7 +753,9 @@ let a_partial_walk_continues_and_says_which_steps_came_back_empty () =
 
 let a_page_that_cannot_be_read_is_a_notice_not_a_failure () =
   let local =
-    fetcher_stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "connection reset")) ()
+    fetcher_stub
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "connection reset"))
+      ()
   in
   let rig = build ~fetcher:local () in
   let r = answered rig ~depth:Model.Report () in
@@ -765,19 +770,19 @@ let the_plan_asks_for_the_walk_a_caller_is_denied () =
      steps there is no caller to act on a list of provider names. *)
   let results = [ result ~snippet:"s" ~url:"https://example.com/1" "r1" ] in
   let local =
-    fetcher_stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "connection reset")) ()
+    fetcher_stub
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "connection reset"))
+      ()
   in
-  let fallback = fetcher_stub ~name:"jina" ~text:(String.make 220 'x' ^ " The page a browser could read.") () in
+  let fallback =
+    fetcher_stub ~name:"jina" ~text:(String.make 220 'x' ^ " The page a browser could read.") ()
+  in
   let rig =
     build ~provider:(stub ~results:(`List results) ()) ~fetcher:local ~fallbacks:[ fallback ] ()
   in
   let r = answered rig ~depth:Model.Report () in
   let local_calls = match rig.local with Some l -> !(l.calls) | None -> -1 in
-  let fallback_calls =
-    match rig.fallbacks with
-    | [ f ] -> !(f.calls)
-    | _ -> -1
-  in
+  let fallback_calls = match rig.fallbacks with [ f ] -> !(f.calls) | _ -> -1 in
   check_int "the local reader was tried" 1 local_calls;
   check_int "the fallback walked" 1 fallback_calls;
   check_int "fetched" 1 r.Model.fetched;
@@ -815,8 +820,7 @@ let the_whole_call_is_bounded_by_timeout_seconds () =
   let m = stub_model ~delay:0.2 () in
   let rig =
     build
-      ~tweak_agent:(fun a ->
-        { a with Config.timeout_seconds = 0.05; model_timeout_seconds = 30.0 })
+      ~tweak_agent:(fun a -> { a with Config.timeout_seconds = 0.05; model_timeout_seconds = 30.0 })
       ~model:m ()
   in
   let message = failed rig () in
@@ -838,8 +842,7 @@ let a_retrieval_spend_past_the_money_ceiling_aborts_the_call () =
           cost_per_1k_in = Some 0.00014;
           cost_per_1k_out = Some 0.00028;
         })
-      ~provider:(stub ~cost_usd:(Some 0.007) ())
-      ~model:m ()
+      ~provider:(stub ~cost_usd:(Some 0.007) ()) ~model:m ()
   in
   let message = failed rig ~depth:Model.Report () in
   check_int "no model call" 0 !(m.calls);
@@ -849,9 +852,7 @@ let a_retrieval_spend_past_the_money_ceiling_aborts_the_call () =
 let an_unconfigured_agent_names_what_is_missing () =
   let m = stub_model () in
   let rig =
-    build
-      ~tweak_agent:(fun a -> { a with Config.base_url = None; model = None })
-      ~model:m ()
+    build ~tweak_agent:(fun a -> { a with Config.base_url = None; model = None }) ~model:m ()
   in
   (* [build] sets the key the way the autouse fixture does; this case clears it
      after the rig exists, and an empty value reads as absent. *)
@@ -893,9 +894,24 @@ let the_endpoints_usage_becomes_the_journal_line () =
   check_strings "the answer line's whole field set"
     (List.sort String.compare
        [
-         "ts"; "tool"; "run"; "model"; "depth"; "searches"; "results"; "fetched";
-         "material_chars"; "prompt_tokens"; "completion_tokens"; "answer_chars"; "cited";
-         "cited_invalid"; "sources"; "model_cost_usd"; "ms"; "error";
+         "ts";
+         "tool";
+         "run";
+         "model";
+         "depth";
+         "searches";
+         "results";
+         "fetched";
+         "material_chars";
+         "prompt_tokens";
+         "completion_tokens";
+         "answer_chars";
+         "cited";
+         "cited_invalid";
+         "sources";
+         "model_cost_usd";
+         "ms";
+         "error";
        ])
     keys;
   check_string "model" "test-model" (str (get "model" line));
@@ -905,23 +921,23 @@ let the_endpoints_usage_becomes_the_journal_line () =
   check_int "cited" 1 (int (get "cited" line));
   check_int "cited_invalid" 0 (int (get "cited_invalid" line));
   check_int "sources" 1 (int (get "sources" line));
-  A.(check (float 1e-9)) "model_cost_usd" (float_of (get "model_cost_usd" line))
-    (0.00014 +. 0.00028 /. 2.);
+  A.(check (float 1e-9))
+    "model_cost_usd"
+    (float_of (get "model_cost_usd" line))
+    (0.00014 +. (0.00028 /. 2.));
   check_bool "error is null" true (is_null (get "error" line));
   (* The run id is a random 16-hex-char id, never a hash of the query. *)
   let run = str (get "run" line) in
   check_int "run id length" 16 (String.length run);
-  if
-    String.exists (fun c -> not ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) run
-  then A.failf "the run id is not hex: %S" run
+  if String.exists (fun c -> not ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) run then
+    A.failf "the run id is not hex: %S" run
 
 let an_endpoint_with_no_usage_reports_null_never_zero () =
   let rig =
     build
       ~tweak_agent:(fun a ->
         { a with Config.cost_per_1k_in = Some 0.00014; cost_per_1k_out = Some 0.00028 })
-      ~model:(stub_model ~usage:None ())
-      ()
+      ~model:(stub_model ~usage:None ()) ()
   in
   ignore (answered rig ());
   let line = one_answer_line rig in
@@ -948,7 +964,7 @@ let a_complete_answer_does_not_serialise_truncated () =
   check_opt_bool "truncated is absent" None r.Model.truncated;
   match Model.answer_response_to_yojson r with
   | `Assoc kvs ->
-    if List.mem_assoc "truncated" kvs then A.failf "truncated serialised on a complete answer"
+      if List.mem_assoc "truncated" kvs then A.failf "truncated serialised on a complete answer"
   | _ -> A.failf "the response did not encode to an object"
 
 let the_retrieval_lines_carry_the_run_and_the_step () =
@@ -1006,7 +1022,12 @@ let the_material_the_model_receives_is_already_escaped () =
   let m = stub_model ~content:(Some "The end marker is <|endoftext|>. [1]") () in
   let provider =
     stub
-      ~results:(`List [ result ~snippet:"docs quote <|endoftext|> verbatim" ~url:"https://example.com/tokens" "tokenizer docs" ])
+      ~results:
+        (`List
+           [
+             result ~snippet:"docs quote <|endoftext|> verbatim" ~url:"https://example.com/tokens"
+               "tokenizer docs";
+           ])
       ()
   in
   let rig = build ~provider ~model:m () in
@@ -1015,13 +1036,12 @@ let the_material_the_model_receives_is_already_escaped () =
   excludes "raw token in the material" "<|endoftext|>" mat;
   includes "escaped token in the material" ("<" ^ zwsp ^ "|endoftext|>") mat;
   check_string "the prose leaves escaped"
-    ("The end marker is <" ^ zwsp ^ "|endoftext|>. [1]") r.Model.answer;
+    ("The end marker is <" ^ zwsp ^ "|endoftext|>. [1]")
+    r.Model.answer;
   check_string "the cited source" "tokenizer docs" (List.hd r.Model.sources).Model.source_title
 
 let the_count_rides_answer_ok () =
-  let rig =
-    build ~model:(stub_model ~content:(Some "echoing <|im_start|> and [INST]") ()) ()
-  in
+  let rig = build ~model:(stub_model ~content:(Some "echoing <|im_start|> and [INST]") ()) () in
   ignore (answered rig ());
   let ok = event rig.lines "answer.ok" in
   check_int "sanitized" 2 (int (field ok "sanitized"))
@@ -1063,7 +1083,8 @@ let plan_cases =
 
 let citation_cases =
   [
-    A.test_case "sources hold only what the prose cited" `Quick sources_hold_only_what_the_prose_cited;
+    A.test_case "sources hold only what the prose cited" `Quick
+      sources_hold_only_what_the_prose_cited;
     A.test_case "an invented index is dropped, counted and named" `Quick
       an_invented_index_is_dropped_counted_and_named;
     A.test_case "an uncited answer is returned with a notice" `Quick

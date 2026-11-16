@@ -14,8 +14,7 @@ val fetch_url : string
 
 val verify_fetch : Cases.fetch_case -> Model.fetch_response -> check list
 
-val verify_agent :
-  depth:Model.depth -> model:string -> Model.answer_response -> check list
+val verify_agent : depth:Model.depth -> model:string -> Model.answer_response -> check list
 
 val quota_limited : string -> bool
 (** Whether a failed live call was refused by quota or a rate limit. *)

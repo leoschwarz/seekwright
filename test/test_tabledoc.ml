@@ -17,7 +17,12 @@ module A = Alcotest
 open Test_support
 
 let table_body =
-  "id,price,city,qty,note\n1,12.50,London,3,four\n2,7.00,Leeds,11,short\n3,3.99,Bristol,2,x\n4,120.00,Perth,1,long note here\n5,0.50,Cork,7,\n"
+  "id,price,city,qty,note\n\
+   1,12.50,London,3,four\n\
+   2,7.00,Leeds,11,short\n\
+   3,3.99,Bristol,2,x\n\
+   4,120.00,Perth,1,long note here\n\
+   5,0.50,Cork,7,\n"
 
 let lines t = String.split_on_char '\n' t
 
@@ -31,8 +36,7 @@ let render ?(delimiter = ",") text =
 let table () = render table_body
 
 let assert_in needle ls =
-  if not (List.mem needle ls) then
-    A.failf "no line %S among %d lines" needle (List.length ls) ()
+  if not (List.mem needle ls) then A.failf "no line %S among %d lines" needle (List.length ls) ()
 
 let test_the_types_that_name_a_table_by_themselves () =
   A.check A.bool "text/csv" true (T.is_table_media "text/csv");
@@ -77,8 +81,7 @@ let test_a_column_name_that_cannot_be_written_bare_is_quoted_and_reads_back () =
   J.parse_path path |> ignore
 
 let test_an_empty_header_cell_gets_a_positional_name () =
-  assert_in "$.rows[0].column2  \"2\""
-    (lines (render "id,,note\n1,2,3\n"))
+  assert_in "$.rows[0].column2  \"2\"" (lines (render "id,,note\n1,2,3\n"))
 
 let test_a_long_header_cell_is_cut_to_the_cap () =
   (* The name labels every cell under it and is a printed path, so it cannot
@@ -98,7 +101,8 @@ let test_a_blank_line_between_records_does_not_consume_a_row_index () =
   let ls = lines (render "a,b\n1,x\n\n2,y\n") in
   assert_in "$.rows[1]  object(2)" ls;
   assert_in "$.rows[1].a  \"2\"" ls;
-  A.check A.bool "no third row index" false (contains ~haystack:(String.concat "\n" ls) ~needle:"$.rows[2]")
+  A.check A.bool "no third row index" false
+    (contains ~haystack:(String.concat "\n" ls) ~needle:"$.rows[2]")
 
 let test_two_columns_with_one_name_print_twice_and_both_are_addressable () =
   (* The file's defect is reported, not renamed away: [path] answers both
@@ -133,15 +137,15 @@ let test_the_shape_names_the_columns_and_withholds_the_values () =
       if contains ~haystack:schema ~needle:"12.50" then A.fail "a value rode through"
 
 let test_one_column_of_every_row_is_one_wildcard_step () =
-  let spans, dropped =
-    J.select_paths ~text:(table ()) ~path:"$.rows[*].price" ~max_chars:6000
-  in
+  let spans, dropped = J.select_paths ~text:(table ()) ~path:"$.rows[*].price" ~max_chars:6000 in
   A.check (A.list A.string) "one cell per row"
-    [ "$.rows[0].price  \"12.50\"";
+    [
+      "$.rows[0].price  \"12.50\"";
       "$.rows[1].price  \"7.00\"";
       "$.rows[2].price  \"3.99\"";
       "$.rows[3].price  \"120.00\"";
-      "$.rows[4].price  \"0.50\"" ]
+      "$.rows[4].price  \"0.50\"";
+    ]
     (List.map snd spans);
   A.check A.int "nothing dropped" 0 dropped
 
@@ -156,8 +160,8 @@ let test_a_slice_of_rows_is_two_whole_row_blocks () =
   A.check A.string "first row" "$.rows[1]  object(5)" (List.nth ls 0);
   A.check A.string "second row" "$.rows[2]  object(5)" (List.nth ls 6);
   A.check A.string "last cell" "$.rows[2].note  \"x\"" (List.nth ls (List.length ls - 1));
-  A.check A.string "offset indexes the rendering"
-    block (String.sub rendered offset (String.length block))
+  A.check A.string "offset indexes the rendering" block
+    (String.sub rendered offset (String.length block))
 
 let test_a_column_name_holding_a_colon_stays_a_name_through_the_grammar () =
   (* [Price: USD] is one header cell, and a slice bound is never quoted. The
@@ -166,9 +170,7 @@ let test_a_column_name_holding_a_colon_stays_a_name_through_the_grammar () =
      unrelated column, since the selector re-reads every printed line. *)
   let rendered = render "id,Price: USD\n1,12.50\n" in
   let line =
-    List.find
-      (fun l -> String.starts_with ~prefix:"$.rows[0][\"Price" l)
-      (lines rendered)
+    List.find (fun l -> String.starts_with ~prefix:"$.rows[0][\"Price" l) (lines rendered)
   in
   let path =
     match find_sub ~haystack:line ~needle:"  " () with
@@ -180,11 +182,13 @@ let test_a_column_name_holding_a_colon_stays_a_name_through_the_grammar () =
   | None -> A.fail "schema refused"
   | Some schema ->
       assert_in "$.rows[*][\"Price: USD\"]  string" (lines schema);
-  let spans, dropped = J.select_paths ~text:rendered ~path:"$.rows[*][\"Price: USD\"]" ~max_chars:600 in
-  A.check A.int "nothing dropped" 0 dropped;
-  A.check (A.list A.string) "the column answers"
-    [ "$.rows[0][\"Price: USD\"]  \"12.50\"" ]
-    (List.map snd spans)
+      let spans, dropped =
+        J.select_paths ~text:rendered ~path:"$.rows[*][\"Price: USD\"]" ~max_chars:600
+      in
+      A.check A.int "nothing dropped" 0 dropped;
+      A.check (A.list A.string) "the column answers"
+        [ "$.rows[0][\"Price: USD\"]  \"12.50\"" ]
+        (List.map snd spans)
 
 let test_a_tab_type_declares_its_delimiter_whatever_the_body_looks_like () =
   (* The type states the delimiter, so a body full of commas does not out-vote
@@ -207,15 +211,13 @@ let test_a_separator_inside_a_quoted_cell_does_not_outvote_the_delimiter () =
      columns. *)
   let body = "id,address\n1,\"1 Main St; London; UK\"\n2,\"2 Oak Ave; Leeds; UK\"\n" in
   A.check A.string "comma wins" "," (T.table_delimiter ~kind:"text/csv" ~text:body);
-  A.check A.string "the cell is one column"
-    "$.rows[0].address  \"1 Main St; London; UK\""
+  A.check A.string "the cell is one column" "$.rows[0].address  \"1 Main St; London; UK\""
     (List.nth (lines (render body)) 4)
 
 let test_prose_with_no_delimiter_stays_on_commas_and_renders_one_column () =
   let text = "some prose here\nand more of it\n" in
-  A.check A.string "commas" "," (T.table_delimiter ~kind:"text/csv" ~text:text);
-  A.check A.string "one column"
-    "$.rows[0][\"some prose here\"]  \"and more of it\""
+  A.check A.string "commas" "," (T.table_delimiter ~kind:"text/csv" ~text);
+  A.check A.string "one column" "$.rows[0][\"some prose here\"]  \"and more of it\""
     (List.nth (lines (render text)) 3)
 
 let test_a_table_wider_than_its_budget_ends_with_the_line_naming_the_cut () =
@@ -233,18 +235,20 @@ let test_a_table_wider_than_its_budget_ends_with_the_line_naming_the_cut () =
       A.check A.bool "some rows printed" true (printed > 0 && printed < 3000);
       A.check A.string "the cut line"
         (Printf.sprintf
-           "$.rows[%d]  not rendered: the table expands past the budget of %d \
-            characters, %d times the file's own %d; %d rows are printed above and no \
-            further row of the file is addressable in this page -- fetch with `offset` \
-            to page through what is here, or raise fetch.max_download_bytes, the budget \
-            being a ratio of it"
+           "$.rows[%d]  not rendered: the table expands past the budget of %d characters, %d times \
+            the file's own %d; %d rows are printed above and no further row of the file is \
+            addressable in this page -- fetch with `offset` to page through what is here, or raise \
+            fetch.max_download_bytes, the budget being a ratio of it"
            printed budget J.max_render_ratio (String.length body) printed)
         last;
       assert_in (Printf.sprintf "$.rows  array(%d)" printed) (lines rendered);
       A.check A.bool "within a small multiple" true (String.length rendered < 5 * String.length body);
-      let spans, _ = J.select_paths ~text:rendered ~path:(Printf.sprintf "$.rows[%d]" (printed + 5)) ~max_chars:600 in
-      A.check A.int "the row count printed is a bound, not the file's length" 0
-        (List.length spans)
+      let spans, _ =
+        J.select_paths ~text:rendered
+          ~path:(Printf.sprintf "$.rows[%d]" (printed + 5))
+          ~max_chars:600
+      in
+      A.check A.int "the row count printed is a bound, not the file's length" 0 (List.length spans)
 
 let test_the_rows_above_a_parse_stop_are_kept_and_counted () =
   (* The record-stream rule: whole rows survive where the reader gave up. *)
@@ -253,8 +257,8 @@ let test_the_rows_above_a_parse_stop_are_kept_and_counted () =
   assert_in "$.rows[0].name  \"Ada\"" (lines rendered);
   A.check A.string "the stop line"
     (Printf.sprintf
-       "$.rows[1]  not rendered: this file stopped parsing at this row (field larger \
-        than field limit (%d)); the rows above it are complete"
+       "$.rows[1]  not rendered: this file stopped parsing at this row (field larger than field \
+        limit (%d)); the rows above it are complete"
        T.field_limit)
     (List.nth (lines rendered) (List.length (lines rendered) - 1))
 
@@ -274,19 +278,24 @@ let () =
   Alcotest.run "tabledoc"
     [
       ( "recognising",
-        [ Alcotest.test_case "the types that name a table by themselves" `Quick
+        [
+          Alcotest.test_case "the types that name a table by themselves" `Quick
             test_the_types_that_name_a_table_by_themselves;
           Alcotest.test_case "a spreadsheet type is not claimed" `Quick
-            test_a_spreadsheet_type_is_not_claimed ] );
+            test_a_spreadsheet_type_is_not_claimed;
+        ] );
       ( "rendering",
-        [ Alcotest.test_case "the whole small table renders" `Quick
+        [
+          Alcotest.test_case "the whole small table renders" `Quick
             test_the_whole_small_table_renders;
           Alcotest.test_case "every cell is a quoted string whatever it holds" `Quick
             test_every_cell_is_a_quoted_string_whatever_it_holds;
           Alcotest.test_case "a cell holding a newline stays on one line" `Quick
-            test_a_cell_holding_a_newline_stays_on_one_line ] );
+            test_a_cell_holding_a_newline_stays_on_one_line;
+        ] );
       ( "header rules",
-        [ Alcotest.test_case "a column name that cannot be written bare is quoted" `Quick
+        [
+          Alcotest.test_case "a column name that cannot be written bare is quoted" `Quick
             test_a_column_name_that_cannot_be_written_bare_is_quoted_and_reads_back;
           Alcotest.test_case "an empty header cell gets a positional name" `Quick
             test_an_empty_header_cell_gets_a_positional_name;
@@ -297,9 +306,11 @@ let () =
           Alcotest.test_case "a blank line between records does not consume a row index" `Quick
             test_a_blank_line_between_records_does_not_consume_a_row_index;
           Alcotest.test_case "two columns with one name print twice" `Quick
-            test_two_columns_with_one_name_print_twice_and_both_are_addressable ] );
+            test_two_columns_with_one_name_print_twice_and_both_are_addressable;
+        ] );
       ( "shared grammar",
-        [ Alcotest.test_case "every line is a path the grammar reads" `Quick
+        [
+          Alcotest.test_case "every line is a path the grammar reads" `Quick
             test_every_line_is_a_path_the_grammar_reads;
           Alcotest.test_case "the shape names the columns and withholds the values" `Quick
             test_the_shape_names_the_columns_and_withholds_the_values;
@@ -308,9 +319,11 @@ let () =
           Alcotest.test_case "a slice of rows is two whole row blocks" `Quick
             test_a_slice_of_rows_is_two_whole_row_blocks;
           Alcotest.test_case "a column name holding a colon stays a name" `Quick
-            test_a_column_name_holding_a_colon_stays_a_name_through_the_grammar ] );
+            test_a_column_name_holding_a_colon_stays_a_name_through_the_grammar;
+        ] );
       ( "delimiters",
-        [ Alcotest.test_case "a tab type declares its delimiter" `Quick
+        [
+          Alcotest.test_case "a tab type declares its delimiter" `Quick
             test_a_tab_type_declares_its_delimiter_whatever_the_body_looks_like;
           Alcotest.test_case "a european export served as csv is read on semicolons" `Quick
             test_a_european_export_served_as_csv_is_read_on_semicolons;
@@ -321,17 +334,22 @@ let () =
           Alcotest.test_case "a separator inside a quoted cell does not outvote" `Quick
             test_a_separator_inside_a_quoted_cell_does_not_outvote_the_delimiter;
           Alcotest.test_case "prose with no delimiter stays on commas" `Quick
-            test_prose_with_no_delimiter_stays_on_commas_and_renders_one_column ] );
+            test_prose_with_no_delimiter_stays_on_commas_and_renders_one_column;
+        ] );
       ( "cuts",
-        [ Alcotest.test_case "a table wider than its budget ends with the cut line" `Quick
+        [
+          Alcotest.test_case "a table wider than its budget ends with the cut line" `Quick
             test_a_table_wider_than_its_budget_ends_with_the_line_naming_the_cut;
           Alcotest.test_case "the rows above a parse stop are kept and counted" `Quick
             test_the_rows_above_a_parse_stop_are_kept_and_counted;
           Alcotest.test_case "a parse stop before any row leaves the body" `Quick
-            test_a_parse_stop_before_any_row_leaves_the_body_as_the_answer ] );
+            test_a_parse_stop_before_any_row_leaves_the_body_as_the_answer;
+        ] );
       ( "nothing to render",
-        [ Alcotest.test_case "an empty body renders as nothing" `Quick
+        [
+          Alcotest.test_case "an empty body renders as nothing" `Quick
             test_an_empty_body_renders_as_nothing;
           Alcotest.test_case "a header only file is a table with no rows" `Quick
-            test_a_header_only_file_is_a_table_with_no_rows ] );
+            test_a_header_only_file_is_a_table_with_no_rows;
+        ] );
     ]

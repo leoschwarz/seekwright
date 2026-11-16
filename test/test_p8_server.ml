@@ -26,35 +26,35 @@ type stub = {
 }
 
 let stub ?(name = "serper") ?fail () =
-  let s = { name; behavior = fun _ -> assert false } in
+  let s = { name; behavior = (fun _ -> assert false) } in
   s.behavior <-
     (fun q ->
       match fail with
       | Some failure -> Error failure
       | None ->
-        Ok
-          {
-            Provider.provider = s.name;
-            results =
-              [
-                {
-                  Provider.result =
-                    {
-                      Model.title = "Result for " ^ q.Model.query;
-                      url = "https://example.com/" ^ q.Model.query;
-                      snippet = Some "a snippet";
-                      text = None;
-                      text_truncated = None;
-                      published_date = None;
-                      score = None;
-                    };
-                  uncapped_chars = None;
-                };
-              ];
-            answer = None;
-            cost_usd = Some 0.001;
-            notice = None;
-          });
+          Ok
+            {
+              Provider.provider = s.name;
+              results =
+                [
+                  {
+                    Provider.result =
+                      {
+                        Model.title = "Result for " ^ q.Model.query;
+                        url = "https://example.com/" ^ q.Model.query;
+                        snippet = Some "a snippet";
+                        text = None;
+                        text_truncated = None;
+                        published_date = None;
+                        score = None;
+                      };
+                    uncapped_chars = None;
+                  };
+                ];
+              answer = None;
+              cost_usd = Some 0.001;
+              notice = None;
+            });
   s
 
 let provider (s : stub) : Provider.t =
@@ -70,16 +70,16 @@ let config ?(dashboard = false) providers =
   match
     Config.resolve
       ~providers:
-        (List.map (fun name -> (name, { Config.default_provider_config with Config.enabled = true })) providers)
-      ~dashboard:
-        { Config.default_dashboard_config with Config.enabled = dashboard }
+        (List.map
+           (fun name -> (name, { Config.default_provider_config with Config.enabled = true }))
+           providers)
+      ~dashboard:{ Config.default_dashboard_config with Config.enabled = dashboard }
       ()
   with
   | Ok config -> config
   | Error message -> A.failf "the fixture config was refused: %s" message
 
-let usage () =
-  match Usage.create ~now () with Ok u -> u | Error message -> A.failf "%s" message
+let usage () = match Usage.create ~now () with Ok u -> u | Error message -> A.failf "%s" message
 
 let fetch_engine config =
   let fetcher =
@@ -183,9 +183,7 @@ let registry_lists_the_three_tools _ =
 let tools_list_advertises_the_freeze _ =
   let server = mcp (default_app ()) in
   let listed = dispatch server {|{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}|} in
-  let tools =
-    match field "tools" (result_of listed) with `List tools -> tools | _ -> []
-  in
+  let tools = match field "tools" (result_of listed) with `List tools -> tools | _ -> [] in
   let names =
     List.map (fun tool -> match field "name" tool with `String n -> n | _ -> "") tools
   in
@@ -207,14 +205,28 @@ let the_surface_data_matches_the_freeze _ =
     [
       ( "answer",
         [
-          "query"; "extra_queries"; "depth"; "provider"; "include_domains"; "exclude_domains";
-          "recency"; "language"; "safe_search";
+          "query";
+          "extra_queries";
+          "depth";
+          "provider";
+          "include_domains";
+          "exclude_domains";
+          "recency";
+          "language";
+          "safe_search";
         ] );
       ("fetch", [ "url"; "offset"; "query"; "path"; "provider"; "structure" ]);
       ( "search",
         [
-          "query"; "provider"; "mode"; "max_results"; "include_domains"; "exclude_domains";
-          "recency"; "language"; "safe_search";
+          "query";
+          "provider";
+          "mode";
+          "max_results";
+          "include_domains";
+          "exclude_domains";
+          "recency";
+          "language";
+          "safe_search";
         ] );
     ]
     Server.tools_surface;
@@ -226,8 +238,15 @@ let the_surface_data_matches_the_freeze _ =
         "AnswerRequest",
         sorted
           [
-            "query"; "extra_queries"; "depth"; "provider"; "include_domains"; "exclude_domains";
-            "recency"; "language"; "safe_search";
+            "query";
+            "extra_queries";
+            "depth";
+            "provider";
+            "include_domains";
+            "exclude_domains";
+            "recency";
+            "language";
+            "safe_search";
           ] );
       ( "POST /api/v1/fetch",
         "FetchRequest",
@@ -236,8 +255,15 @@ let the_surface_data_matches_the_freeze _ =
         "SearchRequest",
         sorted
           [
-            "query"; "provider"; "mode"; "max_results"; "include_domains"; "exclude_domains";
-            "recency"; "language"; "safe_search";
+            "query";
+            "provider";
+            "mode";
+            "max_results";
+            "include_domains";
+            "exclude_domains";
+            "recency";
+            "language";
+            "safe_search";
           ] );
     ]
     (List.map route Server.rest_routes);
@@ -254,8 +280,16 @@ let the_surface_data_matches_the_freeze _ =
   A.(check (list string))
     "server flags"
     [
-      "--check"; "--live"; "--metrics"; "--json"; "--http"; "--host"; "--port"; "--allowed-host";
-      "--log-level"; "--log-format";
+      "--check";
+      "--live";
+      "--metrics";
+      "--json";
+      "--http";
+      "--host";
+      "--port";
+      "--allowed-host";
+      "--log-level";
+      "--log-format";
     ]
     Server.server_flags
 
@@ -267,8 +301,10 @@ let a_search_call_answers_over_the_registry _ =
   in
   check_bool "not an error" false (is_error called);
   let text = text_of called in
-  check_bool "the answer names the provider that served" true (contains ~haystack:text ~needle:"serper");
-  check_bool "the answer carries the hit" true (contains ~haystack:text ~needle:"Result for ocaml effects")
+  check_bool "the answer names the provider that served" true
+    (contains ~haystack:text ~needle:"serper");
+  check_bool "the answer carries the hit" true
+    (contains ~haystack:text ~needle:"Result for ocaml effects")
 
 let a_refused_search_is_a_tool_result _ =
   let server = mcp (default_app ()) in
@@ -314,8 +350,10 @@ let the_host_allowlist_matches_python _ =
   check_bool "loopback name with a port" true (Server.is_host_allowed entries "localhost:8000");
   check_bool "loopback ip with a port" true (Server.is_host_allowed entries "127.0.0.1:8000");
   check_bool "ipv6 loopback with a port" true (Server.is_host_allowed entries "[::1]:8000");
-  check_bool "an operator host with its port" true (Server.is_host_allowed entries "search.internal:9000");
-  check_bool "a wildcard entry matches any port" true (Server.is_host_allowed entries "wild.example:1234");
+  check_bool "an operator host with its port" true
+    (Server.is_host_allowed entries "search.internal:9000");
+  check_bool "a wildcard entry matches any port" true
+    (Server.is_host_allowed entries "wild.example:1234");
   check_bool "a foreign name is refused" false (Server.is_host_allowed entries "evil.example.com");
   check_bool "the wrong port on an exact entry is refused" false
     (Server.is_host_allowed entries "search.internal:9001")
@@ -330,25 +368,26 @@ let healthz_is_secret_free_and_exempt _ =
     (match field "providers" body with `List [ `String "serper" ] -> true | _ -> false);
   check_string "the default provider" "serper"
     (match field "default_provider" body with `String s -> s | _ -> "");
-  check_int "uptime is whole seconds" 2
-    (match field "uptime_s" body with `Int n -> n | _ -> -1);
+  check_int "uptime is whole seconds" 2 (match field "uptime_s" body with `Int n -> n | _ -> -1);
   check_bool "no key or secret field is present" false
-    (contains ~haystack:ok.Server.body ~needle:"api_key" || contains ~haystack:ok.Server.body ~needle:"key");
+    (contains ~haystack:ok.Server.body ~needle:"api_key"
+    || contains ~haystack:ok.Server.body ~needle:"key");
   (* A configured name this build has no adapter for is not a provider it has:
      /healthz reports the dispatchable set, and the startup warning names the
      rest. *)
   let undeployable = make_app [ "serper"; "exa:free" ] in
   let body =
     Yojson.Safe.from_string
-      (Server.handle_custom undeployable ~meth:"GET" ~path:"/healthz" ~host:None
-         ~origin:None ~body:"")
+      (Server.handle_custom undeployable ~meth:"GET" ~path:"/healthz" ~host:None ~origin:None
+         ~body:"")
         .Server.body
   in
   check_bool "an unbuilt configured name is not advertised" true
     (match field "providers" body with `List [ `String "serper" ] -> true | _ -> false);
   (* A kubelet probes with the pod IP in Host; /healthz must still answer. *)
   let probed =
-    Server.handle_custom app ~meth:"GET" ~path:"/healthz" ~host:(Some "10.0.0.5") ~origin:None ~body:""
+    Server.handle_custom app ~meth:"GET" ~path:"/healthz" ~host:(Some "10.0.0.5") ~origin:None
+      ~body:""
   in
   check_int "the probe is not refused" 200 probed.Server.status
 
@@ -366,20 +405,21 @@ let guarded_routes_refuse_a_foreign_host _ =
   in
   check_int "a missing Host is refused too" 421 no_host.Server.status;
   let denied_dash =
-    Server.handle_custom app ~meth:"GET" ~path:"/dashboard" ~host:(Some "evil.example.com") ~origin:None
-      ~body:""
+    Server.handle_custom app ~meth:"GET" ~path:"/dashboard" ~host:(Some "evil.example.com")
+      ~origin:None ~body:""
   in
   check_int "the dashboard is guarded too" 421 denied_dash.Server.status;
   let mcp_is_guarded_at_the_same_layer =
-    Server.handle_custom app ~meth:"POST" ~path:"/mcp" ~host:(Some "evil.example.com") ~origin:None ~body:""
+    Server.handle_custom app ~meth:"POST" ~path:"/mcp" ~host:(Some "evil.example.com") ~origin:None
+      ~body:""
   in
   check_int "any non-healthz path is guarded" 421 mcp_is_guarded_at_the_same_layer.Server.status
 
 let origins_are_checked_against_the_allowlist _ =
   let app = default_app () in
   let call origin =
-    Server.handle_custom app ~meth:"POST" ~path:"/api/v1/search" ~host:(Some "localhost")
-      ~origin ~body:{|{"query":"ocaml effects"}|}
+    Server.handle_custom app ~meth:"POST" ~path:"/api/v1/search" ~host:(Some "localhost") ~origin
+      ~body:{|{"query":"ocaml effects"}|}
   in
   check_int "a foreign origin is 403" 403 (call (Some "https://evil.example.com")).Server.status;
   check_int "a loopback origin is fine" 200 (call (Some "http://localhost")).Server.status;
@@ -389,8 +429,8 @@ let an_oversized_body_is_413 _ =
   let app = default_app () in
   let big = String.make (Server.max_body_size + 1) 'a' in
   let refused =
-    Server.handle_custom app ~meth:"POST" ~path:"/api/v1/search" ~host:(Some "localhost") ~origin:None
-      ~body:big
+    Server.handle_custom app ~meth:"POST" ~path:"/api/v1/search" ~host:(Some "localhost")
+      ~origin:None ~body:big
   in
   check_int "413" 413 refused.Server.status
 
@@ -404,8 +444,7 @@ let api_search_round_trip _ =
   let body = Yojson.Safe.from_string ok.Server.body in
   check_string "the provider that served" "serper"
     (match field "provider" body with `String s -> s | _ -> "");
-  check_int "the hit count" 1
-    (match field "results" body with `List l -> List.length l | _ -> -1);
+  check_int "the hit count" 1 (match field "results" body with `List l -> List.length l | _ -> -1);
   check_bool "the hit is there" true
     (contains ~haystack:ok.Server.body ~needle:"Result for ocaml effects")
 
@@ -501,8 +540,7 @@ let an_answer_failure_projects_the_typed_failure _ =
   let recent =
     match field "recent" (Usage.snapshot app.Server.usage) with `List l -> l | _ -> []
   in
-  check_string "the journal class comes from the variant, not the sentence"
-    "AgentFailed"
+  check_string "the journal class comes from the variant, not the sentence" "AgentFailed"
     (match recent with
     | entry :: _ -> ( match field "error" entry with `String e -> e | _ -> "")
     | [] -> "")
@@ -528,8 +566,8 @@ let dashboard_routes _ =
   let metrics = get enabled "/dashboard/metrics" in
   check_int "metrics" 200 metrics.Server.status;
   let wrong_method =
-    Server.handle_custom enabled ~meth:"POST" ~path:"/dashboard" ~host:(Some "localhost") ~origin:None
-      ~body:""
+    Server.handle_custom enabled ~meth:"POST" ~path:"/dashboard" ~host:(Some "localhost")
+      ~origin:None ~body:""
   in
   check_int "wrong method is 405" 405 wrong_method.Server.status;
   check_int "unknown path is 404" 404 (get enabled "/nope").Server.status
@@ -552,57 +590,79 @@ let slice_between text start_marker end_marker =
    [flag_spec] and its keys, never on a flag spelling — a renamed row moves the
    accepted name, the error sentence and the manifest together. *)
 let test_the_flag_table_is_the_scanners_only_vocabulary () =
-  A.(check (list string) "the manifest is the table's names"
-       (List.map (fun (flag : Server.server_flag) -> flag.name)
-          Server.server_flag_table)
-       Server.server_flags);
-  let names = List.map (fun (flag : Server.server_flag) -> flag.name)
-      Server.server_flag_table
-  in
-  let keys = List.map (fun (flag : Server.server_flag) -> flag.key)
-      Server.server_flag_table
-  in
-  A.(check int "no duplicate spelling" (List.length names)
-       (List.length (List.sort_uniq String.compare names)));
-  A.(check int "no duplicate key" (List.length keys)
-       (List.length (List.sort_uniq String.compare keys)));
-  A.(check (list string) "the ten keys the record has"
-       [ "check"; "live"; "metrics"; "json"; "http"; "host"; "port";
-         "allowed_host"; "log_level"; "log_format" ]
-       keys);
+  A.(
+    check (list string) "the manifest is the table's names"
+      (List.map (fun (flag : Server.server_flag) -> flag.name) Server.server_flag_table)
+      Server.server_flags);
+  let names = List.map (fun (flag : Server.server_flag) -> flag.name) Server.server_flag_table in
+  let keys = List.map (fun (flag : Server.server_flag) -> flag.key) Server.server_flag_table in
+  A.(
+    check int "no duplicate spelling" (List.length names)
+      (List.length (List.sort_uniq String.compare names)));
+  A.(
+    check int "no duplicate key" (List.length keys)
+      (List.length (List.sort_uniq String.compare keys)));
+  A.(
+    check (list string) "the ten keys the record has"
+      [
+        "check";
+        "live";
+        "metrics";
+        "json";
+        "http";
+        "host";
+        "port";
+        "allowed_host";
+        "log_level";
+        "log_format";
+      ]
+      keys);
   List.iter
     (fun (flag : Server.server_flag) ->
       match flag.arity with
-      | Server.Boolean ->
-          A.(check bool (flag.name ^ " is not repeatable") false flag.repeats)
+      | Server.Boolean -> A.(check bool (flag.name ^ " is not repeatable") false flag.repeats)
       | Server.Value ->
-          A.(check bool (flag.name ^ " repeats only for allowed-host") true
-               (flag.repeats = (flag.key = "allowed_host"))))
+          A.(
+            check bool
+              (flag.name ^ " repeats only for allowed-host")
+              true
+              (flag.repeats = (flag.key = "allowed_host"))))
     Server.server_flag_table;
   (* The scanner lives in the CLI library now — [bin/main.ml] only prints
      what [Cli_flags.parse] refused — so the guard reads the library source
      and requires the binary to hold no flag spelling of its own. *)
   let scanner =
-    slice_between (read_file "../lib/cli/cli_flags.ml") "let parse argv ="
-      "(** The startup refusals"
+    slice_between
+      (read_file "../lib/cli/cli_flags.ml")
+      "let parse argv =" "(** The startup refusals"
   in
-  A.(check bool "the scanner lives out of the binary" true
-       (not (contains ~haystack:(read_file "../bin/main.ml") ~needle:"flag_spec")));
-  A.(check bool "the binary parses through the library" true
-       (contains ~haystack:(read_file "../bin/main.ml") ~needle:"Cli_flags.parse"));
+  A.(
+    check bool "the scanner lives out of the binary" true
+      (not (contains ~haystack:(read_file "../bin/main.ml") ~needle:"flag_spec")));
+  A.(
+    check bool "the binary parses through the library" true
+      (contains ~haystack:(read_file "../bin/main.ml") ~needle:"Cli_flags.parse"));
   List.iter
     (fun name ->
-      A.(check bool ("the binary does not spell out " ^ name) false
-           (contains ~haystack:(read_file "../bin/main.ml") ~needle:( "\"" ^ name ^ "\""))))
+      A.(
+        check bool
+          ("the binary does not spell out " ^ name)
+          false
+          (contains ~haystack:(read_file "../bin/main.ml") ~needle:("\"" ^ name ^ "\""))))
     names;
-  A.(check bool "the scanner reads the table" true
-       (contains ~haystack:scanner ~needle:"Server.flag_spec"));
-  A.(check bool "the scanner reads the row's arity" true
-       (contains ~haystack:scanner ~needle:"spec.Server.arity"));
+  A.(
+    check bool "the scanner reads the table" true
+      (contains ~haystack:scanner ~needle:"Server.flag_spec"));
+  A.(
+    check bool "the scanner reads the row's arity" true
+      (contains ~haystack:scanner ~needle:"spec.Server.arity"));
   List.iter
     (fun name ->
-      A.(check bool (name ^ " is not string-matched in the scanner") false
-           (contains ~haystack:scanner ~needle:("\"" ^ name ^ "\""))))
+      A.(
+        check bool
+          (name ^ " is not string-matched in the scanner")
+          false
+          (contains ~haystack:scanner ~needle:("\"" ^ name ^ "\""))))
     names
 
 (* The transport below [serve_http]'s routing writes its own framing, so this
@@ -612,18 +672,22 @@ let test_http_text_response_frames_its_body () =
   let body = "Invalid Host header" in
   let response = Server.http_text_response 421 body in
   check_string "exact bytes"
-    ("HTTP/1.1 421 Misdirected Request\r\ncontent-type: text/plain\r\n\
-      content-length: 19\r\nconnection: close\r\n\r\n" ^ body)
+    ("HTTP/1.1 421 Misdirected Request\r\n\
+      content-type: text/plain\r\n\
+      content-length: 19\r\n\
+      connection: close\r\n\
+      \r\n" ^ body)
     response;
   List.iter
     (fun status ->
       let body = "refused" in
       let response = Server.http_text_response status body in
-      let expected =
-        Printf.sprintf "content-length: %d" (String.length body)
-      in
-      A.(check bool (Printf.sprintf "%d's length is the body's" status) true
-           (contains ~haystack:response ~needle:expected)))
+      let expected = Printf.sprintf "content-length: %d" (String.length body) in
+      A.(
+        check bool
+          (Printf.sprintf "%d's length is the body's" status)
+          true
+          (contains ~haystack:response ~needle:expected)))
     [ 400; 403; 413; 421; 500 ]
 
 (* The replayed request head arrives as lines. [Host] is read from the same
@@ -632,20 +696,14 @@ let test_http_text_response_frames_its_body () =
 let test_header_lines_fold_into_the_header_type () =
   let headers =
     Server.headers_of_lines
-      [
-        "Host: Example.COM";
-        "not a header";
-        "X-Trace:  abc ";
-        ": nameless";
-        "Accept: */*";
-      ]
+      [ "Host: Example.COM"; "not a header"; "X-Trace:  abc "; ": nameless"; "Accept: */*" ]
   in
-  A.(check (option string) "Host is read case-insensitively" (Some "Example.COM")
-       (Http.Header.get headers "host"));
-  A.(check (option string) "a value is trimmed" (Some "abc")
-       (Http.Header.get headers "x-trace"));
-  A.(check (option string) "a second header survives" (Some "*/*")
-       (Http.Header.get headers "accept"))
+  A.(
+    check (option string) "Host is read case-insensitively" (Some "Example.COM")
+      (Http.Header.get headers "host"));
+  A.(check (option string) "a value is trimmed" (Some "abc") (Http.Header.get headers "x-trace"));
+  A.(
+    check (option string) "a second header survives" (Some "*/*") (Http.Header.get headers "accept"))
 
 let () =
   A.run "seekwright/p8-server"
@@ -654,8 +712,10 @@ let () =
         [
           A.test_case "the registry lists the three tools" `Quick registry_lists_the_three_tools;
           A.test_case "tools/list advertises the freeze" `Quick tools_list_advertises_the_freeze;
-          A.test_case "the surface data matches the freeze" `Quick the_surface_data_matches_the_freeze;
-          A.test_case "a search call answers over the registry" `Quick a_search_call_answers_over_the_registry;
+          A.test_case "the surface data matches the freeze" `Quick
+            the_surface_data_matches_the_freeze;
+          A.test_case "a search call answers over the registry" `Quick
+            a_search_call_answers_over_the_registry;
           A.test_case "a refused search is a tool result" `Quick a_refused_search_is_a_tool_result;
           A.test_case "a failed search is a tool result" `Quick a_failed_search_is_a_tool_result;
           A.test_case "fetch disabled refuses cleanly" `Quick fetch_disabled_refuses_cleanly;
@@ -663,8 +723,10 @@ let () =
         ] );
       ( "host guard",
         [
-          A.test_case "the allowlist matches Python's matcher" `Quick the_host_allowlist_matches_python;
-          A.test_case "guarded routes refuse a foreign host" `Quick guarded_routes_refuse_a_foreign_host;
+          A.test_case "the allowlist matches Python's matcher" `Quick
+            the_host_allowlist_matches_python;
+          A.test_case "guarded routes refuse a foreign host" `Quick
+            guarded_routes_refuse_a_foreign_host;
           A.test_case "origins are checked too" `Quick origins_are_checked_against_the_allowlist;
           A.test_case "an oversized body is 413" `Quick an_oversized_body_is_413;
         ] );

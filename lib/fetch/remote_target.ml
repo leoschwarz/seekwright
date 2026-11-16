@@ -12,7 +12,7 @@ let host_of url =
 let vet ~net ~private_web_allowed raw =
   match Fetcher.validate_url raw with
   | Error message -> Error message
-  | Ok target ->
+  | Ok target -> (
       if private_web_allowed then Ok target
       else
         (* The vet runs on every remote route whatever
@@ -28,6 +28,6 @@ let vet ~net ~private_web_allowed raw =
                the oracle's verbatim, and the kind prefix is a caps vocabulary
                the caller has no use for — [Url_blocked] already says what
                kind this is. *)
-            | Error error -> Error (Mcp_caps.Error.message error))
+            | Error error -> Error (Mcp_caps.Error.message error)))
 
 let check net raw = vet ~net ~private_web_allowed:false raw

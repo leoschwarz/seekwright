@@ -6,9 +6,7 @@
 
 module M = Seekwright.Model
 
-let member name = function
-  | `Assoc kvs -> List.assoc_opt name kvs
-  | _ -> None
+let member name = function `Assoc kvs -> List.assoc_opt name kvs | _ -> None
 
 let member_exn name json =
   match member name json with
@@ -21,12 +19,11 @@ let string_member name json =
   | _ -> Alcotest.fail (Printf.sprintf "member %S is not a string" name)
 
 let object_keys json =
-  match json with
-  | `Assoc kvs -> List.map fst kvs
-  | _ -> Alcotest.fail "expected an object"
+  match json with `Assoc kvs -> List.map fst kvs | _ -> Alcotest.fail "expected an object"
 
 let check_keys label expected json =
-  Alcotest.(check (list string)) label (List.sort compare expected)
+  Alcotest.(check (list string))
+    label (List.sort compare expected)
     (List.sort compare (object_keys json))
 
 let check_bool_member label expected json =
@@ -39,20 +36,17 @@ let check_int_member label expected json =
   | `Int i -> Alcotest.(check int) label expected i
   | _ -> Alcotest.fail (Printf.sprintf "member %S is not an integer" label)
 
-let check_absent name json =
-  Alcotest.(check bool) ("no " ^ name) true (member name json = None)
+let check_absent name json = Alcotest.(check bool) ("no " ^ name) true (member name json = None)
 
-let mk_result ?snippet ?text ?text_truncated ?published_date ?score ~title ~url ()
-    : M.result =
+let mk_result ?snippet ?text ?text_truncated ?published_date ?score ~title ~url () : M.result =
   { M.title; url; snippet; text; text_truncated; published_date; score }
 
-let mk_search_response ?answer ?retrieved_at ?notice ~query ~provider ~results ()
-    : M.search_response =
+let mk_search_response ?answer ?retrieved_at ?notice ~query ~provider ~results () :
+    M.search_response =
   { M.query; provider; results; answer; retrieved_at; notice }
 
-let mk_fetch_response ?title ?text ?content_type ?status_code ?retrieved_at
-    ?(truncated = false) ?total_chars ?offset ?matches ?image ?notice ~url
-    ~requested_url () : M.fetch_response =
+let mk_fetch_response ?title ?text ?content_type ?status_code ?retrieved_at ?(truncated = false)
+    ?total_chars ?offset ?matches ?image ?notice ~url ~requested_url () : M.fetch_response =
   {
     M.url;
     requested_url;
@@ -72,22 +66,20 @@ let mk_fetch_response ?title ?text ?content_type ?status_code ?retrieved_at
 let test_a_body_that_would_need_escaping_is_left_whole () =
   let base64 = "PHxlbmRvZnRleHR8Pg==" in
   let response =
-    mk_fetch_response ~url:"https://e.com/a.png"
-      ~requested_url:"https://e.com/a.png" ~content_type:"image/png"
-      ~image:{ M.byte_count = 13; base64 }
-      ()
+    mk_fetch_response ~url:"https://e.com/a.png" ~requested_url:"https://e.com/a.png"
+      ~content_type:"image/png" ~image:{ M.byte_count = 13; base64 } ()
   in
   let json = M.fetch_response_to_yojson response in
   let image = member_exn "image" json in
-  Alcotest.(check (list string)) "image fields" [ "base64"; "byte_count" ]
+  Alcotest.(check (list string))
+    "image fields" [ "base64"; "byte_count" ]
     (List.sort compare (object_keys image));
   check_int_member "byte_count" 13 image;
   Alcotest.(check string) "base64 untouched" base64 (string_member "base64" image)
 
 let test_the_image_carries_no_media_type_of_its_own () =
   let json = M.fetch_image_to_yojson { M.byte_count = 1; base64 = "AA==" } in
-  check_keys "image carries exactly its two fields" [ "byte_count"; "base64" ]
-    json
+  check_keys "image carries exactly its two fields" [ "byte_count"; "base64" ] json
 
 let test_a_result_omits_what_it_has_no_value_for () =
   let json = M.result_to_yojson (mk_result ~title:"t" ~url:"https://e.com" ~text:"x" ()) in
@@ -98,24 +90,21 @@ let test_a_result_omits_what_it_has_no_value_for () =
 
 let test_a_set_field_survives () =
   let json =
-    M.result_to_yojson
-      (mk_result ~title:"t" ~url:"https://e.com" ~text:"x" ~text_truncated:true ())
+    M.result_to_yojson (mk_result ~title:"t" ~url:"https://e.com" ~text:"x" ~text_truncated:true ())
   in
   check_bool_member "text_truncated" true json
 
 let test_false_is_not_absent () =
   let json =
     M.fetch_response_to_yojson
-      (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com"
-         ~text:"t" ())
+      (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com" ~text:"t" ())
   in
   check_bool_member "truncated" false json
 
 let test_a_plain_fetch_serialises_exactly_as_it_did () =
   let json =
     M.fetch_response_to_yojson
-      (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com"
-         ~text:"t" ())
+      (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com" ~text:"t" ())
   in
   check_absent "offset" json;
   check_absent "matches" json
@@ -123,8 +112,7 @@ let test_a_plain_fetch_serialises_exactly_as_it_did () =
 let test_an_image_is_absent_until_there_is_one () =
   let json =
     M.fetch_response_to_yojson
-      (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com"
-         ~text:"t" ())
+      (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com" ~text:"t" ())
   in
   check_absent "image" json
 
@@ -145,8 +133,8 @@ let test_matches_carry_the_content_without_text () =
 let test_a_non_zero_offset_is_echoed () =
   let json =
     M.fetch_response_to_yojson
-      (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com"
-         ~text:"t" ~offset:40_000 ())
+      (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com" ~text:"t"
+         ~offset:40_000 ())
   in
   check_int_member "offset" 40_000 json
 
@@ -186,8 +174,7 @@ let test_locale_is_gone_rather_than_kept_beside_language () =
      encoder cannot emit one. *)
   let query =
     match
-      M.search_query_of_yojson
-        (`Assoc [ ("query", `String "q"); ("locale", `String "de-DE") ])
+      M.search_query_of_yojson (`Assoc [ ("query", `String "q"); ("locale", `String "de-DE") ])
     with
     | Ok query -> query
     | Error e -> Alcotest.fail ("decode failed: " ^ e)
@@ -205,9 +192,7 @@ let test_safe_search_carries_all_three_states () =
   List.iter
     (fun (json, expected) ->
       let query =
-        match
-          M.search_query_of_yojson (`Assoc (("query", `String "q") :: json))
-        with
+        match M.search_query_of_yojson (`Assoc (("query", `String "q") :: json)) with
         | Ok query -> query
         | Error e -> Alcotest.fail ("decode failed: " ^ e)
       in
@@ -225,8 +210,7 @@ let test_safe_search_carries_all_three_states () =
 
 let test_safe_search_defaults_to_none_not_false () =
   match M.search_query_of_yojson (`Assoc [ ("query", `String "q") ]) with
-  | Ok query ->
-      Alcotest.(check (option bool)) "safe_search" None query.safe_search
+  | Ok query -> Alcotest.(check (option bool)) "safe_search" None query.safe_search
   | Error e -> Alcotest.fail ("decode failed: " ^ e)
 
 let test_a_name_the_tree_has_never_heard_of_survives_the_body () =
@@ -234,23 +218,18 @@ let test_a_name_the_tree_has_never_heard_of_survives_the_body () =
     M.fetch_request_of_yojson
       (`Assoc [ ("url", `String "https://e.com/a"); ("provider", `String "scraper") ])
   with
-  | Ok request ->
-      Alcotest.(check (option string)) "provider" (Some "scraper")
-        request.provider
+  | Ok request -> Alcotest.(check (option string)) "provider" (Some "scraper") request.provider
   | Error e -> Alcotest.fail ("decode failed: " ^ e)
 
 let test_the_provider_field_is_a_string () =
   match
-    M.fetch_request_of_yojson
-      (`Assoc [ ("url", `String "https://e.com/a"); ("provider", `Int 5) ])
+    M.fetch_request_of_yojson (`Assoc [ ("url", `String "https://e.com/a"); ("provider", `Int 5) ])
   with
   | Ok _ -> Alcotest.fail "a non-string provider was accepted"
   | Error _ -> ()
 
 let test_an_omitted_provider_stays_out_of_the_body () =
-  match
-    M.fetch_request_of_yojson (`Assoc [ ("url", `String "https://e.com/a") ])
-  with
+  match M.fetch_request_of_yojson (`Assoc [ ("url", `String "https://e.com/a") ]) with
   | Ok request ->
       Alcotest.(check (option string)) "provider" None request.provider;
       let json = M.fetch_request_to_yojson request in
@@ -259,8 +238,7 @@ let test_an_omitted_provider_stays_out_of_the_body () =
 
 let test_a_wire_model_refuses_an_unknown_key () =
   match
-    M.result_of_yojson
-      (`Assoc [ ("title", `String "t"); ("url", `String "u"); ("extra", `Null) ])
+    M.result_of_yojson (`Assoc [ ("title", `String "t"); ("url", `String "u"); ("extra", `Null) ])
   with
   | Ok _ -> Alcotest.fail "an extra key was accepted"
   | Error _ -> ()
@@ -271,12 +249,10 @@ let round_trip label decode encode value =
   | Error e -> Alcotest.fail (label ^ ": decode failed: " ^ e)
   | Ok decoded ->
       let second = encode decoded in
-      Alcotest.(check bool) (label ^ ": round trip") true
-        (Yojson.Safe.equal first second)
+      Alcotest.(check bool) (label ^ ": round trip") true (Yojson.Safe.equal first second)
 
 let test_request_round_trips () =
-  round_trip "search_request" M.search_request_of_yojson
-    M.search_request_to_yojson
+  round_trip "search_request" M.search_request_of_yojson M.search_request_to_yojson
     {
       M.query = "wire models";
       provider = Some "exa:free";
@@ -297,8 +273,7 @@ let test_request_round_trips () =
       structure = true;
       provider = Some "crawl4ai";
     };
-  round_trip "answer_request" M.answer_request_of_yojson
-    M.answer_request_to_yojson
+  round_trip "answer_request" M.answer_request_of_yojson M.answer_request_to_yojson
     {
       M.query = "wire models";
       extra_queries = Some [ "sanitize pass"; "pydantic rules" ];
@@ -312,24 +287,18 @@ let test_request_round_trips () =
     }
 
 let test_response_round_trips () =
-  round_trip "fetch_response" M.fetch_response_of_yojson
-    M.fetch_response_to_yojson
-    (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com/a"
-       ~title:"t" ~text:"body" ~content_type:"text/html" ~status_code:200
-       ~retrieved_at:"2026-11-11T00:00:00Z" ~truncated:true ~total_chars:1000
-       ~offset:10
+  round_trip "fetch_response" M.fetch_response_of_yojson M.fetch_response_to_yojson
+    (mk_fetch_response ~url:"https://e.com" ~requested_url:"https://e.com/a" ~title:"t" ~text:"body"
+       ~content_type:"text/html" ~status_code:200 ~retrieved_at:"2026-11-11T00:00:00Z"
+       ~truncated:true ~total_chars:1000 ~offset:10
        ~matches:[ { M.offset = 1; text = "match" } ]
        ~image:{ M.byte_count = 3; base64 = "AA==" }
        ~notice:"n" ());
-  round_trip "answer_response" M.answer_response_of_yojson
-    M.answer_response_to_yojson
+  round_trip "answer_response" M.answer_response_of_yojson M.answer_response_to_yojson
     {
       M.query = "q";
       answer = "a";
-      sources =
-        [
-          { M.source_title = "t"; source_url = "https://e.com"; source_provider = "p" };
-        ];
+      sources = [ { M.source_title = "t"; source_url = "https://e.com"; source_provider = "p" } ];
       model = "m";
       depth = M.Brief;
       searches = 2;
@@ -338,8 +307,7 @@ let test_response_round_trips () =
       truncated = Some false;
       notice = Some "n";
     };
-  round_trip "provider_result" M.provider_result_of_yojson
-    M.provider_result_to_yojson
+  round_trip "provider_result" M.provider_result_of_yojson M.provider_result_to_yojson
     {
       M.provider = "exa";
       results = [ mk_result ~title:"t" ~url:"https://e.com" ~score:0.5 () ];
@@ -374,8 +342,7 @@ let test_a_duplicate_key_keeps_the_last_value () =
   let query = decode [ ("query", `String "first"); ("query", `String "second") ] in
   Alcotest.(check string) "the last query wins" "second" query.M.query;
   let results =
-    decode
-      [ ("query", `String "q"); ("max_results", `Int 2); ("max_results", `Int 9) ]
+    decode [ ("query", `String "q"); ("max_results", `Int 2); ("max_results", `Int 9) ]
   in
   Alcotest.(check int) "the last max_results wins" 9 results.M.max_results
 
@@ -385,8 +352,7 @@ let test_an_integer_literal_is_read_when_it_fits () =
      decode; a value wider than the int cannot be represented and is refused with
      the range fault rather than as a type error. *)
   let decode field =
-    M.search_query_of_yojson
-      (`Assoc [ ("query", `String "q"); ("max_results", field) ])
+    M.search_query_of_yojson (`Assoc [ ("query", `String "q"); ("max_results", field) ])
   in
   (match decode (`Intlit "5") with
   | Ok value -> Alcotest.(check int) "5" 5 value.M.max_results
@@ -397,23 +363,19 @@ let test_an_integer_literal_is_read_when_it_fits () =
   match decode (`Intlit "99999999999999999999") with
   | Ok _ -> Alcotest.fail "an unrepresentable literal was accepted"
   | Error message ->
-      Alcotest.(check string) "the range fault is named"
-        "field \"max_results\" is outside the integer range" message
+      Alcotest.(check string)
+        "the range fault is named" "field \"max_results\" is outside the integer range" message
 
 let test_an_explicit_null_is_not_a_default () =
   (* pydantic's non-optional defaults: absent means the default, null is an
      error. Treating null as absent would silently accept a body pydantic
      refuses. *)
   (match
-     M.fetch_request_of_yojson
-       (`Assoc [ ("url", `String "https://e.com/a"); ("structure", `Null) ])
+     M.fetch_request_of_yojson (`Assoc [ ("url", `String "https://e.com/a"); ("structure", `Null) ])
    with
   | Ok _ -> Alcotest.fail "null structure was accepted"
   | Error _ -> ());
-  match
-    M.search_query_of_yojson
-      (`Assoc [ ("query", `String "q"); ("max_results", `Null) ])
-  with
+  match M.search_query_of_yojson (`Assoc [ ("query", `String "q"); ("max_results", `Null) ]) with
   | Ok _ -> Alcotest.fail "null max_results was accepted"
   | Error _ -> ()
 
@@ -422,8 +384,8 @@ let () =
     [
       ( "FetchImage",
         [
-          Alcotest.test_case "a body that would need escaping is left whole"
-            `Quick test_a_body_that_would_need_escaping_is_left_whole;
+          Alcotest.test_case "a body that would need escaping is left whole" `Quick
+            test_a_body_that_would_need_escaping_is_left_whole;
           Alcotest.test_case "the image carries no media type of its own" `Quick
             test_the_image_carries_no_media_type_of_its_own;
         ] );
@@ -431,8 +393,7 @@ let () =
         [
           Alcotest.test_case "a result omits what it has no value for" `Quick
             test_a_result_omits_what_it_has_no_value_for;
-          Alcotest.test_case "a set field survives" `Quick
-            test_a_set_field_survives;
+          Alcotest.test_case "a set field survives" `Quick test_a_set_field_survives;
           Alcotest.test_case "false is not absent" `Quick test_false_is_not_absent;
           Alcotest.test_case "a plain fetch serialises exactly as it did" `Quick
             test_a_plain_fetch_serialises_exactly_as_it_did;
@@ -440,8 +401,7 @@ let () =
             test_an_image_is_absent_until_there_is_one;
           Alcotest.test_case "matches carry the content without text" `Quick
             test_matches_carry_the_content_without_text;
-          Alcotest.test_case "a non-zero offset is echoed" `Quick
-            test_a_non_zero_offset_is_echoed;
+          Alcotest.test_case "a non-zero offset is echoed" `Quick test_a_non_zero_offset_is_echoed;
           Alcotest.test_case "the rule reaches nested results" `Quick
             test_the_rule_reaches_nested_results;
           Alcotest.test_case "a wire model refuses an unknown key" `Quick
@@ -449,12 +409,11 @@ let () =
         ] );
       ( "SearchQuery",
         [
-          Alcotest.test_case "the constraint set is exactly these eight fields"
-            `Quick test_the_constraint_set_is_exactly_these_eight_fields;
-          Alcotest.test_case "locale is gone rather than kept beside language"
-            `Quick test_locale_is_gone_rather_than_kept_beside_language;
-          Alcotest.test_case "language defaults to None" `Quick
-            test_language_defaults_to_none;
+          Alcotest.test_case "the constraint set is exactly these eight fields" `Quick
+            test_the_constraint_set_is_exactly_these_eight_fields;
+          Alcotest.test_case "locale is gone rather than kept beside language" `Quick
+            test_locale_is_gone_rather_than_kept_beside_language;
+          Alcotest.test_case "language defaults to None" `Quick test_language_defaults_to_none;
           Alcotest.test_case "safe_search carries all three states" `Quick
             test_safe_search_carries_all_three_states;
           Alcotest.test_case "safe_search defaults to None, not false" `Quick
@@ -471,14 +430,11 @@ let () =
         ] );
       ( "RoundTrip",
         [
-          Alcotest.test_case "request bodies round trip" `Quick
-            test_request_round_trips;
-          Alcotest.test_case "response bodies round trip" `Quick
-            test_response_round_trips;
+          Alcotest.test_case "request bodies round trip" `Quick test_request_round_trips;
+          Alcotest.test_case "response bodies round trip" `Quick test_response_round_trips;
           Alcotest.test_case "a minimal body drops unset fields" `Quick
             test_a_minimal_body_drops_unset_fields;
-          Alcotest.test_case "a too-short query is refused" `Quick
-            test_a_too_short_query_is_refused;
+          Alcotest.test_case "a too-short query is refused" `Quick test_a_too_short_query_is_refused;
           Alcotest.test_case "a duplicate key keeps the last value" `Quick
             test_a_duplicate_key_keeps_the_last_value;
           Alcotest.test_case "an integer literal is read when it fits" `Quick

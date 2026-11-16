@@ -6,12 +6,7 @@ type name = string
 
 type error_kind = Failure | Quota
 
-type error = {
-  provider : string;
-  kind : error_kind;
-  message : string;
-  retryable : bool;
-}
+type error = { provider : string; kind : error_kind; message : string; retryable : bool }
 
 let provider_error ?(retryable = true) ~provider message =
   { provider; kind = Failure; message; retryable }
@@ -22,11 +17,9 @@ let quota_exhausted ~provider ?(message = "quota exhausted") () =
 let render_error e = e.provider ^ ": " ^ e.message
 
 let auth_error ~provider =
-  provider_error ~retryable:false ~provider
-    "authentication rejected (check API key)"
+  provider_error ~retryable:false ~provider "authentication rejected (check API key)"
 
-let http_status_error ~provider code =
-  provider_error ~provider (Printf.sprintf "HTTP %d" code)
+let http_status_error ~provider code = provider_error ~provider (Printf.sprintf "HTTP %d" code)
 
 let timeout_error ~provider = provider_error ~provider "request timed out"
 let network_error ~provider = provider_error ~provider "network error"
@@ -34,14 +27,13 @@ let network_error ~provider = provider_error ~provider "network error"
 let transport_error ~provider (failure : Caps.Error.t) =
   match Caps.Error.kind failure with
   | Caps.Error.Timeout -> timeout_error ~provider
-  | (Caps.Error.Denied | Invalid | Unavailable | Failed) -> network_error ~provider
+  | Caps.Error.Denied | Invalid | Unavailable | Failed -> network_error ~provider
 
 let decode_json_object ~provider body =
   let malformed = provider_error ~provider "malformed JSON response" in
-  match (try Ok (Yojson.Safe.from_string body) with Yojson.Json_error _ -> Error malformed) with
+  match try Ok (Yojson.Safe.from_string body) with Yojson.Json_error _ -> Error malformed with
   | Error e -> Error e
-  | Ok json -> (
-      match json with `Assoc _ -> Ok json | _ -> Error malformed)
+  | Ok json -> ( match json with `Assoc _ -> Ok json | _ -> Error malformed)
 
 let normalise text = String.concat " " (Utf8.split_whitespace text)
 
@@ -60,9 +52,7 @@ let clip text limit =
       else if is_boundary chars.(k) chars.(k + 1) then last_boundary (k + 1) (Some k)
       else last_boundary (k + 1) found
     in
-    let join count =
-      String.concat "" (Array.to_list (Array.sub chars 0 (min count n)))
-    in
+    let join count = String.concat "" (Array.to_list (Array.sub chars 0 (min count n))) in
     match last_boundary 0 None with
     | Some k when k > limit / 2 -> join (k + 1)
     | _ -> rstrip (join limit) ^ "…"
@@ -88,17 +78,17 @@ let truncate_text text limit =
 let ignored_constraints (q : search_query) ~domains ~dates ~geo ~language ~safety =
   let missing = ref [] in
   let add token = missing := token :: !missing in
-  if not domains && (q.Model.include_domains <> [] || q.Model.exclude_domains <> []) then
+  if (not domains) && (q.Model.include_domains <> [] || q.Model.exclude_domains <> []) then
     add "domain";
-  if not dates && q.Model.recency <> None then add "dates";
+  if (not dates) && q.Model.recency <> None then add "dates";
   (match language with
   | None ->
-      if not geo && (q.Model.country <> None || q.Model.language <> None) then
+      if (not geo) && (q.Model.country <> None || q.Model.language <> None) then
         add "country/language"
   | Some honours_language ->
-      if not geo && q.Model.country <> None then add "country";
-      if not honours_language && q.Model.language <> None then add "language");
-  if not safety && q.Model.safe_search <> None then add "safe-search";
+      if (not geo) && q.Model.country <> None then add "country";
+      if (not honours_language) && q.Model.language <> None then add "language");
+  if (not safety) && q.Model.safe_search <> None then add "safe-search";
   if !missing = [] then None
   else
     Some
@@ -109,13 +99,10 @@ let site_filtered_query (q : search_query) =
   let parts =
     if q.include_domains = [] then []
     else
-      let joined =
-        String.concat " OR " (List.map (fun d -> "site:" ^ d) q.include_domains)
-      in
+      let joined = String.concat " OR " (List.map (fun d -> "site:" ^ d) q.include_domains) in
       [ (if List.length q.include_domains > 1 then "(" ^ joined ^ ")" else joined) ]
   in
-  String.concat " "
-    (q.Model.query :: parts @ List.map (fun d -> "-site:" ^ d) q.exclude_domains)
+  String.concat " " ((q.Model.query :: parts) @ List.map (fun d -> "-site:" ^ d) q.exclude_domains)
 
 module Json = struct
   let members json = match json with `Assoc fields -> Some fields | _ -> None
@@ -125,14 +112,13 @@ module Json = struct
   let number json =
     match json with
     | `Int n -> Some (float_of_int n)
-    | `Intlit text -> (match Float.of_string_opt text with Some f -> Some f | None -> None)
+    | `Intlit text -> ( match Float.of_string_opt text with Some f -> Some f | None -> None)
     | `Float f -> Some f
     | _ -> None
 
   let field key json =
     match members json with
-    | Some fields ->
-        (match List.assoc_opt key fields with Some value -> value | None -> `Null)
+    | Some fields -> ( match List.assoc_opt key fields with Some value -> value | None -> `Null)
     | None -> `Null
 
   let string_field key json = string (field key json)
@@ -144,8 +130,7 @@ end
 
 module Net = struct
   type t = {
-    request :
-      Caps.Authority.Net.request -> (Caps.Authority.Net.response, Caps.Error.t) result
+    request : Caps.Authority.Net.request -> (Caps.Authority.Net.response, Caps.Error.t) result;
   }
 
   let of_grant grant = { request = (fun req -> Caps.Authority.Net.request grant req) }
@@ -160,9 +145,7 @@ let policy_of_uri (uri : Uri.t) : Caps.Policy.endpoint =
 
 (* Host extraction for redaction in logs and errors; query parameters may carry credentials. *)
 let redact_url (url : string) : string =
-  match Uri.host (Uri.of_string url) with
-  | Some host when host <> "" -> host
-  | _ -> "?"
+  match Uri.host (Uri.of_string url) with Some host when host <> "" -> host | _ -> "?"
 
 let escape_path_segment (value : string) : string =
   let unreserved = function
@@ -177,10 +160,7 @@ let escape_path_segment (value : string) : string =
     value;
   Buffer.contents out
 
-type hit = {
-  result : Model.result;
-  uncapped_chars : int option
-}
+type hit = { result : Model.result; uncapped_chars : int option }
 
 type outcome = {
   provider : string;

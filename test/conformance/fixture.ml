@@ -47,8 +47,7 @@ module Tool = Mcp_caps.Tool
    accepts for a call that sends no [arguments] at all, and it is the same one
    [ping] uses in [examples/read_source.ml]. *)
 let test_simple_text =
-  Tool.make
-    ~description:"Return one fixed line of text."
+  Tool.make ~description:"Return one fixed line of text."
     ~input_schema:(Mcp_kit.Schema.object_ ~properties:[] ~required:[] ())
     ~decode:(fun _json -> Ok ())
     ~run:(fun () () -> Ok (Tool.Output.text "This is a simple text response for testing."))
@@ -58,13 +57,12 @@ let test_simple_text =
    that answers [Error _]. What reaches the wire is [Mcp_kit.Tool.error_text]
    built from [Error.render] — an [isError] tool result, never a JSON-RPC error. *)
 let test_error_handling =
-  Tool.make
-    ~description:"Always fail, with a message safe to show a model."
+  Tool.make ~description:"Always fail, with a message safe to show a model."
     ~input_schema:(Mcp_kit.Schema.object_ ~properties:[] ~required:[] ())
     ~decode:(fun _json -> Ok ())
-    ~run:
-      (fun () () ->
-        Error (Error.make Error.Failed ~message:"This tool intentionally returns an error for testing"))
+    ~run:(fun () () ->
+      Error
+        (Error.make Error.Failed ~message:"This tool intentionally returns an error for testing"))
     "test_error_handling"
 
 (* [server-stateless] asks for a tool that completes without emitting a log
@@ -75,8 +73,7 @@ let test_error_handling =
    (`test_missing_capability`, `test_streaming_elicitation`), which need an
    input-required result, and `Tool.Output` has none (§3). *)
 let test_logging_tool =
-  Tool.make
-    ~description:"Complete without sending a logging notification."
+  Tool.make ~description:"Complete without sending a logging notification."
     ~input_schema:(Mcp_kit.Schema.object_ ~properties:[] ~required:[] ())
     ~decode:(fun _json -> Ok ())
     ~run:(fun () () -> Ok (Tool.Output.text "logging disabled"))
@@ -99,20 +96,15 @@ let test_logging_tool =
    by mcp-kit's vendored engine. A layer that rewrote or narrowed a declared
    schema fails this scenario. *)
 let test_custom_header =
-  Tool.make
-    ~description:"Answer once the Greeting custom header matches its argument."
+  Tool.make ~description:"Answer once the Greeting custom header matches its argument."
     ~input_schema:
       (Mcp_kit.Schema.object_
          ~properties:
            [
              ( "greeting",
-               `Assoc
-                 [
-                   ("type", `String "string");
-                   ("x-mcp-header", `String "Greeting");
-                 ] );
+               `Assoc [ ("type", `String "string"); ("x-mcp-header", `String "Greeting") ] );
            ]
-         ~required:["greeting"] ())
+         ~required:[ "greeting" ] ())
     ~decode:(Mcp_kit.Tool.Arg.string "greeting")
     ~run:(fun () greeting ->
       Ok (Tool.Output.text (Printf.sprintf "custom-header-ok greeting=%s" greeting)))
@@ -148,8 +140,7 @@ let json_schema_2020_12_tool =
               ( "contactMethod",
                 `Assoc
                   [
-                    ("type", `String "string");
-                    ("enum", `List [ `String "phone"; `String "email" ]);
+                    ("type", `String "string"); ("enum", `List [ `String "phone"; `String "email" ]);
                   ] );
               ("phone", `Assoc [ ("type", `String "string") ]);
               ("email", `Assoc [ ("type", `String "string") ]);
@@ -170,8 +161,7 @@ let json_schema_2020_12_tool =
         ( "if",
           `Assoc
             [
-              ( "properties",
-                `Assoc [ ("contactMethod", `Assoc [ ("const", `String "phone") ]) ] );
+              ("properties", `Assoc [ ("contactMethod", `Assoc [ ("const", `String "phone") ]) ]);
               ("required", `List [ `String "contactMethod" ]);
             ] );
         ("then", `Assoc [ ("required", `List [ `String "phone" ]) ]);
@@ -179,9 +169,7 @@ let json_schema_2020_12_tool =
         ("additionalProperties", `Bool false);
       ]
   in
-  Tool.make
-    ~description:"Draft 2020-12 input schema, handed through unchanged."
-    ~input_schema
+  Tool.make ~description:"Draft 2020-12 input schema, handed through unchanged." ~input_schema
     ~decode:(fun _json -> Ok ())
     ~run:(fun () () -> Ok (Tool.Output.text "ok"))
     "json_schema_2020_12_tool"
@@ -190,13 +178,11 @@ let json_schema_2020_12_tool =
    path argument, and the read is an [Authority.Fs] operation, so it is the line
    in this file that shows a grant in a real [tools/list]. *)
 let test_read_granted_file =
-  Tool.make
-    ~description:"Read note.txt from the root this fixture was started with."
+  Tool.make ~description:"Read note.txt from the root this fixture was started with."
     ~input_schema:
       (Mcp_kit.Schema.object_
-         ~properties:[("path", Mcp_kit.Schema.string ())]
-         ~required:["path"]
-         ())
+         ~properties:[ ("path", Mcp_kit.Schema.string ()) ]
+         ~required:[ "path" ] ())
     ~decode:(fun json ->
       match Mcp_kit.Tool.Arg.string "path" json with
       | Ok path -> Ok path
@@ -236,8 +222,8 @@ let port_of = function
 let cli () =
   match Array.to_list Sys.argv with
   | [] | [ _ ] -> usage ()
-  | _ :: rest -> begin
-      match
+  | _ :: rest ->
+      begin match
         let root = ref None and transport = ref Transport_stdio in
         let rec walk = function
           | [] -> ()
@@ -249,8 +235,7 @@ let cli () =
           | [ "--http"; text ] -> transport := port_of (Some text)
           | flag :: _ when String.starts_with ~prefix:"--http=" flag ->
               let prefix = String.length "--http=" in
-              transport :=
-                port_of (Some (String.sub flag prefix (String.length flag - prefix)))
+              transport := port_of (Some (String.sub flag prefix (String.length flag - prefix)))
           | _ -> usage ()
         in
         walk rest;
@@ -258,7 +243,7 @@ let cli () =
       with
       | None, _ -> usage ()
       | Some root, transport -> (root, transport)
-    end
+      end
 
 let build ~sw env root =
   let ( let* ) = Result.bind in
@@ -269,9 +254,7 @@ let build ~sw env root =
     | Ok confinement -> Ok confinement
     | Error error -> invalid (Error.render error)
   in
-  let grant =
-    Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement
-  in
+  let grant = Authority.Fs.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) confinement in
   let* registry =
     Registry.add Registry.empty test_simple_text ~grant:()
     >>= (fun registry -> Registry.add registry test_error_handling ~grant:())
@@ -295,11 +278,8 @@ let test_png_base64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC"
 
 let static_text_resource =
-  Mcp_kit.Resource.make
-    ~description:"Static text for conformance"
-    ~mime_type:"text/plain"
-    ~uri:"test://static-text"
-    ~name:"Static text"
+  Mcp_kit.Resource.make ~description:"Static text for conformance" ~mime_type:"text/plain"
+    ~uri:"test://static-text" ~name:"Static text"
     [
       Mcp_kit.Resource.Text
         {
@@ -311,78 +291,54 @@ let static_text_resource =
 
 let static_binary_resource =
   (* [resources-read-binary] checks the field is there and decodable. *)
-  Mcp_kit.Resource.make
-    ~description:"Static binary for conformance"
-    ~mime_type:"image/png"
-    ~uri:"test://static-binary"
-    ~name:"Static binary"
+  Mcp_kit.Resource.make ~description:"Static binary for conformance" ~mime_type:"image/png"
+    ~uri:"test://static-binary" ~name:"Static binary"
     [
       Mcp_kit.Resource.Blob
-        {
-          uri = "test://static-binary";
-          mime_type = Some "image/png";
-          blob = test_png_base64;
-        };
+        { uri = "test://static-binary"; mime_type = Some "image/png"; blob = test_png_base64 };
     ]
 
 (* The one path component between the two fixed halves is the template's
    variable; [resources-templates-read] and [caching] read it back. *)
 let template_resource =
-  Mcp_kit.Resource_template.make
-    ~uri_template:"test://template/{id}/data"
-    ~name:"Template data"
-    ~description:"Parameterized test resource"
-    ~mime_type:"text/plain"
-    (fun uri ->
+  Mcp_kit.Resource_template.make ~uri_template:"test://template/{id}/data" ~name:"Template data"
+    ~description:"Parameterized test resource" ~mime_type:"text/plain" (fun uri ->
       let prefix = "test://template/" and suffix = "/data" in
       let prefix_length = String.length prefix in
       let suffix_length = String.length suffix in
       let uri_length = String.length uri in
       if
         uri_length <= prefix_length + suffix_length
-        || not (String.starts_with ~prefix uri)
+        || (not (String.starts_with ~prefix uri))
         || not (String.ends_with ~suffix uri)
       then Mcp_kit.Resource_template.Unmatched
       else
-        let id =
-          String.sub uri prefix_length (uri_length - prefix_length - suffix_length)
-        in
+        let id = String.sub uri prefix_length (uri_length - prefix_length - suffix_length) in
         if String.contains id '/' then Mcp_kit.Resource_template.Failed
         else
           Mcp_kit.Resource_template.Matched
             [
               Mcp_kit.Resource.Text
-                {
-                  uri;
-                  mime_type = Some "text/plain";
-                  text = "Template resource for id " ^ id;
-                };
+                { uri; mime_type = Some "text/plain"; text = "Template resource for id " ^ id };
             ])
 
 let simple_prompt =
-  Mcp_kit.Prompt.make
-    ~description:"Simple conformance prompt"
-    "test_simple_prompt"
-    (fun _args ->
+  Mcp_kit.Prompt.make ~description:"Simple conformance prompt" "test_simple_prompt" (fun _args ->
       Ok
         {
           Mcp_kit.Prompt.description = None;
           messages =
-            [
-              Mcp_kit.Prompt.text Mcp_kit.Prompt.User "This is a simple prompt for testing.";
-            ];
+            [ Mcp_kit.Prompt.text Mcp_kit.Prompt.User "This is a simple prompt for testing." ];
         })
 
 (* [prompts-get-with-args] supplies both arguments; [completion-complete]
    exercises the argument's completion callback, which is why [arg1] answers
    only values prefixed the way the scenario prefixes its query. *)
 let prompt_with_arguments =
-  Mcp_kit.Prompt.make
-    ~description:"Parameterized conformance prompt"
+  Mcp_kit.Prompt.make ~description:"Parameterized conformance prompt"
     ~arguments:
       [
-        Mcp_kit.Prompt.argument ~required:true "arg1";
-        Mcp_kit.Prompt.argument ~required:true "arg2";
+        Mcp_kit.Prompt.argument ~required:true "arg1"; Mcp_kit.Prompt.argument ~required:true "arg2";
       ]
     ~complete:(fun request ->
       if request.Mcp_kit.Completion.name = "arg1" then
@@ -399,9 +355,7 @@ let prompt_with_arguments =
       else Error Mcp_kit.Completion.Invalid_params)
     "test_prompt_with_arguments"
     (fun args ->
-      match
-        (Mcp_kit.Prompt.Arg.string "arg1" args, Mcp_kit.Prompt.Arg.string "arg2" args)
-      with
+      match (Mcp_kit.Prompt.Arg.string "arg1" args, Mcp_kit.Prompt.Arg.string "arg2" args) with
       | Ok arg1, Ok arg2 ->
           Ok
             {
@@ -409,8 +363,7 @@ let prompt_with_arguments =
               messages =
                 [
                   Mcp_kit.Prompt.text Mcp_kit.Prompt.User
-                    (Printf.sprintf "Prompt with arguments: arg1='%s', arg2='%s'" arg1
-                       arg2);
+                    (Printf.sprintf "Prompt with arguments: arg1='%s', arg2='%s'" arg1 arg2);
                 ];
             }
       | Error message, _ | _, Error message -> Error message)
@@ -422,25 +375,20 @@ let prompt_with_arguments =
    the scenario supplies and refuses every other: a prompt that read an
    arbitrary caller URI would be the server authorising a read silently. *)
 let prompt_with_image =
-  Mcp_kit.Prompt.make
-    ~description:"Image conformance prompt"
-    "test_prompt_with_image"
-    (fun _args ->
+  Mcp_kit.Prompt.make ~description:"Image conformance prompt" "test_prompt_with_image" (fun _args ->
       Ok
         {
           Mcp_kit.Prompt.description = None;
           messages =
             [
-              Mcp_kit.Prompt.image Mcp_kit.Prompt.User ~mime_type:"image/png"
-                ~data:test_png_base64;
+              Mcp_kit.Prompt.image Mcp_kit.Prompt.User ~mime_type:"image/png" ~data:test_png_base64;
               Mcp_kit.Prompt.text Mcp_kit.Prompt.User "This prompt includes an image.";
             ];
         })
 
 let prompt_with_embedded_resource =
-  Mcp_kit.Prompt.make
-    ~description:"Embedded resource conformance prompt"
-    ~arguments:[Mcp_kit.Prompt.argument ~required:true "resourceUri"]
+  Mcp_kit.Prompt.make ~description:"Embedded resource conformance prompt"
+    ~arguments:[ Mcp_kit.Prompt.argument ~required:true "resourceUri" ]
     "test_prompt_with_embedded_resource"
     (fun args ->
       match Mcp_kit.Prompt.Arg.string "resourceUri" args with
@@ -490,13 +438,10 @@ let extend_with_mcp_kit_registrations server =
 
 let serve_http ~sw env server port_request =
   let socket =
-    Eio.Net.listen ~backlog:128 ~sw env#net
-      (`Tcp (Eio.Net.Ipaddr.V4.loopback, port_request))
+    Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, port_request))
   in
   let port =
-    match Eio.Net.listening_addr socket with
-    | `Tcp (_, port) -> port
-    | `Unix _ -> assert false
+    match Eio.Net.listening_addr socket with `Tcp (_, port) -> port | `Unix _ -> assert false
   in
   (* Origin protection is the adapter's, and the allowlist is browser
      protection, not authentication. The fixture's own loopback origin is
@@ -527,5 +472,5 @@ let () =
       let server = extend_with_mcp_kit_registrations server in
       match transport with
       | Transport_stdio -> Mcp_kit_stdio.run_channels server stdin stdout
-      | Transport_http port_request -> serve_http ~sw env server
-                                        (match port_request with Some port -> port | None -> 0))
+      | Transport_http port_request ->
+          serve_http ~sw env server (match port_request with Some port -> port | None -> 0))

@@ -1,8 +1,7 @@
 module Output = struct
   type t = { text : string; structured_content : Yojson.Safe.t option }
 
-  let text ?structured_content text_content =
-    { text = text_content; structured_content }
+  let text ?structured_content text_content = { text = text_content; structured_content }
 
   let text_of t = t.text
   let structured_content t = t.structured_content

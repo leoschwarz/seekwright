@@ -13,5 +13,4 @@
    reaches a consumer is what [ocamlc -i] infers, and the package ships neither.
    In a running program the only [Controls_raw.t] is the one inside a grant, and
    the only way to hold a grant is [Authority]. *)
-let read_file confinement path =
-  Policy_fs.read_file ~controls:() confinement path
+let read_file confinement path = Policy_fs.read_file ~controls:() confinement path

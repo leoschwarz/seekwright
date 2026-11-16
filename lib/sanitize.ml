@@ -5,18 +5,10 @@ let text_fields = [ "title"; "snippet"; "text"; "answer" ]
 let is_text_field name = List.mem name text_fields
 
 let literal_tokens =
-  [
-    "<start_of_turn>";
-    "<end_of_turn>";
-    "[INST]";
-    "[/INST]";
-    "<<SYS>>";
-    "<</SYS>>";
-  ]
+  [ "<start_of_turn>"; "<end_of_turn>"; "[INST]"; "[/INST]"; "<<SYS>>"; "<</SYS>>" ]
 
 let escaped_literal marker =
-  String.make 1 marker.[0] ^ zwsp
-  ^ String.sub marker 1 (String.length marker - 1)
+  String.make 1 marker.[0] ^ zwsp ^ String.sub marker 1 (String.length marker - 1)
 
 let escaped_literals = List.map escaped_literal literal_tokens
 
@@ -78,15 +70,13 @@ let escape_angle_fullwidth s =
       let scanning = ref true in
       while !scanning && !j < len && !points < 64 do
         let c = s.[!j] in
-        if c = '<' || c = '>' || c = '|' || c = '\n' || is_fullwidth_bar s !j
-        then scanning := false
+        if c = '<' || c = '>' || c = '|' || c = '\n' || is_fullwidth_bar s !j then scanning := false
         else begin
           incr points;
           j := Utf8.next_index s !j
         end
       done;
-      if !points >= 1 && is_fullwidth_bar s !j && !j + 3 < len && s.[!j + 3] = '>'
-      then begin
+      if !points >= 1 && is_fullwidth_bar s !j && !j + 3 < len && s.[!j + 3] = '>' then begin
         Buffer.add_char buf '<';
         Buffer.add_string buf zwsp;
         Buffer.add_substring buf s (!i + 1) (!j + 4 - (!i + 1));
@@ -129,8 +119,7 @@ let replace_all ~pattern ~with_ text =
   end
 
 let sanitize_text text =
-  if (not (String.contains text '<')) && not (String.contains text '[') then
-    (text, 0)
+  if (not (String.contains text '<')) && not (String.contains text '[') then (text, 0)
   else begin
     let text, ascii_count = escape_angle_ascii text in
     let text, fullwidth_count = escape_angle_fullwidth text in

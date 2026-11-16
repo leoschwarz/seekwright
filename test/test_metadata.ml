@@ -27,7 +27,9 @@ let head_field ~file ~field =
     let line = String.trim line in
     if not (String.starts_with ~prefix line) then None
     else
-      let value = String.sub line (String.length prefix) (String.length line - String.length prefix) in
+      let value =
+        String.sub line (String.length prefix) (String.length line - String.length prefix)
+      in
       Some (String.trim (String.concat "" (String.split_on_char ')' value)))
   in
   match List.filter_map matches (String.split_on_char '\n' (read file)) with
@@ -42,18 +44,19 @@ let dune_project_license () = head_field ~file:"../dune-project" ~field:"license
 let unquote value =
   let value = String.trim value in
   let n = String.length value in
-  if n >= 2 && value.[0] = '"' && value.[n - 1] = '"' then String.sub value 1 (n - 2)
-  else value
+  if n >= 2 && value.[0] = '"' && value.[n - 1] = '"' then String.sub value 1 (n - 2) else value
 
-let dune_project_homepage () =
-  unquote (head_field ~file:"../dune-project" ~field:"homepage")
+let dune_project_homepage () = unquote (head_field ~file:"../dune-project" ~field:"homepage")
 
 let manifest_value ~file ~field =
   let prefix = field ^ ": " in
   let matches line =
     let line = String.trim line in
     if not (String.starts_with ~prefix line) then None
-    else Some (String.trim (String.sub line (String.length prefix) (String.length line - String.length prefix)))
+    else
+      Some
+        (String.trim
+           (String.sub line (String.length prefix) (String.length line - String.length prefix)))
   in
   match List.filter_map matches (String.split_on_char '\n' (read file)) with
   | value :: _ -> value
@@ -81,7 +84,8 @@ let test_the_user_agent_reads_the_owner () =
   let expected = "seekwright/" ^ Version.package ^ " (+" ^ Version.project_url ^ ")" in
   Alcotest.(check string) "the module derives the User-Agent" expected Version.user_agent;
   Alcotest.(check string) "the config default is the owner" expected Config.default_user_agent;
-  Alcotest.(check string) "the fetcher default mirrors the owner" expected Fetcher.default_user_agent
+  Alcotest.(check string)
+    "the fetcher default mirrors the owner" expected Fetcher.default_user_agent
 
 let test_the_project_url_agrees () =
   let expected = dune_project_homepage () in
@@ -110,10 +114,10 @@ let test_the_dependency_floors_agree () =
   let seekwright = read "../seekwright.opam" in
   List.iter
     (fun (name, manifest) ->
-      Test_support.includes (name ^ " needs the tested compiler") "\"ocaml\" {>= \"5.3.0\"}" manifest;
       Test_support.includes
-        (name ^ " pins mcp-kit")
-        "\"mcp-kit\" {= \"0.2.0\"}" manifest;
+        (name ^ " needs the tested compiler")
+        "\"ocaml\" {>= \"5.3.0\"}" manifest;
+      Test_support.includes (name ^ " pins mcp-kit") "\"mcp-kit\" {= \"0.2.0\"}" manifest;
       Test_support.includes
         (name ^ " pins every mcp-kit component")
         "\"mcp-kit-cohttp-eio\" {= \"0.2.0\"" manifest;
@@ -130,15 +134,12 @@ let test_the_mcp_identity_is_separate () =
   Alcotest.(check bool)
     "it is not the package release" true
     (not (String.equal Version.mcp_server Version.package));
-  Test_support.includes
-    "the stdio golden pins the same serverInfo"
+  Test_support.includes "the stdio golden pins the same serverInfo"
     ("\"serverInfo\":{\"version\":\"" ^ Version.mcp_server ^ "\",\"name\":\"seekwright\"}")
     (read "../bin/smoke.expected")
 
 let test_the_embedded_resources_are_present () =
-  let nonempty name text =
-    Alcotest.(check bool) name true (String.length text > 0)
-  in
+  let nonempty name text = Alcotest.(check bool) name true (String.length text > 0) in
   nonempty "server instructions" Prompts.server_instructions;
   nonempty "search description" Prompts.search_description;
   nonempty "fetch description" Prompts.fetch_description;
@@ -146,27 +147,22 @@ let test_the_embedded_resources_are_present () =
   nonempty "answer system prompt" Prompts.answer_system_prompt;
   nonempty "dashboard page" Dashboard_html.dashboard_html;
   Alcotest.(check string)
-    "the answer prompt has one owner" Agent.answer_system_prompt
-    Prompts.answer_system_prompt;
+    "the answer prompt has one owner" Agent.answer_system_prompt Prompts.answer_system_prompt;
   Test_support.includes "the dashboard is the served page" "data-testid=\"dashboard\""
     Dashboard_html.dashboard_html
 
 let () =
   Alcotest.run "metadata"
     [
-      ( "version",
-        [ Alcotest.test_case "one owner" `Quick test_the_version_has_one_owner ] );
+      ("version", [ Alcotest.test_case "one owner" `Quick test_the_version_has_one_owner ]);
       ( "user-agent",
         [
           Alcotest.test_case "reads the owner" `Quick test_the_user_agent_reads_the_owner;
           Alcotest.test_case "project URL agrees" `Quick test_the_project_url_agrees;
         ] );
-      ( "licence",
-        [ Alcotest.test_case "Apache-2.0" `Quick test_the_licence_is_apache_2_0 ] );
-      ( "dependencies",
-        [ Alcotest.test_case "floors agree" `Quick test_the_dependency_floors_agree ] );
+      ("licence", [ Alcotest.test_case "Apache-2.0" `Quick test_the_licence_is_apache_2_0 ]);
+      ("dependencies", [ Alcotest.test_case "floors agree" `Quick test_the_dependency_floors_agree ]);
       ( "mcp",
         [ Alcotest.test_case "serverInfo is separate" `Quick test_the_mcp_identity_is_separate ] );
-      ( "resources",
-        [ Alcotest.test_case "embedded" `Quick test_the_embedded_resources_are_present ] );
+      ("resources", [ Alcotest.test_case "embedded" `Quick test_the_embedded_resources_are_present ]);
     ]

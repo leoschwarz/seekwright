@@ -6,5 +6,4 @@
    line and no bound — has no name to be written with at all. Inside the library
    the same call is [Authority.Fs.read_file], which can only be reached with a
    grant of the right kind. *)
-let read_file decision path =
-  Mcp_caps.Policy_fs.read_file decision path
+let read_file decision path = Mcp_caps.Policy_fs.read_file decision path

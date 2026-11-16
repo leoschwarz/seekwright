@@ -1,6 +1,5 @@
-(** The two records the construction layer reports in: what a build pass
-    produced, and what a config plus that production says about the routable
-    sets. *)
+(** The two records the construction layer reports in: what a build pass produced, and what a config
+    plus that production says about the routable sets. *)
 
 type providers = {
   built : (Seekwright.Config.name * Seekwright.Provider.t) list;

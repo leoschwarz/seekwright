@@ -29,8 +29,8 @@ let closed_message = "MCP client is closed"
 
 type session = {
   id : string option;
-      (** Absent when the deployment answers statelessly: Parallel's real
-          endpoint assigns one, but the specification makes it optional. *)
+      (** Absent when the deployment answers statelessly: Parallel's real endpoint assigns one, but
+          the specification makes it optional. *)
   protocol_version : string;  (** The negotiated version, sent on later calls. *)
 }
 
@@ -50,12 +50,11 @@ type t = {
 }
 
 type tool_result = { text : string }
-(** What a successful tool call answered: the text blocks, joined with a newline
-    the way Python's [ClientSession.call_tool] consumer joins them. Non-text
-    blocks (images) are not part of either search backend's reply. *)
+(** What a successful tool call answered: the text blocks, joined with a newline the way Python's
+    [ClientSession.call_tool] consumer joins them. Non-text blocks (images) are not part of either
+    search backend's reply. *)
 
-let create ?(protocol_version = default_protocol_version)
-    ?(client_name = default_client_name)
+let create ?(protocol_version = default_protocol_version) ?(client_name = default_client_name)
     ?(client_version = default_client_version) ?auth ?(max_frame_bytes = default_max_frame_bytes)
     ?(max_events = default_max_events) ~provider ~net ~uri () =
   {
@@ -114,27 +113,17 @@ let notification_message ~meth =
 let headers t ?session () =
   let base =
     [ ("accept", accept); ("content-type", "application/json") ]
-    @
-    match t.auth with
-    | Some key -> [ ("authorization", "Bearer " ^ key) ]
-    | None -> []
+    @ match t.auth with Some key -> [ ("authorization", "Bearer " ^ key) ] | None -> []
   in
   match session with
   | None -> base
-  | Some session ->
+  | Some session -> (
       let base = base @ [ ("MCP-Protocol-Version", session.protocol_version) ] in
-      (match session.id with
-      | Some id -> base @ [ ("Mcp-Session-Id", id) ]
-      | None -> base)
+      match session.id with Some id -> base @ [ ("Mcp-Session-Id", id) ] | None -> base)
 
 let post t ~headers ~json =
   let request : Caps.Authority.Net.request =
-    {
-      meth = `POST;
-      uri = t.uri;
-      headers;
-      body = Some (Yojson.Safe.to_string json);
-    }
+    { meth = `POST; uri = t.uri; headers; body = Some (Yojson.Safe.to_string json) }
   in
   t.net.Provider.Net.request request
 
@@ -173,8 +162,7 @@ let sse_frames ~max_frame_bytes ~max_events body =
         let rest = String.sub line 5 (String.length line - 5) in
         let payload =
           (* The specification strips exactly one space after the colon. *)
-          if String.starts_with ~prefix:" " rest then
-            String.sub rest 1 (String.length rest - 1)
+          if String.starts_with ~prefix:" " rest then String.sub rest 1 (String.length rest - 1)
           else rest
         in
         if not !oversized then begin
@@ -186,8 +174,7 @@ let sse_frames ~max_frame_bytes ~max_events body =
       else ())
     (String.split_on_char '\n' body);
   dispatch ();
-  if !oversized || !count > max_events then Error Oversized
-  else Ok (List.rev !frames)
+  if !oversized || !count > max_events then Error Oversized else Ok (List.rev !frames)
 
 (* The JSON-RPC object that answers [id], or the failure that says why there is
    none. A value without an [id] is a server notification — progress, logging —
@@ -196,16 +183,14 @@ let sse_frames ~max_frame_bytes ~max_events body =
 let reply_of ~id frames =
   let rec loop = function
     | [] -> None
-    | json :: rest ->
-        (match json with
+    | json :: rest -> (
+        match json with
         | `Assoc fields -> (
             match List.assoc_opt "id" fields with
             | Some (`Int answered) when answered = id -> (
                 match List.assoc_opt "result" fields with
                 | Some reply -> Some (`Result reply)
-                | None ->
-                    if List.mem_assoc "error" fields then Some `Rpc_error
-                    else None)
+                | None -> if List.mem_assoc "error" fields then Some `Rpc_error else None)
             | _ -> loop rest)
         | _ -> loop rest)
   in
@@ -240,9 +225,7 @@ let read_reply t ~id response =
   in
   let* values = parse [] raw in
   let values = List.concat_map (function `List items -> items | value -> [ value ]) values in
-  match reply_of ~id values with
-  | Some reply -> Ok reply
-  | None -> Error Malformed
+  match reply_of ~id values with Some reply -> Ok reply | None -> Error Malformed
 
 let contains_substring ~haystack ~needle =
   let haystack_length = String.length haystack in
@@ -259,9 +242,11 @@ let text_of_result result =
   | `List blocks ->
       blocks
       |> List.filter_map (fun block ->
-             match (Provider.Json.string_field "type" block, Provider.Json.string_field "text" block) with
-             | Some "text", Some text -> Some text
-             | _ -> None)
+          match
+            (Provider.Json.string_field "type" block, Provider.Json.string_field "text" block)
+          with
+          | Some "text", Some text -> Some text
+          | _ -> None)
       |> String.concat "\n"
   | _ -> ""
 
@@ -281,8 +266,7 @@ let tool_result t result =
 
 let status_error t status =
   if status = 401 || status = 403 then Provider.auth_error ~provider:t.provider
-  else if status = 402 || status = 429 then
-    Provider.quota_exhausted ~provider:t.provider ()
+  else if status = 402 || status = 429 then Provider.quota_exhausted ~provider:t.provider ()
   else Provider.http_status_error ~provider:t.provider status
 
 let is_success status = status >= 200 && status < 300
@@ -297,7 +281,7 @@ let connect t =
   else
     match t.session with
     | Some _ -> Ok ()
-    | None ->
+    | None -> (
         let id = next_id t in
         let params =
           `Assoc
@@ -305,23 +289,19 @@ let connect t =
               ("protocolVersion", `String t.requested_protocol_version);
               ("capabilities", `Assoc []);
               ( "clientInfo",
-                `Assoc
-                  [
-                    ("name", `String t.client_name);
-                    ("version", `String t.client_version);
-                  ] );
+                `Assoc [ ("name", `String t.client_name); ("version", `String t.client_version) ] );
             ]
         in
         let message = request_message ~id ~meth:"initialize" ~params in
-        (match post t ~headers:(headers t ()) ~json:message with
+        match post t ~headers:(headers t ()) ~json:message with
         | Error failure ->
             Error (handshake_error t ~timed_out:(Caps.Error.kind failure = Caps.Error.Timeout))
-        | Ok response ->
+        | Ok response -> (
             if response.status <> 200 then Error (handshake_error t ~timed_out:false)
             else
-              (match read_reply t ~id response with
+              match read_reply t ~id response with
               | Error _ | Ok `Rpc_error -> Error (handshake_error t ~timed_out:false)
-              | Ok (`Result result) ->
+              | Ok (`Result result) -> (
                   let negotiated =
                     match Provider.Json.string_field "protocolVersion" result with
                     | Some version when version <> "" -> version
@@ -349,7 +329,7 @@ let connect t =
                         t.session <- Some session;
                         Ok ()
                       end
-                      else Error (handshake_error t ~timed_out:false)))
+                      else Error (handshake_error t ~timed_out:false))))
 
 let ensure_session t = match t.session with Some _ -> Ok () | None -> connect t
 
@@ -361,23 +341,20 @@ type call_failure = Failed of Provider.error | Dead_session
 let call_once t ~name ~arguments =
   match ensure_session t with
   | Error error -> Error (Failed error)
-  | Ok () ->
+  | Ok () -> (
       let id = next_id t in
-      let params =
-        `Assoc [ ("name", `String name); ("arguments", arguments) ]
-      in
+      let params = `Assoc [ ("name", `String name); ("arguments", arguments) ] in
       let message = request_message ~id ~meth:"tools/call" ~params in
-      let carries_session =
-        match t.session with Some { id = Some _; _ } -> true | _ -> false
-      in
-      (match post t ~headers:(headers t ?session:t.session ()) ~json:message with
+      let carries_session = match t.session with Some { id = Some _; _ } -> true | _ -> false in
+      match post t ~headers:(headers t ?session:t.session ()) ~json:message with
       | Error failure ->
           if Caps.Error.kind failure = Caps.Error.Timeout then
             Error (Failed (Provider.timeout_error ~provider:t.provider))
           else Error (Failed (Provider.network_error ~provider:t.provider))
-      | Ok response ->
+      | Ok response -> (
           if carries_session && response.status = 404 then Error Dead_session
-          else if not (is_success response.status) then Error (Failed (status_error t response.status))
+          else if not (is_success response.status) then
+            Error (Failed (status_error t response.status))
           else
             match read_reply t ~id response with
             | Error Oversized ->
@@ -389,7 +366,7 @@ let call_once t ~name ~arguments =
             | Ok (`Result result) -> (
                 match tool_result t result with
                 | Ok result -> Ok result
-                | Error error -> Error (Failed error)))
+                | Error error -> Error (Failed error))))
 
 let call_tool t ~name ~arguments =
   if t.closed then Error (closed_error t)
@@ -397,10 +374,10 @@ let call_tool t ~name ~arguments =
     match call_once t ~name ~arguments with
     | Ok result -> Ok result
     | Error (Failed error) -> Error error
-    | Error Dead_session ->
+    | Error Dead_session -> (
         (* Retries dead long-lived session exactly once before failing. *)
         t.session <- None;
-        (match connect t with
+        match connect t with
         | Error error -> Error error
         | Ok () -> (
             match call_once t ~name ~arguments with

@@ -1,5 +1,5 @@
-(** Argument scanning and request-body construction for client verbs [search],
-    [fetch] and [answer]. Returns [Error message] on validation or syntax failure. *)
+(** Argument scanning and request-body construction for client verbs [search], [fetch] and [answer].
+    Returns [Error message] on validation or syntax failure. *)
 
 type scanned = {
   positional : string list;
@@ -9,7 +9,8 @@ type scanned = {
 (** Scanned command line: positional arguments, valued flags in order, and bare boolean flags. *)
 
 val scan_args : string list -> (scanned, string) result
-(** [scan_args argv] splits flags from positionals. Returns [Error msg] on missing flag values or unexpected arguments. *)
+(** [scan_args argv] splits flags from positionals. Returns [Error msg] on missing flag values or
+    unexpected arguments. *)
 
 val flag_values : scanned -> string -> string list
 

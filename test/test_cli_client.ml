@@ -17,7 +17,6 @@ let result_t =
         | Error (sentence, code) -> Printf.sprintf "error %d: %s" code sentence))
     ( = )
 
-
 (* A fake transport: it records what it was asked to post and answers with a
    canned [(status, text)]. *)
 type tape = { mutable calls : (string * string) list; answer : (int * string, string) result }
@@ -38,7 +37,8 @@ let body_for route =
   match route with
   | "search" -> {j|{"query":"q","provider":"p","results":[]}|j}
   | "fetch" -> {j|{"url":"http://x.example","requested_url":"http://x.example"}|j}
-  | _ -> {j|{"query":"q","model":"m","depth":"brief","searches":1,"fetched":0,"answer":"a","sources":[]}|j}
+  | _ ->
+      {j|{"query":"q","model":"m","depth":"brief","searches":1,"fetched":0,"answer":"a","sources":[]}|j}
 
 let test_routes () =
   let cases =
@@ -53,11 +53,7 @@ let test_routes () =
       (* The argv has to be a body this verb's request model accepts: the
          client validates before it posts, and a refusal would never reach the
          route under test. *)
-      let argv =
-        match verb with
-        | Client.Fetch -> [ "http://x.example/a" ]
-        | _ -> [ "qq" ]
-      in
+      let argv = match verb with Client.Fetch -> [ "http://x.example/a" ] | _ -> [ "qq" ] in
       let tape = { calls = []; answer = Ok (200, body) } in
       let result = Client.run ~post:(post_of tape) ~verb ~argv:(argv @ [ "--json" ]) in
       Alcotest.(check result_t) ("verb " ^ route) (Ok (Some body)) result;
@@ -72,8 +68,7 @@ let test_server_flag_sets_origin () =
     (fun _i (server, want) ->
       let tape = { calls = []; answer = Ok (200, body_for "search") } in
       let _ =
-        Client.run ~post:(post_of tape) ~verb:Client.Search
-          ~argv:[ "qq"; "--server"; server ]
+        Client.run ~post:(post_of tape) ~verb:Client.Search ~argv:[ "qq"; "--server"; server ]
       in
       match tape.calls with
       | [ (path, _) ] -> Alcotest.(check string) server (want ^ "/api/v1/search") path
@@ -154,8 +149,10 @@ let test_json_echo_verbatim () =
 let test_unparsable_success_exit_1 () =
   let answer = Ok (200, {j|{"surprise":true}|j}) in
   let result, _ = run ~answer ~json:false ~argv:[ "qq" ] Client.Search in
-  Alcotest.(check result_t) "not a SearchResponse"
-    (Error ("the response is not a SearchResponse", 1)) result
+  Alcotest.(check result_t)
+    "not a SearchResponse"
+    (Error ("the response is not a SearchResponse", 1))
+    result
 
 let test_human_fetch_with_matches () =
   let body =
@@ -167,7 +164,8 @@ let test_human_fetch_with_matches () =
   | Ok (Some text) ->
       List.iter
         (fun needle ->
-          Alcotest.(check bool) (needle ^ " rendered") true
+          Alcotest.(check bool)
+            (needle ^ " rendered") true
             (try
                ignore (Str.search_forward (Str.regexp_string needle) text 0);
                true
@@ -183,12 +181,15 @@ let test_human_answer_sources () =
   let result, _ = run ~answer ~json:false ~argv:[ "why" ] Client.Answer in
   match result with
   | Ok (Some text) ->
-      Alcotest.(check bool) "truncation sentence" true
+      Alcotest.(check bool)
+        "truncation sentence" true
         (try
-           ignore (Str.search_forward (Str.regexp_string "stopped at the model's output cap") text 0);
+           ignore
+             (Str.search_forward (Str.regexp_string "stopped at the model's output cap") text 0);
            true
          with Not_found -> false);
-      Alcotest.(check bool) "sources rendered" true
+      Alcotest.(check bool)
+        "sources rendered" true
         (try
            ignore (Str.search_forward (Str.regexp_string "1. S") text 0);
            true
@@ -201,7 +202,9 @@ let test_client_names_no_config_or_keys () =
   let source = Test_support.read_file "../lib/cli/cli_client.ml" in
   List.iter
     (fun forbidden ->
-      Alcotest.(check bool) ("the client never touches " ^ forbidden) false
+      Alcotest.(check bool)
+        ("the client never touches " ^ forbidden)
+        false
         (try
            ignore (Str.search_forward (Str.regexp_string forbidden) source 0);
            true
@@ -214,11 +217,13 @@ let () =
       ( "routing",
         [
           Alcotest.test_case "each verb posts to its route" `Quick test_routes;
-          Alcotest.test_case "--server sets the origin, trailing slash dropped" `Quick test_server_flag_sets_origin;
+          Alcotest.test_case "--server sets the origin, trailing slash dropped" `Quick
+            test_server_flag_sets_origin;
         ] );
       ( "status handling",
         [
-          Alcotest.test_case "400 carries the server's sentence" `Quick test_http_error_becomes_sentence_exit_1;
+          Alcotest.test_case "400 carries the server's sentence" `Quick
+            test_http_error_becomes_sentence_exit_1;
           Alcotest.test_case "non-JSON error body" `Quick test_non_json_error_body;
           Alcotest.test_case "empty error body" `Quick test_empty_error_body;
           Alcotest.test_case "transport failure exits 1" `Quick test_transport_failure_exit_1;
@@ -233,5 +238,8 @@ let () =
           Alcotest.test_case "human answer with sources" `Quick test_human_answer_sources;
         ] );
       ( "holds no secrets",
-        [ Alcotest.test_case "no config, keys or journal in the client" `Quick test_client_names_no_config_or_keys ] );
+        [
+          Alcotest.test_case "no config, keys or journal in the client" `Quick
+            test_client_names_no_config_or_keys;
+        ] );
     ]

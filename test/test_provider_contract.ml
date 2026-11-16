@@ -74,8 +74,7 @@ let adapters =
       name = "algolia";
       build =
         (fun net ->
-          Seekwright_providers.Algolia.make
-            ~app_id:"app123"
+          Seekwright_providers.Algolia.make ~app_id:"app123"
             ~endpoint:
               (Seekwright_providers.Algolia.endpoint_of_deployment ~app_id:"app123"
                  ~index:"products")
@@ -95,9 +94,7 @@ let adapters =
     };
     {
       name = "deepseek";
-      build =
-        (fun net ->
-          Seekwright_providers.Deepseek.make ~net ~key:probe_key ~now:clock ());
+      build = (fun net -> Seekwright_providers.Deepseek.make ~net ~key:probe_key ~now:clock ());
       auth_message = None;
       (* 402 is DeepSeek's own "insufficient balance" answer, so the payment
          status belongs to the quota row here. Its 408 row is narrower than the
@@ -116,9 +113,7 @@ let adapters =
     };
     {
       name = "linkup";
-      build =
-        (fun net ->
-          Seekwright_providers.Linkup.make ~net ~key:probe_key ~now:clock ());
+      build = (fun net -> Seekwright_providers.Linkup.make ~net ~key:probe_key ~now:clock ());
       auth_message = None;
       (* Linkup's 402 belongs to the keyless x402 lane this adapter never enters,
          so a payment status on a bearer-keyed request is the [HTTP 402] row. *)
@@ -127,8 +122,7 @@ let adapters =
     };
     {
       name = "querit";
-      build =
-        (fun net -> Seekwright_providers.Querit.make ~net ~key:probe_key ());
+      build = (fun net -> Seekwright_providers.Querit.make ~net ~key:probe_key ());
       auth_message = None;
       (* 429 is the documented 1 QPS free limit and the exhausted monthly
          allowance answers the same code; 402 says the same about the account. *)
@@ -137,16 +131,14 @@ let adapters =
     };
     {
       name = "scrappa";
-      build =
-        (fun net -> Seekwright_providers.Scrappa.make ~net ~key:probe_key ());
+      build = (fun net -> Seekwright_providers.Scrappa.make ~net ~key:probe_key ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
       non_object_is_empty = false;
     };
     {
       name = "search1api";
-      build =
-        (fun net -> Seekwright_providers.Search1api.make ~net ~key:probe_key ());
+      build = (fun net -> Seekwright_providers.Search1api.make ~net ~key:probe_key ());
       auth_message = None;
       (* 402 is documented ([application/problem+json]) for a bearer-keyed
          client: the credits are gone, the same failure as the rate limit. *)
@@ -155,9 +147,7 @@ let adapters =
     };
     {
       name = "parallel";
-      build =
-        (fun net ->
-          Seekwright_providers.Parallel.make ~net ~key:probe_key ~now:clock ());
+      build = (fun net -> Seekwright_providers.Parallel.make ~net ~key:probe_key ~now:clock ());
       auth_message = None;
       (* 402 and 429 are one sentence for this backend — "rate limited or out
          of credits" — because the payment status and the rate limit are the
@@ -175,7 +165,8 @@ let adapters =
       build =
         (fun net ->
           Seekwright_providers.Searxng.make ~net
-            ~endpoint:(Uri.of_string "http://searx.invalid/search") ());
+            ~endpoint:(Uri.of_string "http://searx.invalid/search")
+            ());
       (* A locked-down instance can refuse the JSON format specifically, so this
          adapter names what to fix. *)
       auth_message = Some "authentication rejected (enable `format=json` for this client)";
@@ -184,8 +175,7 @@ let adapters =
     };
     {
       name = "serpapi";
-      build =
-        (fun net -> Seekwright_providers.Serpapi.make ~net ~key:probe_key ());
+      build = (fun net -> Seekwright_providers.Serpapi.make ~net ~key:probe_key ());
       auth_message = None;
       (* 429 is documented as the hourly throughput limit, or an exhausted
          account; 402 for this vendor says the same about the account. The key
@@ -197,16 +187,14 @@ let adapters =
     };
     {
       name = "serper";
-      build =
-        (fun net -> Seekwright_providers.Serper.make ~net ~key:probe_key ());
+      build = (fun net -> Seekwright_providers.Serper.make ~net ~key:probe_key ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
       non_object_is_empty = false;
     };
     {
       name = "tavily";
-      build =
-        (fun net -> Seekwright_providers.Tavily.make ~net ~key:probe_key ());
+      build = (fun net -> Seekwright_providers.Tavily.make ~net ~key:probe_key ());
       auth_message = None;
       (* Tavily's quota pair is 429 and its own 432 (monthly credits exhausted);
          402 is not a status this vendor answers with, so it stays on the plain
@@ -216,8 +204,7 @@ let adapters =
     };
     {
       name = "tinyfish";
-      build =
-        (fun net -> Seekwright_providers.Tinyfish.make ~net ~key:probe_key ());
+      build = (fun net -> Seekwright_providers.Tinyfish.make ~net ~key:probe_key ());
       auth_message = None;
       (* 402 here reads "Search API access is required for your account", which is
          the account question the quota row is for — the same status is the plain
@@ -236,12 +223,11 @@ type probe = {
   status : int;
   body : string;
   refusal : (unit, Caps.Error.t) result;
-      (** [Ok ()] answers with [status] and [body]; [Error e] refuses the
-          request instead, which is how the timeout and network rows are cast. *)
+      (** [Ok ()] answers with [status] and [body]; [Error e] refuses the request instead, which is
+          how the timeout and network rows are cast. *)
 }
 
-let responding label ?(status = 200) ?(body = "{}") () =
-  { label; status; body; refusal = Ok () }
+let responding label ?(status = 200) ?(body = "{}") () = { label; status; body; refusal = Ok () }
 
 let refusing label kind =
   {
@@ -259,8 +245,8 @@ type row = {
   key : string;
   expected_kind : Provider.error_kind;
   message : int -> string option;
-      (** [None] for the rows whose wording is the adapter's own; otherwise a
-          function of the status, because the [>= 400] row names the code. *)
+      (** [None] for the rows whose wording is the adapter's own; otherwise a function of the
+          status, because the [>= 400] row names the code. *)
   retryable : bool;
   probes : probe list;
 }
@@ -290,7 +276,10 @@ let rows =
       expected_kind = Provider.Failure;
       message = (fun code -> Some (Printf.sprintf "HTTP %d" code));
       retryable = true;
-      probes = List.map (fun code -> responding (Printf.sprintf "status %d" code) ~status:code ()) other_statuses;
+      probes =
+        List.map
+          (fun code -> responding (Printf.sprintf "status %d" code) ~status:code ())
+          other_statuses;
     };
     {
       key = "quota-kind-only";
@@ -332,7 +321,8 @@ let rows =
         [
           responding "an html body" ~body:{|<html>not json at all</html>|} ();
           responding "an html body quoting the key"
-            ~body:(Printf.sprintf "<html>upstream echoed %s</html>" probe_key) ();
+            ~body:(Printf.sprintf "<html>upstream echoed %s</html>" probe_key)
+            ();
           responding "an empty body" ~body:"" ();
         ];
     };
@@ -341,10 +331,7 @@ let rows =
       expected_kind = Provider.Failure;
       message = (fun _status -> Some "malformed JSON response");
       retryable = true;
-      probes =
-        List.map
-          (fun (label, body) -> responding label ~body ())
-          non_object_bodies;
+      probes = List.map (fun (label, body) -> responding label ~body ()) non_object_bodies;
     };
   ]
 
@@ -366,7 +353,8 @@ let where adapter row probe = Printf.sprintf "%s [%s: %s]" adapter.name row.key 
 let probes_for adapter row =
   match row.key with
   | "quota-kind-only" ->
-      List.map (fun code -> responding (Printf.sprintf "status %d" code) ~status:code ())
+      List.map
+        (fun code -> responding (Printf.sprintf "status %d" code) ~status:code ())
         adapter.quota_statuses
   (* A backend whose parser answers a non-object document with an empty
      result set is not departing from the row — it holds a different, pinned
@@ -384,8 +372,10 @@ let problems adapter row probe =
   let provider = adapter.build (net_of probe) in
   match Provider.search provider probe_query with
   | Ok outcome ->
-      [ Printf.sprintf "%s: returned %d results instead of failing" (where adapter row probe)
-          (List.length outcome.results) ]
+      [
+        Printf.sprintf "%s: returned %d results instead of failing" (where adapter row probe)
+          (List.length outcome.results);
+      ]
   | Error error ->
       (* The record's [provider] field shares its name with [outcome]'s, so the
          annotation is what picks the failure's. *)
@@ -394,7 +384,11 @@ let problems adapter row probe =
       let kind =
         let shown k = match k with Provider.Quota -> "quota" | Provider.Failure -> "failure" in
         if failure.kind = row.expected_kind then []
-        else [ Printf.sprintf "%s: answered %s, the table says %s" here (shown failure.kind) (shown row.expected_kind) ]
+        else
+          [
+            Printf.sprintf "%s: answered %s, the table says %s" here (shown failure.kind)
+              (shown row.expected_kind);
+          ]
       in
       (* The [error_kind] is the load-bearing half of the row: it is what the
          engine branches on, so a quota failure reported as an ordinary one (or
@@ -409,7 +403,11 @@ let problems adapter row probe =
       in
       let retry =
         if failure.retryable = row.retryable then []
-        else [ Printf.sprintf "%s: retryable %b, the table says %b" here failure.retryable row.retryable ]
+        else
+          [
+            Printf.sprintf "%s: retryable %b, the table says %b" here failure.retryable
+              row.retryable;
+          ]
       in
       let naming =
         if failure.provider = adapter.name then []
@@ -417,7 +415,9 @@ let problems adapter row probe =
       in
       let leak =
         if contains ~haystack:(Provider.render_error failure) ~needle:probe_key then
-          [ Printf.sprintf "%s: the request key leaked into %S" here (Provider.render_error failure) ]
+          [
+            Printf.sprintf "%s: the request key leaked into %S" here (Provider.render_error failure);
+          ]
         else if contains ~haystack:failure.message ~needle:probe_key then
           [ Printf.sprintf "%s: the key is in the message" here ]
         else []
@@ -425,34 +425,32 @@ let problems adapter row probe =
       kind @ wording @ retry @ naming @ leak
 
 let () =
-  A.
-    (run "seekwright/provider-contract"
-       [
-         ( "the Failures table, over every HTTP adapter",
-             List.map
-               (fun adapter ->
-                 A.test_case
-                   (Printf.sprintf "%s honours the failure rows" adapter.name)
-                   `Quick
-                   (fun () ->
-                     let problems =
-                       List.concat_map
-                         (fun row ->
-                           List.concat_map
-                             (fun probe -> problems adapter row probe) (probes_for adapter row))
-                         rows
-                     in
-                     match problems with
-                     | [] -> ()
-                     | found ->
-                         A.failf
-                           "%s departs from the Failures table:@\n%s"
-                           adapter.name (String.concat "\n" found)))
-               adapters );
-         ( "the adapter set",
-             [
-               A.test_case "every adapter module on disk is driven here" `Quick (fun () ->
-                   (* The guard the Python suite runs against its provider
+  A.(
+    run "seekwright/provider-contract"
+      [
+        ( "the Failures table, over every HTTP adapter",
+          List.map
+            (fun adapter ->
+              A.test_case (Printf.sprintf "%s honours the failure rows" adapter.name) `Quick
+                (fun () ->
+                  let problems =
+                    List.concat_map
+                      (fun row ->
+                        List.concat_map
+                          (fun probe -> problems adapter row probe)
+                          (probes_for adapter row))
+                      rows
+                  in
+                  match problems with
+                  | [] -> ()
+                  | found ->
+                      A.failf "%s departs from the Failures table:@\n%s" adapter.name
+                        (String.concat "\n" found)))
+            adapters );
+        ( "the adapter set",
+          [
+            A.test_case "every adapter module on disk is driven here" `Quick (fun () ->
+                (* The guard the Python suite runs against its provider
                       directory: a new adapter that skips this suite skips the
                       contract, and a name driven here that no longer exists
                       tests nothing. [dune] and [dune-project] are not modules,
@@ -461,18 +459,18 @@ let () =
                       MCP-backed names — its status rows are the shared
                       client's, pinned in [test_mcp_client.ml], so neither owes
                       a row here. *)
-                   let on_disk =
-                     Array.to_list (Sys.readdir "../lib/providers")
-                     |> List.filter (fun name -> Filename.check_suffix name ".ml")
-                     |> List.map Filename.chop_extension
-                     |> List.filter (fun name -> name <> "mcp_client" && name <> "exa")
-                     |> List.sort Stdlib.compare
-                   in
-                   let driven = List.map (fun a -> a.name) adapters |> List.sort Stdlib.compare in
-                   A.(check (list string)) "adapters on disk vs driven" on_disk driven);
-               A.test_case "the table's rows are all driven" `Quick (fun () ->
-                   (* Six shared rows plus the quota row's kind. A row dropped
+                let on_disk =
+                  Array.to_list (Sys.readdir "../lib/providers")
+                  |> List.filter (fun name -> Filename.check_suffix name ".ml")
+                  |> List.map Filename.chop_extension
+                  |> List.filter (fun name -> name <> "mcp_client" && name <> "exa")
+                  |> List.sort Stdlib.compare
+                in
+                let driven = List.map (fun a -> a.name) adapters |> List.sort Stdlib.compare in
+                A.(check (list string)) "adapters on disk vs driven" on_disk driven);
+            A.test_case "the table's rows are all driven" `Quick (fun () ->
+                (* Six shared rows plus the quota row's kind. A row dropped
                       from [rows] would leave an adapter free to skip it. *)
-                   A.(check int) "rows driven" 7 (List.length rows));
-             ] );
-       ])
+                A.(check int) "rows driven" 7 (List.length rows));
+          ] );
+      ])

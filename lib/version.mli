@@ -10,5 +10,5 @@ val user_agent : string
 (** [seekwright/<package> (+<project_url>)], the [fetch.user_agent] default. *)
 
 val mcp_server : string
-(** The MCP [serverInfo] version reported to clients. This is a protocol-visible
-    identity distinct from the package release version. *)
+(** The MCP [serverInfo] version reported to clients. This is a protocol-visible identity distinct
+    from the package release version. *)

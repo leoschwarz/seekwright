@@ -1,15 +1,9 @@
 let request_head_limit = 16 * 1024
 let response_head_limit = 8 * 1024
 
-type request_head = {
-  request_line : string;
-  header_lines : string list;
-}
+type request_head = { request_line : string; header_lines : string list }
 
-type read_error =
-  | Client_closed
-  | Request_head_too_large
-  | Malformed_request_head
+type read_error = Client_closed | Request_head_too_large | Malformed_request_head
 
 type head_error = Response_head_too_large
 
@@ -32,15 +26,14 @@ let read_line ~limit ~consumed ic =
     else
       match Eio.Buf_read.any_char ic with
       | exception End_of_file ->
-          if consumed = 0 && bytes = 0 then Error Client_closed
-          else Error Malformed_request_head
+          if consumed = 0 && bytes = 0 then Error Client_closed else Error Malformed_request_head
       | exception Eio.Buf_read.Buffer_limit_exceeded -> Error Request_head_too_large
-      | c -> (
+      | c ->
           Buffer.add_char line c;
           if c = '\n' then
             let raw = Buffer.contents line in
             Ok (line_of_raw raw, raw, consumed + bytes + 1)
-          else loop (bytes + 1))
+          else loop (bytes + 1)
   in
   loop 0
 
@@ -54,23 +47,19 @@ let read_request_head ?(limit = request_head_limit) ic =
     | Error error -> Error error
     | Ok (line, bytes, consumed) ->
         Buffer.add_string raw bytes;
-        if line = "" then Ok (List.rev acc, consumed)
-        else headers (line :: acc) consumed
+        if line = "" then Ok (List.rev acc, consumed) else headers (line :: acc) consumed
   in
   match read_line ~limit ~consumed:0 ic with
   | Error error -> Error error
-  | Ok (request_line, bytes, consumed) ->
+  | Ok (request_line, bytes, consumed) -> (
       Buffer.add_string raw bytes;
       match headers [] consumed with
       | Error error -> Error error
-      | Ok (header_lines, _consumed) ->
-          Ok ({ request_line; header_lines }, Buffer.contents raw)
+      | Ok (header_lines, _consumed) -> Ok ({ request_line; header_lines }, Buffer.contents raw))
 
-let status_line status =
-  Printf.sprintf "HTTP/1.1 %d %s\r\n" status (reason_phrase status)
+let status_line status = Printf.sprintf "HTTP/1.1 %d %s\r\n" status (reason_phrase status)
 
-let content_length_line body_length =
-  Printf.sprintf "content-length: %d\r\n" body_length
+let content_length_line body_length = Printf.sprintf "content-length: %d\r\n" body_length
 
 let connection_line = "connection: close\r\n"
 
@@ -82,8 +71,7 @@ let response_head_is_bounded ~limit ~status ~headers ~body_length =
     (String.length (status_line status))
     headers
   + String.length (content_length_line body_length)
-  + String.length connection_line
-  + 2
+  + String.length connection_line + 2
   <= limit
 
 let response_head ?(limit = response_head_limit) ~status ~headers ~body_length () =

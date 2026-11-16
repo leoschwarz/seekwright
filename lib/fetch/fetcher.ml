@@ -4,10 +4,7 @@ module J = Jsondoc
 module Repr = Seekwright_text.Repr
 module Utf8 = Seekwright_text.Utf8
 
-type fetched_image = Seekwright_wire.Page.image = {
-  media_type : string;
-  body : string;
-}
+type fetched_image = Seekwright_wire.Page.image = { media_type : string; body : string }
 
 type fetched_page = Seekwright_wire.Page.page = {
   url : string;
@@ -21,14 +18,9 @@ type fetched_page = Seekwright_wire.Page.page = {
   image : fetched_image option;
 }
 
-type refusal =
-  | Url_blocked of string
-  | Redirect_blocked of string
-  | Blocked of string
+type refusal = Url_blocked of string | Redirect_blocked of string | Blocked of string
 
-type error =
-  | Refusal of refusal
-  | Failed of string
+type error = Refusal of refusal | Failed of string
 
 let default_user_agent = "seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright)"
 
@@ -42,13 +34,10 @@ let png_signature = "\x89PNG\r\n\x1a\n"
 
 let sniff_image_type (body : string) : string option =
   (* Magic numbers, not a decoder: this process never opens the image. *)
-
   if String.starts_with ~prefix:png_signature body then Some "image/png"
   else if String.starts_with ~prefix:"\xff\xd8\xff" body then Some "image/jpeg"
-  else if
-    String.starts_with ~prefix:"GIF87a" body
-    || String.starts_with ~prefix:"GIF89a" body
-  then Some "image/gif"
+  else if String.starts_with ~prefix:"GIF87a" body || String.starts_with ~prefix:"GIF89a" body then
+    Some "image/gif"
   else if
     String.starts_with ~prefix:"RIFF" body
     && String.length body >= 12
@@ -80,16 +69,13 @@ let ipvfuture_ok host =
   let n = String.length host in
   if n = 0 || host.[0] <> 'v' then false
   else
-    let is_hex c =
-      (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
-    in
+    let is_hex c = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') in
     let rec hex_end i = if i < n && is_hex host.[i] then hex_end (i + 1) else i in
     let dot = hex_end 1 in
     dot > 1 && dot < n && host.[dot] = '.' && dot + 1 < n
 
 let does_not_appear host =
-  Printf.sprintf "unparseable URL: %s does not appear to be an IPv4 or IPv6 address"
-    (py_repr host)
+  Printf.sprintf "unparseable URL: %s does not appear to be an IPv4 or IPv6 address" (py_repr host)
 
 let check_bracketed_host host =
   if ipvfuture_ok host then None
@@ -101,14 +87,11 @@ let check_bracketed_host host =
        syntax, so the zone is split off and checked by hand. *)
     let literal, zone =
       match String.index_opt host '%' with
-      | Some i ->
-          ( String.sub host 0 i,
-            Some (String.sub host (i + 1) (String.length host - i - 1)) )
+      | Some i -> (String.sub host 0 i, Some (String.sub host (i + 1) (String.length host - i - 1)))
       | None -> (host, None)
     in
     match Ipaddr.of_string literal with
-    | Ok (Ipaddr.V6 _) -> (
-        match zone with Some "" -> Some (does_not_appear host) | _ -> None)
+    | Ok (Ipaddr.V6 _) -> ( match zone with Some "" -> Some (does_not_appear host) | _ -> None)
     | Ok (Ipaddr.V4 _) ->
         if zone = None then Some "unparseable URL: An IPv4 address cannot be in brackets"
         else Some (does_not_appear host)
@@ -141,9 +124,7 @@ let check_bracketed_netloc netloc =
     | Some open_at ->
         if open_at > 0 then Some invalid_ipv6
         else
-          let bracketed =
-            String.sub hostname_and_port 1 (String.length hostname_and_port - 1)
-          in
+          let bracketed = String.sub hostname_and_port 1 (String.length hostname_and_port - 1) in
           let host, port =
             match String.index_opt bracketed ']' with
             | Some close ->
@@ -151,8 +132,7 @@ let check_bracketed_netloc netloc =
                   String.sub bracketed (close + 1) (String.length bracketed - close - 1) )
             | None -> (bracketed, "")
           in
-          if port <> "" && port.[0] <> ':' then Some invalid_ipv6
-          else check_bracketed_host host
+          if port <> "" && port.[0] <> ':' then Some invalid_ipv6 else check_bracketed_host host
 
 (* The URL gate returns a value: the fetch chain turns a hop-0 refusal into
    [Url_blocked] and a later hop's into [Redirect_blocked]. *)
@@ -169,19 +149,16 @@ let validate_url (raw : string) : (string, string) result =
   if scheme_l <> "http" && scheme_l <> "https" then
     let shown = if scheme = "" then "(none)" else scheme in
     Error
-      (Printf.sprintf "scheme %s is not fetchable; only http and https are allowed"
-         (py_repr shown))
+      (Printf.sprintf "scheme %s is not fetchable; only http and https are allowed" (py_repr shown))
   else
     let after =
-      if String.starts_with ~prefix:"//" rest then
-        String.sub rest 2 (String.length rest - 2)
+      if String.starts_with ~prefix:"//" rest then String.sub rest 2 (String.length rest - 2)
       else rest
     in
     let netloc_end =
       let rec go i =
         if i >= String.length after then String.length after
-        else
-          match after.[i] with '/' | '?' | '#' -> i | _ -> go (i + 1)
+        else match after.[i] with '/' | '?' | '#' -> i | _ -> go (i + 1)
       in
       go 0
     in
@@ -204,17 +181,16 @@ let validate_url (raw : string) : (string, string) result =
                       Some (String.sub userinfo (i + 1) (String.length userinfo - i - 1)) )
                 | None -> (userinfo, None)
               in
-              if user <> "" || password <> Some "" && password <> None then
+              if user <> "" || (password <> Some "" && password <> None) then
                 Error "URLs with embedded credentials are refused"
               else Ok (String.sub netloc (at + 1) (String.length netloc - at - 1))
           | None -> Ok netloc)
     in
     match hostinfo with
     | Error message -> Error message
-    | Ok hostinfo ->
+    | Ok hostinfo -> (
         (* Host and port: a bracketed IPv6 literal ends at []], anything else
            splits at the last [:]. *)
-
         let host, port_text =
           if String.length hostinfo > 0 && hostinfo.[0] = '[' then
             match String.index_opt hostinfo ']' with
@@ -231,7 +207,8 @@ let validate_url (raw : string) : (string, string) result =
           else
             match String.rindex_opt hostinfo ':' with
             | Some i ->
-                (String.sub hostinfo 0 i, Some (String.sub hostinfo (i + 1) (String.length hostinfo - i - 1)))
+                ( String.sub hostinfo 0 i,
+                  Some (String.sub hostinfo (i + 1) (String.length hostinfo - i - 1)) )
             | None -> (hostinfo, None)
         in
         if host = "" then Error "URL has no host"
@@ -244,33 +221,26 @@ let validate_url (raw : string) : (string, string) result =
                   String.for_all (fun c -> c >= '0' && c <= '9') p
                   && String.length p <= 5
                   && int_of_string p <= 65535
-                then
-                  if int_of_string p = 0 then Error "port 0 is not fetchable"
-                  else Ok ()
-                else
-                  Error (Printf.sprintf "invalid port: %s is not a port in 1-65535" p)
+                then if int_of_string p = 0 then Error "port 0 is not fetchable" else Ok ()
+                else Error (Printf.sprintf "invalid port: %s is not a port in 1-65535" p)
           in
           match port_ok with
           | Error _ as e -> e
           | Ok () ->
               (* Path and query, fragment dropped: never sent to the server. *)
-
               let no_fragment =
-                match String.index_opt tail '#' with
-                | Some i -> String.sub tail 0 i
-                | None -> tail
+                match String.index_opt tail '#' with Some i -> String.sub tail 0 i | None -> tail
               in
               let path, query =
                 match String.index_opt no_fragment '?' with
                 | Some i ->
                     ( String.sub no_fragment 0 i,
-                      Some
-                        (String.sub no_fragment (i + 1) (String.length no_fragment - i - 1)) )
+                      Some (String.sub no_fragment (i + 1) (String.length no_fragment - i - 1)) )
                 | None -> (no_fragment, None)
               in
               let path = if path = "" then "/" else path in
               let query = match query with Some q when q <> "" -> "?" ^ q | _ -> "" in
-              Ok (scheme_l ^ "://" ^ netloc ^ path ^ query)
+              Ok (scheme_l ^ "://" ^ netloc ^ path ^ query))
 
 let rstrip_py = Utf8.rstrip
 
@@ -281,7 +251,6 @@ let window_text (text : string) ~offset ~max_chars : string * bool =
      surface's [offset ≥ 0] and positive caps, and this function is also reached
      directly by the differential corpus, so a negative bound counts from the end
      and clamps exactly as [text[a:b]] does. *)
-
   let t = Utf8.of_string text in
   let n = Array.length t in
   let index i = if i < 0 then max (n + i) 0 else if i > n then n else i in
@@ -313,9 +282,7 @@ let window_text (text : string) ~offset ~max_chars : string * bool =
     let cut = if !found <= half then max_chars else !found in
     let more_remains = offset + cut < n || offset > n in
     let sliced = rstrip_py (slice offset (offset + cut)) in
-    let sliced =
-      if sliced <> "" && more_remains then sliced ^ "\n\n[...]" else sliced
-    in
+    let sliced = if sliced <> "" && more_remains then sliced ^ "\n\n[...]" else sliced in
     (sliced, more_remains)
 
 type t = {
@@ -336,8 +303,8 @@ type t = {
 }
 
 let make ~net ~extractor ?(max_download_bytes = 8_388_608) ?(max_text_chars = 40_000)
-    ?(max_redirects = 3) ?(allow_images = false) ?(user_agent = default_user_agent)
-    ?workers ?parse_timeout_seconds () =
+    ?(max_redirects = 3) ?(allow_images = false) ?(user_agent = default_user_agent) ?workers
+    ?parse_timeout_seconds () =
   {
     net;
     extractor;
@@ -352,33 +319,24 @@ let make ~net ~extractor ?(max_download_bytes = 8_388_608) ?(max_text_chars = 40
 
 let contains_substring hay needle =
   let n = String.length hay and m = String.length needle in
-  let rec go i =
-    if i + m > n then false
-    else String.sub hay i m = needle || go (i + 1)
-  in
+  let rec go i = if i + m > n then false else String.sub hay i m = needle || go (i + 1) in
   m = 0 || go 0
 
 let header name (headers : (string * string) list) : string option =
   let name = ascii_lower name in
-  List.find_map
-    (fun (k, v) -> if ascii_lower k = name then Some v else None)
-    headers
+  List.find_map (fun (k, v) -> if ascii_lower k = name then Some v else None) headers
 
-let is_redirect status =
-  List.mem status [ 301; 302; 303; 307; 308 ]
+let is_redirect status = List.mem status [ 301; 302; 303; 307; 308 ]
 
 let type_refusal kind (extractor : E.backend) : string =
   (* Derived from the backend's supported set, so a backend swap cannot leave
      the sentence claiming a type the new backend does not have. *)
-
   let message =
     Printf.sprintf "cannot extract text from %s; this tool reads %s" kind
       (E.describe_types extractor.supported_types)
   in
   if List.mem kind image_types then
-    message
-    ^ "; set fetch.allow_images = true to return image bytes to a caller that \
-       can read them"
+    message ^ "; set fetch.allow_images = true to return image bytes to a caller that can read them"
   else message
 
 (* The download cap, enforced on the grant-delivered body: the grant's own
@@ -386,8 +344,7 @@ let type_refusal kind (extractor : E.backend) : string =
    is the page bound, sliced exactly as the Python reader's buffer is. *)
 
 let cap_body max_download_bytes (body : string) : string * bool =
-  if String.length body > max_download_bytes then
-    (String.sub body 0 max_download_bytes, true)
+  if String.length body > max_download_bytes then (String.sub body 0 max_download_bytes, true)
   else (body, false)
 
 (* The oracle's parse-deadline sentence (its [TimeoutError] arm),
@@ -399,8 +356,8 @@ let parse_timeout_refusal kind seconds =
   Refusal
     (Blocked
        (Printf.sprintf
-          "cannot extract text: %s did not finish within %s seconds; raise \
-           fetch.timeout_seconds to allow a longer parse"
+          "cannot extract text: %s did not finish within %s seconds; raise fetch.timeout_seconds \
+           to allow a longer parse"
           what (Printf.sprintf "%g" seconds)))
 
 (* Turning a body into text, on the pool when the fetcher has one and inline
@@ -419,25 +376,20 @@ let extract_body (t : t) ~kind body content_type =
         Error (Refusal (Blocked ("cannot extract text: " ^ message))))
   | Some pool -> (
       match
-        Extract_pool.extract pool ?timeout_seconds:t.parse_timeout_seconds ~body
-          ~content_type
+        Extract_pool.extract pool ?timeout_seconds:t.parse_timeout_seconds ~body ~content_type
       with
       | Ok extracted -> Ok extracted
       | Error Extract_pool.Timed_out ->
-          Error
-            (parse_timeout_refusal
-               kind
-               (Option.value ~default:0. t.parse_timeout_seconds))
-      | Error Extract_pool.Pool_closed ->
-          Error (Failed "the extraction worker pool is closed")
+          Error (parse_timeout_refusal kind (Option.value ~default:0. t.parse_timeout_seconds))
+      | Error Extract_pool.Pool_closed -> Error (Failed "the extraction worker pool is closed")
       | Error (Extract_pool.Backend message | Extract_pool.Worker message) ->
           Error (Refusal (Blocked ("cannot extract text: " ^ message))))
 
-let rec fetch ?(chain_timeout = Eio.Time.Timeout.none) (t : t) (url : string) ~offset
-    ~max_chars : (fetched_page, error) result =
+let rec fetch ?(chain_timeout = Eio.Time.Timeout.none) (t : t) (url : string) ~offset ~max_chars :
+    (fetched_page, error) result =
   match validate_url url with
   | Error message -> Error (Refusal (Url_blocked message))
-  | Ok current ->
+  | Ok current -> (
       let rec chain current hop =
         let request =
           {
@@ -459,36 +411,29 @@ let rec fetch ?(chain_timeout = Eio.Time.Timeout.none) (t : t) (url : string) ~o
                    with the pinned "with a redirect to a host this grant does
                    not allow" message — is a mid-flight refusal
                    ([Redirect_blocked]), as is any denial on a later hop. *)
-                if
-                  hop = 0
-                  && not (contains_substring message "with a redirect to a host")
-                then Error (Refusal (Url_blocked message))
+                if hop = 0 && not (contains_substring message "with a redirect to a host") then
+                  Error (Refusal (Url_blocked message))
                 else Error (Refusal (Redirect_blocked message))
             | Caps.Error.Timeout -> Error (Failed "request timed out")
             | _ -> Error (Failed "network error"))
         | Ok response ->
             if is_redirect response.status then
               if hop >= t.max_redirects then
-                Error
-                  (Refusal
-                     (Blocked
-                        (Printf.sprintf "more than %d redirects" t.max_redirects)))
+                Error (Refusal (Blocked (Printf.sprintf "more than %d redirects" t.max_redirects)))
               else
                 match header "location" response.headers with
-                | None | Some "" ->
-                    Error (Failed "redirect without a Location header")
-                | Some location ->
+                | None | Some "" -> Error (Failed "redirect without a Location header")
+                | Some location -> (
                     let target =
                       Uri.to_string
                         (Uri.resolve "" (Uri.of_string current) (Uri.of_string location))
                     in
-                    (match validate_url target with
+                    match validate_url target with
                     | Error message -> Error (Refusal (Redirect_blocked message))
                     | Ok target ->
                         (* A redirect from https to http is either a
                            misconfiguration or an active downgrade; either way
                            the caller asked for the secure one. *)
-
                         let scheme_of u =
                           match Uri.scheme (Uri.of_string u) with
                           | Some s -> ascii_lower s
@@ -512,15 +457,14 @@ let rec fetch ?(chain_timeout = Eio.Time.Timeout.none) (t : t) (url : string) ~o
          to swallow and keeps unwinding. The sentence is the one the per-hop
          mapping above already returns: a caller cannot tell which bound expired,
          and never needs to. *)
-      (try Eio.Time.Timeout.run_exn chain_timeout (fun () -> chain current 0)
-       with Eio.Time.Timeout -> Error (Failed "request timed out"))
+      try Eio.Time.Timeout.run_exn chain_timeout (fun () -> chain current 0)
+      with Eio.Time.Timeout -> Error (Failed "request timed out"))
 
 and read (t : t) (url : string) (response : Caps.Authority.Net.response) ~offset ~max_chars :
     (fetched_page, error) result =
   if response.status >= 400 then
     (* An error page's body is not content. Returning it would hand the model a
        404 page to summarise as though it were the article. *)
-
     Error (Failed (Printf.sprintf "HTTP %d" response.status))
   else
     let content_type = header "content-type" response.headers in
@@ -537,30 +481,28 @@ and read (t : t) (url : string) (response : Caps.Authority.Net.response) ~offset
       if capped && List.mem kind E.pdf_types then
         (* A PDF's cross-reference table lives at the end: a cut one is
            unreadable, not merely shorter. *)
-
         Error
           (Refusal
              (Blocked
                 (Printf.sprintf
-                   "PDF exceeds the %d KiB download limit and cannot be read in \
-                    part; raise fetch.max_download_bytes to read it"
+                   "PDF exceeds the %d KiB download limit and cannot be read in part; raise \
+                    fetch.max_download_bytes to read it"
                    limit_kib)))
       else if capped && J.is_json_document_media kind then
         Error
           (Refusal
              (Blocked
                 (Printf.sprintf
-                   "JSON document exceeds the %d KiB download limit, and one cut \
-                    in the middle cannot be read as one; raise \
-                    fetch.max_download_bytes to read it"
+                   "JSON document exceeds the %d KiB download limit, and one cut in the middle \
+                    cannot be read as one; raise fetch.max_download_bytes to read it"
                    limit_kib)))
       else if capped && List.mem kind image_types then
         Error
           (Refusal
              (Blocked
                 (Printf.sprintf
-                   "%s image exceeds the %d KiB download limit and cannot be \
-                    returned in part; raise fetch.max_download_bytes to return it"
+                   "%s image exceeds the %d KiB download limit and cannot be returned in part; \
+                    raise fetch.max_download_bytes to return it"
                    kind limit_kib)))
       else
         let extracted = extract_body t ~kind body content_type in
@@ -589,7 +531,6 @@ and read_image (t : t) (url : string) (response : Caps.Authority.Net.response) (
   (* The image is handed back whole, and only when its bytes agree with its
      header: the type was checked against the first bytes, not taken from the
      server's word. *)
-
   let body, capped = cap_body t.max_download_bytes response.body in
   let limit_kib = t.max_download_bytes / 1024 in
   if capped then
@@ -597,22 +538,19 @@ and read_image (t : t) (url : string) (response : Caps.Authority.Net.response) (
       (Refusal
          (Blocked
             (Printf.sprintf
-               "%s image exceeds the %d KiB download limit and cannot be returned \
-                in part; raise fetch.max_download_bytes to return it"
+               "%s image exceeds the %d KiB download limit and cannot be returned in part; raise \
+                fetch.max_download_bytes to return it"
                kind limit_kib)))
   else if sniff_image_type body <> Some kind then
     Error
       (Refusal
          (Blocked
             (Printf.sprintf
-               "the response is served as %s, but its first bytes are not that \
-                image type"
-               kind)))
+               "the response is served as %s, but its first bytes are not that image type" kind)))
   else
     (* Nothing is extracted, so the empty [text] is what makes the response's
        paging fields read correctly, and [total_chars] stays 0 because the
        character coordinate system has nothing in it. *)
-
     Ok
       {
         url;

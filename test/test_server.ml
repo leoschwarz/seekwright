@@ -11,21 +11,18 @@ let object_schema ~properties ~required =
       ("required", `List (List.map (fun name -> `String name) required));
     ]
 
-let string_schema = `Assoc [("type", `String "string")]
+let string_schema = `Assoc [ ("type", `String "string") ]
 
 let echo ?output_schema () =
   Tool.make
-    ~input_schema:(object_schema ~properties:[("message", string_schema)] ~required:["message"])
+    ~input_schema:(object_schema ~properties:[ ("message", string_schema) ] ~required:[ "message" ])
     ?output_schema
     ~decode:(fun json ->
       match json with
-      | `Assoc [("message", `String message)] -> Ok message
+      | `Assoc [ ("message", `String message) ] -> Ok message
       | _ -> Error "message must be a string")
     ~run:(fun () message ->
-      Ok
-        (Tool.Output.text
-           ~structured_content:(`Assoc [("echoed", `String message)])
-           message))
+      Ok (Tool.Output.text ~structured_content:(`Assoc [ ("echoed", `String message) ]) message))
     "echo"
 
 let build registry =
@@ -65,17 +62,20 @@ let legacy_lifecycle_answers _ =
       {|{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"0"}}}|}
   in
   Alcotest.(check bool) "initialize has a result" true (has initialize "result");
-  Alcotest.(check bool) "initialized is a notification" true
+  Alcotest.(check bool)
+    "initialized is a notification" true
     (dispatch server {|{"jsonrpc":"2.0","method":"notifications/initialized","params":{}}|} = `Null);
   let listed = dispatch server {|{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}|} in
-  Alcotest.(check bool) "tools/list advertises echo" true
+  Alcotest.(check bool)
+    "tools/list advertises echo" true
     (contains ~haystack:(Yojson.Safe.to_string listed) ~needle:"\"echo\"");
   let called =
     dispatch server
       {|{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"echo","arguments":{"message":"hello"}}}|}
   in
   Alcotest.(check string) "the tool answered" "hello" (text_of called);
-  Alcotest.(check bool) "structured content is there" true
+  Alcotest.(check bool)
+    "structured content is there" true
     (has (field (field called "result") "structuredContent") "echoed")
 
 (* The same server answers a 2026-07-28 request that carries no handshake. *)
@@ -103,7 +103,8 @@ let a_tool_failure_is_not_a_transport_failure _ =
       {|{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"denier","arguments":{}}}|}
   in
   Alcotest.(check bool) "no JSON-RPC error" false (has response "error");
-  Alcotest.(check bool) "isError is set" true
+  Alcotest.(check bool)
+    "isError is set" true
     (field (field response "result") "isError" = `Bool true);
   Alcotest.(check string) "only the sanitized message crosses" "denied: no" (text_of response)
 
@@ -118,30 +119,42 @@ let bad_declarations_fail_construction _ =
     | Error (Server.Invalid_declaration message) -> message
   in
   let tool ~name =
-    Tool.make ~input_schema:(object_schema ~properties:[] ~required:[])
+    Tool.make
+      ~input_schema:(object_schema ~properties:[] ~required:[])
       ~decode:(fun _ -> Ok ())
       ~run:(fun () () -> Ok (Tool.Output.text ""))
       name
   in
   let non_object_schema =
     refusal
-      (Tool.make ~input_schema:(`Assoc [("type", `String "string")])
+      (Tool.make
+         ~input_schema:(`Assoc [ ("type", `String "string") ])
          ~decode:(fun _ -> Ok ())
          ~run:(fun () () -> Ok (Tool.Output.text ""))
          "bad")
   in
-  Alcotest.(check bool) "the refusal names the tool" true (contains ~haystack:non_object_schema ~needle:"bad:");
-  Alcotest.(check bool) "and says what is wrong" true
+  Alcotest.(check bool)
+    "the refusal names the tool" true
+    (contains ~haystack:non_object_schema ~needle:"bad:");
+  Alcotest.(check bool)
+    "and says what is wrong" true
     (contains ~haystack:non_object_schema ~needle:"describe an object");
-  Alcotest.(check bool) "an empty name is refused" true
+  Alcotest.(check bool)
+    "an empty name is refused" true
     (contains ~haystack:(refusal (tool ~name:"")) ~needle:"usable");
-  Alcotest.(check bool) "a name with a space is refused" true
+  Alcotest.(check bool)
+    "a name with a space is refused" true
     (contains ~haystack:(refusal (tool ~name:"not a name")) ~needle:"usable")
 
 (* An advertised output schema the handler does not satisfy is a server contract
    failure, which mcp-kit owns: it becomes a JSON-RPC error, not a denial. *)
 let an_output_schema_mismatch_is_a_contract_failure _ =
-  let tool = echo ~output_schema:(object_schema ~properties:[("missing", string_schema)] ~required:["missing"]) () in
+  let tool =
+    echo
+      ~output_schema:
+        (object_schema ~properties:[ ("missing", string_schema) ] ~required:[ "missing" ])
+      ()
+  in
   let server = build (registered tool) in
   let response =
     dispatch server

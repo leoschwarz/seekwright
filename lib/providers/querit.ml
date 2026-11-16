@@ -53,12 +53,21 @@ let country_names =
 let language_param code = List.assoc_opt (String.lowercase_ascii code) language_names
 let country_param code = List.assoc_opt code country_names
 
-let request_body ~(country : string option) ~(language : string option) (q : Provider.search_query) =
+let request_body ~(country : string option) ~(language : string option) (q : Provider.search_query)
+    =
   let filters =
     let sites =
       let s = [] in
-      let s = if q.Model.include_domains <> [] then ("include", `List (List.map (fun d -> `String d) q.Model.include_domains)) :: s else s in
-      let s = if q.Model.exclude_domains <> [] then ("exclude", `List (List.map (fun d -> `String d) q.Model.exclude_domains)) :: s else s in
+      let s =
+        if q.Model.include_domains <> [] then
+          ("include", `List (List.map (fun d -> `String d) q.Model.include_domains)) :: s
+        else s
+      in
+      let s =
+        if q.Model.exclude_domains <> [] then
+          ("exclude", `List (List.map (fun d -> `String d) q.Model.exclude_domains)) :: s
+        else s
+      in
       List.rev s
     in
     let f = if sites <> [] then [ ("sites", `Assoc sites) ] else [] in
@@ -69,7 +78,9 @@ let request_body ~(country : string option) ~(language : string option) (q : Pro
     in
     let f =
       match country with
-      | Some country -> f @ [ ("geo", `Assoc [ ("countries", `Assoc [ ("include", `List [ `String country ]) ]) ]) ]
+      | Some country ->
+          f
+          @ [ ("geo", `Assoc [ ("countries", `Assoc [ ("include", `List [ `String country ]) ]) ]) ]
       | None -> f
     in
     let f =
@@ -80,7 +91,9 @@ let request_body ~(country : string option) ~(language : string option) (q : Pro
     f
   in
   let fields =
-    [ ("query", `String q.Model.query); ("count", `Int (Stdlib.min q.Model.max_results max_results)) ]
+    [
+      ("query", `String q.Model.query); ("count", `Int (Stdlib.min q.Model.max_results max_results));
+    ]
   in
   let fields = if filters <> [] then fields @ [ ("filters", `Assoc filters) ] else fields in
   Yojson.Safe.to_string (`Assoc fields)
@@ -88,16 +101,15 @@ let request_body ~(country : string option) ~(language : string option) (q : Pro
 (* Hits live under results.result[]. *)
 let parse ~snippet_chars data ~limit =
   let records =
-    match Provider.Json.list (Provider.Json.field "result" (Provider.Json.field "results" data)) with
+    match
+      Provider.Json.list (Provider.Json.field "result" (Provider.Json.field "results" data))
+    with
     | Some items -> items
     | None -> []
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->
@@ -137,12 +149,8 @@ let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
   let ( let* ) = Result.bind in
-  let country =
-    match q.Model.country with Some code -> country_param code | None -> None
-  in
-  let language =
-    match q.Model.language with Some code -> language_param code | None -> None
-  in
+  let country = match q.Model.country with Some code -> country_param code | None -> None in
+  let language = match q.Model.language with Some code -> language_param code | None -> None in
   let geo_honoured = q.Model.country = None || country <> None in
   let language_honoured = q.Model.language = None || language <> None in
   let request =

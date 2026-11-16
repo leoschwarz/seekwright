@@ -65,10 +65,10 @@ let parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit =
     (fun record ->
       match Provider.Json.members record with
       | None -> None
-      | Some _ ->
+      | Some _ -> (
           let title =
             match title_attr with
-            | Some attr -> first_str [attr] record
+            | Some attr -> first_str [ attr ] record
             | None -> (
                 match first_str [ "title"; "name"; "question" ] record with
                 | Some title -> Some title
@@ -76,21 +76,18 @@ let parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit =
           in
           let url =
             match url_attr with
-            | Some attr -> first_str [attr] record
+            | Some attr -> first_str [ attr ] record
             | None -> first_str [ "url"; "link" ] record
           in
           match (title, url) with
           | Some title, Some url when title <> "" && url <> "" ->
               let snippet =
                 match snippet_attr with
-                | Some attr -> first_str [attr] record
+                | Some attr -> first_str [ attr ] record
                 | None ->
-                    first_str [ "description"; "summary"; "excerpt"; "content"; "answer" ]
-                      record
+                    first_str [ "description"; "summary"; "excerpt"; "content"; "answer" ] record
               in
-              let snippet, uncapped_chars =
-                Provider.truncate_snippet snippet snippet_chars
-              in
+              let snippet, uncapped_chars = Provider.truncate_snippet snippet snippet_chars in
               Some
                 {
                   Provider.result =
@@ -105,7 +102,7 @@ let parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit =
                     };
                   uncapped_chars;
                 }
-          | _ -> None)
+          | _ -> None))
     (take limit records)
 
 let check_status status =
@@ -124,14 +121,10 @@ let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let request_body (q : Provider.search_query) =
   Yojson.Safe.to_string
-    (`Assoc
-      [
-        ("query", `String q.Model.query);
-        ("hitsPerPage", `Int q.Model.max_results);
-      ])
+    (`Assoc [ ("query", `String q.Model.query); ("hitsPerPage", `Int q.Model.max_results) ])
 
-let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_chars
-    ~key ~endpoint (net : Provider.Net.t) (q : Provider.search_query) =
+let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_chars ~key ~endpoint
+    (net : Provider.Net.t) (q : Provider.search_query) =
   let ( let* ) = Result.bind in
   let request =
     {
@@ -156,24 +149,23 @@ let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_cha
         {
           Provider.provider = name;
           results =
-            parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data
-              ~limit:q.Model.max_results;
+            parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit:q.Model.max_results;
           answer = None;
           cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
           notice =
-            Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false
-              ~language:None ~safety:false;
+            Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:None
+              ~safety:false;
         }
 
-let make ?(cost_per_1k = 0.50) ?(snippet_chars = 500) ?title_attr ?url_attr
-    ?snippet_attr ~app_id ~key ~endpoint ~net () : Provider.t =
+let make ?(cost_per_1k = 0.50) ?(snippet_chars = 500) ?title_attr ?url_attr ?snippet_attr ~app_id
+    ~key ~endpoint ~net () : Provider.t =
   (module struct
     let name = name
     let cost_per_1k = cost_per_1k
     let cost_for = cost_for ~cost_per_1k
     let search =
-      search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_chars
-        ~key ~endpoint net
+      search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_chars ~key ~endpoint
+        net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

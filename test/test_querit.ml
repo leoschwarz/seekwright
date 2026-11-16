@@ -23,14 +23,13 @@ let chars s =
   let n = ref 0 and i = ref 0 in
   while !i < String.length s do
     let c = Char.code s.[!i] in
-    i := !i + (if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4);
+    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
     incr n
   done;
   !n
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -92,11 +91,7 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ()
   (provider, fun () -> Option.get !sent)
 
 let refusal kind ~message =
-  let net =
-    {
-      Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message));
-    }
-  in
+  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
   Querit.make ~key:test_key ~net ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
@@ -120,8 +115,7 @@ let body_path request path =
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Querit.parse ~snippet_chars data ~limit
 
-let record fields =
-  `Assoc (("title", `String "t") :: ("url", `String "https://x") :: fields)
+let record fields = `Assoc (("title", `String "t") :: ("url", `String "https://x") :: fields)
 
 let hits items = `Assoc [ ("result", `List items) ]
 
@@ -132,11 +126,9 @@ let the_fixture_yields_both_records () =
   check_int "two results" 2 (List.length found);
   check_string "the title" "Hybrid search explained" (List.hd found).result.title;
   check_string "the url" "https://example.com/post" (List.hd found).result.url;
-  check_string "the second url" "https://example.org/vector-databases"
-    (List.nth found 1).result.url
+  check_string "the second url" "https://example.org/vector-databases" (List.nth found 1).result.url
 
-let the_limit_is_honoured () =
-  check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
+let the_limit_is_honoured () = check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
 
 let the_snippet_is_kept_and_never_text () =
   (* A SERP backend fills snippet, never text. *)
@@ -156,8 +148,7 @@ let the_length_the_cap_discarded_is_recorded () =
   let uncapped = Option.get hit.uncapped_chars in
   let whole = "Hybrid search combines a vector index with BM25 for recall and precision." in
   check_int "the whole snippet was longer than the cap" (chars whole) uncapped;
-  check_bool "and longer than what shipped" true
-    (uncapped > chars (Option.get hit.result.snippet));
+  check_bool "and longer than what shipped" true (uncapped > chars (Option.get hit.result.snippet));
   (* Private, so a caller can never see it: the response carries the clipped
      snippet, never a measurement of the clip. *)
   excludes "absent from the wire model" "uncapped"
@@ -185,7 +176,8 @@ let records_without_a_url_are_dropped () =
 
 let records_without_a_title_are_dropped () =
   check_int "no title" 0
-    (List.length (parse (with_results (hits [ `Assoc [ ("url", `String "https://example.com") ] ]))))
+    (List.length
+       (parse (with_results (hits [ `Assoc [ ("url", `String "https://example.com") ] ]))))
 
 let a_record_that_is_not_an_object_is_skipped () =
   check_int "the string is dropped, the object survives" 1
@@ -198,10 +190,8 @@ let missing_results_is_empty_not_an_error () =
 let a_non_object_results_container_is_empty_not_an_error () =
   (* [results] is an object on the wire; a shape drift to a list — the
      intuitive reading of the name — is a missing container, not a failure. *)
-  check_int "results drifted to a list" 0
-    (List.length (parse (with_results (`List [ record [] ]))));
-  check_int "result is null" 0
-    (List.length (parse (with_results (`Assoc [ ("result", `Null) ]))))
+  check_int "results drifted to a list" 0 (List.length (parse (with_results (`List [ record [] ]))));
+  check_int "result is null" 0 (List.length (parse (with_results (`Assoc [ ("result", `Null) ]))))
 
 (* A non-string [snippet] or [page_age] is dropped, not handed to the shared
    truncate helper: the schema marks every result field optional but nothing
@@ -218,30 +208,29 @@ let non_strings =
 let a_non_string_date_is_dropped_and_the_call_succeeds () =
   List.iter
     (fun (what, value) ->
-      let body =
-        Yojson.Safe.to_string (with_results (hits [ record [ ("page_age", value) ] ]))
-      in
+      let body = Yojson.Safe.to_string (with_results (hits [ record [ ("page_age", value) ] ])) in
       let outcome, _ = search_of ~body ~query:(query ~max_results:1 ()) () in
-      check_int (Printf.sprintf "the call succeeded through %s" what) 1 (List.length outcome.results);
+      check_int
+        (Printf.sprintf "the call succeeded through %s" what)
+        1 (List.length outcome.results);
       check_opt_string what None (List.hd outcome.results).result.published_date)
     non_strings
 
 let a_non_string_snippet_is_dropped_and_the_call_succeeds () =
   List.iter
     (fun (what, value) ->
-      let body =
-        Yojson.Safe.to_string (with_results (hits [ record [ ("snippet", value) ] ]))
-      in
+      let body = Yojson.Safe.to_string (with_results (hits [ record [ ("snippet", value) ] ])) in
       let outcome, _ = search_of ~body ~query:(query ~max_results:1 ()) () in
-      check_int (Printf.sprintf "the call succeeded through %s" what) 1 (List.length outcome.results);
+      check_int
+        (Printf.sprintf "the call succeeded through %s" what)
+        1 (List.length outcome.results);
       check_opt_string what None (List.hd outcome.results).result.snippet)
     non_strings
 
 let a_string_snippet_still_reaches_the_model () =
   (* The guard must not change behaviour for a well-formed payload. *)
   let outcome, _ = search_of ~query:(query ~max_results:1 ()) () in
-  check_opt_string
-    "the snippet"
+  check_opt_string "the snippet"
     (Some "Hybrid search combines a vector index with BM25 for recall and precision.")
     (List.hd outcome.results).result.snippet
 
@@ -255,14 +244,16 @@ let a_string_snippet_still_reaches_the_model () =
 let post_with_the_bearer_key () =
   let _, request = search_of () in
   check_bool "the method" true (request.Caps.Authority.Net.meth = `POST);
-  check_opt_string "the bearer header" (Some ("Bearer " ^ test_key))
+  check_opt_string "the bearer header"
+    (Some ("Bearer " ^ test_key))
     (List.assoc_opt "Authorization" request.Caps.Authority.Net.headers);
   check_string "the endpoint" "https://api.querit.ai/v1/search"
     (Uri.to_string request.Caps.Authority.Net.uri)
 
 let the_query_and_count_are_sent () =
   let _, request = search_of ~query:(query ~text:"hybrid search" ~max_results:3 ()) () in
-  check_string "the query" "\"hybrid search\"" (Yojson.Safe.to_string (Provider.Json.field "query" (body request)));
+  check_string "the query" "\"hybrid search\""
+    (Yojson.Safe.to_string (Provider.Json.field "query" (body request)));
   check_string "count" "3" (Yojson.Safe.to_string (Provider.Json.field "count" (body request)))
 
 let count_is_clamped_to_the_free_plan_cap () =
@@ -272,7 +263,8 @@ let count_is_clamped_to_the_free_plan_cap () =
   List.iter
     (fun max_results ->
       let outcome, request = search_of ~query:(query ~max_results ()) () in
-      check_string (Printf.sprintf "count at max_results=%d" max_results)
+      check_string
+        (Printf.sprintf "count at max_results=%d" max_results)
         (string_of_int Querit.max_results)
         (Yojson.Safe.to_string (Provider.Json.field "count" (body request)));
       check_int "the cap is ten" 10 Querit.max_results;
@@ -282,8 +274,7 @@ let count_is_clamped_to_the_free_plan_cap () =
 let the_domain_filters_ride_their_native_fields () =
   let _, request =
     search_of
-      ~query:
-        (query ~include_domains:[ "example.com" ] ~exclude_domains:[ "spam.example" ] ())
+      ~query:(query ~include_domains:[ "example.com" ] ~exclude_domains:[ "spam.example" ] ())
       ()
   in
   check_string "sites.include" "[\"example.com\"]"
@@ -304,7 +295,9 @@ let the_recency_maps_onto_time_range () =
   List.iter
     (fun (period, date) ->
       let _, request = search_of ~query:(query ~recency:period ()) () in
-      check_string (Printf.sprintf "timeRange.date for %s" date) ("\"" ^ date ^ "\"")
+      check_string
+        (Printf.sprintf "timeRange.date for %s" date)
+        ("\"" ^ date ^ "\"")
         (Yojson.Safe.to_string (body_path request [ "filters"; "timeRange"; "date" ])))
     [ (Model.Day, "d1"); (Model.Week, "w1"); (Model.Month, "m1"); (Model.Year, "y1") ];
   let _, request = search_of () in
@@ -315,15 +308,24 @@ let the_language_maps_onto_the_enums_name () =
   List.iter
     (fun (code, wire) ->
       let outcome, request = search_of ~query:(query ~language:code ()) () in
-      check_string (Printf.sprintf "languages.include for %s" code)
+      check_string
+        (Printf.sprintf "languages.include for %s" code)
         ("[\"" ^ wire ^ "\"]")
         (Yojson.Safe.to_string (body_path request [ "filters"; "languages"; "include" ]));
       (* The language is honoured, so a language-only constraint carries no
          notice. *)
       check_opt_string "no notice" None outcome.notice)
-    [ ("en", "english"); ("EN", "english"); ("ja", "japanese"); ("ko", "korean");
-      ("de", "german"); ("fr", "french"); ("es", "spanish"); ("pt", "portuguese");
-      ("ru", "russian") ]
+    [
+      ("en", "english");
+      ("EN", "english");
+      ("ja", "japanese");
+      ("ko", "korean");
+      ("de", "german");
+      ("fr", "french");
+      ("es", "spanish");
+      ("pt", "portuguese");
+      ("ru", "russian");
+    ]
 
 let an_unmappable_language_is_dropped_and_noticed () =
   (* The enum is strict: an ISO code with no entry is not sent (it would be a
@@ -331,26 +333,30 @@ let an_unmappable_language_is_dropped_and_noticed () =
   let outcome, request = search_of ~query:(query ~language:"zh" ()) () in
   check_bool "no filters at all" false (body_has request "filters");
   check_opt_string "the language is named"
-    (Some "cannot filter by language; that constraint was ignored")
-    outcome.notice
+    (Some "cannot filter by language; that constraint was ignored") outcome.notice
 
 let the_country_maps_onto_the_enums_name () =
   List.iter
     (fun (code, wire) ->
       let outcome, request = search_of ~query:(query ~country:code ()) () in
-      check_string (Printf.sprintf "geo.countries.include for %s" code)
+      check_string
+        (Printf.sprintf "geo.countries.include for %s" code)
         ("[\"" ^ wire ^ "\"]")
         (Yojson.Safe.to_string (body_path request [ "filters"; "geo"; "countries"; "include" ]));
       check_opt_string "no notice" None outcome.notice)
-    [ ("us", "united states"); ("gb", "united kingdom"); ("kr", "south korea");
-      ("jp", "japan"); ("de", "germany") ]
+    [
+      ("us", "united states");
+      ("gb", "united kingdom");
+      ("kr", "south korea");
+      ("jp", "japan");
+      ("de", "germany");
+    ]
 
 let an_unmappable_country_is_dropped_and_noticed () =
   let outcome, request = search_of ~query:(query ~country:"no" ()) () in
   check_bool "no filters at all" false (body_has request "filters");
   check_opt_string "the country is named"
-    (Some "cannot filter by country; that constraint was ignored")
-    outcome.notice
+    (Some "cannot filter by country; that constraint was ignored") outcome.notice
 
 let the_notice_cases () =
   (* An unconstrained query carries no notice. *)
@@ -362,20 +368,17 @@ let the_notice_cases () =
       let outcome, _ = search_of ~query:(query ~safe_search:value ()) () in
       check_opt_string
         (Printf.sprintf "safe_search=%b" value)
-        (Some "cannot filter by safe-search; that constraint was ignored")
-        outcome.notice)
+        (Some "cannot filter by safe-search; that constraint was ignored") outcome.notice)
     [ true; false ];
   (* Two dropped halves name themselves. *)
   let outcome, _ = search_of ~query:(query ~country:"no" ~language:"zh" ()) () in
   check_opt_string "country or language"
-    (Some "cannot filter by country or language; that constraint was ignored")
-    outcome.notice;
+    (Some "cannot filter by country or language; that constraint was ignored") outcome.notice;
   (* A country half alone, with an honoured language: the buckets are split, so
      the sentence names only what dropped. *)
   let outcome, _ = search_of ~query:(query ~country:"no" ~language:"en" ()) () in
   check_opt_string "only country is named"
-    (Some "cannot filter by country; that constraint was ignored")
-    outcome.notice
+    (Some "cannot filter by country; that constraint was ignored") outcome.notice
 
 let the_honoured_buckets_stay_silent () =
   (* Domains, dates, a mappable country and a mappable language are honoured,
@@ -383,13 +386,12 @@ let the_honoured_buckets_stay_silent () =
   let outcome, _ =
     search_of
       ~query:
-        (query ~include_domains:[ "example.com" ] ~recency:Model.Month ~language:"en"
-           ~country:"us" ~safe_search:true ())
+        (query ~include_domains:[ "example.com" ] ~recency:Model.Month ~language:"en" ~country:"us"
+           ~safe_search:true ())
       ()
   in
   check_opt_string "only safe-search is named"
-    (Some "cannot filter by safe-search; that constraint was ignored")
-    outcome.notice
+    (Some "cannot filter by safe-search; that constraint was ignored") outcome.notice
 
 let never_a_content_or_vertical_field () =
   (* [needContent] would move the call to the content tier (body text in
@@ -400,8 +402,8 @@ let never_a_content_or_vertical_field () =
   let _, request =
     search_of
       ~query:
-        (query ~include_domains:[ "example.com" ] ~exclude_domains:[ "spam.example" ]
-           ~language:"en" ~recency:Model.Day ~country:"us" ~safe_search:true ())
+        (query ~include_domains:[ "example.com" ] ~exclude_domains:[ "spam.example" ] ~language:"en"
+           ~recency:Model.Day ~country:"us" ~safe_search:true ())
       ()
   in
   List.iter
@@ -476,81 +478,79 @@ let the_endpoint_is_the_one_the_grant_allows () =
     (contains ~haystack:(Uri.to_string request.Caps.Authority.Net.uri) ~needle:test_key)
 
 let () =
-  A.
-    (run "seekwright/querit"
-       [
-         ( "parsing",
-             [
-               test_case "the fixture yields both records" `Quick the_fixture_yields_both_records;
-               test_case "the limit is honoured" `Quick the_limit_is_honoured;
-               test_case "the snippet is kept and never text" `Quick the_snippet_is_kept_and_never_text;
-               test_case "the snippet is truncated" `Quick the_snippet_is_truncated;
-               test_case "the length the cap discarded is recorded" `Quick
-                 the_length_the_cap_discarded_is_recorded;
-               test_case "a short snippet reports its own length" `Quick
-                 a_short_snippet_reports_its_own_length;
-               test_case "the page age is kept only when a string" `Quick
-                 the_page_age_is_kept_only_when_a_string;
-               test_case "records without a url are dropped" `Quick records_without_a_url_are_dropped;
-               test_case "records without a title are dropped" `Quick
-                 records_without_a_title_are_dropped;
-               test_case "a record that is not an object is skipped" `Quick
-                 a_record_that_is_not_an_object_is_skipped;
-               test_case "missing results is empty, not an error" `Quick
-                 missing_results_is_empty_not_an_error;
-               test_case "a non-object results container is empty, not an error" `Quick
-                 a_non_object_results_container_is_empty_not_an_error;
-             ] );
-         ( "the upstream field guards",
-             [
-               test_case "a non-string date is dropped and the call succeeds" `Quick
-                 a_non_string_date_is_dropped_and_the_call_succeeds;
-               test_case "a non-string snippet is dropped and the call succeeds" `Quick
-                 a_non_string_snippet_is_dropped_and_the_call_succeeds;
-               test_case "a string snippet still reaches the model" `Quick
-                 a_string_snippet_still_reaches_the_model;
-             ] );
-         ( "the request",
-             [
-               test_case "POST with the bearer key" `Quick post_with_the_bearer_key;
-               test_case "the query and count are sent" `Quick the_query_and_count_are_sent;
-               test_case "count is clamped to the free plan cap" `Quick
-                 count_is_clamped_to_the_free_plan_cap;
-               test_case "the domain filters ride their native fields" `Quick
-                 the_domain_filters_ride_their_native_fields;
-               test_case "the domain fields are absent without filters" `Quick
-                 the_domain_fields_are_absent_without_filters;
-               test_case "an include-only search sends include" `Quick an_include_only_sends_include;
-               test_case "the recency maps onto timeRange.date" `Quick
-                 the_recency_maps_onto_time_range;
-               test_case "the language maps onto the enum's name" `Quick
-                 the_language_maps_onto_the_enums_name;
-               test_case "an unmappable language is dropped and noticed" `Quick
-                 an_unmappable_language_is_dropped_and_noticed;
-               test_case "the country maps onto the enum's name" `Quick
-                 the_country_maps_onto_the_enums_name;
-               test_case "an unmappable country is dropped and noticed" `Quick
-                 an_unmappable_country_is_dropped_and_noticed;
-               test_case "the notice cases" `Quick the_notice_cases;
-               test_case "the honoured buckets stay silent" `Quick the_honoured_buckets_stay_silent;
-               test_case "never a content or vertical field" `Quick never_a_content_or_vertical_field;
-             ] );
-         ( "the failures this adapter owns",
-             [
-               test_case "payment and rate limit are quota" `Quick payment_and_rate_limit_are_quota;
-               test_case "a network error does not echo the request" `Quick
-                 a_network_error_does_not_echo_the_request;
-             ] );
-         ( "cost and endpoint",
-             [
-               test_case "cost does not scale with result count" `Quick
-                 cost_does_not_scale_with_result_count;
-               test_case "cost tracks the declared rate" `Quick cost_tracks_the_declared_rate;
-               test_case "the result reports its flat cost" `Quick
-                 the_result_reports_its_flat_cost;
-               test_case "the default price is the row's figure" `Quick
-                 the_default_price_is_the_rows_figure;
-               test_case "the endpoint is the one the grant allows" `Quick
-                 the_endpoint_is_the_one_the_grant_allows;
-             ] );
-       ])
+  A.(
+    run "seekwright/querit"
+      [
+        ( "parsing",
+          [
+            test_case "the fixture yields both records" `Quick the_fixture_yields_both_records;
+            test_case "the limit is honoured" `Quick the_limit_is_honoured;
+            test_case "the snippet is kept and never text" `Quick the_snippet_is_kept_and_never_text;
+            test_case "the snippet is truncated" `Quick the_snippet_is_truncated;
+            test_case "the length the cap discarded is recorded" `Quick
+              the_length_the_cap_discarded_is_recorded;
+            test_case "a short snippet reports its own length" `Quick
+              a_short_snippet_reports_its_own_length;
+            test_case "the page age is kept only when a string" `Quick
+              the_page_age_is_kept_only_when_a_string;
+            test_case "records without a url are dropped" `Quick records_without_a_url_are_dropped;
+            test_case "records without a title are dropped" `Quick
+              records_without_a_title_are_dropped;
+            test_case "a record that is not an object is skipped" `Quick
+              a_record_that_is_not_an_object_is_skipped;
+            test_case "missing results is empty, not an error" `Quick
+              missing_results_is_empty_not_an_error;
+            test_case "a non-object results container is empty, not an error" `Quick
+              a_non_object_results_container_is_empty_not_an_error;
+          ] );
+        ( "the upstream field guards",
+          [
+            test_case "a non-string date is dropped and the call succeeds" `Quick
+              a_non_string_date_is_dropped_and_the_call_succeeds;
+            test_case "a non-string snippet is dropped and the call succeeds" `Quick
+              a_non_string_snippet_is_dropped_and_the_call_succeeds;
+            test_case "a string snippet still reaches the model" `Quick
+              a_string_snippet_still_reaches_the_model;
+          ] );
+        ( "the request",
+          [
+            test_case "POST with the bearer key" `Quick post_with_the_bearer_key;
+            test_case "the query and count are sent" `Quick the_query_and_count_are_sent;
+            test_case "count is clamped to the free plan cap" `Quick
+              count_is_clamped_to_the_free_plan_cap;
+            test_case "the domain filters ride their native fields" `Quick
+              the_domain_filters_ride_their_native_fields;
+            test_case "the domain fields are absent without filters" `Quick
+              the_domain_fields_are_absent_without_filters;
+            test_case "an include-only search sends include" `Quick an_include_only_sends_include;
+            test_case "the recency maps onto timeRange.date" `Quick the_recency_maps_onto_time_range;
+            test_case "the language maps onto the enum's name" `Quick
+              the_language_maps_onto_the_enums_name;
+            test_case "an unmappable language is dropped and noticed" `Quick
+              an_unmappable_language_is_dropped_and_noticed;
+            test_case "the country maps onto the enum's name" `Quick
+              the_country_maps_onto_the_enums_name;
+            test_case "an unmappable country is dropped and noticed" `Quick
+              an_unmappable_country_is_dropped_and_noticed;
+            test_case "the notice cases" `Quick the_notice_cases;
+            test_case "the honoured buckets stay silent" `Quick the_honoured_buckets_stay_silent;
+            test_case "never a content or vertical field" `Quick never_a_content_or_vertical_field;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "payment and rate limit are quota" `Quick payment_and_rate_limit_are_quota;
+            test_case "a network error does not echo the request" `Quick
+              a_network_error_does_not_echo_the_request;
+          ] );
+        ( "cost and endpoint",
+          [
+            test_case "cost does not scale with result count" `Quick
+              cost_does_not_scale_with_result_count;
+            test_case "cost tracks the declared rate" `Quick cost_tracks_the_declared_rate;
+            test_case "the result reports its flat cost" `Quick the_result_reports_its_flat_cost;
+            test_case "the default price is the row's figure" `Quick
+              the_default_price_is_the_rows_figure;
+            test_case "the endpoint is the one the grant allows" `Quick
+              the_endpoint_is_the_one_the_grant_allows;
+          ] );
+      ])

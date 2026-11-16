@@ -89,11 +89,7 @@ let provider scenario : Provider.t =
 let config ?(dashboard = false) () =
   match
     Config.resolve
-      ~providers:
-        [
-          ( "serper",
-            { Config.default_provider_config with Config.enabled = true } );
-        ]
+      ~providers:[ ("serper", { Config.default_provider_config with Config.enabled = true }) ]
       ~dashboard:{ Config.default_dashboard_config with Config.enabled = dashboard }
       ()
   with
@@ -101,15 +97,11 @@ let config ?(dashboard = false) () =
   | Error message -> A.failf "the fixture config was refused: %s" message
 
 let usage () =
-  match Usage.create ~now:clock () with
-  | Ok usage -> usage
-  | Error message -> A.failf "%s" message
+  match Usage.create ~now:clock () with Ok usage -> usage | Error message -> A.failf "%s" message
 
 let make_app ?(dashboard = false) scenario : Server.app =
   let config = config ~dashboard () in
-  let search =
-    Engine.Search.create config [ ("serper", provider scenario) ] ~clock ~now ()
-  in
+  let search = Engine.Search.create config [ ("serper", provider scenario) ] ~clock ~now () in
   {
     Server.config;
     search;
@@ -126,8 +118,7 @@ let server app =
   match Server.mcp_server app with
   | Ok server -> server
   | Error (Mcp_caps.Server.Duplicate_tool name) -> A.failf "duplicate tool: %s" name
-  | Error (Mcp_caps.Server.Invalid_declaration message) ->
-      A.failf "invalid declaration: %s" message
+  | Error (Mcp_caps.Server.Invalid_declaration message) -> A.failf "invalid declaration: %s" message
 
 (* [serve_http] owns its port, so the suite picks one first: bind port 0,
    read the number the kernel chose, close. Nothing ever listened on it, so
@@ -145,18 +136,13 @@ let free_port () =
 let post ~env ~port ~body =
   Eio.Switch.run (fun sw ->
       let client = Cohttp_eio.Client.make ~https:None env#net in
-      let uri =
-        Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/api/v1/search" port)
-      in
+      let uri = Uri.of_string (Printf.sprintf "http://127.0.0.1:%d/api/v1/search" port) in
       let headers = Http.Header.of_list [ ("content-type", "application/json") ] in
       let response, response_body =
-        Cohttp_eio.Client.post client ~sw ~headers
-          ~body:(Cohttp_eio.Body.of_string body) uri
+        Cohttp_eio.Client.post client ~sw ~headers ~body:(Cohttp_eio.Body.of_string body) uri
       in
       let status = Http.Status.to_int (Http.Response.status response) in
-      let text =
-        Eio.Buf_read.(take_all (of_flow response_body ~max_size:1_000_000))
-      in
+      let text = Eio.Buf_read.(take_all (of_flow response_body ~max_size:1_000_000)) in
       (status, text))
 
 (* The caller's close in [Cli_serve.run_http] is assembled by [bin] from the
@@ -164,8 +150,8 @@ let post ~env ~port ~body =
    observable. *)
 let serve ~env ~sw ~app ~close ~stop ?grace_seconds port =
   let server = server app in
-  Cli_serve.run_http ~env ~sw ~log:no_log ~app ~server ~host:"127.0.0.1" ~port
-    ~close ?grace_seconds ~stop ()
+  Cli_serve.run_http ~env ~sw ~log:no_log ~app ~server ~host:"127.0.0.1" ~port ~close ?grace_seconds
+    ~stop ()
 
 let a_graceful_stop_drains_the_in_flight_call () =
   Eio_main.run @@ fun env ->
@@ -179,8 +165,7 @@ let a_graceful_stop_drains_the_in_flight_call () =
   let port = free_port () in
   let served, resolve_served = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
-      Eio.Promise.resolve resolve_served
-        (serve ~env ~sw ~app ~close ~stop port));
+      Eio.Promise.resolve resolve_served (serve ~env ~sw ~app ~close ~stop port));
   let answered, resolve_answered = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
       let answer =
@@ -196,20 +181,14 @@ let a_graceful_stop_drains_the_in_flight_call () =
   Eio.Fiber.yield ();
   A.(check int) "a requested stop does not close before the call finishes" 0 !closes;
   Eio.Promise.resolve resolve_release ();
-  let answer =
-    Eio.Time.with_timeout_exn env#clock 2.0 (fun () ->
-        Eio.Promise.await answered)
-  in
-  let lifecycle =
-    Eio.Time.with_timeout_exn env#clock 2.0 (fun () -> Eio.Promise.await served)
-  in
+  let answer = Eio.Time.with_timeout_exn env#clock 2.0 (fun () -> Eio.Promise.await answered) in
+  let lifecycle = Eio.Time.with_timeout_exn env#clock 2.0 (fun () -> Eio.Promise.await served) in
   (match answer with
   | Ok (200, text) ->
       includes "the drained call answered its own query" "Result for slow query" text
   | Ok (status, _) -> A.failf "the drained call answered %d, not 200" status
   | Error exn -> A.failf "the drained call failed: %s" (Printexc.to_string exn));
-  A.(check bool) "the listener reports a completed drain" true
-    (lifecycle = Ok Server.Drained);
+  A.(check bool) "the listener reports a completed drain" true (lifecycle = Ok Server.Drained);
   A.(check int) "close ran once, after the drain" 1 !closes
 
 let the_grace_ceiling_forces_a_hung_call () =
@@ -224,8 +203,7 @@ let the_grace_ceiling_forces_a_hung_call () =
   let port = free_port () in
   let served, resolve_served = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
-      Eio.Promise.resolve resolve_served
-        (serve ~env ~sw ~app ~close ~stop ~grace_seconds:0.2 port));
+      Eio.Promise.resolve resolve_served (serve ~env ~sw ~app ~close ~stop ~grace_seconds:0.2 port));
   let answered, resolve_answered = Eio.Promise.create () in
   Eio.Fiber.fork ~sw (fun () ->
       let answer =
@@ -239,31 +217,24 @@ let the_grace_ceiling_forces_a_hung_call () =
   (* The ceiling, not the request, ends this: a second of wall time is an
      order of magnitude over the grace, so a hang is a visible failure rather
      than a slow test. *)
-  let lifecycle =
-    Eio.Time.with_timeout_exn env#clock 2.0 (fun () -> Eio.Promise.await served)
-  in
+  let lifecycle = Eio.Time.with_timeout_exn env#clock 2.0 (fun () -> Eio.Promise.await served) in
   let elapsed = Unix.gettimeofday () -. began in
-  A.(check bool) "the ceiling answers Grace_expired" true
-    (lifecycle = Ok Server.Grace_expired);
+  A.(check bool) "the ceiling answers Grace_expired" true (lifecycle = Ok Server.Grace_expired);
   A.(check bool) "the ceiling exits promptly instead of hanging" true (elapsed < 1.0);
   A.(check int) "close still ran exactly once" 1 !closes;
   (* The client's own fiber ends when the connection is cancelled; it is
      allowed to fail, and joining it keeps its exception out of the switch. *)
-  match
-    Eio.Time.with_timeout_exn env#clock 2.0 (fun () ->
-        Eio.Promise.await answered)
-  with
+  match Eio.Time.with_timeout_exn env#clock 2.0 (fun () -> Eio.Promise.await answered) with
   | Ok _ | Error _ -> ()
 
 let call ?stopping app ~meth ~path ~body =
-  Server.handle_custom ?stopping app ~meth ~path ~host:(Some "localhost")
-    ~origin:None ~body
+  Server.handle_custom ?stopping app ~meth ~path ~host:(Some "localhost") ~origin:None ~body
 
 let a_stopping_server_refuses_fresh_work () =
   let _started, resolve_started = Eio.Promise.create () in
   let never, _resolve_never = Eio.Promise.create () in
   let app = make_app ~dashboard:true (Hung { started = resolve_started; never }) in
-  let stopping = (fun () -> true) in
+  let stopping = fun () -> true in
   let status response = response.Server.status in
   let body response = response.Server.body in
   (* The operational GETs answer the oracle's stopping sentinel. *)
@@ -271,7 +242,8 @@ let a_stopping_server_refuses_fresh_work () =
     (fun path ->
       let response = call ~stopping app ~meth:"GET" ~path ~body:"" in
       A.(check int) (path ^ " is 503") 503 (status response);
-      A.(check string) (path ^ " carries the stopping sentinel")
+      A.(check string)
+        (path ^ " carries the stopping sentinel")
         {|{"status":"stopping"}|} (body response))
     [ "/healthz"; "/dashboard/data"; "/dashboard/metrics" ];
   (* The three projections refuse in the REST surface's error shape, and they
@@ -280,7 +252,8 @@ let a_stopping_server_refuses_fresh_work () =
     (fun path ->
       let response = call ~stopping app ~meth:"POST" ~path ~body:"{}" in
       A.(check int) (path ^ " is 503") 503 (status response);
-      A.(check string) (path ^ " carries the retry sentence")
+      A.(check string)
+        (path ^ " carries the retry sentence")
         {|{"error":"The server is stopping; retry shortly."}|} (body response))
     [ "/api/v1/search"; "/api/v1/fetch"; "/api/v1/answer" ];
   (* The static dashboard is still served: it accepts no work. *)
@@ -290,7 +263,8 @@ let a_stopping_server_refuses_fresh_work () =
      change. *)
   let healthz = call app ~meth:"GET" ~path:"/healthz" ~body:"" in
   A.(check int) "/healthz is 200 when not stopping" 200 (status healthz);
-  A.(check bool) "the running healthz says ok" true
+  A.(check bool)
+    "the running healthz says ok" true
     (contains ~haystack:(body healthz) ~needle:{|"status":"ok"|})
 
 let () =

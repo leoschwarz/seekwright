@@ -1,8 +1,8 @@
 (** Parallel — web search backend with REST (billed) and MCP (anonymous free) halves.
 
-    [parallel] uses the REST API with structured filter parameters (domains, recency,
-    location, mode). [parallel:free] uses the hosted Search MCP endpoint anonymously.
-    Both share the same [results[]] parsing logic. *)
+    [parallel] uses the REST API with structured filter parameters (domains, recency, location,
+    mode). [parallel:free] uses the hosted Search MCP endpoint anonymously. Both share the same
+    [results[]] parsing logic. *)
 
 val endpoint : Uri.t
 (** [https://api.parallel.ai/v1/search], the REST API endpoint. *)
@@ -22,8 +22,7 @@ val recency_days : Seekwright.Model.recency -> int
 val after_date : now:(unit -> float) -> Seekwright.Model.recency -> string
 (** Formats [YYYY-MM-DD] for the recency window boundary relative to [now]. *)
 
-val parse_results :
-  Yojson.Safe.t -> limit:int -> text_chars:int -> Seekwright.Provider.hit list
+val parse_results : Yojson.Safe.t -> limit:int -> text_chars:int -> Seekwright.Provider.hit list
 (** Parses hits from [results[]], mapping excerpts to text. *)
 
 val make :

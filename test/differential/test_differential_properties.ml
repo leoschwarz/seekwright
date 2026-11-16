@@ -1,28 +1,25 @@
 (** Deterministic property runs over the surfaces the corpus pins.
 
-    The corpus is an enumeration: a human chose each case, and a golden pins the
-    answer. Properties are the other half of the same claim. A case list can only
-    say what someone thought of; a property says what must hold for every input
-    the generator can make, and the generator is what makes a malformed byte, a
-    lone CR or a past-the-end offset show up without anyone predicting it.
+    The corpus is an enumeration: a human chose each case, and a golden pins the answer. Properties
+    are the other half of the same claim. A case list can only say what someone thought of; a
+    property says what must hold for every input the generator can make, and the generator is what
+    makes a malformed byte, a lone CR or a past-the-end offset show up without anyone predicting it.
 
     Two constraints shape everything here:
 
-    - {b Deterministic.} A property that fails only on the seed the gate happened
-      to draw is a flaky gate, so the seed is a constant in this file and each
-      property gets its own [Random.State] built from it. [QCHECK_SEED],
-      [QCHECK_COUNT] and [QCHECK_LONG] are bypassed by passing [~rand], [~count]
-      and [~long] explicitly — the environment a developer happens to have cannot
+    - {b Deterministic.} A property that fails only on the seed the gate happened to draw is a flaky
+      gate, so the seed is a constant in this file and each property gets its own [Random.State]
+      built from it. [QCHECK_SEED], [QCHECK_COUNT] and [QCHECK_LONG] are bypassed by passing
+      [~rand], [~count] and [~long] explicitly — the environment a developer happens to have cannot
       change what the gate ran.
-    - {b Hermetic.} No fixture file, no Python, no clock, no network. The
-      generators build their inputs, the properties call the port, and a failure
-      prints the counterexample QCheck shrank to.
+    - {b Hermetic.} No fixture file, no Python, no clock, no network. The generators build their
+      inputs, the properties call the port, and a failure prints the counterexample QCheck shrank
+      to.
 
-    QCheck ([qcheck-core] and [qcheck-alcotest], two packages, about 5 MB
-    installed, BSD-2-Clause, no new transitive dependency) is used rather than a
-    hand-rolled loop: the only work left for a framework here is generation and
-    shrinking, and writing those is how a test suite grows a second, worse one.
-    The dependency decision and its cost are recorded in [README.md] and in the
+    QCheck ([qcheck-core] and [qcheck-alcotest], two packages, about 5 MB installed, BSD-2-Clause,
+    no new transitive dependency) is used rather than a hand-rolled loop: the only work left for a
+    framework here is generation and shrinking, and writing those is how a test suite grows a
+    second, worse one. The dependency decision and its cost are recorded in [README.md] and in the
     port plan (F3.3). *)
 
 module Jsondoc = Seekwright_fetch.Jsondoc
@@ -91,7 +88,8 @@ let word =
 (* A key may hold a single space, which is exactly what [child_path]'s quoting is
    for; it never holds two in a row, which is what keeps {!split_label}'s reading
    of a rendered line unambiguous. *)
-let key = QCheck2.Gen.map (String.concat " ") (QCheck2.Gen.list_size QCheck2.Gen.(int_range 0 2) word)
+let key =
+  QCheck2.Gen.map (String.concat " ") (QCheck2.Gen.list_size QCheck2.Gen.(int_range 0 2) word)
 
 let rec json ~depth =
   let leaf =
@@ -111,7 +109,8 @@ let rec json ~depth =
         leaf;
         QCheck2.Gen.map
           (fun members -> `Assoc members)
-          (QCheck2.Gen.list_size QCheck2.Gen.(int_range 0 3)
+          (QCheck2.Gen.list_size
+             QCheck2.Gen.(int_range 0 3)
              (QCheck2.Gen.pair key (json ~depth:(depth - 1))));
         QCheck2.Gen.map
           (fun items -> `List items)
@@ -144,7 +143,8 @@ let table =
           rows
       in
       (header, rows))
-    (QCheck2.Gen.pair QCheck2.Gen.(int_range 1 3)
+    (QCheck2.Gen.pair
+       QCheck2.Gen.(int_range 1 3)
        (QCheck2.Gen.pair
           (QCheck2.Gen.list_size (QCheck2.Gen.int_range 0 3) word)
           (QCheck2.Gen.list_size (QCheck2.Gen.int_range 0 3)
@@ -165,9 +165,7 @@ let split_label line =
 
 let label_parses line =
   let label, _ = split_label line in
-  match Jsondoc.parse_path label with
-  | _ -> true
-  | exception Jsondoc.Path_syntax _ -> false
+  match Jsondoc.parse_path label with _ -> true | exception Jsondoc.Path_syntax _ -> false
 
 let every_label_parses rendered = List.for_all label_parses (String.split_on_char '\n' rendered)
 
@@ -176,8 +174,9 @@ let remove_zwsp text =
   let buffer = Buffer.create (String.length text) in
   let index = ref 0 in
   while !index < String.length text do
-    if !index + String.length zwsp <= String.length text
-       && String.sub text !index (String.length zwsp) = zwsp
+    if
+      !index + String.length zwsp <= String.length text
+      && String.sub text !index (String.length zwsp) = zwsp
     then index := !index + String.length zwsp
     else begin
       Buffer.add_char buffer text.[!index];
@@ -223,8 +222,7 @@ let utf8_properties =
         let total = Utf8.count text in
         let kept = Utf8.take limit text in
         let is_prefix =
-          String.length kept <= String.length text
-          && String.sub text 0 (String.length kept) = kept
+          String.length kept <= String.length text && String.sub text 0 (String.length kept) = kept
         in
         is_prefix && Utf8.count kept = min limit total)
   in
@@ -262,7 +260,8 @@ let window_properties =
         is_prefix && marker_only_when_more && whole_when_not_more)
   in
   let past_the_end_is_empty =
-    check ~salt:8 "an offset past the end is empty text with a truthful flag" valid_text (fun text ->
+    check ~salt:8 "an offset past the end is empty text with a truthful flag" valid_text
+      (fun text ->
         let total = Utf8.count text in
         let window, more = Fetcher.window_text text ~offset:(total + 5) ~max_chars:10 in
         window = "" && more)
@@ -342,7 +341,7 @@ let tabledoc_properties =
                      cells
                    |> List.for_all Fun.id)
                  rows
-            |> List.for_all Fun.id)
+               |> List.for_all Fun.id)
   in
   [ cell_paths_round_trip ]
 

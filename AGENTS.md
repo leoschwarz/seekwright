@@ -79,6 +79,16 @@ the embedded prose and the dashboard page, the three egress lists, the `--check`
 reports, the differential goldens and matrix, the negative-compilation
 diagnostics. A green run means both.
 
+Formatting is pinned by `.ocamlformat` — ocamlformat 0.29.0, `margin = 100`,
+spacing options chosen to preserve the tree's blank-line grouping. No gate
+target runs the formatter, so the pin is honoured by
+`ocamlformat --inplace <the files you touched>` before committing; a whole-tree
+`ocamlformat --check` is clean at every commit on this branch. Source-text
+needles in the suites are matched with whitespace collapsed
+(`Test_support.source_includes`, `source_excludes`, `source_count_occurrences`),
+which is what keeps the formatter's line breaks from moving an assertion about
+the code a needle quotes.
+
 ```bash
 dune runtest ocaml-tools --auto-promote     # re-render and re-pin a golden you meant to move
 ./_build/default/test/test_engine.exe test "<suite name>"    # one suite, from _build/default/test

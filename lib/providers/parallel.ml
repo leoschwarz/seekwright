@@ -31,10 +31,7 @@ let after_date ~(now : unit -> float) period =
 let parse_results data ~limit ~text_chars =
   let items =
     match data with
-    | `Assoc _ -> (
-        match Provider.Json.field "results" data with
-        | `List items -> items
-        | _ -> [])
+    | `Assoc _ -> ( match Provider.Json.field "results" data with `List items -> items | _ -> [])
     | _ -> []
     (* a JSON array or scalar is not a result set *)
   in
@@ -102,9 +99,7 @@ let request_body ~(mode : string) ~(now : unit -> float) (q : Provider.search_qu
   let advanced =
     let a = [ ("max_results", `Int q.Model.max_results) ] in
     let a = if source_policy <> [] then ("source_policy", `Assoc source_policy) :: a else a in
-    match q.Model.country with
-    | Some country -> ("location", `String country) :: a
-    | None -> a
+    match q.Model.country with Some country -> ("location", `String country) :: a | None -> a
   in
   `Assoc
     [
@@ -124,8 +119,7 @@ let compose_notices (q : Provider.search_query) data =
       else p
     in
     let p =
-      if q.Model.language <> None then
-        "cannot filter by language; that constraint was ignored" :: p
+      if q.Model.language <> None then "cannot filter by language; that constraint was ignored" :: p
       else p
     in
     let p =
@@ -133,20 +127,14 @@ let compose_notices (q : Provider.search_query) data =
         "cannot filter by safe-search; that constraint was ignored" :: p
       else p
     in
-    let warnings =
-      match data with `Assoc _ -> Provider.Json.field "warnings" data | _ -> `Null
-    in
+    let warnings = match data with `Assoc _ -> Provider.Json.field "warnings" data | _ -> `Null in
     let p =
       match warnings with
       | `List entries ->
           let messages =
-            List.filter_map
-              (fun entry -> Provider.Json.string_field "message" entry)
-              entries
+            List.filter_map (fun entry -> Provider.Json.string_field "message" entry) entries
           in
-          if messages <> [] then
-            ("upstream warnings: " ^ String.concat "; " messages) :: p
-          else p
+          if messages <> [] then ("upstream warnings: " ^ String.concat "; " messages) :: p else p
       | _ -> p
     in
     List.rev p
@@ -172,8 +160,7 @@ let make ?(cost_per_1k = 1.00) ?(text_chars = 2000) ?(mode = "fast") ~key ~now ~
           {
             meth = `POST;
             uri = endpoint;
-            headers =
-              [ ("x-api-key", key); ("Content-Type", "application/json") ];
+            headers = [ ("x-api-key", key); ("Content-Type", "application/json") ];
             body = Some (Yojson.Safe.to_string (request_body ~mode ~now q));
           }
         in
@@ -212,10 +199,7 @@ let mcp_tool = "web_search"
 
 let mcp_arguments (q : Provider.search_query) =
   `Assoc
-    [
-      ("objective", `String q.Model.query);
-      ("search_queries", `List [ `String q.Model.query ]);
-    ]
+    [ ("objective", `String q.Model.query); ("search_queries", `List [ `String q.Model.query ]) ]
 
 let make_mcp ?(cost_per_1k = 0.0) ?(text_chars = 2000) ~name ~uri ~net () =
   let client = Mcp.create ~provider:name ~net ~uri () in
@@ -249,7 +233,4 @@ let make_mcp ?(cost_per_1k = 0.0) ?(text_chars = 2000) ~name ~uri ~net () =
       let aclose () = Mcp.aclose client
     end : Provider.S)
   in
-  {
-    Provider.adapter;
-    Provider.warmup = (fun () -> Result.is_ok (Mcp.connect client));
-  }
+  { Provider.adapter; Provider.warmup = (fun () -> Result.is_ok (Mcp.connect client)) }

@@ -17,8 +17,7 @@ let grant_of_decision = Grants.grant_of_decision
 
 let build_extractor config =
   match config.Config.fetch.Config.extractor with
-  | "stdlib" ->
-      Ok (Extractor.of_module (module Seekwright_fetch_stdlib.Stdlib))
+  | "stdlib" -> Ok (Extractor.of_module (module Seekwright_fetch_stdlib.Stdlib))
   | name ->
       Error
         (Printf.sprintf "unknown fetch extractor %S; supported: %s" name
@@ -48,8 +47,7 @@ let cap_of (cap : Engine.Fetch.cap) : int option =
 let fallback_cost config (row : Config.fetch_fallback) =
   match row.Config.default_cost with
   | None -> None
-  | Some declared ->
-      Some (Option.value ~default:declared config.Config.fetch.Config.cost_per_1k)
+  | Some declared -> Some (Option.value ~default:declared config.Config.fetch.Config.cost_per_1k)
 
 let fallback_error_of (name : Config.name) error =
   match error with
@@ -95,13 +93,11 @@ let tavily_body_floor = 30.0
    grant on it, and the target the rung re-vets on each call. *)
 let grant_and_target ~sw ~net ~mono_clock ?audit config row =
   let endpoint =
-    Provider.policy_of_uri
-      (Uri.of_string (Option.value ~default:"" row.Config.endpoint))
+    Provider.policy_of_uri (Uri.of_string (Option.value ~default:"" row.Config.endpoint))
   in
   let* grant =
     Grants.grant_of_endpoint ~sw ~net ~mono_clock
-      ~timeout_seconds:
-        (Float.max config.Config.fetch.Config.timeout_seconds grant_floor)
+      ~timeout_seconds:(Float.max config.Config.fetch.Config.timeout_seconds grant_floor)
       ?audit endpoint
   in
   Ok (grant, Remote_target.make net)
@@ -117,21 +113,17 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
   | None ->
       Error
         (Printf.sprintf "unknown fetch fallback %S; supported: %s" name
-           (String.concat ", " (List.sort compare (List.map (fun r -> r.Config.name)
-              Config.known_fetch_fallbacks))))
+           (String.concat ", "
+              (List.sort compare (List.map (fun r -> r.Config.name) Config.known_fetch_fallbacks))))
   | Some row -> (
       let keyed () =
-        match Config.api_key name with
-        | Some key when key <> "" -> Some key
-        | _ -> None
+        match Config.api_key name with Some key when key <> "" -> Some key | _ -> None
       in
       match name with
       | "jina" ->
           if not (Config.is_permitted config name) then Ok None
           else
-            let* (grant, target) =
-              grant_and_target ~sw ~net ~mono_clock ?audit config row
-            in
+            let* grant, target = grant_and_target ~sw ~net ~mono_clock ?audit config row in
             Ok
               (Some
                  (wrap_fallback name (fallback_cost config row)
@@ -142,17 +134,17 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                          max_text_chars = fetch.Config.max_text_chars;
                          user_agent = fetch.Config.user_agent;
                        })))
-      | "crawl4ai" ->
+      | "crawl4ai" -> (
           (* The self-hosted renderer: no key and no permission gate, so
              [fetch.crawl4ai_url] is the whole prerequisite — and its endpoint
              is the operator's own config, not a constant. *)
-          (match fetch.Config.crawl4ai_url with
+          match fetch.Config.crawl4ai_url with
           | None | Some "" -> Ok None
           | Some base_url ->
               let* grant =
                 Grants.grant_of_endpoint ~sw ~net ~mono_clock
-                  ~timeout_seconds:fetch.Config.crawl4ai_timeout_seconds
-                  ?audit (Provider.policy_of_uri (Uri.of_string base_url))
+                  ~timeout_seconds:fetch.Config.crawl4ai_timeout_seconds ?audit
+                  (Provider.policy_of_uri (Uri.of_string base_url))
               in
               let target = Remote_target.make net in
               Ok
@@ -166,11 +158,13 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                            base_url;
                            token = fetch.Config.crawl4ai_token;
                          }))))
-      | _ ->
-          (* Both keyed gates before anything is built: a permission set that
+      | _ -> (
+          if
+            (* Both keyed gates before anything is built: a permission set that
              omits the name, or an empty [api_key], leaves the rung unbuilt
              rather than firing it. *)
-          if not (Config.is_permitted config name) then Ok None
+            not (Config.is_permitted config name)
+          then Ok None
           else
             match keyed () with
             | None -> Ok None
@@ -178,9 +172,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                 match keyed_vendor name with
                 | None -> Ok None
                 | Some vendor ->
-                    let* (grant, target) =
-                      grant_and_target ~sw ~net ~mono_clock ?audit config row
-                    in
+                    let* grant, target = grant_and_target ~sw ~net ~mono_clock ?audit config row in
                     let vendor_net = Fallback.of_grant grant in
                     let max_text_chars = fetch.Config.max_text_chars in
                     let rung =
@@ -199,13 +191,10 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                               max_text_chars;
                               api_key;
                               timeout_seconds =
-                                Float.max fetch.Config.timeout_seconds
-                                  tavily_body_floor;
+                                Float.max fetch.Config.timeout_seconds tavily_body_floor;
                             }
                     in
-                    Ok (Some (wrap_fallback name (fallback_cost config row) rung))))
-
-
+                    Ok (Some (wrap_fallback name (fallback_cost config row) rung)))))
 
 (* [error_of] is a translation, not a copy, and stays one: [Fetcher.refusal] and
    [Engine.Fetch.fetch_error] are different vocabularies on purpose — a
@@ -216,8 +205,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
 let error_of (error : Fetcher.error) : Engine.Fetch.fetch_error =
   match error with
   | Fetcher.Refusal (Fetcher.Url_blocked message) -> Engine.Fetch.Url_blocked message
-  | Fetcher.Refusal (Fetcher.Redirect_blocked message) ->
-      Engine.Fetch.Redirect_blocked message
+  | Fetcher.Refusal (Fetcher.Redirect_blocked message) -> Engine.Fetch.Redirect_blocked message
   | Fetcher.Refusal (Fetcher.Blocked message) -> Engine.Fetch.Fetch_blocked message
   | Fetcher.Failed message ->
       Engine.Fetch.Provider (Provider.provider_error ~provider:"http" message)
@@ -229,71 +217,67 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
     match build_extractor config with
     | Error message -> Some (Error message)
     | Ok extractor -> (
-    match
-      (* The local reader's grant respects allow_private_addresses; fallbacks remain strictly public. *)
-      (if fetch.Config.allow_private_addresses then Policy.with_private_web else Policy.with_public_web)
-        ~sw ~net ~port_policy:Policy.Any_port
-        ~max_response_bytes:fetch.Config.max_download_bytes ()
-    with
-    | Error error -> Some (Error (Caps.Error.render error))
-    | Ok decision -> (
         match
-          Extract_pool.make ~net ~mono_clock
-            ~dir:(Filename.get_temp_dir_name ())
-            ~extractor ~max_body_bytes:fetch.Config.max_download_bytes ()
+          (* The local reader's grant respects allow_private_addresses; fallbacks remain strictly public. *)
+          (if fetch.Config.allow_private_addresses then Policy.with_private_web
+           else Policy.with_public_web)
+            ~sw ~net ~port_policy:Policy.Any_port
+            ~max_response_bytes:fetch.Config.max_download_bytes ()
         with
-        | Error message -> Some (Error message)
-        | Ok workers ->
-            let grant =
-              grant_of_decision ~mono_clock
-                ~timeout_seconds:fetch.Config.timeout_seconds ?audit decision
-            in
-            let fetcher =
-              Fetcher.make ~net:grant ~extractor
-                ~workers
-                ~parse_timeout_seconds:fetch.Config.timeout_seconds
-                ~max_download_bytes:fetch.Config.max_download_bytes
-                ~max_text_chars:fetch.Config.max_text_chars
-                ~max_redirects:fetch.Config.max_redirects
-                ~allow_images:fetch.Config.allow_images
-                ~user_agent:fetch.Config.user_agent
-                ()
-            in
-            let local =
-              {
-                Engine.Fetch.name = "http";
-                cost_per_1k = fetch.Config.cost_per_1k;
-                fetch =
-                  (fun ~url ~offset ~max_chars ->
-                    match
-                      Fetcher.fetch
-                        ~chain_timeout:
-                          (Eio.Time.Timeout.seconds mono_clock
-                             (2. *. fetch.Config.timeout_seconds))
-                        fetcher url ~offset ~max_chars:(cap_of max_chars)
-                    with
-                    | Ok page -> Ok page
-                    | Error error -> Error (error_of error));
-                aclose = (fun () -> Extract_pool.close workers);
-              }
-            in
-            let build_ladder names =
-              let* acc =
-                List.fold_left
-                  (fun acc name ->
-                    let* acc = acc in
-                    match build_fallback ~sw ~net ~mono_clock ?audit config name with
-                    | Error message -> Error message
-                    | Ok None -> Ok acc
-                    | Ok Some rung -> Ok (rung :: acc))
-                  (Ok []) names
-              in
-              Ok (List.rev acc)
-            in
-            match build_ladder (Option.value ~default:[] fetch.Config.fallback) with
+        | Error error -> Some (Error (Caps.Error.render error))
+        | Ok decision -> (
+            match
+              Extract_pool.make ~net ~mono_clock ~dir:(Filename.get_temp_dir_name ()) ~extractor
+                ~max_body_bytes:fetch.Config.max_download_bytes ()
+            with
             | Error message -> Some (Error message)
-            | Ok ladder -> Some (Ok (local, ladder)))
-)
+            | Ok workers -> (
+                let grant =
+                  grant_of_decision ~mono_clock ~timeout_seconds:fetch.Config.timeout_seconds ?audit
+                    decision
+                in
+                let fetcher =
+                  Fetcher.make ~net:grant ~extractor ~workers
+                    ~parse_timeout_seconds:fetch.Config.timeout_seconds
+                    ~max_download_bytes:fetch.Config.max_download_bytes
+                    ~max_text_chars:fetch.Config.max_text_chars
+                    ~max_redirects:fetch.Config.max_redirects
+                    ~allow_images:fetch.Config.allow_images ~user_agent:fetch.Config.user_agent ()
+                in
+                let local =
+                  {
+                    Engine.Fetch.name = "http";
+                    cost_per_1k = fetch.Config.cost_per_1k;
+                    fetch =
+                      (fun ~url ~offset ~max_chars ->
+                        match
+                          Fetcher.fetch
+                            ~chain_timeout:
+                              (Eio.Time.Timeout.seconds mono_clock
+                                 (2. *. fetch.Config.timeout_seconds))
+                            fetcher url ~offset ~max_chars:(cap_of max_chars)
+                        with
+                        | Ok page -> Ok page
+                        | Error error -> Error (error_of error));
+                    aclose = (fun () -> Extract_pool.close workers);
+                  }
+                in
+                let build_ladder names =
+                  let* acc =
+                    List.fold_left
+                      (fun acc name ->
+                        let* acc = acc in
+                        match build_fallback ~sw ~net ~mono_clock ?audit config name with
+                        | Error message -> Error message
+                        | Ok None -> Ok acc
+                        | Ok (Some rung) -> Ok (rung :: acc))
+                      (Ok []) names
+                  in
+                  Ok (List.rev acc)
+                in
+                match build_ladder (Option.value ~default:[] fetch.Config.fallback) with
+                | Error message -> Some (Error message)
+                | Ok ladder -> Some (Ok (local, ladder)))))
 
 let cache_read_floor = 65_536
 let cache_max_entries = 10_000
@@ -301,10 +285,7 @@ let cache_max_entries = 10_000
 let preflight_of ~(net : _ Eio.Net.t) config =
   let fetch = config.Config.fetch in
   fun (raw : string) ->
-    match
-      Remote_target.vet ~net
-        ~private_web_allowed:fetch.Config.allow_private_addresses raw
-    with
+    match Remote_target.vet ~net ~private_web_allowed:fetch.Config.allow_private_addresses raw with
     | Ok validated -> Ok validated
     | Error message -> Error (Engine.Fetch.Url_blocked message)
 
@@ -323,46 +304,46 @@ let cache_seam ~(net : _ Eio.Net.t) config (cache : Page_cache.t) =
     match lookup () with
     | Some entry -> Ok (Page_cache.to_page entry, true)
     | None -> (
-      let key = Page_cache.entry_name ~rung ~url in
-      match Hashtbl.find_opt fills key with
-      | Some waiting -> (
-          match Eio.Promise.await waiting with
-          | Error exc -> Error exc
-          | Ok () -> (
-              match lookup () with
-              | Some entry -> Ok (Page_cache.to_page entry, true)
-              | None -> Result.map (fun page -> (page, false)) (dispatch ~offset ~max_chars)))
-      | None ->
-        let waiting, resolve = Eio.Promise.create () in
-        Hashtbl.add fills key waiting;
-        Fun.protect
-          ~finally:(fun () ->
-            Hashtbl.remove fills key;
-            (* Wake waiters if cancelled before resolution. *)
-            ignore
-              (Eio.Promise.try_resolve
-                 resolve
-                 (Error
-                    (Engine.Fetch.Provider
-                       (Provider.provider_error ~provider:"http"
-                          "the page fetch was interrupted")))))
-          (fun () ->
-            match dispatch ~offset:0 ~max_chars:Engine.Fetch.Uncapped with
-            | Error exc ->
-                Eio.Promise.resolve resolve (Error exc);
-                Error exc
-            | Ok full ->
-                if full.image = None
-                then ignore (Page_cache.put cache ~rung ~url ~page:(Page_cache.of_page full));
-                Eio.Promise.resolve resolve (Ok ());
+        let key = Page_cache.entry_name ~rung ~url in
+        match Hashtbl.find_opt fills key with
+        | Some waiting -> (
+            match Eio.Promise.await waiting with
+            | Error exc -> Error exc
+            | Ok () -> (
                 match lookup () with
-                | Some entry -> Ok (Page_cache.to_page entry, false)
-                | None ->
-                    if max_chars = Engine.Fetch.Uncapped
-                    then Ok (full, false)
-                    else
-                      let window, truncated = Fetcher.window_text full.text ~offset ~max_chars:cap in
-                      Ok ({ full with text = window; truncated }, false)))
+                | Some entry -> Ok (Page_cache.to_page entry, true)
+                | None -> Result.map (fun page -> (page, false)) (dispatch ~offset ~max_chars)))
+        | None ->
+            let waiting, resolve = Eio.Promise.create () in
+            Hashtbl.add fills key waiting;
+            Fun.protect
+              ~finally:(fun () ->
+                Hashtbl.remove fills key;
+                (* Wake waiters if cancelled before resolution. *)
+                ignore
+                  (Eio.Promise.try_resolve resolve
+                     (Error
+                        (Engine.Fetch.Provider
+                           (Provider.provider_error ~provider:"http"
+                              "the page fetch was interrupted")))))
+              (fun () ->
+                match dispatch ~offset:0 ~max_chars:Engine.Fetch.Uncapped with
+                | Error exc ->
+                    Eio.Promise.resolve resolve (Error exc);
+                    Error exc
+                | Ok full -> (
+                    if full.image = None then
+                      ignore (Page_cache.put cache ~rung ~url ~page:(Page_cache.of_page full));
+                    Eio.Promise.resolve resolve (Ok ());
+                    match lookup () with
+                    | Some entry -> Ok (Page_cache.to_page entry, false)
+                    | None ->
+                        if max_chars = Engine.Fetch.Uncapped then Ok (full, false)
+                        else
+                          let window, truncated =
+                            Fetcher.window_text full.text ~offset ~max_chars:cap
+                          in
+                          Ok ({ full with text = window; truncated }, false))))
   in
   { Engine.Fetch.Cache.preflight = preflight_of ~net config; read }
 
@@ -381,14 +362,12 @@ let build_page_cache ~sw ~(net : _ Eio.Net.t) ~mono_clock ~now ?audit ~fs config
   match open_cache_grant ~sw ~mono_clock ~fs ?audit config with
   | Error message -> Error message
   | Ok None -> Ok None
-  | Ok Some grant ->
+  | Ok (Some grant) ->
       let fetch = config.Config.fetch in
       let cache =
-        Page_cache.create ~fs:grant
-          ~max_bytes:fetch.Config.cache_max_bytes
+        Page_cache.create ~fs:grant ~max_bytes:fetch.Config.cache_max_bytes
           ~max_entry_bytes:fetch.Config.cache_max_entry_bytes
-          ~ttl_seconds:fetch.Config.cache_ttl_seconds
-          ~now ()
+          ~ttl_seconds:fetch.Config.cache_ttl_seconds ~now ()
       in
       Ok (Some (cache_seam ~net config cache))
 
@@ -396,5 +375,5 @@ let page_cache_stats ~sw ~mono_clock ~fs config =
   match open_cache_grant ~sw ~mono_clock ~fs config with
   | Error message -> Error message
   | Ok None -> Ok None
-  | Ok Some grant -> Ok (Some (Page_cache.stats (Page_cache.create ~fs:grant ~now:(fun () -> 0.0) ())))
-
+  | Ok (Some grant) ->
+      Ok (Some (Page_cache.stats (Page_cache.create ~fs:grant ~now:(fun () -> 0.0) ())))

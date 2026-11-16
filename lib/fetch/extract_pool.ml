@@ -1,10 +1,6 @@
 module E = Extractor
 
-type error =
-  | Timed_out
-  | Pool_closed
-  | Backend of string
-  | Worker of string
+type error = Timed_out | Pool_closed | Backend of string | Worker of string
 
 let i64_to_string (v : int64) : string =
   let b = Bytes.create 8 in
@@ -34,10 +30,7 @@ let absent = -1L
 let write_all fd (s : string) =
   let b = Bytes.of_string s in
   let n = Bytes.length b in
-  let rec go off =
-    if off >= n then ()
-    else go (off + Unix.write fd b off (n - off))
-  in
+  let rec go off = if off >= n then () else go (off + Unix.write fd b off (n - off)) in
   go 0
 
 let read_exact fd (buf : bytes) off len =
@@ -85,11 +78,7 @@ let result_frame (r : E.extract_result) =
 
 let backend_frame (message : string) =
   String.concat ""
-    [
-      i64_to_string status_backend;
-      i64_to_string (Int64.of_int (String.length message));
-      message;
-    ]
+    [ i64_to_string status_backend; i64_to_string (Int64.of_int (String.length message)); message ]
 
 (* One accepted connection: a job frame, the extraction, a response frame —
    or the quit sentinel. [Exit] / [End_of_file] / [Unix_error] mean "the
@@ -118,21 +107,21 @@ let serve_one conn ~(extractor : E.backend) ~max_body_bytes =
             Some (Bytes.to_string b)
       in
       let frame =
-        (try `Ok (extractor.extract body content_type)
-         with
-         | E.Extraction_failed message -> `Backend message
-         | _ ->
-             (* The backend broke its own contract (an extract may raise only
+        try `Ok (extractor.extract body content_type) with
+        | E.Extraction_failed message -> `Backend message
+        | _ ->
+            (* The backend broke its own contract (an extract may raise only
                 [Extraction_failed]). Keep the worker, report a constant, and
                 never render the exception: the source-discipline rule
                 against raw exception printers is about what leaves the
                 process, and this sentence does leave the process — into the
                 caller's refusal. *)
-             `Backend "the extraction backend raised an unexpected failure")
+            `Backend "the extraction backend raised an unexpected failure"
       in
       (match frame with
-      | `Ok r -> (try write_all conn (result_frame r) with Unix.Unix_error _ -> ())
-      | `Backend message -> (try write_all conn (backend_frame message) with Unix.Unix_error _ -> ()));
+      | `Ok r -> ( try write_all conn (result_frame r) with Unix.Unix_error _ -> ())
+      | `Backend message -> (
+          try write_all conn (backend_frame message) with Unix.Unix_error _ -> ()));
       `job
   | _ -> `job
 
@@ -151,11 +140,10 @@ let listen path =
        client, and it never opens more than that many connections at once. *)
     Unix.listen sock 16;
     sock
-  with
-  | Unix.Unix_error _ ->
-      Unix.close sock;
-      (try Unix.unlink path with Unix.Unix_error _ -> ());
-      raise Exit
+  with Unix.Unix_error _ ->
+    Unix.close sock;
+    (try Unix.unlink path with Unix.Unix_error _ -> ());
+    raise Exit
 
 let accept_loop sock ~(extractor : E.backend) ~max_body_bytes =
   let quit = ref false in
@@ -164,11 +152,8 @@ let accept_loop sock ~(extractor : E.backend) ~max_body_bytes =
       try
         let conn, _addr = Unix.accept sock in
         let stop =
-          (try
-             match serve_one conn ~extractor ~max_body_bytes with
-             | `quit -> true
-             | `job -> false
-           with End_of_file | Exit | Unix.Unix_error _ | Sys_error _ -> false)
+          try match serve_one conn ~extractor ~max_body_bytes with `quit -> true | `job -> false
+          with End_of_file | Exit | Unix.Unix_error _ | Sys_error _ -> false
         in
         (try Unix.close conn with Unix.Unix_error _ -> ());
         stop
@@ -188,18 +173,16 @@ let worker_main ~path ~(extractor : E.backend) ~max_body_bytes ~ready =
      and a worker that could not bind is reported instead of hanging. *)
   let report byte =
     (try ignore (Unix.write ready (Bytes.make 1 byte) 0 1) with Unix.Unix_error _ -> ());
-    (try Unix.close ready with Unix.Unix_error _ -> ())
+    try Unix.close ready with Unix.Unix_error _ -> ()
   in
-  let sock =
-    try Some (listen path) with Exit | Unix.Unix_error _ | Sys_error _ -> None
-  in
+  let sock = try Some (listen path) with Exit | Unix.Unix_error _ | Sys_error _ -> None in
   match sock with
   | None -> report 'E'
-  | Some sock ->
+  | Some sock -> (
       report 'R';
       accept_loop sock ~extractor ~max_body_bytes;
       (try Unix.close sock with Unix.Unix_error _ -> ());
-      (try Unix.unlink path with Unix.Unix_error _ -> ())
+      try Unix.unlink path with Unix.Unix_error _ -> ())
 
 (* [Eio.Net.t] and [Eio.Time.Mono.t] are parameterised by the backend's
    resource tag, and a record type cannot carry an existential tag — [_] is
@@ -255,8 +238,8 @@ let send_quit path =
     Unix.close fd
   with Unix.Unix_error _ -> ()
 
-let make ~net ~mono_clock ~dir ~(extractor : E.backend) ?(workers = workers_default)
-    ?queue_limit ?(max_body_bytes = 8_388_608) ?max_result_bytes () =
+let make ~net ~mono_clock ~dir ~(extractor : E.backend) ?(workers = workers_default) ?queue_limit
+    ?(max_body_bytes = 8_388_608) ?max_result_bytes () =
   if workers < 1 then Error "the extraction pool needs at least one worker"
   else
     let queue_limit =
@@ -268,14 +251,14 @@ let make ~net ~mono_clock ~dir ~(extractor : E.backend) ?(workers = workers_defa
     let seq = Atomic.fetch_and_add pool_seq 1 in
     let paths =
       Array.init workers (fun i ->
-        Filename.concat dir
-          (Printf.sprintf "seekwright-extract-%d-%d-%d.sock" (Unix.getpid ()) seq i))
+          Filename.concat dir
+            (Printf.sprintf "seekwright-extract-%d-%d-%d.sock" (Unix.getpid ()) seq i))
     in
     if too_long paths then
       Error
         (Printf.sprintf
-           "the extraction pool's socket path in %S exceeds the %d-byte limit of a \
-            unix socket name; point it at a shorter directory"
+           "the extraction pool's socket path in %S exceeds the %d-byte limit of a unix socket \
+            name; point it at a shorter directory"
            dir socket_name_limit)
     else
       (* Spawn, then wait on each worker's readiness byte. The worker reports
@@ -297,9 +280,7 @@ let make ~net ~mono_clock ~dir ~(extractor : E.backend) ?(workers = workers_defa
         (fun i path ->
           let ready_read, ready_write = Unix.pipe () in
           let domain =
-            Domain.spawn
-              (fun () ->
-                worker_main ~path ~extractor ~max_body_bytes ~ready:ready_write)
+            Domain.spawn (fun () -> worker_main ~path ~extractor ~max_body_bytes ~ready:ready_write)
           in
           started := (domain, ready_read) :: !started;
           let b = Bytes.create 1 in
@@ -308,9 +289,7 @@ let make ~net ~mono_clock ~dir ~(extractor : E.backend) ?(workers = workers_defa
           | _ ->
               if !failure = None then
                 failure :=
-                  Some
-                    (Printf.sprintf "extraction worker %d could not listen on %s" i
-                       path));
+                  Some (Printf.sprintf "extraction worker %d could not listen on %s" i path));
           Unix.close ready_read)
         paths;
       match !failure with
@@ -323,17 +302,14 @@ let make ~net ~mono_clock ~dir ~(extractor : E.backend) ?(workers = workers_defa
           List.iter (fun (domain, _ready_read) -> Domain.join domain) !started;
           Error message
       | None ->
-         (* [close] has each worker unlink its own path on the way out; this
+          (* [close] has each worker unlink its own path on the way out; this
             is the safety net for a process that exits without one — the path
             sits in a shared temp directory, and a stale file is an unclaimed
             inode a later operator has to hunt. Idempotent: an unlink failure
             is exactly "already gone". *)
-         at_exit
-           (fun () ->
-             Array.iter
-               (fun p -> try Unix.unlink p with Unix.Unix_error _ -> ())
-               paths);
-         Ok
+          at_exit (fun () ->
+              Array.iter (fun p -> try Unix.unlink p with Unix.Unix_error _ -> ()) paths);
+          Ok
             (T
                {
                  net;
@@ -348,15 +324,15 @@ let make ~net ~mono_clock ~dir ~(extractor : E.backend) ?(workers = workers_defa
 
 let exchange (t : _ pool) flow ~body ~content_type =
   Eio.Buf_write.with_flow flow (fun w ->
-    let write_i64 v = Eio.Buf_write.string w (i64_to_string v) in
-    write_i64 kind_job;
-    write_i64 (Int64.of_int (String.length body));
-    Eio.Buf_write.string w body;
-    match content_type with
-    | None -> write_i64 absent
-    | Some c ->
-        write_i64 (Int64.of_int (String.length c));
-        Eio.Buf_write.string w c);
+      let write_i64 v = Eio.Buf_write.string w (i64_to_string v) in
+      write_i64 kind_job;
+      write_i64 (Int64.of_int (String.length body));
+      Eio.Buf_write.string w body;
+      match content_type with
+      | None -> write_i64 absent
+      | Some c ->
+          write_i64 (Int64.of_int (String.length c));
+          Eio.Buf_write.string w c);
   (* [+ 1] is the [Buf_read] idiom: the limit is an allocation ceiling, and a
      frame declaring more than [max_result_bytes] still cannot make the loop
      allocate past it. *)
@@ -429,8 +405,8 @@ let extract ?timeout_seconds (T t) ~body ~content_type =
         x mod Array.length t.paths
       in
       Eio.Switch.run (fun sw ->
-        let flow = Eio.Net.connect ~sw t.net (`Unix t.paths.(i)) in
-        exchange t flow ~body ~content_type)
+          let flow = Eio.Net.connect ~sw t.net (`Unix t.paths.(i)) in
+          exchange t flow ~body ~content_type)
     in
     let guarded f = try f () with exn -> classify exn in
     Fun.protect
@@ -443,21 +419,21 @@ let extract ?timeout_seconds (T t) ~body ~content_type =
         Eio.Fiber.check ();
         match timeout_seconds with
         | None -> guarded exchange_job
-        | Some seconds ->
-            (try
-               (* [run_exn] rather than [run]: the body's error channel is
+        | Some seconds -> (
+            try
+              (* [run_exn] rather than [run]: the body's error channel is
                   this sum type, not a row [Timeout.run] would widen — the
                   same pattern the fetcher's chain budget uses. The timeout
                   cancels the body, whose [Eio.Io] on the half-closed socket
                   [classify] would map to [Worker]; [run_exn] attributes the
                   cancelled body to the deadline, so the answer is
                   [Timed_out]. *)
-               guarded (fun () ->
-                 Eio.Time.Timeout.run_exn
-                   (Eio.Time.Timeout.seconds t.mono_clock seconds) exchange_job)
-             with Eio.Time.Timeout -> Error Timed_out))
-
-end
+              guarded (fun () ->
+                  Eio.Time.Timeout.run_exn
+                    (Eio.Time.Timeout.seconds t.mono_clock seconds)
+                    exchange_job)
+            with Eio.Time.Timeout -> Error Timed_out))
+  end
 
 let close (T t) =
   if Atomic.get t.closed then ()

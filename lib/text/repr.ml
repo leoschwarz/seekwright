@@ -38,9 +38,7 @@ let is_non_printable cp =
   while !lo <= !hi && not !found do
     let mid = (!lo + !hi) / 2 in
     let a, b = non_printable.(mid) in
-    if cp < a then hi := mid - 1
-    else if cp > b then lo := mid + 1
-    else found := true
+    if cp < a then hi := mid - 1 else if cp > b then lo := mid + 1 else found := true
   done;
   !found
 

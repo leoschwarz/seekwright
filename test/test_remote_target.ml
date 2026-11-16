@@ -16,25 +16,32 @@ let cases () =
   (* The syntax arm first: a non-fetchable scheme never reaches the resolver,
      which is the sentence [request_guard.validate_url] writes — with the
      scheme through Python's [repr], so it arrives quoted. *)
-  Alcotest.(check string) "scheme refused"
+  Alcotest.(check string)
+    "scheme refused"
     (Result.get_error (check "ftp://public.test/x"))
     "scheme 'ftp' is not fetchable; only http and https are allowed";
-  Alcotest.(check string) "credentials refused"
+  Alcotest.(check string)
+    "credentials refused"
     (Result.get_error (check "https://u:p@public.test/x"))
     "URLs with embedded credentials are refused";
   (* The address arm: the vet's sentence arrives verbatim, loopback named —
      the operator's [fetch.allow_private_addresses] cannot reach here. *)
-  Alcotest.(check string) "loopback refused"
+  Alcotest.(check string)
+    "loopback refused"
     (Result.get_error (check "http://internal.test/x"))
-    "internal.test resolves to a non-public address (127.0.0.1); fetching private, loopback and link-local addresses is disabled";
+    "internal.test resolves to a non-public address (127.0.0.1); fetching private, loopback and \
+     link-local addresses is disabled";
   (* A name the resolver answers nothing for is the vet's other sentence. *)
-  Alcotest.(check string) "unresolvable refused"
+  Alcotest.(check string)
+    "unresolvable refused"
     (Result.get_error (check "https://nowhere.test/x"))
     "could not resolve nowhere.test";
   (* The IP-literal short circuit: no lookup, straight to the address rule. *)
-  Alcotest.(check string) "literal loopback refused"
+  Alcotest.(check string)
+    "literal loopback refused"
     (Result.get_error (check "http://127.0.0.1/x"))
     "127.0.0.1 is not a public address"
 
 let () =
-  Alcotest.run "remote_target" [ ("the composition", [ Alcotest.test_case "arms and order" `Quick cases ]) ]
+  Alcotest.run "remote_target"
+    [ ("the composition", [ Alcotest.test_case "arms and order" `Quick cases ]) ]

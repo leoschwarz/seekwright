@@ -1,22 +1,20 @@
 (** The OCaml half of every corpus projection.
 
-    One function per corpus area, each taking the corpus input as text and
-    answering with the projection lines the golden pins. The Python half these
-    renderings were mirrored against was written against the implementation the
-    baseline came from and is gone with it; the golden file is what made the two
-    agree, and it is still the only rendering this suite trusts.
+    One function per corpus area, each taking the corpus input as text and answering with the
+    projection lines the golden pins. The Python half these renderings were mirrored against was
+    written against the implementation the baseline came from and is gone with it; the golden file
+    is what made the two agree, and it is still the only rendering this suite trusts.
 
-    The area names and the line grammar are the corpus format's, written down in
-    [README.md] beside this module. Two rules every area follows, because they
-    are what keep a pinned answer reproducible from its input alone:
+    The area names and the line grammar are the corpus format's, written down in [README.md] beside
+    this module. Two rules every area follows, because they are what keep a pinned answer
+    reproducible from its input alone:
 
-    - no clock and no environment: {!Seekwright_diff.Canon.reset_key_environment}
-      runs once in the driver, and any value a golden would have to re-read from
-      the machine ([retrieved_at], [ms]) is left out of the projection rather
-      than pinned at an invented instant;
+    - no clock and no environment: {!Seekwright_diff.Canon.reset_key_environment} runs once in the
+      driver, and any value a golden would have to re-read from the machine ([retrieved_at], [ms])
+      is left out of the projection rather than pinned at an invented instant;
     - free text is escaped, never embedded: a sentence or a page goes through
-      {!Seekwright_diff.Canon.escape_text}, so a projection line stays one line
-      and a golden stays ASCII. *)
+      {!Seekwright_diff.Canon.escape_text}, so a projection line stays one line and a golden stays
+      ASCII. *)
 
 module Caps = Mcp_caps
 module Config = Seekwright.Config
@@ -33,8 +31,7 @@ module Utf8 = Seekwright_text.Utf8
 
 let read_json text = Yojson.Safe.from_string text
 
-let member key value =
-  match value with `Assoc fields -> List.assoc_opt key fields | _ -> None
+let member key value = match value with `Assoc fields -> List.assoc_opt key fields | _ -> None
 
 let ( $ ) key value =
   match member key value with
@@ -50,7 +47,8 @@ let maybe_string key value =
   match member key value with
   | Some `Null | None -> None
   | Some (`String s) -> Some s
-  | Some v -> failwith (Printf.sprintf "corpus %S is not a string: %s" key (Yojson.Safe.to_string v))
+  | Some v ->
+      failwith (Printf.sprintf "corpus %S is not a string: %s" key (Yojson.Safe.to_string v))
 
 let want_int key value =
   match key $ value with
@@ -88,7 +86,8 @@ let strings_of_list key items =
     (fun item ->
       match item with
       | `String s -> s
-      | v -> failwith (Printf.sprintf "corpus %S holds a non-string: %s" key (Yojson.Safe.to_string v)))
+      | v ->
+          failwith (Printf.sprintf "corpus %S holds a non-string: %s" key (Yojson.Safe.to_string v)))
     items
 
 let want_strings key value =
@@ -107,7 +106,8 @@ let objects_of_list key items =
     (fun item ->
       match item with
       | `Assoc _ as object_ -> object_
-      | v -> failwith (Printf.sprintf "corpus %S holds a non-object: %s" key (Yojson.Safe.to_string v)))
+      | v ->
+          failwith (Printf.sprintf "corpus %S holds a non-object: %s" key (Yojson.Safe.to_string v)))
     items
 
 let want_objects key value =
@@ -138,17 +138,14 @@ let cut_at marker text =
   let length = String.length marker in
   let haystack = String.length text in
   let rec go index =
-    if index + length > haystack
-    then text
-    else if String.sub text index length = marker
-    then String.sub text 0 index
+    if index + length > haystack then text
+    else if String.sub text index length = marker then String.sub text 0 index
     else go (index + 1)
   in
   go 0
 
 let strip_prefix prefix text =
-  if String.length text >= String.length prefix
-     && String.sub text 0 (String.length prefix) = prefix
+  if String.length text >= String.length prefix && String.sub text 0 (String.length prefix) = prefix
   then Some (String.sub text (String.length prefix) (String.length text - String.length prefix))
   else None
 
@@ -164,13 +161,13 @@ let drop_load_prefix message =
           Some (String.sub rest (colon + 2) (String.length rest - colon - 2))
       | _ -> None)
 
-let provider_line (name, entry : string * Config.provider_config) =
+let provider_line ((name, entry) : string * Config.provider_config) =
   String.concat " "
     [
       "provider";
       name;
       "enabled=" ^ flag entry.enabled;
-      "cost=" ^ (match entry.cost_per_1k with None -> "-" | Some v -> pct v);
+      ("cost=" ^ match entry.cost_per_1k with None -> "-" | Some v -> pct v);
       "depth=" ^ entry.depth;
       "output=" ^ Config.show_output_kind entry.output_type;
       "mode=" ^ entry.mode;
@@ -273,18 +270,20 @@ let config_lines (config : Config.t) =
    refusal is the loader's sentence with the file's path and the keyless hint
    taken out. *)
 let config_refusal message =
-  if String.length message >= String.length "seekwright: invalid TOML in "
-     && String.sub message 0 (String.length "seekwright: invalid TOML in ")
-        = "seekwright: invalid TOML in "
+  if
+    String.length message >= String.length "seekwright: invalid TOML in "
+    && String.sub message 0 (String.length "seekwright: invalid TOML in ")
+       = "seekwright: invalid TOML in "
   then [ "PARSE-ERR" ]
   else
-    let sentence =
-      match drop_load_prefix message with
-      | Some rest -> rest
-      | None -> message
-    in
+    let sentence = match drop_load_prefix message with Some rest -> rest | None -> message in
     let sentence = cut_at "A config that needs no API key:" sentence in
-    [ "ERR " ^ Canon.escape_text (String.concat " " (String.split_on_char ' ' (one_line sentence) |> List.filter (fun s -> s <> ""))) ]
+    [
+      "ERR "
+      ^ Canon.escape_text
+          (String.concat " "
+             (String.split_on_char ' ' (one_line sentence) |> List.filter (fun s -> s <> "")));
+    ]
 
 let config path =
   match Config.load (Some path) with
@@ -296,8 +295,9 @@ let remove_zwsp text =
   let buffer = Buffer.create (String.length text) in
   let index = ref 0 in
   while !index < String.length text do
-    if !index + String.length zwsp <= String.length text
-       && String.sub text !index (String.length zwsp) = zwsp
+    if
+      !index + String.length zwsp <= String.length text
+      && String.sub text !index (String.length zwsp) = zwsp
     then index := !index + String.length zwsp
     else (
       Buffer.add_string buffer (String.sub text !index 1);
@@ -339,7 +339,7 @@ let cap_case spec =
   let default = want_int "default" spec in
   let max_chars = maybe_int "max_chars" spec in
   let cap = Fetcher.resolved_cap default max_chars in
-  [ "cap=" ^ (if cap = Fetcher.uncapped then "uncapped" else string_of_int cap) ]
+  [ ("cap=" ^ if cap = Fetcher.uncapped then "uncapped" else string_of_int cap) ]
 
 let fetch_ops =
   [
@@ -380,34 +380,37 @@ let jsondoc_ops =
     ( "structure",
       fun spec ->
         let body = want_string "body" spec in
-        (match Jsondoc.render_json body with
+        match Jsondoc.render_json body with
         | None -> [ "render= -" ]
         | Some rendered ->
-            [ "render= " ^ Canon.escape_text rendered; "schema= " ^ opt_value (Jsondoc.render_schema rendered) ]) );
+            [
+              "render= " ^ Canon.escape_text rendered;
+              "schema= " ^ opt_value (Jsondoc.render_schema rendered);
+            ] );
     ( "select",
       fun spec ->
         let body = want_string "body" spec in
         let path = want_string "path" spec in
         let max_chars = want_int "max_chars" spec in
-        (match Jsondoc.render_json body with
+        match Jsondoc.render_json body with
         | None -> [ "render= -" ]
-        | Some rendered ->
-            (try
-               let spans, dropped = Jsondoc.select_paths ~text:rendered ~path ~max_chars in
-               [
-                 "select= "
-                 ^ String.concat "|"
-                     (List.map
-                        (fun (offset, text) -> string_of_int offset ^ ":" ^ Canon.escape_text text)
-                        spans);
-                 "dropped=" ^ string_of_int dropped;
-               ]
-             with Jsondoc.Path_syntax message -> [ "path-refused= " ^ Canon.escape_text message ])) );
+        | Some rendered -> (
+            try
+              let spans, dropped = Jsondoc.select_paths ~text:rendered ~path ~max_chars in
+              [
+                "select= "
+                ^ String.concat "|"
+                    (List.map
+                       (fun (offset, text) -> string_of_int offset ^ ":" ^ Canon.escape_text text)
+                       spans);
+                "dropped=" ^ string_of_int dropped;
+              ]
+            with Jsondoc.Path_syntax message -> [ "path-refused= " ^ Canon.escape_text message ]) );
     ( "parse-path",
       fun spec ->
         let path = want_string "path" spec in
-        (try [ "steps= " ^ reprint_steps (Jsondoc.parse_path path) ]
-         with Jsondoc.Path_syntax message -> [ "path-refused= " ^ Canon.escape_text message ]) );
+        try [ "steps= " ^ reprint_steps (Jsondoc.parse_path path) ]
+        with Jsondoc.Path_syntax message -> [ "path-refused= " ^ Canon.escape_text message ] );
     ( "child-path",
       fun spec ->
         let parent = want_string "parent" spec in
@@ -472,15 +475,13 @@ let text_ops =
     ("strip", fun spec -> [ "strip= " ^ Canon.to_hex (Utf8.strip (text_bytes spec)) ]);
     ("lstrip", fun spec -> [ "lstrip= " ^ Canon.to_hex (Utf8.lstrip (text_bytes spec)) ]);
     ("rstrip", fun spec -> [ "rstrip= " ^ Canon.to_hex (Utf8.rstrip (text_bytes spec)) ]);
-    ( "words",
-      fun spec -> counted "word" (Utf8.split_whitespace (text_bytes spec)) );
+    ("words", fun spec -> counted "word" (Utf8.split_whitespace (text_bytes spec)));
     ( "lines",
       fun spec ->
-        counted "line" (List.map Utf8.to_string (Utf8.splitlines (Utf8.of_string (text_bytes spec)))) );
-    ( "slices",
-      fun spec -> counted "slice" (Array.to_list (Utf8.slices (text_bytes spec))) );
-    ( "repr",
-      fun spec -> [ "repr= " ^ Canon.escape_text (Repr.py_repr (text_bytes spec)) ] );
+        counted "line"
+          (List.map Utf8.to_string (Utf8.splitlines (Utf8.of_string (text_bytes spec)))) );
+    ("slices", fun spec -> counted "slice" (Array.to_list (Utf8.slices (text_bytes spec))));
+    ("repr", fun spec -> [ "repr= " ^ Canon.escape_text (Repr.py_repr (text_bytes spec)) ]);
     ( "roundtrip",
       fun spec ->
         [ "roundtrip= " ^ Canon.to_hex (Utf8.to_string (Utf8.of_string (text_bytes spec))) ] );
@@ -518,7 +519,8 @@ let router_call (table : Router.search_table) call =
   | "resolve_search" -> (
       try [ "resolve_search= " ^ opt_value (Some (Router.resolve_search table ?mode requested)) ]
       with Router.Route_refused message -> [ "resolve_search " ^ refused message ])
-  | "is_permitted" -> [ "is_permitted= " ^ flag (Router.is_permitted table (want_string "name" call)) ]
+  | "is_permitted" ->
+      [ "is_permitted= " ^ flag (Router.is_permitted table (want_string "name" call)) ]
   | "unnamed_walks_free" -> [ "unnamed_walks_free= " ^ flag (Router.unnamed_walks_free table) ]
   | "free_candidates" -> [ "free_candidates= " ^ String.concat "," (Router.free_candidates table) ]
   | "free_walk" -> [ "free_walk= " ^ String.concat "," (Router.free_walk table) ]
@@ -530,7 +532,9 @@ let router_call (table : Router.search_table) call =
       [
         "rungs= "
         ^ String.concat ","
-            (List.map (fun rung -> rung.Router.name ^ "/" ^ Router.show_rung_status rung.Router.status) rungs);
+            (List.map
+               (fun rung -> rung.Router.name ^ "/" ^ Router.show_rung_status rung.Router.status)
+               rungs);
       ]
   | "fallback_served_notice" ->
       [
@@ -545,9 +549,10 @@ let router_call (table : Router.search_table) call =
         "note= "
         ^ Canon.escape_text
             (Router.fallback_exhausted_note ~failed:(names "failed")
-               ~mode:(if maybe_string "mode" call <> None then Some Router.Free else None))
+               ~mode:(if maybe_string "mode" call <> None then Some Router.Free else None));
       ]
-  | "retry_advice" -> [ "advice= " ^ Canon.escape_text (Router.retry_advice ~quota:(want_bool "quota" call)) ]
+  | "retry_advice" ->
+      [ "advice= " ^ Canon.escape_text (Router.retry_advice ~quota:(want_bool "quota" call)) ]
   | _ -> failwith (Printf.sprintf "router corpus has no fn %S" name)
 
 let fetch_router_call table call =
@@ -558,7 +563,11 @@ let fetch_router_call table call =
   | "provider_names" -> [ "provider_names= " ^ Canon.escape_text (Router.provider_names table) ]
   | "choose_names" -> [ "choose_names= " ^ Canon.escape_text (Router.choose_names table) ]
   | "choose_instead" -> [ "choose_instead= " ^ Canon.escape_text (Router.choose_instead table) ]
-  | "empty_notice" -> [ "empty_notice= " ^ Canon.escape_text (Router.empty_notice table ~walked:(want_bool "walked" call)) ]
+  | "empty_notice" ->
+      [
+        "empty_notice= "
+        ^ Canon.escape_text (Router.empty_notice table ~walked:(want_bool "walked" call));
+      ]
   | "refetched_notice" ->
       [
         "refetched= "
@@ -566,12 +575,16 @@ let fetch_router_call table call =
             (Router.refetched_notice table ~reason:(want_string "reason" call)
                ~fallback:(want_string "fallback" call));
       ]
-  | "not_enabled" -> [ "not_enabled= " ^ Canon.escape_text (Router.not_enabled table (want_string "requested" call)) ]
+  | "not_enabled" ->
+      [
+        "not_enabled= "
+        ^ Canon.escape_text (Router.not_enabled table (want_string "requested" call));
+      ]
   | "resolve_fetch" -> (
       try
-        (match Router.resolve_fetch table (maybe_string "requested" call) with
+        match Router.resolve_fetch table (maybe_string "requested" call) with
         | None -> [ "resolve_fetch= local" ]
-        | Some name -> [ "resolve_fetch= " ^ name ])
+        | Some name -> [ "resolve_fetch= " ^ name ]
       with Router.Route_refused message -> [ "resolve_fetch " ^ refused message ])
   | _ -> failwith (Printf.sprintf "fetch router corpus has no fn %S" name)
 
@@ -583,8 +596,7 @@ let router spec_text =
     | Some (`Assoc fields) -> List.mem_assoc "providers" fields
     | _ -> false
   in
-  if is_search_table
-  then
+  if is_search_table then
     let table = search_table spec in
     List.concat_map (fun call -> router_call table call) calls
   else
@@ -608,11 +620,11 @@ let decode_encode name (body : Yojson.Safe.t) : (Yojson.Safe.t, string) Stdlib.r
   | "search_request" ->
       Result.map Model.search_request_to_yojson (Model.search_request_of_yojson body)
   | "fetch_request" -> Result.map Model.fetch_request_to_yojson (Model.fetch_request_of_yojson body)
-  | "answer_request" -> Result.map Model.answer_request_to_yojson (Model.answer_request_of_yojson body)
+  | "answer_request" ->
+      Result.map Model.answer_request_to_yojson (Model.answer_request_of_yojson body)
   | "answer_response" ->
       Result.map Model.answer_response_to_yojson (Model.answer_response_of_yojson body)
-  | "answer_source" ->
-      Result.map Model.answer_source_to_yojson (Model.answer_source_of_yojson body)
+  | "answer_source" -> Result.map Model.answer_source_to_yojson (Model.answer_source_of_yojson body)
   | "search_query" -> Result.map Model.search_query_to_yojson (Model.search_query_of_yojson body)
   | "provider_result" ->
       Result.map Model.provider_result_to_yojson (Model.provider_result_of_yojson body)
@@ -696,21 +708,24 @@ let error_of_spec provider spec =
   | Some kind -> (
       let message = want_string "message" spec in
       match kind with
-      | "failure" -> Some (Provider.provider_error ~provider ~retryable:(want_bool "retryable" spec) message)
+      | "failure" ->
+          Some (Provider.provider_error ~provider ~retryable:(want_bool "retryable" spec) message)
       | "quota" -> Some (Provider.quota_exhausted ~provider ~message ())
       | _ -> failwith (Printf.sprintf "engine corpus failure kind %S" kind))
 
 let engine_provider_entry spec =
   let name = want_string "name" spec in
   let results =
-    match maybe_objects "results" spec with
-    | None -> []
-    | Some bodies -> List.map hit bodies
+    match maybe_objects "results" spec with None -> [] | Some bodies -> List.map hit bodies
   in
   ( name,
     {
       name;
-      cost = (match member "cost" spec with Some (`Float f) -> f | Some (`Int n) -> float_of_int n | _ -> 0.);
+      cost =
+        (match member "cost" spec with
+        | Some (`Float f) -> f
+        | Some (`Int n) -> float_of_int n
+        | _ -> 0.);
       fail = error_of_spec name spec;
       results;
       answer = maybe_string "answer" spec;
@@ -729,8 +744,14 @@ let engine_config spec =
                 Config.default_provider_config with
                 enabled = want_bool "enabled" entry;
                 cost_per_1k = maybe_float "cost_per_1k" entry;
-                depth = (match maybe_string "depth" entry with Some d -> d | None -> Config.default_provider_config.depth);
-                mode = (match maybe_string "mode" entry with Some m -> m | None -> Config.default_provider_config.mode);
+                depth =
+                  (match maybe_string "depth" entry with
+                  | Some d -> d
+                  | None -> Config.default_provider_config.depth);
+                mode =
+                  (match maybe_string "mode" entry with
+                  | Some m -> m
+                  | None -> Config.default_provider_config.mode);
                 url = maybe_string "url" entry;
               } ))
           members
@@ -762,11 +783,14 @@ let engine_call engine call attempts events =
     {
       Model.query = want_string "query" call;
       max_results = (match maybe_int "max_results" call with Some n -> n | None -> 5);
-      include_domains = (match maybe_strings "include_domains" call with Some xs -> xs | None -> []);
-      exclude_domains = (match maybe_strings "exclude_domains" call with Some xs -> xs | None -> []);
+      include_domains =
+        (match maybe_strings "include_domains" call with Some xs -> xs | None -> []);
+      exclude_domains =
+        (match maybe_strings "exclude_domains" call with Some xs -> xs | None -> []);
       country = maybe_string "country" call;
       language = maybe_string "language" call;
-      recency = (match maybe_string "recency" call with Some s -> recency_of_string s | None -> None);
+      recency =
+        (match maybe_string "recency" call with Some s -> recency_of_string s | None -> None);
       safe_search = maybe_bool "safe_search" call;
     }
   in
@@ -781,14 +805,17 @@ let engine_call engine call attempts events =
           "results=" ^ string_of_int (List.length response.Model.results);
           "titles="
           ^ String.concat ","
-              (List.map (fun (hit : Model.result) -> Canon.escape_text hit.Model.title) response.Model.results);
+              (List.map
+                 (fun (hit : Model.result) -> Canon.escape_text hit.Model.title)
+                 response.Model.results);
           "notice=" ^ opt_value response.Model.notice;
         ]
-    | Error (Engine.Search.Refused message) -> [ "verdict= refused"; "message= " ^ Canon.escape_text message ]
-    | Error (Engine.Search.Failed message) -> [ "verdict= failed"; "message= " ^ Canon.escape_text message ]
+    | Error (Engine.Search.Refused message) ->
+        [ "verdict= refused"; "message= " ^ Canon.escape_text message ]
+    | Error (Engine.Search.Failed message) ->
+        [ "verdict= failed"; "message= " ^ Canon.escape_text message ]
   in
   List.rev (attempt_lines !attempts) @ [ "events= " ^ String.concat "," (List.rev !events) ] @ lines
-
 
 let engine spec_text =
   let spec = read_json spec_text in
@@ -804,7 +831,10 @@ let engine spec_text =
   in
   let log _level event _fields = events := event :: !events in
   let engine =
-    Engine.Search.create config entries ~log ~clock:(fun () -> 1768478400.) ~now:(fun () -> 1768478400.) ()
+    Engine.Search.create config entries ~log
+      ~clock:(fun () -> 1768478400.)
+      ~now:(fun () -> 1768478400.)
+      ()
   in
   let lines =
     List.concat_map
@@ -860,11 +890,7 @@ let provider_query spec =
     safe_search = maybe_bool "safe_search" spec;
   }
 
-type peer_reply = {
-  status : int;
-  body : string;
-  refusal : (unit, Caps.Error.t) result;
-}
+type peer_reply = { status : int; body : string; refusal : (unit, Caps.Error.t) result }
 
 let respond status body = { status; body; refusal = Ok () }
 
@@ -874,7 +900,8 @@ let refuse kind =
   {
     status = 0;
     body = "";
-    refusal = Error (Caps.Error.make kind ~message:(Printf.sprintf "dial failed, key: %s" probe_key));
+    refusal =
+      Error (Caps.Error.make kind ~message:(Printf.sprintf "dial failed, key: %s" probe_key));
   }
 
 let transport_refusal_of = function
@@ -893,13 +920,14 @@ let peer spec =
       match transport_refusal_of kind with
       | Some reply -> fun _ -> reply
       | None -> failwith "unreachable")
-  | None ->
+  | None -> (
       let pages =
         match maybe_objects "pages" spec with
         | None -> []
         | Some items ->
             List.map
-              (fun page -> (want_int "pageno" page, respond (want_int "status" page) (want_string "body" page)))
+              (fun page ->
+                (want_int "pageno" page, respond (want_int "status" page) (want_string "body" page)))
               items
       in
       (* A paging adapter answers from the table; every other case carries one
@@ -910,17 +938,16 @@ let peer spec =
         respond (want_int "status" response) (want_string "body" response)
       in
       if pages = [] then fun _ -> single ()
-      else
-        fun request ->
-          match Uri.get_query_param request.Caps.Authority.Net.uri "pageno" with
-          | Some pageno -> (
-              match int_of_string_opt pageno with
-              | Some number -> (
-                  match List.assoc_opt number pages with
-                  | Some reply -> reply
-                  | None -> failwith (Printf.sprintf "provider corpus has no page %s" pageno))
-              | None -> failwith (Printf.sprintf "provider corpus pageno %S is not a number" pageno))
-          | None -> failwith "provider corpus pages a request with no pageno"
+      else fun request ->
+        match Uri.get_query_param request.Caps.Authority.Net.uri "pageno" with
+        | Some pageno -> (
+            match int_of_string_opt pageno with
+            | Some number -> (
+                match List.assoc_opt number pages with
+                | Some reply -> reply
+                | None -> failwith (Printf.sprintf "provider corpus has no page %s" pageno))
+            | None -> failwith (Printf.sprintf "provider corpus pageno %S is not a number" pageno))
+        | None -> failwith "provider corpus pages a request with no pageno")
 
 let net_of sent replies =
   {
@@ -929,8 +956,7 @@ let net_of sent replies =
         sent := request :: !sent;
         match replies request with
         | { refusal = Error failure; _ } -> Error failure
-        | { status; body; _ } ->
-            Ok { Caps.Authority.Net.status; headers = []; body });
+        | { status; body; _ } -> Ok { Caps.Authority.Net.status; headers = []; body });
   }
 
 let provider_adapter name ~endpoint spec =
@@ -943,13 +969,13 @@ let provider_adapter name ~endpoint spec =
          [index] the path segment, so the projection derives the destination from
          the same spec the Python half hands to its adapter constructor. *)
       fun ~net () ->
-        Seekwright_providers.Algolia.make ~app_id:(want_string "app_id" spec)
-          ~key:probe_key
-          ~endpoint:(Seekwright_providers.Algolia.endpoint_of_deployment
-            ~app_id:(want_string "app_id" spec) ~index:(want_string "index" spec))
-          ?title_attr:(maybe_string "title_attr" spec)
-          ?url_attr:(maybe_string "url_attr" spec)
-          ?snippet_attr:(maybe_string "snippet_attr" spec) ~net ()
+        Seekwright_providers.Algolia.make ~app_id:(want_string "app_id" spec) ~key:probe_key
+          ~endpoint:
+            (Seekwright_providers.Algolia.endpoint_of_deployment ~app_id:(want_string "app_id" spec)
+               ~index:(want_string "index" spec))
+          ?title_attr:(maybe_string "title_attr" spec) ?url_attr:(maybe_string "url_attr" spec)
+          ?snippet_attr:(maybe_string "snippet_attr" spec)
+          ~net ()
   | "tavily" -> fun ~net () -> Seekwright_providers.Tavily.make ~key:probe_key ~net ()
   | "tinyfish" -> fun ~net () -> Seekwright_providers.Tinyfish.make ~key:probe_key ~net ()
   | "linkup" ->
@@ -984,10 +1010,8 @@ let provider_adapter name ~endpoint spec =
          does in the registry row, and [cost_per_1k] tracks it: a dearer mode
          wants the matching config figure, which is what the case carries. *)
       fun ~net () ->
-        Seekwright_providers.Parallel.make
-          ?cost_per_1k:(maybe_float "cost_per_1k" spec)
-          ?text_chars:(maybe_int "text_chars" spec)
-          ?mode:(maybe_string "mode" spec) ~key:probe_key
+        Seekwright_providers.Parallel.make ?cost_per_1k:(maybe_float "cost_per_1k" spec)
+          ?text_chars:(maybe_int "text_chars" spec) ?mode:(maybe_string "mode" spec) ~key:probe_key
           ~now:(fun () ->
             match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
           ~net ()
@@ -1028,9 +1052,12 @@ let redact_key value =
   let out = Buffer.create len in
   let rec walk i =
     if i >= len then Buffer.contents out
-    else if i + klen <= len && String.sub value i klen = probe_key then
-      (Buffer.add_string out "sentinel"; walk (i + klen))
-    else (Buffer.add_char out value.[i]; walk (i + 1))
+    else if i + klen <= len && String.sub value i klen = probe_key then (
+      Buffer.add_string out "sentinel";
+      walk (i + klen))
+    else (
+      Buffer.add_char out value.[i];
+      walk (i + 1))
   in
   walk 0
 
@@ -1040,9 +1067,7 @@ let render_headers (request : Caps.Authority.Net.request) =
        (fun (name, value) ->
          let name = String.lowercase_ascii name in
          name ^ "=" ^ Canon.escape_text (redact_key value))
-       (List.sort
-          (fun (a, _) (b, _) -> String.compare a b)
-          request.Caps.Authority.Net.headers))
+       (List.sort (fun (a, _) (b, _) -> String.compare a b) request.Caps.Authority.Net.headers))
 
 (* The body is re-emitted through the canonical JSON rendering; a GET carries
    none, and the projection says so with [-]. *)
@@ -1071,23 +1096,20 @@ let hit_lines (hit : Provider.hit) =
     "result title=" ^ Canon.escape_text result.title;
     "result url=" ^ Canon.escape_text result.url;
     "result snippet=" ^ opt_value result.snippet;
-    "result uncapped="
-    ^ (match hit.uncapped_chars with Some n -> string_of_int n | None -> "-");
+    ("result uncapped=" ^ match hit.uncapped_chars with Some n -> string_of_int n | None -> "-");
     (* The text half is what a content adapter fills: leaving it out of the
        rendering would leave Tavily's answer surface unpinned. *)
     "result text=" ^ opt_value result.text;
-    "result text_truncated="
-    ^ (match result.text_truncated with Some b -> flag b | None -> "-");
+    ("result text_truncated=" ^ match result.text_truncated with Some b -> flag b | None -> "-");
     "result published_date=" ^ opt_value result.published_date;
-    "result score="
-    ^ (match result.score with Some v -> pct v | None -> "-");
+    ("result score=" ^ match result.score with Some v -> pct v | None -> "-");
   ]
 
 let result_lines (outcome : Provider.outcome) =
   [ "name= " ^ outcome.provider ]
   @ List.concat_map hit_lines outcome.results
   @ [
-      "cost_usd= " ^ (match outcome.cost_usd with Some v -> pct v | None -> "-");
+      ("cost_usd= " ^ match outcome.cost_usd with Some v -> pct v | None -> "-");
       (* The prose half of [tavily] and [linkup]: what the adapter read out of
          the payload, and the dash for the names that have no answer to give. *)
       "answer= " ^ opt_value outcome.answer;
@@ -1100,7 +1122,8 @@ let verdict_lines outcome =
   | Error (failure : Provider.error) ->
       [
         "verdict= error";
-        "kind= " ^ (match failure.kind with Provider.Quota -> "quota" | Provider.Failure -> "failure");
+        ("kind= "
+        ^ match failure.kind with Provider.Quota -> "quota" | Provider.Failure -> "failure");
         "retryable= " ^ flag failure.retryable;
         "message= " ^ Canon.escape_text failure.message;
       ]
@@ -1112,7 +1135,9 @@ let provider_case spec_text =
   let replies = peer spec in
   let net = net_of sent replies in
   let endpoint =
-    match maybe_string "endpoint" spec with Some uri -> Uri.of_string uri | None -> Uri.of_string "http://peer.invalid/"
+    match maybe_string "endpoint" spec with
+    | Some uri -> Uri.of_string uri
+    | None -> Uri.of_string "http://peer.invalid/"
   in
   let adapter = provider_adapter name ~endpoint spec ~net () in
   let outcome = Provider.search adapter (provider_query ("query" $ spec)) in

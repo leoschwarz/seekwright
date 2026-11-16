@@ -15,8 +15,7 @@ let cfg fixture =
 
 let run ?(status = 200) body =
   let fixture = Fix.make [ Fix.Response (status, body) ] in
-  ( fixture,
-    Linkup.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None )
+  (fixture, Linkup.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None)
 
 let request_shape () =
   let fixture, result = run {|{"markdown":"page text"}|} in
@@ -39,29 +38,40 @@ let request_shape () =
 
 let arms () =
   let one status = Fix.show_error (Result.get_error (snd (run ~status "{}"))) in
-  Alcotest.(check string) "401 is the key" (one 401)
+  Alcotest.(check string)
+    "401 is the key" (one 401)
     (Fix.error_case ~kind:"rejected" ~message:"authentication rejected (check API key)");
-  Alcotest.(check string) "403 is the key" (one 403)
+  Alcotest.(check string)
+    "403 is the key" (one 403)
     (Fix.error_case ~kind:"rejected" ~message:"authentication rejected (check API key)");
-  Alcotest.(check string) "429 is the account or the burst" (one 429)
+  Alcotest.(check string)
+    "429 is the account or the burst" (one 429)
     (Fix.error_case ~kind:"quota" ~message:"rate limited or out of credits");
   (* 402 falls to the plain row: it belongs to a lane this tree never
      enters. *)
-  Alcotest.(check string) "402 is not a meter here" (one 402)
+  Alcotest.(check string)
+    "402 is not a meter here" (one 402)
     (Fix.error_case ~kind:"failed" ~message:"HTTP 402");
   Alcotest.(check string) "500" (one 500) (Fix.error_case ~kind:"failed" ~message:"HTTP 500");
   let fixture = Fix.make [] in
-  Alcotest.(check string) "private target"
+  Alcotest.(check string)
+    "private target"
     (Fix.show_error
-       (Result.get_error (Linkup.fetch (cfg fixture) "https://internal.test/x" ~offset:0 ~max_chars:None)))
-    (Fix.error_case ~kind:"url_blocked" ~message:"internal.test resolves to a non-public address (127.0.0.1); fetching private, loopback and link-local addresses is disabled");
+       (Result.get_error
+          (Linkup.fetch (cfg fixture) "https://internal.test/x" ~offset:0 ~max_chars:None)))
+    (Fix.error_case ~kind:"url_blocked"
+       ~message:
+         "internal.test resolves to a non-public address (127.0.0.1); fetching private, loopback \
+          and link-local addresses is disabled");
   Fix.check_no_request fixture "the vendor saw nothing"
 
 let envelope_cases () =
-  Alcotest.(check string) "not JSON"
+  Alcotest.(check string)
+    "not JSON"
     (Fix.show_error (Result.get_error (snd (run "<html>nope</html>"))))
     (Fix.error_case ~kind:"failed" ~message:"malformed JSON response");
-  Alcotest.(check string) "not an object"
+  Alcotest.(check string)
+    "not an object"
     (Fix.show_error (Result.get_error (snd (run "[1,2]"))))
     (Fix.error_case ~kind:"failed" ~message:"malformed JSON response");
   (* An empty [markdown] is a page the service could not read — an empty
@@ -73,7 +83,8 @@ let envelope_cases () =
 
 let timeout_row () =
   let fixture = Fix.make [ Fix.Transport (Caps.Error.make Caps.Error.Timeout ~message:"x") ] in
-  Alcotest.(check string) "timed out"
+  Alcotest.(check string)
+    "timed out"
     (Fix.show_error
        (Result.get_error (Linkup.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None)))
     (Fix.error_case ~kind:"failed" ~message:"request timed out")
@@ -82,10 +93,10 @@ let () =
   Alcotest.run "fallback_linkup"
     [
       ( "linkup",
-          [
-            Alcotest.test_case "request shape" `Quick request_shape;
-            Alcotest.test_case "status arms and the private target" `Quick arms;
-            Alcotest.test_case "envelope mappings" `Quick envelope_cases;
-            Alcotest.test_case "transport timeout" `Quick timeout_row;
-          ] );
+        [
+          Alcotest.test_case "request shape" `Quick request_shape;
+          Alcotest.test_case "status arms and the private target" `Quick arms;
+          Alcotest.test_case "envelope mappings" `Quick envelope_cases;
+          Alcotest.test_case "transport timeout" `Quick timeout_row;
+        ] );
     ]

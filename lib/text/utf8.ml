@@ -13,13 +13,15 @@ let lead_width s i =
   else if c < 0xC2 then 1 (* a continuation byte or an overlong lead *)
   else if c <= 0xDF then if cont (i + 1) 0x80 0xBF then 2 else 1
   else if c <= 0xEF then begin
-    let lo, hi = if c = 0xE0 then (0xA0, 0xBF) else if c = 0xED then (0x80, 0x9F) else (0x80, 0xBF) in
-    if not (cont (i + 1) lo hi) then 1
-    else if cont (i + 2) 0x80 0xBF then 3
-    else 2
+    let lo, hi =
+      if c = 0xE0 then (0xA0, 0xBF) else if c = 0xED then (0x80, 0x9F) else (0x80, 0xBF)
+    in
+    if not (cont (i + 1) lo hi) then 1 else if cont (i + 2) 0x80 0xBF then 3 else 2
   end
   else if c <= 0xF4 then begin
-    let lo, hi = if c = 0xF0 then (0x90, 0xBF) else if c = 0xF4 then (0x80, 0x8F) else (0x80, 0xBF) in
+    let lo, hi =
+      if c = 0xF0 then (0x90, 0xBF) else if c = 0xF4 then (0x80, 0x8F) else (0x80, 0xBF)
+    in
     if not (cont (i + 1) lo hi) then 1
     else if not (cont (i + 2) 0x80 0xBF) then 2
     else if cont (i + 3) 0x80 0xBF then 4
@@ -53,8 +55,7 @@ let count s =
   done;
   !n
 
-let slices s =
-  Array.of_list (List.map (fun cp -> String.sub s cp.idx cp.width) (codepoints s))
+let slices s = Array.of_list (List.map (fun cp -> String.sub s cp.idx cp.width) (codepoints s))
 
 let take limit s =
   let target = max limit 0 in
@@ -75,11 +76,8 @@ let of_string s =
     let next = next_index s !i in
     let cp =
       match next - !i with
-      | 1 ->
-          if Char.code s.[!i] < 0x80 then Char.code s.[!i] else 0xFFFD
-      | 2 ->
-          ((Char.code s.[!i] land 0x1f) lsl 6)
-          lor (Char.code s.[!i + 1] land 0x3f)
+      | 1 -> if Char.code s.[!i] < 0x80 then Char.code s.[!i] else 0xFFFD
+      | 2 -> ((Char.code s.[!i] land 0x1f) lsl 6) lor (Char.code s.[!i + 1] land 0x3f)
       | 3 ->
           ((Char.code s.[!i] land 0x0f) lsl 12)
           lor ((Char.code s.[!i + 1] land 0x3f) lsl 6)
@@ -95,25 +93,22 @@ let of_string s =
   done;
   Array.of_list (List.rev !cps)
 
-let utf8_width cp =
-  if cp < 0x80 then 1 else if cp < 0x800 then 2 else if cp < 0x10000 then 3 else 4
+let utf8_width cp = if cp < 0x80 then 1 else if cp < 0x800 then 2 else if cp < 0x10000 then 3 else 4
 
 let encode cp =
   String.init (utf8_width cp) (fun i ->
-    match utf8_width cp with
-    | 1 -> Char.chr cp
-    | 2 ->
-        if i = 0 then Char.chr (0xc0 lor (cp lsr 6))
-        else Char.chr (0x80 lor (cp land 0x3f))
-    | 3 ->
-        if i = 0 then Char.chr (0xe0 lor (cp lsr 12))
-        else if i = 1 then Char.chr (0x80 lor ((cp lsr 6) land 0x3f))
-        else Char.chr (0x80 lor (cp land 0x3f))
-    | _ ->
-        if i = 0 then Char.chr (0xf0 lor (cp lsr 18))
-        else if i = 1 then Char.chr (0x80 lor ((cp lsr 12) land 0x3f))
-        else if i = 2 then Char.chr (0x80 lor ((cp lsr 6) land 0x3f))
-        else Char.chr (0x80 lor (cp land 0x3f)))
+      match utf8_width cp with
+      | 1 -> Char.chr cp
+      | 2 -> if i = 0 then Char.chr (0xc0 lor (cp lsr 6)) else Char.chr (0x80 lor (cp land 0x3f))
+      | 3 ->
+          if i = 0 then Char.chr (0xe0 lor (cp lsr 12))
+          else if i = 1 then Char.chr (0x80 lor ((cp lsr 6) land 0x3f))
+          else Char.chr (0x80 lor (cp land 0x3f))
+      | _ ->
+          if i = 0 then Char.chr (0xf0 lor (cp lsr 18))
+          else if i = 1 then Char.chr (0x80 lor ((cp lsr 12) land 0x3f))
+          else if i = 2 then Char.chr (0x80 lor ((cp lsr 6) land 0x3f))
+          else Char.chr (0x80 lor (cp land 0x3f)))
 
 let to_string cps =
   let bytes = Array.fold_left (fun acc cp -> acc + utf8_width cp) 0 cps in
@@ -141,8 +136,9 @@ let to_string cps =
 
 let is_python_space cp =
   match cp with
-  | 0x09 | 0x0a | 0x0b | 0x0c | 0x0d | 0x20 | 0x1c | 0x1d | 0x1e | 0x1f | 0x85
-  | 0xa0 | 0x1680 | 0x2028 | 0x2029 | 0x202f | 0x205f | 0x3000 -> true
+  | 0x09 | 0x0a | 0x0b | 0x0c | 0x0d | 0x20 | 0x1c | 0x1d | 0x1e | 0x1f | 0x85 | 0xa0 | 0x1680
+  | 0x2028 | 0x2029 | 0x202f | 0x205f | 0x3000 ->
+      true
   | cp -> cp >= 0x2000 && cp <= 0x200a
 
 let lstrip s =
@@ -172,12 +168,12 @@ let split_whitespace s =
   let start = ref 0 in
   let in_word = ref false in
   for i = 0 to n - 1 do
-    if is_python_space a.(i) then begin
-      if !in_word then begin
+    if is_python_space a.(i) then
+      begin if !in_word then begin
         words := to_string (Array.sub a !start (i - !start)) :: !words;
         in_word := false
       end
-    end
+      end
     else if not !in_word then begin
       in_word := true;
       start := i
@@ -199,9 +195,7 @@ let splitlines cps =
   while !i < n do
     let cp = cps.(!i) in
     if is_line_boundary cp then begin
-      let stop =
-        if cp = 0x0d && !i + 1 < n && cps.(!i + 1) = 0x0a then !i + 2 else !i + 1
-      in
+      let stop = if cp = 0x0d && !i + 1 < n && cps.(!i + 1) = 0x0a then !i + 2 else !i + 1 in
       lines := Array.sub cps !start (!i - !start) :: !lines;
       start := stop;
       i := stop
@@ -211,5 +205,4 @@ let splitlines cps =
   if !start < n then lines := Array.sub cps !start (n - !start) :: !lines;
   List.rev !lines
 
-let ascii_lower cps =
-  Array.map (fun cp -> if cp >= 0x41 && cp <= 0x5a then cp + 0x20 else cp) cps
+let ascii_lower cps = Array.map (fun cp -> if cp >= 0x41 && cp <= 0x5a then cp + 0x20 else cp) cps

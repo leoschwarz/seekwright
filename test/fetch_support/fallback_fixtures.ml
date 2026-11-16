@@ -6,9 +6,7 @@ module Caps = Mcp_caps
 module Fallback = Seekwright_fetch.Fallback
 module Remote_target = Seekwright_fetch.Remote_target
 
-type outcome =
-  | Response of int * string
-  | Transport of Caps.Error.t
+type outcome = Response of int * string | Transport of Caps.Error.t
 
 type recorded = {
   meth : Caps.Policy_net.method_;
@@ -19,10 +17,7 @@ type recorded = {
 
 (* The suites are single-threaded, so plain cells: what matters is what was
    recorded and what the script answers, not safe publication. *)
-type t = {
-  mutable requests : recorded list;
-  mutable script : outcome list;
-}
+type t = { mutable requests : recorded list; mutable script : outcome list }
 
 let make script = { requests = []; script }
 
@@ -40,14 +35,14 @@ let pop_answer t =
 (* Newest first; [requests] reverses, so a case that issues two sees them in
    the order they were sent. *)
 let record t request =
-  t.requests
-  <- {
-       meth = request.Caps.Authority.Net.meth;
-       uri = Uri.to_string request.Caps.Authority.Net.uri;
-       headers = request.headers;
-       body = request.body;
-     }
-     :: t.requests
+  t.requests <-
+    {
+      meth = request.Caps.Authority.Net.meth;
+      uri = Uri.to_string request.Caps.Authority.Net.uri;
+      headers = request.headers;
+      body = request.body;
+    }
+    :: t.requests
 
 let net t =
   {
@@ -55,8 +50,7 @@ let net t =
       (fun ~max_response_bytes:_ request ->
         record t request;
         match pop_answer t with
-        | Response (status, body) ->
-            Ok { Caps.Authority.Net.status; headers = []; body }
+        | Response (status, body) -> Ok { Caps.Authority.Net.status; headers = []; body }
         | Transport error -> Error error);
   }
 
@@ -91,8 +85,7 @@ module Scripted_resolver = struct
 end
 
 let remote_target () =
-  Remote_target.make
-    (Eio.Resource.T ((), Eio.Net.Pi.network (module Scripted_resolver)))
+  Remote_target.make (Eio.Resource.T ((), Eio.Net.Pi.network (module Scripted_resolver)))
 
 let public_url = "https://public.test/page"
 
@@ -126,7 +119,8 @@ let testable_string = Alcotest.string
 let check_request t expected =
   match requests t with
   | [ got ] ->
-      Alcotest.(check string) "method"
+      Alcotest.(check string)
+        "method"
         (show_recorded { got with headers = []; body = None; uri = "" })
         (show_recorded { expected with headers = []; body = None; uri = "" });
       Alcotest.(check string) "uri" got.uri expected.uri;
@@ -135,9 +129,7 @@ let check_request t expected =
       Alcotest.(check (option testable_string)) "body" got.body expected.body
   | [] -> Alcotest.fail "no request was sent"
   | many ->
-      Alcotest.failf "%d requests were sent; expected exactly one: %s"
-        (List.length many)
+      Alcotest.failf "%d requests were sent; expected exactly one: %s" (List.length many)
         (String.concat " | " (List.map show_recorded many))
 
-let check_no_request t label =
-  Alcotest.(check int) label 0 (List.length (requests t))
+let check_no_request t label = Alcotest.(check int) label 0 (List.length (requests t))

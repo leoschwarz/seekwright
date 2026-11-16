@@ -2,9 +2,8 @@
 
     Endpoint: [GET https://scrappa.co/api/search-light] with API key header.
 
-    Billed flat per request. Result count is capped at 20. Supports domains via
-    site operators, country ([gl]), language ([hl]), recency ([dateRestrict]), and
-    safe search ([safe]).
+    Billed flat per request. Result count is capped at 20. Supports domains via site operators,
+    country ([gl]), language ([hl]), recency ([dateRestrict]), and safe search ([safe]).
 
     402 or 429 indicates credit exhaustion or rate limiting. *)
 

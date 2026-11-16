@@ -37,8 +37,7 @@ let markers prose =
       done;
       let run = !j - (!i + 1) in
       if
-        run >= 1 && run <= 32 && !j < n && prose.[!j] = ']'
-        && (!j + 1 >= n || prose.[!j + 1] <> '(')
+        run >= 1 && run <= 32 && !j < n && prose.[!j] = ']' && (!j + 1 >= n || prose.[!j + 1] <> '(')
       then begin
         acc := String.sub prose (!i + 1) run :: !acc;
         i := !j + 1
@@ -49,22 +48,16 @@ let markers prose =
   done;
   List.rev !acc
 
-let has_whitespace s =
-  Array.exists Utf8.is_python_space (Utf8.of_string s)
+let has_whitespace s = Array.exists Utf8.is_python_space (Utf8.of_string s)
 
 let is_all_digits s =
   s <> ""
-  && (let ok = ref true in
-      String.iter (fun c -> if c < '0' || c > '9' then ok := false) s;
-      !ok)
+  &&
+  let ok = ref true in
+  String.iter (fun c -> if c < '0' || c > '9' then ok := false) s;
+  !ok
 
-type material = {
-  index : int;
-  title : string;
-  url : string;
-  provider : string;
-  text : string;
-}
+type material = { index : int; title : string; url : string; provider : string; text : string }
 (** One numbered item handed to the model, kept for citation validation. *)
 
 type tally = {
@@ -79,15 +72,10 @@ type tally = {
   mutable cited_invalid : int;
   mutable sources : int;
 }
-(** What the call got through, updated as the plan runs rather than assembled at
-    the end: a call that dies at the model still records the retrieval it paid
-    for. *)
+(** What the call got through, updated as the plan runs rather than assembled at the end: a call
+    that dies at the model still records the retrieval it paid for. *)
 
-type plan = {
-  items : material list;
-  rendered : string;
-  mutable notices : string list;
-}
+type plan = { items : material list; rendered : string; mutable notices : string list }
 
 type completion = {
   prose : string;
@@ -96,11 +84,7 @@ type completion = {
   completion_tokens : int option;
 }
 
-type citations = {
-  cited : int;
-  cited_invalid : int;
-  sources : Model.answer_source list;
-}
+type citations = { cited : int; cited_invalid : int; sources : Model.answer_source list }
 
 type failure =
   | Agent_failed of string
@@ -124,7 +108,7 @@ let create config ~net engine ?fetch_engine ?usage ?log ~clock ~now () =
     engine;
     fetch_engine;
     usage;
-    log = (match log with Some log -> log | None -> (fun _ _ _ -> ()));
+    log = (match log with Some log -> log | None -> fun _ _ _ -> ());
     clock;
     now;
   }
@@ -142,8 +126,8 @@ let failure_class = function Agent_failed _ -> "AgentFailed" | Timed_out _ -> "T
 let failure_message (settings : Config.agent_config) = function
   | Agent_failed message -> message
   | Timed_out phase ->
-    Printf.sprintf "The answer call exceeded %gs while %s; no answer was produced."
-      settings.Config.timeout_seconds phase
+      Printf.sprintf "The answer call exceeded %gs while %s; no answer was produced."
+        settings.Config.timeout_seconds phase
 
 let spent t = match t.usage with None -> 0.0 | Some usage -> Usage.search_cost_usd usage
 
@@ -153,24 +137,26 @@ let output_cap (settings : Config.agent_config) depth =
   | Model.Brief -> settings.Config.max_output_tokens_brief
 
 let worst_case_model_cost (settings : Config.agent_config) depth =
-  match settings.Config.cost_per_1k_in, settings.Config.cost_per_1k_out with
+  match (settings.Config.cost_per_1k_in, settings.Config.cost_per_1k_out) with
   | Some cost_in, Some cost_out ->
-    (float_of_int settings.Config.max_material_chars /. chars_per_token /. 1000. *. cost_in)
-    +. (float_of_int (output_cap settings depth) /. 1000. *. cost_out)
+      (float_of_int settings.Config.max_material_chars /. chars_per_token /. 1000. *. cost_in)
+      +. (float_of_int (output_cap settings depth) /. 1000. *. cost_out)
   | _ -> 0.0
 
 let model_cost (settings : Config.agent_config) (tally : tally) =
   match
-    tally.prompt_tokens, tally.completion_tokens, settings.Config.cost_per_1k_in,
-    settings.Config.cost_per_1k_out
+    ( tally.prompt_tokens,
+      tally.completion_tokens,
+      settings.Config.cost_per_1k_in,
+      settings.Config.cost_per_1k_out )
   with
   | Some prompt, Some completion, Some cost_in, Some cost_out ->
-    Some (float_of_int prompt /. 1000. *. cost_in +. (float_of_int completion /. 1000. *. cost_out))
+      Some
+        ((float_of_int prompt /. 1000. *. cost_in) +. (float_of_int completion /. 1000. *. cost_out))
   | _ -> None
 
 let timeout_failure t (settings : Config.agent_config) ~started phase =
-  if t.clock () -. started > settings.Config.timeout_seconds then Some (Timed_out phase)
-  else None
+  if t.clock () -. started > settings.Config.timeout_seconds then Some (Timed_out phase) else None
 
 let partial_notice total failed empty =
   let steps = List.map (Printf.sprintf "step %d") in
@@ -183,49 +169,53 @@ let partial_notice total failed empty =
   in
   Printf.sprintf "%d of %d retrieval steps returned results (%s)"
     (total - List.length failed - List.length empty)
-    total (String.concat "; " (List.rev detail))
+    total
+    (String.concat "; " (List.rev detail))
 
 let read_pages t hits ~run ~tally ~notices =
   let texts = Array.make (List.length hits) None in
   match t.fetch_engine with
   | None ->
-    notices
-    := !notices
-       @ [
-           "no pages could be read (this server has the fetch tool disabled), so the answer is grounded in search snippets alone";
-         ];
-    Array.to_list texts
+      notices :=
+        !notices
+        @ [
+            "no pages could be read (this server has the fetch tool disabled), so the answer is \
+             grounded in search snippets alone";
+          ];
+      Array.to_list texts
   | Some engine ->
-    let attempts = ref 0 in
-    let skipped = ref 0 in
-    List.iteri
-      (fun index ((result : Model.result), _provider) ->
-        match result.Model.text with
-        | Some text when text <> "" -> texts.(index) <- Some text
-        | _ ->
-          if !attempts < pages_per_report then begin
-            incr attempts;
-            match
-              Engine.Fetch.fetch engine ~auto_fallback:true ~run ~step:!attempts result.Model.url
-            with
-            | Error _ -> incr skipped
-            | Ok page ->
-              (match page.Model.text with
-              | Some text when text <> "" && Utf8.strip text <> "" ->
-                texts.(index) <- Some text;
-                tally.fetched <- tally.fetched + 1
-              | _ -> incr skipped)
-          end)
-      hits;
-    if !skipped > 0 then
-      notices
-      := !notices
-         @ [
-             Printf.sprintf
-               "%d of %d pages could not be read; the answer is grounded in the rest of the material"
-               !skipped !attempts;
-           ];
-    Array.to_list texts
+      let attempts = ref 0 in
+      let skipped = ref 0 in
+      List.iteri
+        (fun index ((result : Model.result), _provider) ->
+          match result.Model.text with
+          | Some text when text <> "" -> texts.(index) <- Some text
+          | _ ->
+              if !attempts < pages_per_report then begin
+                incr attempts;
+                match
+                  Engine.Fetch.fetch engine ~auto_fallback:true ~run ~step:!attempts
+                    result.Model.url
+                with
+                | Error _ -> incr skipped
+                | Ok page -> (
+                    match page.Model.text with
+                    | Some text when text <> "" && Utf8.strip text <> "" ->
+                        texts.(index) <- Some text;
+                        tally.fetched <- tally.fetched + 1
+                    | _ -> incr skipped)
+              end)
+        hits;
+      if !skipped > 0 then
+        notices :=
+          !notices
+          @ [
+              Printf.sprintf
+                "%d of %d pages could not be read; the answer is grounded in the rest of the \
+                 material"
+                !skipped !attempts;
+            ];
+      Array.to_list texts
 
 let assemble t hits texts =
   let cap = t.config.Config.agent.Config.max_material_chars in
@@ -233,36 +223,38 @@ let assemble t hits texts =
   let blocks = ref [] in
   let used = ref 0 in
   let rec go hits texts =
-    match hits, texts with
+    match (hits, texts) with
     | ((result : Model.result), provider) :: hrest, text :: trest ->
-      let body =
-        match text with
-        | Some text -> text
-        | None -> (
-          match result.Model.text with
-          | Some text when text <> "" -> text
-          | _ -> (match result.Model.snippet with Some snippet -> snippet | None -> ""))
-      in
-      let header =
-        Printf.sprintf "[%d] %s\n%s\n" (List.length !items + 1) result.Model.title result.Model.url
-      in
-      let room = cap - !used - Utf8.count header in
-      if room <= 0 then ()
-      else begin
-        let clipped = Utf8.take room body in
-        items
-        := {
-             index = List.length !items + 1;
-             title = result.Model.title;
-             url = result.Model.url;
-             provider;
-             text = clipped;
-           }
-           :: !items;
-        blocks := (header ^ clipped) :: !blocks;
-        used := !used + Utf8.count header + Utf8.count clipped;
-        if Utf8.count clipped < Utf8.count body then () else go hrest trest
-      end
+        let body =
+          match text with
+          | Some text -> text
+          | None -> (
+              match result.Model.text with
+              | Some text when text <> "" -> text
+              | _ -> ( match result.Model.snippet with Some snippet -> snippet | None -> ""))
+        in
+        let header =
+          Printf.sprintf "[%d] %s\n%s\n"
+            (List.length !items + 1)
+            result.Model.title result.Model.url
+        in
+        let room = cap - !used - Utf8.count header in
+        if room <= 0 then ()
+        else begin
+          let clipped = Utf8.take room body in
+          items :=
+            {
+              index = List.length !items + 1;
+              title = result.Model.title;
+              url = result.Model.url;
+              provider;
+              text = clipped;
+            }
+            :: !items;
+          blocks := (header ^ clipped) :: !blocks;
+          used := !used + Utf8.count header + Utf8.count clipped;
+          if Utf8.count clipped < Utf8.count body then () else go hrest trest
+        end
     | _ -> ()
   in
   go hits texts;
@@ -274,7 +266,8 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
   let queries =
     match depth with
     | Model.Report -> query :: (match extra_queries with None -> [] | Some qs -> qs)
-    | Model.Brief -> [ query ]  (* [brief] is one search by contract *)
+    | Model.Brief -> [ query ]
+    (* [brief] is one search by contract *)
   in
   let responses = ref [] in
   let failed = ref [] in
@@ -284,142 +277,152 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
   let rec walk step = function
     | [] -> Ok ()
     | text :: rest -> (
-      match timeout_failure t settings ~started "retrieving" with
-      | Some failure -> Error failure
-      | None ->
-        let before = spent t in
-        tally.searches <- tally.searches + 1;
-        let search_query : Model.search_query =
-          {
-            Model.query = text;
-            max_results = results_per_query;
-            include_domains = (match include_domains with None -> [] | Some domains -> domains);
-            exclude_domains = (match exclude_domains with None -> [] | Some domains -> domains);
-            country = None;
-            language;
-            recency;
-            safe_search;
-          }
-        in
-        match Engine.Search.search t.engine ?provider ~run ~step search_query with
-        | Error (Engine.Search.Refused sentence) | Error (Engine.Search.Failed sentence) ->
-          failed := step :: !failed;
-          if !first_failure = None then first_failure := Some sentence;
-          walk (step + 1) rest
-        | Ok response ->
-          responses := response :: !responses;
-          if response.Model.results = [] then empty := step :: !empty;
-          spent_total := !spent_total +. (spent t -. before);
-          (match settings.Config.max_cost_usd with
-          | Some ceiling
-            when !spent_total +. worst_case_model_cost settings depth > ceiling ->
-            Error
-              (Agent_failed
-                 (Printf.sprintf
-                    "Retrieval spend reached $%.4f after step %d and the model call could push the total past the $%.2f per-call ceiling (agent.max_cost_usd); the call was aborted."
-                    !spent_total step ceiling))
-          | _ -> walk (step + 1) rest))
+        match timeout_failure t settings ~started "retrieving" with
+        | Some failure -> Error failure
+        | None -> (
+            let before = spent t in
+            tally.searches <- tally.searches + 1;
+            let search_query : Model.search_query =
+              {
+                Model.query = text;
+                max_results = results_per_query;
+                include_domains =
+                  (match include_domains with None -> [] | Some domains -> domains);
+                exclude_domains =
+                  (match exclude_domains with None -> [] | Some domains -> domains);
+                country = None;
+                language;
+                recency;
+                safe_search;
+              }
+            in
+            match Engine.Search.search t.engine ?provider ~run ~step search_query with
+            | Error (Engine.Search.Refused sentence) | Error (Engine.Search.Failed sentence) ->
+                failed := step :: !failed;
+                if !first_failure = None then first_failure := Some sentence;
+                walk (step + 1) rest
+            | Ok response -> (
+                responses := response :: !responses;
+                if response.Model.results = [] then empty := step :: !empty;
+                spent_total := !spent_total +. (spent t -. before);
+                match settings.Config.max_cost_usd with
+                | Some ceiling when !spent_total +. worst_case_model_cost settings depth > ceiling
+                  ->
+                    Error
+                      (Agent_failed
+                         (Printf.sprintf
+                            "Retrieval spend reached $%.4f after step %d and the model call could \
+                             push the total past the $%.2f per-call ceiling (agent.max_cost_usd); \
+                             the call was aborted."
+                            !spent_total step ceiling))
+                | _ -> walk (step + 1) rest)))
   in
   match walk 1 queries with
   | Error failure -> Error failure
   | Ok () ->
-    let responses = List.rev !responses in
-    let failed = List.rev !failed in
-    let empty = List.rev !empty in
-    let zero_results =
-      Error
-        (Agent_failed
-           (Option.value
-              (List.find_map (fun (r : Model.search_response) -> r.Model.notice) responses)
-              ~default:"No results were returned for this question; retry or rephrase."))
-    in
-    if responses = [] then
-      match !first_failure with
-      | Some failure ->
-          Error (Agent_failed failure)
-      | None -> zero_results
-    else if not (List.exists (fun (r : Model.search_response) -> r.Model.results <> []) responses)
-    then zero_results
-    else begin
-      let notices =
-        if failed <> [] || empty <> [] then [ partial_notice (List.length queries) failed empty ]
-        else []
-      in
-      let hits =
-        List.concat_map
-          (fun (r : Model.search_response) ->
-            List.map (fun result -> (result, r.Model.provider)) r.Model.results)
-          responses
-      in
-      tally.results <- List.length hits;
-      let notices_ref = ref notices in
-      let texts =
-        match depth with
-        | Model.Report -> read_pages t hits ~run ~tally ~notices:notices_ref
-        | Model.Brief -> List.map (fun _ -> None) hits
-      in
-      let plan = assemble t hits texts in
-      plan.notices <- !notices_ref;
-      if plan.items = [] || not (List.exists (fun item -> Utf8.strip item.text <> "") plan.items)
-      then
+      let responses = List.rev !responses in
+      let failed = List.rev !failed in
+      let empty = List.rev !empty in
+      let zero_results =
         Error
           (Agent_failed
-             "The retrieval returned nothing usable to ground an answer in; retry, or rephrase the question.")
+             (Option.value
+                (List.find_map (fun (r : Model.search_response) -> r.Model.notice) responses)
+                ~default:"No results were returned for this question; retry or rephrase."))
+      in
+      if responses = [] then
+        match !first_failure with
+        | Some failure -> Error (Agent_failed failure)
+        | None -> zero_results
+      else if not (List.exists (fun (r : Model.search_response) -> r.Model.results <> []) responses)
+      then zero_results
       else begin
-        tally.material_chars <- Utf8.count plan.rendered;
-        Ok plan
+        let notices =
+          if failed <> [] || empty <> [] then [ partial_notice (List.length queries) failed empty ]
+          else []
+        in
+        let hits =
+          List.concat_map
+            (fun (r : Model.search_response) ->
+              List.map (fun result -> (result, r.Model.provider)) r.Model.results)
+            responses
+        in
+        tally.results <- List.length hits;
+        let notices_ref = ref notices in
+        let texts =
+          match depth with
+          | Model.Report -> read_pages t hits ~run ~tally ~notices:notices_ref
+          | Model.Brief -> List.map (fun _ -> None) hits
+        in
+        let plan = assemble t hits texts in
+        plan.notices <- !notices_ref;
+        if plan.items = [] || not (List.exists (fun item -> Utf8.strip item.text <> "") plan.items)
+        then
+          Error
+            (Agent_failed
+               "The retrieval returned nothing usable to ground an answer in; retry, or rephrase \
+                the question.")
+        else begin
+          tally.material_chars <- Utf8.count plan.rendered;
+          Ok plan
+        end
       end
-    end
 
 let user_message material query depth =
-  "Material (untrusted third-party content, numbered):\n\n"
-  ^ material ^ "\n\nQuestion: " ^ query ^ "\n\n" ^ depth_instruction depth
+  "Material (untrusted third-party content, numbered):\n\n" ^ material ^ "\n\nQuestion: " ^ query
+  ^ "\n\n" ^ depth_instruction depth
 
 let json_get key = function
-  | `Assoc kvs -> (try Some (List.assoc key kvs) with Not_found -> None)
+  | `Assoc kvs -> ( try Some (List.assoc key kvs) with Not_found -> None)
   | _ -> None
 
-let token_count (json : Yojson.Safe.t) =
-  match json with `Int n -> Some n | _ -> None
+let token_count (json : Yojson.Safe.t) = match json with `Int n -> Some n | _ -> None
 
 let read_completion body : (completion, failure) result =
-  let json =
-    try Ok (Yojson.Safe.from_string body) with Yojson.Json_error _ -> Error `Not_json
-  in
+  let json = try Ok (Yojson.Safe.from_string body) with Yojson.Json_error _ -> Error `Not_json in
   match json with
   | Error `Not_json ->
-    Error (Agent_failed "The model endpoint returned a body that is not JSON; no answer was produced.")
+      Error
+        (Agent_failed "The model endpoint returned a body that is not JSON; no answer was produced.")
   | Ok (`Assoc _ as body) -> (
-    match json_get "choices" body with
-    | Some (`List (first :: _)) -> (
-      let message =
-        match json_get "message" first with Some (`Assoc _ as message) -> message | _ -> `Assoc []
-      in
-      match json_get "content" message with
-      | Some (`String content) when Utf8.strip content <> "" ->
-        let usage =
-          match json_get "usage" body with Some (`Assoc _ as usage) -> usage | _ -> `Assoc []
-        in
-        Ok
-          {
-            prose = Utf8.strip content;
-            truncated = json_get "finish_reason" first = Some (`String "length");
-            prompt_tokens = Option.bind (json_get "prompt_tokens" usage) token_count;
-            completion_tokens = Option.bind (json_get "completion_tokens" usage) token_count;
-          }
+      match json_get "choices" body with
+      | Some (`List (first :: _)) -> (
+          let message =
+            match json_get "message" first with
+            | Some (`Assoc _ as message) -> message
+            | _ -> `Assoc []
+          in
+          match json_get "content" message with
+          | Some (`String content) when Utf8.strip content <> "" ->
+              let usage =
+                match json_get "usage" body with
+                | Some (`Assoc _ as usage) -> usage
+                | _ -> `Assoc []
+              in
+              Ok
+                {
+                  prose = Utf8.strip content;
+                  truncated = json_get "finish_reason" first = Some (`String "length");
+                  prompt_tokens = Option.bind (json_get "prompt_tokens" usage) token_count;
+                  completion_tokens = Option.bind (json_get "completion_tokens" usage) token_count;
+                }
+          | _ ->
+              Error
+                (Agent_failed
+                   "The model returned no prose for this question; no answer was produced."))
       | _ ->
-        Error (Agent_failed "The model returned no prose for this question; no answer was produced."))
-    | _ ->
-      Error (Agent_failed "The model endpoint returned no completion; no answer was produced."))
+          Error (Agent_failed "The model endpoint returned no completion; no answer was produced."))
   | Ok _ ->
-    Error (Agent_failed "The model endpoint returned an unexpected body; no answer was produced.")
+      Error (Agent_failed "The model endpoint returned an unexpected body; no answer was produced.")
 
 let complete t ~material ~query ~depth : (completion, failure) result =
   let settings = t.config.Config.agent in
   let model_name = Option.value ~default:"" settings.Config.model in
   let base_url = Option.value ~default:"" settings.Config.base_url in
   let rec rstrip i = if i > 0 && base_url.[i - 1] = '/' then rstrip (i - 1) else i in
-  let uri = Uri.of_string (String.sub base_url 0 (rstrip (String.length base_url)) ^ "/chat/completions") in
+  let uri =
+    Uri.of_string (String.sub base_url 0 (rstrip (String.length base_url)) ^ "/chat/completions")
+  in
   let payload : Yojson.Safe.t =
     `Assoc
       [
@@ -429,7 +432,9 @@ let complete t ~material ~query ~depth : (completion, failure) result =
             [
               `Assoc [ ("role", `String "system"); ("content", `String answer_system_prompt) ];
               `Assoc
-                [ ("role", `String "user"); ("content", `String (user_message material query depth)) ];
+                [
+                  ("role", `String "user"); ("content", `String (user_message material query depth));
+                ];
             ] );
         ("temperature", `Float temperature);
         ("max_tokens", `Int (output_cap settings depth));
@@ -450,25 +455,26 @@ let complete t ~material ~query ~depth : (completion, failure) result =
   in
   match t.net.Provider.Net.request request with
   | Error error -> (
-    match Mcp_caps.Error.kind error with
-    | Mcp_caps.Error.Timeout ->
-      Error
-        (Agent_failed
-           (Printf.sprintf "The model (%s) did not answer within %gs; no answer was produced."
-              model_name settings.Config.model_timeout_seconds))
-    | kind ->
-      Error
-        (Agent_failed
-           (Printf.sprintf "The model endpoint could not be reached (%s); no answer was produced."
-              (String.capitalize_ascii (Mcp_caps.Error.kind_to_string kind)))))
+      match Mcp_caps.Error.kind error with
+      | Mcp_caps.Error.Timeout ->
+          Error
+            (Agent_failed
+               (Printf.sprintf "The model (%s) did not answer within %gs; no answer was produced."
+                  model_name settings.Config.model_timeout_seconds))
+      | kind ->
+          Error
+            (Agent_failed
+               (Printf.sprintf
+                  "The model endpoint could not be reached (%s); no answer was produced."
+                  (String.capitalize_ascii (Mcp_caps.Error.kind_to_string kind)))))
   | Ok response ->
-    let (response : Mcp_caps.Authority.Net.response) = response in
-    if response.status <> 200 then
-      Error
-        (Agent_failed
-           (Printf.sprintf "The model endpoint (%s) returned HTTP %d; no answer was produced."
-              model_name response.status))
-    else read_completion response.body
+      let (response : Mcp_caps.Authority.Net.response) = response in
+      if response.status <> 200 then
+        Error
+          (Agent_failed
+             (Printf.sprintf "The model endpoint (%s) returned HTTP %d; no answer was produced."
+                model_name response.status))
+      else read_completion response.body
 
 let cite prose items =
   let count = List.length items in
@@ -483,18 +489,18 @@ let cite prose items =
       else if is_all_digits token then
         match int_of_string_opt token with
         | Some index when index >= 1 && index <= count ->
-          let item = List.nth items (index - 1) in
-          if not (List.mem item.index !cited) then cited := item.index :: !cited;
-          if not (List.mem item.url !seen_urls) then begin
-            seen_urls := item.url :: !seen_urls;
-            sources
-            := {
-                 Model.source_title = item.title;
-                 source_url = item.url;
-                 source_provider = item.provider;
-               }
-               :: !sources
-          end
+            let item = List.nth items (index - 1) in
+            if not (List.mem item.index !cited) then cited := item.index :: !cited;
+            if not (List.mem item.url !seen_urls) then begin
+              seen_urls := item.url :: !seen_urls;
+              sources :=
+                {
+                  Model.source_title = item.title;
+                  source_url = item.url;
+                  source_provider = item.provider;
+                }
+                :: !sources
+            end
         | _ -> incr invalid
       else incr invalid)
     (markers prose);
@@ -503,15 +509,16 @@ let cite prose items =
 let citation_notices (citations : citations) =
   let notices = ref [] in
   if citations.cited_invalid = 1 then
-    notices
-    := "the answer cites 1 index that is not in the retrieved material; that citation was dropped from `sources`"
-       :: !notices
+    notices :=
+      "the answer cites 1 index that is not in the retrieved material; that citation was dropped \
+       from `sources`" :: !notices
   else if citations.cited_invalid > 1 then
-    notices
-    := Printf.sprintf
-         "the answer cites %d indices that are not in the retrieved material; those citations were dropped from `sources`"
-         citations.cited_invalid
-       :: !notices;
+    notices :=
+      Printf.sprintf
+        "the answer cites %d indices that are not in the retrieved material; those citations were \
+         dropped from `sources`"
+        citations.cited_invalid
+      :: !notices;
   if citations.cited = 0 then
     notices := "the answer carries no citations; read it against `sources`" :: !notices;
   List.rev !notices
@@ -522,12 +529,12 @@ let record t ~tally ~run ~depth ~started ?error ?notice ?sanitized () =
   let model_cost = model_cost settings tally in
   (match t.usage with
   | Some usage ->
-    Usage.record_answer usage ~run ~model:settings.Config.model ~depth:(depth_string depth)
-      ~searches:tally.searches ~results:tally.results ~fetched:tally.fetched
-      ~material_chars:tally.material_chars ~prompt_tokens:tally.prompt_tokens
-      ~completion_tokens:tally.completion_tokens ~answer_chars:tally.answer_chars
-      ~cited:tally.cited ~cited_invalid:tally.cited_invalid ~sources:tally.sources
-      ~model_cost_usd:model_cost ~ms ?error ()
+      Usage.record_answer usage ~run ~model:settings.Config.model ~depth:(depth_string depth)
+        ~searches:tally.searches ~results:tally.results ~fetched:tally.fetched
+        ~material_chars:tally.material_chars ~prompt_tokens:tally.prompt_tokens
+        ~completion_tokens:tally.completion_tokens ~answer_chars:tally.answer_chars
+        ~cited:tally.cited ~cited_invalid:tally.cited_invalid ~sources:tally.sources
+        ~model_cost_usd:model_cost ~ms ?error ()
   | None -> ());
   let opt_string = function Some s -> `String s | None -> `Null in
   let opt_int = function Some n -> `Int n | None -> `Null in
@@ -552,7 +559,7 @@ let record t ~tally ~run ~depth ~started ?error ?notice ?sanitized () =
       ("notice", opt_string notice);
       ("sanitized", opt_int sanitized);
     ]
-    @ (match error with Some e -> [ ("error", `String e) ] | None -> [])
+    @ match error with Some e -> [ ("error", `String e) ] | None -> []
   in
   match error with
   | None -> t.log Config.Log_info "answer.ok" fields
@@ -566,8 +573,8 @@ let log_content t prose ~run ~depth =
         ("depth", `String (depth_string depth));
         ( "answer",
           `String
-            (Printf.sprintf "%S"
-               (Utf8.take t.config.Config.agent.Config.max_material_chars prose)) );
+            (Printf.sprintf "%S" (Utf8.take t.config.Config.agent.Config.max_material_chars prose))
+        );
       ]
 
 let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_domains ?recency
@@ -575,80 +582,80 @@ let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_do
   let settings = t.config.Config.agent in
   match Config.missing_agent_settings t.config with
   | [] -> begin
-    let selected = match depth with None -> Model.Brief | Some depth -> depth in
-    let run = new_run () in
-    let started = t.clock () in
-    let tally =
-      {
-        searches = 0;
-        results = 0;
-        fetched = 0;
-        material_chars = 0;
-        prompt_tokens = None;
-        completion_tokens = None;
-        answer_chars = 0;
-        cited = 0;
-        cited_invalid = 0;
-        sources = 0;
-      }
-    in
-    let abort failure =
-      record t ~tally ~run ~depth:selected ~started ~error:(failure_class failure) ();
-      Error (failure_message settings failure)
-    in
-    match
-      retrieve t ~run ~tally ~started ~depth:selected ~query ~extra_queries ~provider
-        ~include_domains ~exclude_domains ~recency ~language ~safe_search
-    with
-    | Error failure -> abort failure
-    | Ok plan -> (
-      match timeout_failure t settings ~started "retrieving" with
-      | Some failure -> abort failure
-      | None -> (
-        match complete t ~material:plan.rendered ~query ~depth:selected with
-        | Error failure -> abort failure
-        | Ok completion -> (
-          match timeout_failure t settings ~started "calling the model" with
+      let selected = match depth with None -> Model.Brief | Some depth -> depth in
+      let run = new_run () in
+      let started = t.clock () in
+      let tally =
+        {
+          searches = 0;
+          results = 0;
+          fetched = 0;
+          material_chars = 0;
+          prompt_tokens = None;
+          completion_tokens = None;
+          answer_chars = 0;
+          cited = 0;
+          cited_invalid = 0;
+          sources = 0;
+        }
+      in
+      let abort failure =
+        record t ~tally ~run ~depth:selected ~started ~error:(failure_class failure) ();
+        Error (failure_message settings failure)
+      in
+      match
+        retrieve t ~run ~tally ~started ~depth:selected ~query ~extra_queries ~provider
+          ~include_domains ~exclude_domains ~recency ~language ~safe_search
+      with
+      | Error failure -> abort failure
+      | Ok plan -> (
+          match timeout_failure t settings ~started "retrieving" with
           | Some failure -> abort failure
-          | None ->
-            tally.prompt_tokens <- completion.prompt_tokens;
-            tally.completion_tokens <- completion.completion_tokens;
-            tally.answer_chars <- Utf8.count completion.prose;
-            let citations = cite completion.prose plan.items in
-            tally.cited <- citations.cited;
-            tally.cited_invalid <- citations.cited_invalid;
-            tally.sources <- List.length citations.sources;
-            let notices = plan.notices @ citation_notices citations in
-            let notice =
-              match notices with [] -> None | _ -> Some (String.concat "; " notices)
-            in
-            let prose, prose_escaped = Sanitize.sanitize_text completion.prose in
-            let sanitized = ref prose_escaped in
-            let sources =
-              List.map
-                (fun (source : Model.answer_source) ->
-                  let title, escaped = Sanitize.sanitize_text source.Model.source_title in
-                  sanitized := !sanitized + escaped;
-                  { source with Model.source_title = title })
-                citations.sources
-            in
-            record t ~tally ~run ~depth:selected ~started ?notice ~sanitized:!sanitized ();
-            log_content t prose ~run ~depth:selected;
-            Ok
-              {
-                Model.query;
-                answer = prose;
-                sources;
-                model = Option.value ~default:"" settings.Config.model;
-                depth = selected;
-                searches = tally.searches;
-                fetched = tally.fetched;
-                retrieved_at = Some (Usage.iso_utc_seconds (t.now ()));
-                truncated = (if completion.truncated then Some true else None);
-                notice;
-              })))
+          | None -> (
+              match complete t ~material:plan.rendered ~query ~depth:selected with
+              | Error failure -> abort failure
+              | Ok completion -> (
+                  match timeout_failure t settings ~started "calling the model" with
+                  | Some failure -> abort failure
+                  | None ->
+                      tally.prompt_tokens <- completion.prompt_tokens;
+                      tally.completion_tokens <- completion.completion_tokens;
+                      tally.answer_chars <- Utf8.count completion.prose;
+                      let citations = cite completion.prose plan.items in
+                      tally.cited <- citations.cited;
+                      tally.cited_invalid <- citations.cited_invalid;
+                      tally.sources <- List.length citations.sources;
+                      let notices = plan.notices @ citation_notices citations in
+                      let notice =
+                        match notices with [] -> None | _ -> Some (String.concat "; " notices)
+                      in
+                      let prose, prose_escaped = Sanitize.sanitize_text completion.prose in
+                      let sanitized = ref prose_escaped in
+                      let sources =
+                        List.map
+                          (fun (source : Model.answer_source) ->
+                            let title, escaped = Sanitize.sanitize_text source.Model.source_title in
+                            sanitized := !sanitized + escaped;
+                            { source with Model.source_title = title })
+                          citations.sources
+                      in
+                      record t ~tally ~run ~depth:selected ~started ?notice ~sanitized:!sanitized ();
+                      log_content t prose ~run ~depth:selected;
+                      Ok
+                        {
+                          Model.query;
+                          answer = prose;
+                          sources;
+                          model = Option.value ~default:"" settings.Config.model;
+                          depth = selected;
+                          searches = tally.searches;
+                          fetched = tally.fetched;
+                          retrieved_at = Some (Usage.iso_utc_seconds (t.now ()));
+                          truncated = (if completion.truncated then Some true else None);
+                          notice;
+                        })))
     end
   | missing ->
-    Error
-      (Printf.sprintf "Agent mode is not configured on this server: %s is missing."
-         (String.concat ", " missing))
+      Error
+        (Printf.sprintf "Agent mode is not configured on this server: %s is missing."
+           (String.concat ", " missing))

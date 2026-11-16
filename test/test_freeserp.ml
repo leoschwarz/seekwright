@@ -23,14 +23,13 @@ let chars s =
   let n = ref 0 and i = ref 0 in
   while !i < String.length s do
     let c = Char.code s.[!i] in
-    i := !i + (if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4);
+    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
     incr n
   done;
   !n
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -111,8 +110,7 @@ let sample_json =
    a canned response — the analogue of the Python suite's
    [httpx.MockTransport]. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
-    ?(cost_per_1k = 0.) () =
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.) () =
   let sent = ref None in
   let net =
     {
@@ -128,12 +126,7 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
 (* A Net that answers with a transport failure instead of a response: the
    grant refusing the endpoint, the name not resolving, the bound expiring. *)
 let refusal kind ~message =
-  let net =
-    {
-      Provider.Net.request =
-        (fun _ -> Error (Caps.Error.make kind ~message));
-    }
-  in
+  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
   Freeserp.make ~now ~net ()
 
 (* [Policy_net] declares [body] and [headers] on both its request and its
@@ -141,16 +134,14 @@ let refusal kind ~message =
 let params (request : Caps.Authority.Net.request) = Uri.query request.uri
 let param (request : Caps.Authority.Net.request) name = Uri.get_query_param request.uri name
 
-let has_param request name =
-  List.exists (fun (key, _) -> key = name) (params request)
+let has_param request name = List.exists (fun (key, _) -> key = name) (params request)
 
 let record fields =
   `Assoc (("title", `String "t") :: ("url", `String "https://example.com/a") :: fields)
 
 let payload items = `Assoc [ ("results", `List items) ]
 
-let parse ?(snippet_chars = 500) ?(limit = 10) data =
-  Freeserp.parse ~snippet_chars data ~limit
+let parse ?(snippet_chars = 500) ?(limit = 10) data = Freeserp.parse ~snippet_chars data ~limit
 
 let hits_json hits =
   Yojson.Safe.to_string
@@ -158,8 +149,8 @@ let hits_json hits =
 
 (* The adapter, driven: [search_of ()] answers with the fixture and hands back
    both the outcome and the request that was dialed. *)
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
-    ?(cost_per_1k = 0.) ?(query = query ()) () =
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.)
+    ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ~cost_per_1k () in
   match Provider.search provider query with
   | Ok outcome -> (outcome, sent ())
@@ -169,8 +160,7 @@ let engine_fallback_refusal body query =
   let provider, _ = dial ~body () in
   match Provider.search provider query with
   | Ok outcome ->
-      A.failf "the substituted index was accepted: %d results"
-        (List.length outcome.results)
+      A.failf "the substituted index was accepted: %d results" (List.length outcome.results)
   | Error failure -> failure
 
 let the_fixture_yields_both_records () =
@@ -182,8 +172,7 @@ let the_fixture_yields_both_records () =
   check_string "the second url" "https://realpython.com/async-io-python/"
     (List.nth hits 1).result.url
 
-let the_limit_is_honoured () =
-  check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
+let the_limit_is_honoured () = check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
 
 let a_serp_record_fills_snippet_and_never_text () =
   (* A SERP backend: the record's [snippet] is the only text there is, and a
@@ -210,7 +199,9 @@ let uncapped_chars_reach_the_boundary_not_the_wire () =
   let hits = parse sample_json in
   check_opt_int "recorded" (Some 132) (List.hd hits).uncapped_chars;
   check_bool "absent from the wire model" false
-    (contains ~haystack:(Yojson.Safe.to_string (Model.result_to_yojson (List.hd hits).result)) ~needle:"uncapped")
+    (contains
+       ~haystack:(Yojson.Safe.to_string (Model.result_to_yojson (List.hd hits).result))
+       ~needle:"uncapped")
 
 let published_at_is_the_date () =
   check_opt_string "the declared date" (Some "2024-10-04")
@@ -226,14 +217,7 @@ let a_falsy_published_at_falls_through_to_crawled_at () =
   List.iter
     (fun (what, value) ->
       let hits =
-        parse
-          (payload
-             [
-               record
-                 [
-                   ("published_at", value); ("crawled_at", `String "2026-01-02");
-                 ];
-             ])
+        parse (payload [ record [ ("published_at", value); ("crawled_at", `String "2026-01-02") ] ])
       in
       check_opt_string what (Some "2026-01-02") (List.hd hits).result.published_date)
     [ ("null", `Null); ("empty", `String ""); ("zero", `Int 0) ]
@@ -272,10 +256,7 @@ let records_without_a_url_or_title_are_dropped () =
     (drop [ `Assoc [ ("url", `String "https://e.com"); ("title", `String "") ] ])
 
 let a_record_that_is_not_an_object_is_skipped () =
-  let hits =
-    parse
-      (payload [ `String "nonsense"; record [] ])
-  in
+  let hits = parse (payload [ `String "nonsense"; record [] ]) in
   check_int "the string is dropped, the object survives" 1 (List.length hits)
 
 let missing_results_is_empty_not_an_error () =
@@ -291,7 +272,8 @@ let the_cross_promotion_block_is_ignored () =
   check_bool "the fixture carries it" true (contains ~haystack:sample ~needle:"related_apis");
   let without =
     `Assoc
-      (List.filter (fun (key, _) -> key <> "related_apis")
+      (List.filter
+         (fun (key, _) -> key <> "related_apis")
          (Option.get (Provider.Json.members sample_json)))
   in
   check_string "identical parses" (hits_json (parse sample_json)) (hits_json (parse without))
@@ -308,12 +290,13 @@ let the_substituted_index_fails_the_search () =
   let body =
     Yojson.Safe.to_string
       (`Assoc
-         (Option.get (Provider.Json.members sample_json) @ [
-            ("index", `String "sites");
-            ("engine_fallback", `Bool true);
-            ("engine_error", `String "engine_unavailable");
-            ("requested_index", `String "web");
-          ]))
+         (Option.get (Provider.Json.members sample_json)
+         @ [
+             ("index", `String "sites");
+             ("engine_fallback", `Bool true);
+             ("engine_error", `String "engine_unavailable");
+             ("requested_index", `String "web");
+           ]))
   in
   let failure = engine_fallback_refusal body (query ()) in
   check_string "the contracted sentence" "upstream index unavailable" failure.message;
@@ -340,9 +323,7 @@ let the_upstream_error_text_is_not_interpolated () =
 let a_false_or_absent_key_maps_normally () =
   let with_false =
     Yojson.Safe.to_string
-      (`Assoc
-         (Option.get (Provider.Json.members sample_json)
-         @ [ ("engine_fallback", `Bool false) ]))
+      (`Assoc (Option.get (Provider.Json.members sample_json) @ [ ("engine_fallback", `Bool false) ]))
   in
   List.iter
     (fun body ->
@@ -368,7 +349,8 @@ let size_is_clamped_to_the_endpoint_ceiling () =
   (* The tool schema caps [max_results] at 20, but the adapter is callable
      directly, so the clamp lives here rather than being assumed. *)
   let _, request = search_of ~query:(query ~max_results:500 ()) () in
-  check_opt_string "the endpoint's ceiling" (Some (string_of_int Freeserp.max_size))
+  check_opt_string "the endpoint's ceiling"
+    (Some (string_of_int Freeserp.max_size))
     (param request "size")
 
 let a_language_reaches_lang_lowercased () =
@@ -405,8 +387,7 @@ let the_unhonourable_constraints_are_reported_never_guessed () =
     search_of
       ~query:
         (query ~text:"wal mode" ~include_domains:[ "sqlite.org" ]
-           ~exclude_domains:[ "spam.example" ] ~country:"de" ~language:"de"
-           ~safe_search:true ())
+           ~exclude_domains:[ "spam.example" ] ~country:"de" ~language:"de" ~safe_search:true ())
       ()
   in
   check_string "the notice names exactly what dropped"
@@ -414,11 +395,18 @@ let the_unhonourable_constraints_are_reported_never_guessed () =
     (Option.get outcome.notice);
   check_opt_string "the language did ride the wire" (Some "de") (param request "lang");
   List.iter
-    (fun name ->
-      check_bool (Printf.sprintf "no %s parameter" name) false (has_param request name))
+    (fun name -> check_bool (Printf.sprintf "no %s parameter" name) false (has_param request name))
     [
-      "site"; "include_domains"; "exclude_domains"; "country"; "gl"; "safe_search";
-      "safety"; "safe"; "published_to"; "total";
+      "site";
+      "include_domains";
+      "exclude_domains";
+      "country";
+      "gl";
+      "safe_search";
+      "safety";
+      "safe";
+      "published_to";
+      "total";
     ];
   (* No [site:] operator either: a backend with a native filter field never
      folds the domain into the query, and this one has no field either. *)
@@ -431,8 +419,7 @@ let safe_search_is_noticed_for_both_values () =
     (fun value ->
       let outcome, _ = search_of ~query:(query ~safe_search:value ()) () in
       check_string "the safe-search sentence"
-        "cannot filter by safe-search; that constraint was ignored"
-        (Option.get outcome.notice))
+        "cannot filter by safe-search; that constraint was ignored" (Option.get outcome.notice))
     [ true; false ]
 
 let the_candidate_pool_size_is_not_a_hit_count () =
@@ -551,88 +538,89 @@ let the_endpoint_is_the_one_the_grant_allows () =
     (Uri.host request.uri = Some Freeserp.policy_endpoint.Caps.Policy.host)
 
 let () =
-  A.
-    (run "seekwright/freeserp"
-       [
-         ( "parsing",
-             [
-               test_case "the live fixture yields both records" `Quick the_fixture_yields_both_records;
-               test_case "the limit is honoured" `Quick the_limit_is_honoured;
-               test_case "a SERP record fills snippet and never text" `Quick
-                 a_serp_record_fills_snippet_and_never_text;
-               test_case "the snippet cap clips and measures" `Quick the_snippet_cap_clips_and_measures;
-               test_case "the cap measurement stops at the boundary" `Quick
-                 uncapped_chars_reach_the_boundary_not_the_wire;
-               test_case "published_at is the date" `Quick published_at_is_the_date;
-               test_case "crawled_at stands in when published_at is missing" `Quick
-                 crawled_at_stands_in_when_published_at_is_missing;
-               test_case "a falsy published_at falls through to crawled_at" `Quick
-                 a_falsy_published_at_falls_through_to_crawled_at;
-               test_case "no date is invented when neither is present" `Quick
-                 no_date_is_invented_when_neither_is_present;
-               test_case "the score passes through as-is" `Quick the_score_passes_through_as_is;
-               test_case "a non-numeric score is dropped" `Quick a_non_numeric_score_is_dropped;
-               test_case "records without a url or title are dropped" `Quick
-                 records_without_a_url_or_title_are_dropped;
-               test_case "a record that is not an object is skipped" `Quick
-                 a_record_that_is_not_an_object_is_skipped;
-               test_case "missing results is empty, not an error" `Quick
-                 missing_results_is_empty_not_an_error;
-               test_case "the cross-promotion block is ignored" `Quick
-                 the_cross_promotion_block_is_ignored;
-             ] );
-         ( "the substituted index",
-             [
-               test_case "a healthy fixture does not carry the key" `Quick
-                 a_healthy_fixture_does_not_carry_the_key;
-               test_case "the substituted index fails the search" `Quick
-                 the_substituted_index_fails_the_search;
-               test_case "the upstream error text is not interpolated" `Quick
-                 the_upstream_error_text_is_not_interpolated;
-               test_case "a false or absent key maps normally" `Quick a_false_or_absent_key_maps_normally;
-             ] );
-         ( "the request",
-             [
-               test_case "GET to the web index, self-identifying" `Quick
-                 get_to_the_web_index_self_identifying;
-               test_case "size is clamped to the endpoint ceiling" `Quick
-                 size_is_clamped_to_the_endpoint_ceiling;
-               test_case "a language reaches lang lowercased" `Quick a_language_reaches_lang_lowercased;
-               test_case "no lang is sent when none was asked for" `Quick
-                 no_lang_is_sent_when_none_was_asked_for;
-               test_case "recency reaches published_from, and only that" `Quick
-                 recency_reaches_published_from;
-               test_case "the unhonourable constraints are reported, never guessed" `Quick
-                 the_unhonourable_constraints_are_reported_never_guessed;
-               test_case "safe-search is noticed for both values" `Quick
-                 safe_search_is_noticed_for_both_values;
-               test_case "the candidate pool size is not a hit count" `Quick
-                 the_candidate_pool_size_is_not_a_hit_count;
-               test_case "a honoured constraint draws no notice" `Quick
-                 a_honoured_constraint_draws_no_notice;
-               test_case "the result reports its flat zero cost" `Quick
-                 the_result_reports_its_flat_zero_cost;
-             ] );
-         ( "the failures this adapter owns",
-             [
-               test_case "payment and rate limit are quota" `Quick payment_and_rate_limit_are_quota;
-               test_case "rejected authentication is the auth row" `Quick
-                 rejected_authentication_is_the_auth_row;
-               test_case "the status row carries only the code" `Quick
-                 the_status_row_carries_only_the_code;
-               test_case "a network failure does not echo the request" `Quick
-                 a_network_failure_does_not_echo_the_request;
-               test_case "the grant's bound is the timeout row" `Quick
-                 the_grants_bound_is_the_timeout_row;
-               test_case "a body that is not JSON is malformed" `Quick
-                 a_body_that_is_not_json_is_malformed;
-             ] );
-         ( "cost and endpoint",
-             [
-               test_case "it cannot bill" `Quick it_cannot_bill;
-               test_case "an operator-corrected cost reaches the adapter" `Quick
-                 an_operator_corrected_cost_reaches_the_adapter;
-               test_case "the endpoint is the one the grant allows" `Quick
-                 the_endpoint_is_the_one_the_grant_allows;
-             ] );
-       ])
+  A.(
+    run "seekwright/freeserp"
+      [
+        ( "parsing",
+          [
+            test_case "the live fixture yields both records" `Quick the_fixture_yields_both_records;
+            test_case "the limit is honoured" `Quick the_limit_is_honoured;
+            test_case "a SERP record fills snippet and never text" `Quick
+              a_serp_record_fills_snippet_and_never_text;
+            test_case "the snippet cap clips and measures" `Quick the_snippet_cap_clips_and_measures;
+            test_case "the cap measurement stops at the boundary" `Quick
+              uncapped_chars_reach_the_boundary_not_the_wire;
+            test_case "published_at is the date" `Quick published_at_is_the_date;
+            test_case "crawled_at stands in when published_at is missing" `Quick
+              crawled_at_stands_in_when_published_at_is_missing;
+            test_case "a falsy published_at falls through to crawled_at" `Quick
+              a_falsy_published_at_falls_through_to_crawled_at;
+            test_case "no date is invented when neither is present" `Quick
+              no_date_is_invented_when_neither_is_present;
+            test_case "the score passes through as-is" `Quick the_score_passes_through_as_is;
+            test_case "a non-numeric score is dropped" `Quick a_non_numeric_score_is_dropped;
+            test_case "records without a url or title are dropped" `Quick
+              records_without_a_url_or_title_are_dropped;
+            test_case "a record that is not an object is skipped" `Quick
+              a_record_that_is_not_an_object_is_skipped;
+            test_case "missing results is empty, not an error" `Quick
+              missing_results_is_empty_not_an_error;
+            test_case "the cross-promotion block is ignored" `Quick
+              the_cross_promotion_block_is_ignored;
+          ] );
+        ( "the substituted index",
+          [
+            test_case "a healthy fixture does not carry the key" `Quick
+              a_healthy_fixture_does_not_carry_the_key;
+            test_case "the substituted index fails the search" `Quick
+              the_substituted_index_fails_the_search;
+            test_case "the upstream error text is not interpolated" `Quick
+              the_upstream_error_text_is_not_interpolated;
+            test_case "a false or absent key maps normally" `Quick
+              a_false_or_absent_key_maps_normally;
+          ] );
+        ( "the request",
+          [
+            test_case "GET to the web index, self-identifying" `Quick
+              get_to_the_web_index_self_identifying;
+            test_case "size is clamped to the endpoint ceiling" `Quick
+              size_is_clamped_to_the_endpoint_ceiling;
+            test_case "a language reaches lang lowercased" `Quick a_language_reaches_lang_lowercased;
+            test_case "no lang is sent when none was asked for" `Quick
+              no_lang_is_sent_when_none_was_asked_for;
+            test_case "recency reaches published_from, and only that" `Quick
+              recency_reaches_published_from;
+            test_case "the unhonourable constraints are reported, never guessed" `Quick
+              the_unhonourable_constraints_are_reported_never_guessed;
+            test_case "safe-search is noticed for both values" `Quick
+              safe_search_is_noticed_for_both_values;
+            test_case "the candidate pool size is not a hit count" `Quick
+              the_candidate_pool_size_is_not_a_hit_count;
+            test_case "a honoured constraint draws no notice" `Quick
+              a_honoured_constraint_draws_no_notice;
+            test_case "the result reports its flat zero cost" `Quick
+              the_result_reports_its_flat_zero_cost;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "payment and rate limit are quota" `Quick payment_and_rate_limit_are_quota;
+            test_case "rejected authentication is the auth row" `Quick
+              rejected_authentication_is_the_auth_row;
+            test_case "the status row carries only the code" `Quick
+              the_status_row_carries_only_the_code;
+            test_case "a network failure does not echo the request" `Quick
+              a_network_failure_does_not_echo_the_request;
+            test_case "the grant's bound is the timeout row" `Quick
+              the_grants_bound_is_the_timeout_row;
+            test_case "a body that is not JSON is malformed" `Quick
+              a_body_that_is_not_json_is_malformed;
+          ] );
+        ( "cost and endpoint",
+          [
+            test_case "it cannot bill" `Quick it_cannot_bill;
+            test_case "an operator-corrected cost reaches the adapter" `Quick
+              an_operator_corrected_cost_reaches_the_adapter;
+            test_case "the endpoint is the one the grant allows" `Quick
+              the_endpoint_is_the_one_the_grant_allows;
+          ] );
+      ])

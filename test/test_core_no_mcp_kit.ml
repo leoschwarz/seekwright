@@ -49,15 +49,14 @@ let no_module_imports_mcp_kit () =
 
 let the_adapter_is_still_there () =
   let source = read (Filename.concat library_dir adapter) in
-  Alcotest.(check bool) "server.ml is the mcp-kit adapter" true
+  Alcotest.(check bool)
+    "server.ml is the mcp-kit adapter" true
     (contains ~haystack:source ~needle:"Mcp_kit");
-  Alcotest.(check bool) "and it is the only one" true
+  Alcotest.(check bool)
+    "and it is the only one" true
     (List.for_all
        (fun module_name ->
-         not
-           (contains
-              ~haystack:(read (Filename.concat library_dir module_name))
-              ~needle:"Mcp_kit"))
+         not (contains ~haystack:(read (Filename.concat library_dir module_name)) ~needle:"Mcp_kit"))
        (core_modules ()))
 
 let () =

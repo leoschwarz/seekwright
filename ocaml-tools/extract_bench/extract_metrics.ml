@@ -38,31 +38,23 @@ let load_cases dir =
           List.filter_map
             (fun (row : Yojson.Safe.t) ->
               match row with
-              | `Assoc f ->
+              | `Assoc f -> (
                   let str key =
-                    match List.assoc_opt key f with
-                    | Some (`String s) -> Some s
-                    | _ -> None
+                    match List.assoc_opt key f with Some (`String s) -> Some s | _ -> None
                   in
                   let str_list key =
                     match List.assoc_opt key f with
                     | Some (`List xs) ->
-                        List.filter_map
-                          (fun x -> match x with `String s -> Some s | _ -> None)
-                          xs
+                        List.filter_map (fun x -> match x with `String s -> Some s | _ -> None) xs
                     | _ -> []
                   in
                   let int key dflt =
-                    match List.assoc_opt key f with
-                    | Some (`Int n) -> n
-                    | _ -> dflt
+                    match List.assoc_opt key f with Some (`Int n) -> n | _ -> dflt
                   in
                   let bool key dflt =
-                    match List.assoc_opt key f with
-                    | Some (`Bool b) -> b
-                    | _ -> dflt
+                    match List.assoc_opt key f with Some (`Bool b) -> b | _ -> dflt
                   in
-                  (match str "id" with
+                  match str "id" with
                   | Some id ->
                       let file = Option.value ~default:id (str "file") in
                       Some
@@ -71,13 +63,11 @@ let load_cases dir =
                           file;
                           content_type = str "content_type";
                           kind = Option.value ~default:"html" (str "kind");
-                          category =
-                            Option.value ~default:"" (str "category");
+                          category = Option.value ~default:"" (str "category");
                           essential = str_list "essential";
                           boilerplate = str_list "boilerplate";
                           title = str "title";
-                          title_rule =
-                            Option.value ~default:"exact" (str "title_rule");
+                          title_rule = Option.value ~default:"exact" (str "title_rule");
                           unicode = str_list "unicode";
                           expect = Option.value ~default:"text" (str "expect");
                           bar_essential_min = int "bar_essential_min" 0;
@@ -112,16 +102,14 @@ let collapse s =
 let contains ~haystack ~needle =
   let h = collapse haystack and n = collapse needle in
   n = ""
-  || (String.length h >= String.length n
+  || String.length h >= String.length n
      &&
      let rec go i =
-       i + String.length n > String.length h
-       || (String.sub h i (String.length n) = n || go (i + 1))
+       i + String.length n > String.length h || String.sub h i (String.length n) = n || go (i + 1)
      in
-     go 0)
+     go 0
 
-let misses ~haystack ~needles =
-  List.filter (fun n -> not (contains ~haystack ~needle:n)) needles
+let misses ~haystack ~needles = List.filter (fun n -> not (contains ~haystack ~needle:n)) needles
 
 let codepoints s =
   let n = ref 0 in
@@ -130,10 +118,12 @@ let codepoints s =
     let c = Char.code s.[!i] in
     i :=
       !i
-      + (if c < 0x80 then 1
-        else if c < 0xC0 then 1
-        else if c < 0xE0 then 2
-        else if c < 0xF0 then 3 else 4);
+      +
+      if c < 0x80 then 1
+      else if c < 0xC0 then 1
+      else if c < 0xE0 then 2
+      else if c < 0xF0 then 3
+      else 4;
     incr n
   done;
   !n
@@ -142,9 +132,7 @@ let replacement_chars s =
   let n = ref 0 in
   let i = ref 0 in
   while !i < String.length s do
-    if
-      s.[!i] = '\xef' && !i + 2 < String.length s && s.[!i + 1] = '\xbf'
-      && s.[!i + 2] = '\xbd'
+    if s.[!i] = '\xef' && !i + 2 < String.length s && s.[!i + 1] = '\xbf' && s.[!i + 2] = '\xbd'
     then (
       incr n;
       i := !i + 3)
@@ -154,9 +142,7 @@ let replacement_chars s =
 
 let searchable text title = text ^ "\n" ^ Option.value ~default:"" title
 
-type outcome =
-  | Text of { text : string; title : string option; chars : int }
-  | Refusal of string
+type outcome = Text of { text : string; title : string option; chars : int } | Refusal of string
 
 let run (c : case) =
   match S.extract c.body c.content_type with
@@ -208,10 +194,7 @@ let measure (c : case) =
     match c.title_rule with
     | "none" -> title = None
     | "any" -> title <> None
-    | _ ->
-        (match (title, c.title) with
-        | Some a, Some b -> collapse a = collapse b
-        | _ -> false)
+    | _ -> ( match (title, c.title) with Some a, Some b -> collapse a = collapse b | _ -> false)
   in
   let refused = outcome <> "text" in
   let unicode_ok =
@@ -230,29 +213,26 @@ let measure (c : case) =
     deterministic;
     essential_missed = misses ~haystack:both ~needles:c.essential;
     boiler_missed = misses ~haystack:both ~needles:c.boilerplate;
-    boiler_leaked =
-      List.filter (fun n -> contains ~haystack:both ~needle:n) c.boilerplate;
+    boiler_leaked = List.filter (fun n -> contains ~haystack:both ~needle:n) c.boilerplate;
     codepoints = cp;
     replacements = replacement_chars text;
   }
 
 let outcome_of m =
-  if m.outcome <> "text" then "refusal"
-  else if m.codepoints = 0 then "empty"
-  else "text"
+  if m.outcome <> "text" then "refusal" else if m.codepoints = 0 then "empty" else "text"
 
 let bar_failures ~median_ms (c : case) (m : metrics) =
   let fails = ref [] in
   let add fmt = Printf.ksprintf (fun s -> fails := s :: !fails) fmt in
   if m.essential_hit < c.bar_essential_min then
-    add "essential %d/%d under the bar of %d (missed: %s)" m.essential_hit
-      m.essential_total c.bar_essential_min
+    add "essential %d/%d under the bar of %d (missed: %s)" m.essential_hit m.essential_total
+      c.bar_essential_min
       (String.concat " | " m.essential_missed);
   if m.boiler_hit > c.bar_boiler_max then
-    add "boilerplate %d/%d over the bar of %d (leaked: %s)" m.boiler_hit
-      m.boiler_total c.bar_boiler_max (String.concat " | " m.boiler_leaked);
-  if m.title_ok <> c.bar_title_ok then
-    add "title_ok %b, bar asks for %b" m.title_ok c.bar_title_ok;
+    add "boilerplate %d/%d over the bar of %d (leaked: %s)" m.boiler_hit m.boiler_total
+      c.bar_boiler_max
+      (String.concat " | " m.boiler_leaked);
+  if m.title_ok <> c.bar_title_ok then add "title_ok %b, bar asks for %b" m.title_ok c.bar_title_ok;
   if m.unicode_total > 0 && m.unicode_ok <> c.bar_unicode_ok then
     add "unicode_ok %b, bar asks for %b" m.unicode_ok c.bar_unicode_ok;
   if not m.deterministic then add "the backend answered the same bytes twice";

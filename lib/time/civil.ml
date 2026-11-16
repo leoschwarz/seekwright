@@ -6,7 +6,7 @@ let days_from_civil y m d =
   let y = if m <= 2 then y - 1 else y in
   let era = (if y >= 0 then y else y - 399) / 400 in
   let yoe = y - (era * 400) in
-  let doy = ((153 * (m + (if m > 2 then -3 else 9))) + 2) / 5 + d - 1 in
+  let doy = (((153 * (m + if m > 2 then -3 else 9)) + 2) / 5) + d - 1 in
   let doe = (yoe * 365) + (yoe / 4) - (yoe / 100) + doy in
   (era * 146097) + doe - 719468
 
@@ -22,6 +22,7 @@ let civil_from_days z0 =
   let m = if mp < 10 then mp + 3 else mp - 9 in
   let y = if m <= 2 then y + 1 else y in
   (y, m, d)
+
 (* The instant floored to a whole second: [int_of_float] alone truncates toward
    zero, which reads a pre-epoch fraction as the epoch. *)
 let whole_seconds instant = int_of_float (Float.floor instant)
@@ -33,16 +34,20 @@ let days_of_secs secs = if secs >= 0 then secs / 86_400 else (secs - 86_399) / 8
 let seconds_of_day secs = secs - (days_of_secs secs * 86_400)
 
 let date_of_days days =
-  let (y, m, d) = civil_from_days days in
+  let y, m, d = civil_from_days days in
   Printf.sprintf "%04d-%02d-%02d" y m d
 
 (* [YYYY-MM-DD] is the form the journal keys its day buckets on, and the prune
    compares that key as a string — a form check first, then the day count. *)
 let date_of_string date =
   let digit i = match date.[i] with '0' .. '9' -> true | _ -> false in
-  if String.length date <> 10 || not (digit 0 && digit 1 && digit 2 && digit 3)
-  || date.[4] <> '-' || not (digit 5 && digit 6) || date.[7] <> '-'
-  || not (digit 8 && digit 9)
+  if
+    String.length date <> 10
+    || (not (digit 0 && digit 1 && digit 2 && digit 3))
+    || date.[4] <> '-'
+    || (not (digit 5 && digit 6))
+    || date.[7] <> '-'
+    || not (digit 8 && digit 9)
   then None
   else
     Some
@@ -53,8 +58,8 @@ let date_of_string date =
 
 let iso_utc_seconds instant =
   let secs = whole_seconds instant in
-  let (y, m, d) = civil_from_days (days_of_secs secs) in
+  let y, m, d = civil_from_days (days_of_secs secs) in
   let clock = seconds_of_day secs in
   Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ" y m d (clock / 3600)
-    ((clock / 60) mod 60)
+    (clock / 60 mod 60)
     (clock mod 60)

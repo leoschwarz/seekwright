@@ -26,7 +26,7 @@ let to_page cfg target body ~offset ~max_chars =
     | None | Some [] -> Error (Fallback.malformed ())
     | Some (first :: _) -> (
         match first with
-        | (`Assoc _ as result) ->
+        | `Assoc _ as result ->
             if Fallback.Json.is_false (Fallback.Json.field "success" result) then
               (* The renderer's own reason when it has one; the bare sentence
                  when it does not. *)
@@ -38,9 +38,7 @@ let to_page cfg target body ~offset ~max_chars =
               (* [status_code] is the origin's, on the Scrappa rule: an error
                  page rendered successfully is still a failed fetch. *)
               let status_code =
-                match Fallback.Json.int_field "status_code" result with
-                | Some n -> n
-                | None -> 200
+                match Fallback.Json.int_field "status_code" result with Some n -> n | None -> 200
               in
               if status_code >= 400 then
                 Error (Fallback.Failed (Printf.sprintf "HTTP %d" status_code))
@@ -80,12 +78,12 @@ let to_page cfg target body ~offset ~max_chars =
    concatenates without a doubled slash whatever the operator wrote. *)
 let rstrip_slashes url =
   let n = String.length url in
-  if n > 0 && url.[n - 1] = '/' then
+  if n > 0 && url.[n - 1] = '/' then (
     let last = ref n in
     while !last > 0 && url.[!last - 1] = '/' do
       decr last
     done;
-    String.sub url 0 !last
+    String.sub url 0 !last)
   else url
 
 let fetch cfg raw ~offset ~max_chars =
@@ -102,17 +100,13 @@ let fetch cfg raw ~offset ~max_chars =
                ("crawler_config", `Assoc []);
              ])
       in
-      let request : Caps.Authority.Net.request = {
-        meth = `POST;
-        uri;
-        headers = headers cfg.token;
-        body = Some body;
-      } in
+      let request : Caps.Authority.Net.request =
+        { meth = `POST; uri; headers = headers cfg.token; body = Some body }
+      in
       match cfg.net.request ~max_response_bytes:None request with
       | Error caps_error -> Error (Fallback.transport_error caps_error)
       | Ok response -> (
-          if response.Caps.Authority.Net.status = 401
-          || response.Caps.Authority.Net.status = 403
+          if response.Caps.Authority.Net.status = 401 || response.Caps.Authority.Net.status = 403
           then
             (* The operator's own service refused the token this deployment
                configured — which is a different fix than a vendor key. *)

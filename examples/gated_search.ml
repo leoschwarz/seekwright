@@ -1,13 +1,10 @@
 (** A gated [search_web] and [fetch_url] server demonstrating network grants.
 
-    The operator names allowed endpoints at startup. [search_web] reaches the
-    configured endpoint, while [fetch_url] validates caller-supplied URLs against
-    the grant.
+    The operator names allowed endpoints at startup. [search_web] reaches the configured endpoint,
+    while [fetch_url] validates caller-supplied URLs against the grant.
 
     Run target in one shell:
-    {v
-    python3 -m http.server 8099 --bind 127.0.0.1
-    v}
+    {v python3 -m http.server 8099 --bind 127.0.0.1 v}
 
     Run server in another:
     {v
@@ -39,8 +36,7 @@ let request_headers = [ ("accept", "application/json") ]
 
 type target = { endpoint : Policy.endpoint; base : Uri.t }
 
-let search_uri target query =
-  Uri.add_query_param' (Uri.with_path target.base "/search") ("q", query)
+let search_uri target query = Uri.add_query_param' (Uri.with_path target.base "/search") ("q", query)
 
 let search_web target =
   Tool.make
@@ -50,13 +46,13 @@ let search_web target =
     ~input_schema:
       (Mcp_kit.Schema.object_
          ~properties:[ ("query", Mcp_kit.Schema.string ()) ]
-         ~required:[ "query" ]
-         ())
+         ~required:[ "query" ] ())
     ~decode:(Mcp_kit.Tool.Arg.string "query")
     ~run:(fun grant query ->
       match
         Authority.Net.request grant
-          { Authority.Net.meth = `GET;
+          {
+            Authority.Net.meth = `GET;
             uri = search_uri target query;
             headers = request_headers;
             body = None;
@@ -69,27 +65,24 @@ let search_web target =
 let fetch_url =
   Tool.make
     ~description:
-      "Read a URL through this server's network grant. Only the endpoints the operator listed \
-       are reachable."
+      "Read a URL through this server's network grant. Only the endpoints the operator listed are \
+       reachable."
     ~input_schema:
       (Mcp_kit.Schema.object_
          ~properties:[ ("url", Mcp_kit.Schema.string ()) ]
-         ~required:[ "url" ]
-         ())
+         ~required:[ "url" ] ())
     ~decode:(Mcp_kit.Tool.Arg.string "url")
     ~run:(fun grant url ->
       match
         Authority.Net.request grant
-          { Authority.Net.meth = `GET;
+          {
+            Authority.Net.meth = `GET;
             uri = Uri.of_string url;
             headers = request_headers;
             body = None;
           }
       with
-      | Ok response ->
-          Ok
-            (Tool.Output.text
-               (Printf.sprintf "%d\n%s" response.status response.body))
+      | Ok response -> Ok (Tool.Output.text (Printf.sprintf "%d\n%s" response.status response.body))
       | Error error -> Error error)
     "fetch_url"
 
@@ -120,10 +113,10 @@ let target_of text =
   in
   let uri = Uri.of_string with_scheme in
   match (Uri.scheme uri, Uri.host uri) with
-  | (Some ("http" | "https" as scheme), Some host) ->
+  | Some (("http" | "https") as scheme), Some host ->
       let scheme = if scheme = "https" then `Https else `Http in
       Ok { endpoint = { Policy.scheme; host; port = Uri.port uri }; base = uri }
-  | (scheme, _) ->
+  | scheme, _ ->
       note
         (Printf.sprintf "%S is not an http(s) endpoint with a host (scheme: %s)" text
            (Option.value ~default:"none" scheme));
@@ -132,14 +125,14 @@ let target_of text =
 let cli () =
   match Array.to_list Sys.argv with
   | [] | [ _ ] -> usage ()
-  | _ :: endpoint_text :: rest ->
+  | _ :: endpoint_text :: rest -> (
       let transport = ref Transport_stdio and max_calls = ref None in
       let scan = function
         | [] -> ()
         | [ "--http" ] -> transport := port_of None
         | [ "--http"; text ] -> transport := port_of (Some text)
-        | [ "--max-calls"; text ] ->
-            (match int_of_string_opt text with
+        | [ "--max-calls"; text ] -> (
+            match int_of_string_opt text with
             | Some n when n > 0 -> max_calls := Some n
             | _ ->
                 note (Printf.sprintf "--max-calls: %S is not a positive count" text);
@@ -149,7 +142,7 @@ let cli () =
       scan rest;
       match target_of endpoint_text with
       | Error () -> exit 2
-      | Ok target -> (target, !transport, !max_calls)
+      | Ok target -> (target, !transport, !max_calls))
 
 let build ~sw env target max_calls =
   let ( let* ) = Result.bind in
@@ -182,9 +175,7 @@ let build ~sw env target max_calls =
     (Printf.sprintf "one endpoint allowed: %s://%s%s, at most %d response bytes%s"
        (match target.endpoint.Policy.scheme with `Http -> "http" | `Https -> "https")
        target.endpoint.Policy.host
-       (match target.endpoint.Policy.port with
-       | Some port -> ":" ^ string_of_int port
-       | None -> "")
+       (match target.endpoint.Policy.port with Some port -> ":" ^ string_of_int port | None -> "")
        max_response_bytes
        (match max_calls with
        | Some calls -> ", at most " ^ string_of_int calls ^ " calls per process"
@@ -193,9 +184,7 @@ let build ~sw env target max_calls =
 
 let serve_http ~sw env server port =
   let handler = Mcp_kit_cohttp_eio.handler ~max_body_size:1_048_576 server in
-  let socket =
-    Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, port))
-  in
+  let socket = Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (Eio.Net.Ipaddr.V4.loopback, port)) in
   note (Printf.sprintf "streamable HTTP on http://%s:%d/ (POST JSON-RPC to /)" loopback port);
   Cohttp_eio.Server.run
     ~on_error:(function

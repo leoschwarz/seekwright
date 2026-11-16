@@ -17,39 +17,33 @@ let obj ?(additional = true) properties required =
 
 let str ?min ?max () =
   let bounds =
-    (match min with Some n -> [("minLength", `Int n)] | None -> [])
-    @ (match max with Some n -> [("maxLength", `Int n)] | None -> [])
+    (match min with Some n -> [ ("minLength", `Int n) ] | None -> [])
+    @ match max with Some n -> [ ("maxLength", `Int n) ] | None -> []
   in
   `Assoc (("type", `String "string") :: bounds)
 
 let int ?min ?max ?default () =
   let bounds =
-    (match min with Some n -> [("minimum", `Int n)] | None -> [])
-    @ (match max with Some n -> [("maximum", `Int n)] | None -> [])
-    @ (match default with Some n -> [("default", `Int n)] | None -> [])
+    (match min with Some n -> [ ("minimum", `Int n) ] | None -> [])
+    @ (match max with Some n -> [ ("maximum", `Int n) ] | None -> [])
+    @ match default with Some n -> [ ("default", `Int n) ] | None -> []
   in
   `Assoc (("type", `String "integer") :: bounds)
 
 let bool ?default () =
   `Assoc
     (("type", `String "boolean")
-    :: (match default with Some b -> [("default", `Bool b)] | None -> []))
+    :: (match default with Some b -> [ ("default", `Bool b) ] | None -> []))
 
 let enum values =
-  `Assoc
-    [
-      ("type", `String "string");
-      ("enum", `List (List.map (fun v -> `String v) values));
-    ]
+  `Assoc [ ("type", `String "string"); ("enum", `List (List.map (fun v -> `String v) values)) ]
 
 let string_list ?max_items () =
   `Assoc
     [
       ("type", `String "array");
       ("items", str ());
-      (match max_items with
-      | Some n -> ("maxItems", `Int n)
-      | None -> ("maxItems", `Int 20));
+      (match max_items with Some n -> ("maxItems", `Int n) | None -> ("maxItems", `Int 20));
     ]
 
 let provider_enum = enum Config.known_providers
@@ -85,12 +79,8 @@ let answer_properties =
   [
     ("query", str ~min:2 ~max:400 ());
     ( "extra_queries",
-      `Assoc
-        [
-          ("type", `String "array");
-          ("items", str ~min:2 ~max:400 ());
-          ("maxItems", `Int 2);
-        ] );
+      `Assoc [ ("type", `String "array"); ("items", str ~min:2 ~max:400 ()); ("maxItems", `Int 2) ]
+    );
     ("depth", enum [ "brief"; "report" ]);
     ("provider", provider_enum);
     ("include_domains", string_list ~max_items:20 ());
@@ -104,8 +94,7 @@ let answer_properties =
    encoders always emit are [required]; an absent optional field is omitted,
    never null, so the schema never contradicts the encoder. *)
 let result_schema =
-  obj
-    ~additional:false
+  obj ~additional:false
     [
       ("title", str ());
       ("url", str ());
@@ -113,17 +102,16 @@ let result_schema =
       ("text", str ());
       ("text_truncated", bool ());
       ("published_date", str ());
-      ("score", `Assoc [("type", `String "number")]);
+      ("score", `Assoc [ ("type", `String "number") ]);
     ]
     [ "title"; "url" ]
 
 let search_response_schema =
-  obj
-    ~additional:false
+  obj ~additional:false
     [
       ("query", str ());
       ("provider", str ());
-      ("results", `Assoc [("type", `String "array"); ("items", result_schema)]);
+      ("results", `Assoc [ ("type", `String "array"); ("items", result_schema) ]);
       ("answer", str ());
       ("retrieved_at", str ());
       ("notice", str ());
@@ -131,8 +119,7 @@ let search_response_schema =
     [ "query"; "provider"; "results" ]
 
 let fetch_response_schema =
-  obj
-    ~additional:false
+  obj ~additional:false
     [
       ("url", str ());
       ("requested_url", str ());
@@ -149,21 +136,18 @@ let fetch_response_schema =
           [
             ("type", `String "array");
             ( "items",
-              obj ~additional:false
-                [("offset", int ()); ("text", str ())]
-                [ "offset"; "text" ] );
+              obj ~additional:false [ ("offset", int ()); ("text", str ()) ] [ "offset"; "text" ] );
           ] );
       ( "image",
         obj ~additional:false
-          [("byte_count", int ()); ("base64", str ())]
+          [ ("byte_count", int ()); ("base64", str ()) ]
           [ "byte_count"; "base64" ] );
       ("notice", str ());
     ]
     [ "url"; "requested_url"; "truncated" ]
 
 let answer_response_schema =
-  obj
-    ~additional:false
+  obj ~additional:false
     [
       ("query", str ());
       ("answer", str ());
@@ -173,7 +157,7 @@ let answer_response_schema =
             ("type", `String "array");
             ( "items",
               obj ~additional:false
-                [("title", str ()); ("url", str ()); ("provider", str ())]
+                [ ("title", str ()); ("url", str ()); ("provider", str ()) ]
                 [ "title"; "url"; "provider" ] );
           ] );
       ("model", str ());
@@ -205,11 +189,9 @@ type app = {
   health : health option;
 }
 
-let fetch_disabled =
-  "This server has the fetch tool disabled; use `search` instead."
+let fetch_disabled = "This server has the fetch tool disabled; use `search` instead."
 
-let agent_disabled =
-  "This server has agent mode disabled; use `search` or `fetch` instead."
+let agent_disabled = "This server has agent mode disabled; use `search` or `fetch` instead."
 
 let mode_of (mode : Model.mode option) : Router.search_mode option =
   match mode with None -> None | Some Model.Free -> Some Router.Free
@@ -229,30 +211,22 @@ let search_query_of (req : Model.search_request) : Model.search_query =
 let output_of json = Tool.Output.text ~structured_content:json (Yojson.Safe.pretty_to_string json)
 
 let search_tool =
-  Tool.make
-    ~title:"Web Search"
-    ~description:Prompts.search_description
+  Tool.make ~title:"Web Search" ~description:Prompts.search_description
     ~output_schema:search_response_schema
     ~input_schema:(obj ~additional:false search_properties [ "query" ])
     ~decode:Model.search_request_of_yojson
     ~run:(fun app req ->
       match
-        Engine.Search.search app.search
-          ?provider:req.Model.provider
-          ?mode:(mode_of req.Model.mode)
+        Engine.Search.search app.search ?provider:req.Model.provider ?mode:(mode_of req.Model.mode)
           (search_query_of req)
       with
       | Ok response -> Ok (output_of (Model.search_response_to_yojson response))
-      | Error (Engine.Search.Refused message) ->
-          Error (Error.make Error.Invalid ~message)
-      | Error (Engine.Search.Failed message) ->
-          Error (Error.make Error.Failed ~message))
+      | Error (Engine.Search.Refused message) -> Error (Error.make Error.Invalid ~message)
+      | Error (Engine.Search.Failed message) -> Error (Error.make Error.Failed ~message))
     "search"
 
 let fetch_tool =
-  Tool.make
-    ~title:"Fetch Page Text"
-    ~description:Prompts.fetch_description
+  Tool.make ~title:"Fetch Page Text" ~description:Prompts.fetch_description
     ~output_schema:fetch_response_schema
     ~input_schema:(obj ~additional:false fetch_properties [ "url" ])
     ~decode:Model.fetch_request_of_yojson
@@ -261,12 +235,8 @@ let fetch_tool =
       | None -> Error (Error.make Error.Invalid ~message:fetch_disabled)
       | Some engine -> (
           match
-            Engine.Fetch.fetch engine
-              ?offset:req.Model.offset
-              ?query:req.Model.query
-              ?path:req.Model.path
-              ~structure:req.Model.structure
-              ?provider:req.Model.provider
+            Engine.Fetch.fetch engine ?offset:req.Model.offset ?query:req.Model.query
+              ?path:req.Model.path ~structure:req.Model.structure ?provider:req.Model.provider
               req.Model.url
           with
           | Ok response ->
@@ -274,16 +244,12 @@ let fetch_tool =
                  v1 gap), so an image answer rides inside the JSON projection,
                  exactly as the REST route carries it. *)
               Ok (output_of (Model.fetch_response_to_yojson response))
-          | Error (Engine.Fetch.Refused message) ->
-              Error (Error.make Error.Invalid ~message)
-          | Error (Engine.Fetch.Failed message) ->
-              Error (Error.make Error.Failed ~message)))
+          | Error (Engine.Fetch.Refused message) -> Error (Error.make Error.Invalid ~message)
+          | Error (Engine.Fetch.Failed message) -> Error (Error.make Error.Failed ~message)))
     "fetch"
 
 let answer_tool =
-  Tool.make
-    ~title:"Answer a Question"
-    ~description:Prompts.answer_description
+  Tool.make ~title:"Answer a Question" ~description:Prompts.answer_description
     ~output_schema:answer_response_schema
     ~input_schema:(obj ~additional:false answer_properties [ "query" ])
     ~decode:Model.answer_request_of_yojson
@@ -292,17 +258,11 @@ let answer_tool =
       | None -> Error (Error.make Error.Invalid ~message:agent_disabled)
       | Some agent -> (
           match
-            Agent.answer agent
-              ~query:req.Model.query
-              ?extra_queries:req.Model.extra_queries
-              ?depth:req.Model.depth
-              ?provider:req.Model.provider
-              ?include_domains:req.Model.include_domains
-              ?exclude_domains:req.Model.exclude_domains
-              ?recency:req.Model.recency
-              ?language:req.Model.language
-              ?safe_search:req.Model.safe_search
-              ()
+            Agent.answer agent ~query:req.Model.query ?extra_queries:req.Model.extra_queries
+              ?depth:req.Model.depth ?provider:req.Model.provider
+              ?include_domains:req.Model.include_domains ?exclude_domains:req.Model.exclude_domains
+              ?recency:req.Model.recency ?language:req.Model.language
+              ?safe_search:req.Model.safe_search ()
           with
           | Ok response -> Ok (output_of (Model.answer_response_to_yojson response))
           | Error message -> Error (Error.make Error.Failed ~message)))
@@ -324,9 +284,7 @@ let mcp_server app =
 let loopback = [ "localhost"; "127.0.0.1"; "::1" ]
 
 let host_allowlist extra =
-  let seed =
-    loopback @ List.map (fun h -> h ^ ":*") loopback @ [ "[::1]:*" ]
-  in
+  let seed = loopback @ List.map (fun h -> h ^ ":*") loopback @ [ "[::1]:*" ] in
   seed @ extra
 
 let is_host_allowed entries host =
@@ -335,23 +293,15 @@ let is_host_allowed entries host =
     (fun entry ->
       let entry = String.lowercase_ascii entry in
       if entry = host then true
-      else if
-        String.length entry > 2
-        && String.sub entry (String.length entry - 2) 2 = ":*"
-      then
+      else if String.length entry > 2 && String.sub entry (String.length entry - 2) 2 = ":*" then
         let prefix = String.sub entry 0 (String.length entry - 2) in
         let n = String.length prefix in
-        host = prefix
-        || (String.length host > n
-           && String.sub host 0 n = prefix
-           && host.[n] = ':' )
+        host = prefix || (String.length host > n && String.sub host 0 n = prefix && host.[n] = ':')
       else false)
     entries
 
 let origin_allowlist extra =
-  List.concat_map
-    (fun host -> [ "http://" ^ host; "https://" ^ host ])
-    (loopback @ extra)
+  List.concat_map (fun host -> [ "http://" ^ host; "https://" ^ host ]) (loopback @ extra)
 
 (* [/healthz] is outside the allowlist; missing Host is refused like unlisted. *)
 let host_gate app ~path ~host =
@@ -361,11 +311,7 @@ let host_gate app ~path ~host =
   | Some h -> is_host_allowed (host_allowlist app.allowed_hosts) h
   | None -> false
 
-type response = {
-  status : int;
-  headers : (string * string) list;
-  body : string;
-}
+type response = { status : int; headers : (string * string) list; body : string }
 
 let json_content = [ ("content-type", "application/json") ]
 let text_content = [ ("content-type", "text/plain; charset=utf-8") ]
@@ -374,8 +320,7 @@ let html_content = [ ("content-type", "text/html; charset=utf-8") ]
 let json_response status json =
   { status; headers = json_content; body = Yojson.Safe.to_string json }
 
-let error_response status message =
-  json_response status (`Assoc [ ("error", `String message) ])
+let error_response status message = json_response status (`Assoc [ ("error", `String message) ])
 
 let text_response status body = { status; headers = text_content; body }
 
@@ -389,8 +334,7 @@ let parse_json_body body =
 
 let stopping_message = "The server is stopping; retry shortly."
 
-let stopping_response () =
-  json_response 503 (`Assoc [ ("status", `String "stopping") ])
+let stopping_response () = json_response 503 (`Assoc [ ("status", `String "stopping") ])
 
 let stopping_error () = error_response 503 stopping_message
 
@@ -410,91 +354,76 @@ let healthz app ~stopping =
               serves searches, never what a file asked for. *)
            ("providers", `List (List.map (fun name -> `String name) built));
            ( "default_provider",
-             (match app.config.Config.default_provider with
+             match app.config.Config.default_provider with
              | Some name when List.mem name built -> `String name
-             | _ -> `Null) );
-           ( "uptime_s",
-             `Int (int_of_float (app.mono_now () -. app.started_at)) );
+             | _ -> `Null );
+           ("uptime_s", `Int (int_of_float (app.mono_now () -. app.started_at)));
          ])
 
 let api_search app ~stopping body =
   if stopping then stopping_error ()
   else
-  match parse_json_body body with
-  | Error message -> error_response 400 message
-  | Ok json -> (
-      match Model.search_request_of_yojson json with
-      | Error message -> error_response 400 ("Invalid request: " ^ message ^ ".")
-      | Ok req -> (
-          match
-            Engine.Search.search app.search
-              ?provider:req.Model.provider
-              ?mode:(mode_of req.Model.mode)
-              (search_query_of req)
-          with
-          | Ok response -> json_response 200 (Model.search_response_to_yojson response)
-          | Error (Engine.Search.Refused message) -> error_response 400 message
-          | Error (Engine.Search.Failed message) -> error_response 502 message))
+    match parse_json_body body with
+    | Error message -> error_response 400 message
+    | Ok json -> (
+        match Model.search_request_of_yojson json with
+        | Error message -> error_response 400 ("Invalid request: " ^ message ^ ".")
+        | Ok req -> (
+            match
+              Engine.Search.search app.search ?provider:req.Model.provider
+                ?mode:(mode_of req.Model.mode) (search_query_of req)
+            with
+            | Ok response -> json_response 200 (Model.search_response_to_yojson response)
+            | Error (Engine.Search.Refused message) -> error_response 400 message
+            | Error (Engine.Search.Failed message) -> error_response 502 message))
 
 let api_fetch app ~stopping body =
   if stopping then stopping_error ()
   else
-  match app.fetch with
-  | None -> error_response 404 fetch_disabled
-  | Some engine -> (
-      match parse_json_body body with
-      | Error message -> error_response 400 message
-      | Ok json -> (
-          match Model.fetch_request_of_yojson json with
-          | Error message -> error_response 400 ("Invalid request: " ^ message ^ ".")
-          | Ok req -> (
-              match
-                Engine.Fetch.fetch engine
-                  ?offset:req.Model.offset
-                  ?query:req.Model.query
-                  ?path:req.Model.path
-                  ~structure:req.Model.structure
-                  ?provider:req.Model.provider
-                  req.Model.url
-              with
-              | Ok response ->
-                  json_response 200 (Model.fetch_response_to_yojson response)
-              | Error (Engine.Fetch.Refused message) -> error_response 400 message
-              | Error (Engine.Fetch.Failed message) -> error_response 502 message)))
+    match app.fetch with
+    | None -> error_response 404 fetch_disabled
+    | Some engine -> (
+        match parse_json_body body with
+        | Error message -> error_response 400 message
+        | Ok json -> (
+            match Model.fetch_request_of_yojson json with
+            | Error message -> error_response 400 ("Invalid request: " ^ message ^ ".")
+            | Ok req -> (
+                match
+                  Engine.Fetch.fetch engine ?offset:req.Model.offset ?query:req.Model.query
+                    ?path:req.Model.path ~structure:req.Model.structure ?provider:req.Model.provider
+                    req.Model.url
+                with
+                | Ok response -> json_response 200 (Model.fetch_response_to_yojson response)
+                | Error (Engine.Fetch.Refused message) -> error_response 400 message
+                | Error (Engine.Fetch.Failed message) -> error_response 502 message)))
 
 let api_answer app ~stopping body =
   if stopping then stopping_error ()
   else
-  match app.agent with
-  | None -> error_response 404 agent_disabled
-  | Some agent -> (
-      match parse_json_body body with
-      | Error message -> error_response 400 message
-      | Ok json -> (
-          match Model.answer_request_of_yojson json with
-          | Error message -> error_response 400 ("Invalid request: " ^ message ^ ".")
-          | Ok req -> (
-              (* The provider pin is refused before any dispatch, as the 400
+    match app.agent with
+    | None -> error_response 404 agent_disabled
+    | Some agent -> (
+        match parse_json_body body with
+        | Error message -> error_response 400 message
+        | Ok json -> (
+            match Model.answer_request_of_yojson json with
+            | Error message -> error_response 400 ("Invalid request: " ^ message ^ ".")
+            | Ok req -> (
+                (* The provider pin is refused before any dispatch, as the 400
                  the request deserves — the walk would swallow it. *)
-              match Engine.Search.resolve app.search req.Model.provider with
-              | Error message -> error_response 400 message
-              | Ok _ -> (
-                  match
-                    Agent.answer agent
-                      ~query:req.Model.query
-                      ?extra_queries:req.Model.extra_queries
-                      ?depth:req.Model.depth
-                      ?provider:req.Model.provider
-                      ?include_domains:req.Model.include_domains
-                      ?exclude_domains:req.Model.exclude_domains
-                      ?recency:req.Model.recency
-                      ?language:req.Model.language
-                      ?safe_search:req.Model.safe_search
-                      ()
-                  with
-                  | Ok response ->
-                      json_response 200 (Model.answer_response_to_yojson response)
-                  | Error message -> error_response 502 message))))
+                match Engine.Search.resolve app.search req.Model.provider with
+                | Error message -> error_response 400 message
+                | Ok _ -> (
+                    match
+                      Agent.answer agent ~query:req.Model.query
+                        ?extra_queries:req.Model.extra_queries ?depth:req.Model.depth
+                        ?provider:req.Model.provider ?include_domains:req.Model.include_domains
+                        ?exclude_domains:req.Model.exclude_domains ?recency:req.Model.recency
+                        ?language:req.Model.language ?safe_search:req.Model.safe_search ()
+                    with
+                    | Ok response -> json_response 200 (Model.answer_response_to_yojson response)
+                    | Error message -> error_response 502 message))))
 
 let dashboard_enabled app = app.config.Config.dashboard.Config.enabled
 
@@ -510,7 +439,7 @@ let dashboard_metrics app =
 
 let custom_paths app =
   [ "/healthz"; "/api/v1/search"; "/api/v1/fetch"; "/api/v1/answer" ]
-  @ (if dashboard_enabled app then [ "/dashboard"; "/dashboard/data"; "/dashboard/metrics" ] else [])
+  @ if dashboard_enabled app then [ "/dashboard"; "/dashboard/data"; "/dashboard/metrics" ] else []
 
 (* Every custom-route answer crosses this boundary before the transport frames
    it. A head wider than [Http_head.response_head_limit] is replaced by a bounded
@@ -524,24 +453,17 @@ let bounded_response response =
       ~body_length:(String.length response.body) ()
   with
   | Ok _ -> response
-  | Error Http_head.Response_head_too_large ->
-      { status = 500; headers = text_content; body = "" }
+  | Error Http_head.Response_head_too_large -> { status = 500; headers = text_content; body = "" }
 
-let route_custom ?(stopping = fun () -> false) app ~meth ~path ~host ~origin
-    ~body =
-  if String.length body > max_body_size then
-    { status = 413; headers = text_content; body = "" }
+let route_custom ?(stopping = fun () -> false) app ~meth ~path ~host ~origin ~body =
+  if String.length body > max_body_size then { status = 413; headers = text_content; body = "" }
   else
     (* [/healthz] is outside the allowlist; everything else is guarded. *)
     let origin_ok =
-      match origin with
-      | None -> true
-      | Some o -> List.mem o (origin_allowlist app.allowed_hosts)
+      match origin with None -> true | Some o -> List.mem o (origin_allowlist app.allowed_hosts)
     in
-    if not (host_gate app ~path ~host) then
-      text_response 421 "Invalid Host header"
-    else if path <> "/healthz" && not origin_ok then
-      text_response 403 "Invalid Origin header"
+    if not (host_gate app ~path ~host) then text_response 421 "Invalid Host header"
+    else if path <> "/healthz" && not origin_ok then text_response 403 "Invalid Origin header"
     else
       let is_stopping = stopping () in
       match (meth, path) with
@@ -555,8 +477,7 @@ let route_custom ?(stopping = fun () -> false) app ~meth ~path ~host ~origin
           if is_stopping then stopping_response () else dashboard_data app
       | "GET", "/dashboard/metrics" when dashboard_enabled app ->
           if is_stopping then stopping_response () else dashboard_metrics app
-      | _, path when List.mem path (custom_paths app) ->
-          text_response 405 "Method Not Allowed"
+      | _, path when List.mem path (custom_paths app) -> text_response 405 "Method Not Allowed"
       | _ -> text_response 404 "Not Found"
 
 let handle_custom ?stopping app ~meth ~path ~host ~origin ~body =
@@ -570,10 +491,7 @@ let handle_custom ?stopping app ~meth ~path ~host ~origin ~body =
    keeps the replay from becoming a second, unbounded recording of the
    connection. *)
 module Replay = struct
-  type t = {
-    mutable prefix : string;
-    rest : Eio.Flow.source_ty Eio.Resource.t;
-  }
+  type t = { mutable prefix : string; rest : Eio.Flow.source_ty Eio.Resource.t }
 
   let read_methods : t Eio.Flow.read_method list = []
 
@@ -594,9 +512,7 @@ end
 let custom_handler ?stopping app =
   Cohttp_eio.Server.make
     ~callback:(fun _conn req body ->
-      let raw =
-        Eio.Buf_read.(take_all (of_flow body ~max_size:(max_body_size + 1)))
-      in
+      let raw = Eio.Buf_read.(take_all (of_flow body ~max_size:(max_body_size + 1))) in
       if String.length raw > max_body_size then
         Cohttp_eio.Server.respond_string ~status:`Request_entity_too_large ~body:"" ()
       else
@@ -605,14 +521,11 @@ let custom_handler ?stopping app =
         let headers = Http.Request.headers req in
         let host = Http.Header.get headers "host" in
         let origin = Http.Header.get headers "origin" in
-        let response =
-          handle_custom ?stopping app ~meth ~path ~host ~origin ~body:raw
-        in
+        let response = handle_custom ?stopping app ~meth ~path ~host ~origin ~body:raw in
         Cohttp_eio.Server.respond_string
           ~headers:(Http.Header.of_list response.headers)
           ~status:(Http.Status.of_int response.status)
-          ~body:response.body
-          ())
+          ~body:response.body ())
     ()
 
 (* The request line's path: [METHOD SP resource SP version]. *)
@@ -624,9 +537,7 @@ let path_of_request_line line =
       | None -> resource)
   | _ -> "/"
 
-type serve_error =
-  | Bind_address_unresolved
-  | Listener_unavailable
+type serve_error = Bind_address_unresolved | Listener_unavailable
 
 (* The two startup failures are values with a constant classification, not an
    exception: the address may carry the operator's host and a bind failure may
@@ -655,10 +566,7 @@ let headers_of_lines lines =
       | None -> headers
       | Some at ->
           let name = String.trim (String.sub line 0 at) in
-          let value =
-            String.trim
-              (String.sub line (at + 1) (String.length line - at - 1))
-          in
+          let value = String.trim (String.sub line (at + 1) (String.length line - at - 1)) in
           if name = "" then headers else Http.Header.add headers name value)
     (Http.Header.init ()) lines
 
@@ -676,8 +584,11 @@ let http_text_response status body =
   with
   | Ok head -> head ^ body
   | Error Http_head.Response_head_too_large ->
-      "HTTP/1.1 500 Internal Server Error\r\ncontent-type: text/plain\r\n\
-       content-length: 0\r\nconnection: close\r\n\r\n"
+      "HTTP/1.1 500 Internal Server Error\r\n\
+       content-type: text/plain\r\n\
+       content-length: 0\r\n\
+       connection: close\r\n\
+       \r\n"
 
 (* The head-read bound. A connection whose head has not arrived inside this is
    refused rather than waited on, so a peer that trickles a byte at a time
@@ -686,8 +597,7 @@ let http_text_response status body =
    so the decision is taken by the timeout and not by elapsed wall time. *)
 let request_head_timeout_seconds = 10.0
 
-let head_rejected log kind =
-  log Config.Log_info "http.head_rejected" [ ("kind", `String kind) ]
+let head_rejected log kind = log Config.Log_info "http.head_rejected" [ ("kind", `String kind) ]
 
 let write_text flow status sentence =
   Eio.Buf_write.with_flow flow @@ fun oc ->
@@ -717,9 +627,7 @@ let drain flow =
 let refuse ~clock flow status sentence =
   write_text flow status sentence;
   ignore
-    (Eio.Time.Timeout.run
-       (Eio.Time.Timeout.seconds clock request_head_timeout_seconds)
-       (fun () ->
+    (Eio.Time.Timeout.run (Eio.Time.Timeout.seconds clock request_head_timeout_seconds) (fun () ->
          drain flow;
          Ok ()))
 
@@ -738,9 +646,8 @@ let serve_connection ?stopping ~clock ~log ~app ~server ~flow ~peer () =
   Eio.Switch.run @@ fun conn_sw ->
   let reader = Http_head.request_reader flow in
   match
-    Eio.Time.Timeout.run
-      (Eio.Time.Timeout.seconds clock request_head_timeout_seconds)
-      (fun () -> Ok (Http_head.read_request_head reader))
+    Eio.Time.Timeout.run (Eio.Time.Timeout.seconds clock request_head_timeout_seconds) (fun () ->
+        Ok (Http_head.read_request_head reader))
   with
   | Error `Timeout ->
       head_rejected log "timeout";
@@ -752,18 +659,17 @@ let serve_connection ?stopping ~clock ~log ~app ~server ~flow ~peer () =
   | Ok (Error Http_head.Malformed_request_head) ->
       head_rejected log "malformed";
       refuse ~clock flow 400 "Bad Request"
-  | Ok (Ok (head, raw)) ->
+  | Ok (Ok (head, raw)) -> (
       let headers = headers_of_lines head.Http_head.header_lines in
       let path = path_of_request_line head.Http_head.request_line in
       let host = Http.Header.get headers "host" in
-      if not (host_gate app ~path ~host) then
-        refuse ~clock flow 421 "Invalid Host header"
+      if not (host_gate app ~path ~host) then refuse ~clock flow 421 "Invalid Host header"
       else
         let replay : Eio.Flow.source_ty Eio.Resource.t =
-          ( Eio.Resource.T
-              ( { Replay.prefix = raw; rest = Eio.Buf_read.as_flow reader },
-                Eio.Flow.Pi.source (module Replay) )
-            :> Eio.Flow.source_ty Eio.Resource.t )
+          (Eio.Resource.T
+             ( { Replay.prefix = raw; rest = Eio.Buf_read.as_flow reader },
+               Eio.Flow.Pi.source (module Replay) )
+            :> Eio.Flow.source_ty Eio.Resource.t)
         in
         let replay_reader = Http_head.request_reader replay in
         let handler =
@@ -773,10 +679,10 @@ let serve_connection ?stopping ~clock ~log ~app ~server ~flow ~peer () =
               server
           else custom_handler ?stopping app
         in
-        (match
-           Eio.Buf_write.with_flow flow @@ fun oc ->
-           Cohttp_eio.Server.callback handler (conn_sw, peer) replay_reader oc
-         with
+        match
+          Eio.Buf_write.with_flow flow @@ fun oc ->
+          Cohttp_eio.Server.callback handler (conn_sw, peer) replay_reader oc
+        with
         | () -> ()
         | exception Eio.Buf_read.Buffer_limit_exceeded ->
             (* A later request on this keep-alive connection brought a head
@@ -786,11 +692,9 @@ let serve_connection ?stopping ~clock ~log ~app ~server ~flow ~peer () =
             head_rejected log "too_large";
             refuse ~clock flow 431 "Request Header Fields Too Large")
 
-let run_health_monitor (health : health) ~(config : Config.t)
-    ~(sleep : unit -> unit) =
+let run_health_monitor (health : health) ~(config : Config.t) ~(sleep : unit -> unit) =
   let tick () =
-    Health.run_probes config ~built:health.built ~table:health.probes
-      ~net:health.net health.board
+    Health.run_probes config ~built:health.built ~table:health.probes ~net:health.net health.board
   in
   (* Sleep first, as [HealthMonitor.run] does: a start does not spend a probe
      before the first interval. The fiber is a child of the listener's switch
@@ -811,9 +715,7 @@ let run_health_monitor (health : health) ~(config : Config.t)
    oracle either; a future key would move one binding. *)
 let drain_grace_seconds = 10.0
 
-type lifecycle =
-  | Drained
-  | Grace_expired
+type lifecycle = Drained | Grace_expired
 
 (* Raised into the connection switch at the grace ceiling, and by the accept
    loop when accepting itself fails. Both are caught inside [serve_http], so
@@ -822,20 +724,18 @@ exception Drain_forced
 
 exception Listener_failed of exn
 
-let serve_http ~env ~sw ~log app server ~host ~port ~stop
-    ?(grace_seconds = drain_grace_seconds) () =
-  match addr_of_host ~net:(env#net) host with
+let serve_http ~env ~sw ~log app server ~host ~port ~stop ?(grace_seconds = drain_grace_seconds) ()
+    =
+  match addr_of_host ~net:env#net host with
   | Error error ->
-      log Config.Log_warning "http.listen_failed"
-        [ ("kind", `String (serve_error_kind error)) ];
+      log Config.Log_warning "http.listen_failed" [ ("kind", `String (serve_error_kind error)) ];
       Error error
   | Ok addr -> (
       match Eio.Net.listen ~backlog:128 ~sw env#net (`Tcp (addr, port)) with
       | exception (Eio.Cancel.Cancelled _ as exn) -> raise exn
       | exception _ ->
           let error = Listener_unavailable in
-          log Config.Log_warning "http.listen_failed"
-            [ ("kind", `String (serve_error_kind error)) ];
+          log Config.Log_warning "http.listen_failed" [ ("kind", `String (serve_error_kind error)) ];
           Error error
       | socket ->
           (* The one fact every custom route reads while draining. It is set
@@ -849,20 +749,15 @@ let serve_http ~env ~sw ~log app server ~host ~port ~stop
              completion are captured now so the drain can cancel and join it. *)
           let health =
             match app.health with
-            | Some health
-              when app.config.Config.search.Config.health_interval_seconds > 0.0
-              ->
-                let interval =
-                  app.config.Config.search.Config.health_interval_seconds
-                in
+            | Some health when app.config.Config.search.Config.health_interval_seconds > 0.0 ->
+                let interval = app.config.Config.search.Config.health_interval_seconds in
                 let ready, resolve_ready = Eio.Promise.create () in
                 let done_ =
                   Eio.Fiber.fork_promise ~sw (fun () ->
-                    Eio.Cancel.sub (fun health_ctx ->
-                      Eio.Promise.resolve resolve_ready health_ctx;
-                      run_health_monitor health ~config:app.config
-                        ~sleep:(fun () ->
-                          Eio.Time.Mono.sleep env#mono_clock interval)))
+                      Eio.Cancel.sub (fun health_ctx ->
+                          Eio.Promise.resolve resolve_ready health_ctx;
+                          run_health_monitor health ~config:app.config ~sleep:(fun () ->
+                              Eio.Time.Mono.sleep env#mono_clock interval)))
                 in
                 Some (ready, done_)
             | _ -> None
@@ -870,10 +765,10 @@ let serve_http ~env ~sw ~log app server ~host ~port ~stop
           let stop_health () =
             match health with
             | None -> ()
-            | Some (ready, done_) ->
+            | Some (ready, done_) -> (
                 let health_ctx = Eio.Promise.await ready in
                 Eio.Cancel.cancel health_ctx (Failure "shutdown");
-                (match Eio.Promise.await done_ with
+                match Eio.Promise.await done_ with
                 | Ok () | Error (Eio.Cancel.Cancelled _) -> ()
                 | Error _ -> ())
           in
@@ -887,8 +782,7 @@ let serve_http ~env ~sw ~log app server ~host ~port ~stop
              anything else is a WARNING. Neither arm renders the exception. *)
           let on_error = function
             | Mcp_kit_cohttp_eio.Rejected_origin ->
-                log Config.Log_info "http.origin_rejected"
-                  [ ("kind", `String "rejected_origin") ]
+                log Config.Log_info "http.origin_rejected" [ ("kind", `String "rejected_origin") ]
             | exn ->
                 log Config.Log_warning "http.connection_error"
                   [ ("kind", `String (Log.classify_exn exn)) ]
@@ -914,84 +808,77 @@ let serve_http ~env ~sw ~log app server ~host ~port ~stop
             let forced = ref false in
             let serve () =
               Eio.Switch.run @@ fun conn_sw ->
-                let accept_ctx, resolve_accept_ctx = Eio.Promise.create () in
-                let accept_done =
-                  Eio.Fiber.fork_promise ~sw (fun () ->
+              let accept_ctx, resolve_accept_ctx = Eio.Promise.create () in
+              let accept_done =
+                Eio.Fiber.fork_promise ~sw (fun () ->
                     Eio.Cancel.sub (fun ctx ->
-                      Eio.Promise.resolve resolve_accept_ctx ctx;
-                      let rec accept () =
-                        let flow, peer = Eio.Net.accept ~sw:conn_sw socket in
-                        incr connections;
-                        Eio.Fiber.fork ~sw:conn_sw (fun () ->
-                          Fun.protect ~finally:connection_finished (fun () ->
-                            try
-                              serve_connection
-                                ~stopping:(fun () -> Atomic.get stopping)
-                                ~clock:env#mono_clock ~log ~app ~server
-                                ~flow:
-                                  (flow
-                                    :> Eio.Flow.two_way_ty Eio.Resource.t)
-                                ~peer ()
-                            with
-                            | Eio.Cancel.Cancelled _ as exn -> raise exn
-                            | exn -> on_error exn));
-                        accept ()
-                      in
-                      accept ()))
-                in
-                match
-                  Eio.Fiber.first
-                    (fun () ->
-                      Eio.Promise.await stop;
-                      `Stopped)
-                    (fun () ->
-                      match Eio.Promise.await accept_done with
-                      | Ok () -> `Accept_ended
-                      | Error (Eio.Cancel.Cancelled _ as exn) -> raise exn
-                      | Error exn -> `Accept_failed exn)
-                with
-                | `Accept_failed exn ->
-                    Atomic.set stopping true;
-                    Eio.Net.close socket;
-                    stop_health ();
-                    raise (Listener_failed exn)
-                | `Stopped | `Accept_ended ->
-                    Atomic.set stopping true;
-                    log Config.Log_info "http.stopping"
-                      [ ("grace_seconds", `Float grace_seconds) ];
-                    (* Stop accepting, then close the socket: the accept fiber
+                        Eio.Promise.resolve resolve_accept_ctx ctx;
+                        let rec accept () =
+                          let flow, peer = Eio.Net.accept ~sw:conn_sw socket in
+                          incr connections;
+                          Eio.Fiber.fork ~sw:conn_sw (fun () ->
+                              Fun.protect ~finally:connection_finished (fun () ->
+                                  try
+                                    serve_connection
+                                      ~stopping:(fun () -> Atomic.get stopping)
+                                      ~clock:env#mono_clock ~log ~app ~server
+                                      ~flow:(flow :> Eio.Flow.two_way_ty Eio.Resource.t)
+                                      ~peer ()
+                                  with
+                                  | Eio.Cancel.Cancelled _ as exn -> raise exn
+                                  | exn -> on_error exn));
+                          accept ()
+                        in
+                        accept ()))
+              in
+              match
+                Eio.Fiber.first
+                  (fun () ->
+                    Eio.Promise.await stop;
+                    `Stopped)
+                  (fun () ->
+                    match Eio.Promise.await accept_done with
+                    | Ok () -> `Accept_ended
+                    | Error (Eio.Cancel.Cancelled _ as exn) -> raise exn
+                    | Error exn -> `Accept_failed exn)
+              with
+              | `Accept_failed exn ->
+                  Atomic.set stopping true;
+                  Eio.Net.close socket;
+                  stop_health ();
+                  raise (Listener_failed exn)
+              | `Stopped | `Accept_ended -> (
+                  Atomic.set stopping true;
+                  log Config.Log_info "http.stopping" [ ("grace_seconds", `Float grace_seconds) ];
+                  (* Stop accepting, then close the socket: the accept fiber
                        no longer sits in [accept], so the close cannot race the
                        resource it is registered with. *)
-                    (try
-                       Eio.Cancel.cancel
-                         (Eio.Promise.await accept_ctx)
-                         (Failure "shutdown")
-                     with Invalid_argument _ -> ());
-                    (match Eio.Promise.await accept_done with
-                    | Ok () | Error (Eio.Cancel.Cancelled _) -> ()
-                    | Error exn -> raise (Listener_failed exn));
-                    Eio.Net.close socket;
-                    stop_health ();
-                    let drain =
-                      Eio.Time.Timeout.run
-                        (Eio.Time.Timeout.seconds env#mono_clock grace_seconds)
-                        (fun () ->
-                          wait_idle ();
-                          Ok ())
-                    in
-                    (match drain with
-                    | Ok () -> `Drained
-                    | Error `Timeout ->
-                        forced := true;
-                        Eio.Switch.fail conn_sw Drain_forced;
-                        (* The failure above cancels this body's context too
+                  (try Eio.Cancel.cancel (Eio.Promise.await accept_ctx) (Failure "shutdown")
+                   with Invalid_argument _ -> ());
+                  (match Eio.Promise.await accept_done with
+                  | Ok () | Error (Eio.Cancel.Cancelled _) -> ()
+                  | Error exn -> raise (Listener_failed exn));
+                  Eio.Net.close socket;
+                  stop_health ();
+                  let drain =
+                    Eio.Time.Timeout.run (Eio.Time.Timeout.seconds env#mono_clock grace_seconds)
+                      (fun () ->
+                        wait_idle ();
+                        Ok ())
+                  in
+                  match drain with
+                  | Ok () -> `Drained
+                  | Error `Timeout ->
+                      forced := true;
+                      Eio.Switch.fail conn_sw Drain_forced;
+                      (* The failure above cancels this body's context too
                            (it is a fiber of the switch), so the join has to
                            run protected: it is cleanup, not work the
                            cancellation should pre-empt. *)
-                        Eio.Cancel.protect wait_idle;
-                        log Config.Log_warning "http.drain_forced"
-                          [ ("grace_seconds", `Float grace_seconds) ];
-                        `Forced)
+                      Eio.Cancel.protect wait_idle;
+                      log Config.Log_warning "http.drain_forced"
+                        [ ("grace_seconds", `Float grace_seconds) ];
+                      `Forced)
             in
             match serve () with
             | `Drained -> Ok Drained
@@ -1014,18 +901,9 @@ let tools_surface =
 
 let rest_routes =
   [
-    ( "POST",
-      "/api/v1/answer",
-      "AnswerRequest",
-      List.sort compare (params answer_properties) );
-    ( "POST",
-      "/api/v1/fetch",
-      "FetchRequest",
-      List.sort compare (params fetch_properties) );
-    ( "POST",
-      "/api/v1/search",
-      "SearchRequest",
-      List.sort compare (params search_properties) );
+    ("POST", "/api/v1/answer", "AnswerRequest", List.sort compare (params answer_properties));
+    ("POST", "/api/v1/fetch", "FetchRequest", List.sort compare (params fetch_properties));
+    ("POST", "/api/v1/search", "SearchRequest", List.sort compare (params search_properties));
   ]
 
 let operational_routes =
@@ -1038,16 +916,9 @@ let operational_routes =
 
 let cli_verbs = [ "answer"; "fetch"; "search" ]
 
-type flag_arity =
-  | Boolean
-  | Value
+type flag_arity = Boolean | Value
 
-type server_flag = {
-  name : string;
-  arity : flag_arity;
-  repeats : bool;
-  key : string;
-}
+type server_flag = { name : string; arity : flag_arity; repeats : bool; key : string }
 
 let server_flag_table =
   [
@@ -1058,43 +929,44 @@ let server_flag_table =
     { name = "--http"; arity = Boolean; repeats = false; key = "http" };
     { name = "--host"; arity = Value; repeats = false; key = "host" };
     { name = "--port"; arity = Value; repeats = false; key = "port" };
-    {
-      name = "--allowed-host";
-      arity = Value;
-      repeats = true;
-      key = "allowed_host";
-    };
+    { name = "--allowed-host"; arity = Value; repeats = true; key = "allowed_host" };
     { name = "--log-level"; arity = Value; repeats = false; key = "log_level" };
-    {
-      name = "--log-format";
-      arity = Value;
-      repeats = false;
-      key = "log_format";
-    };
+    { name = "--log-format"; arity = Value; repeats = false; key = "log_format" };
   ]
 
 (* The frozen manifest's list is derived, so the name the manifest advertises
    and the name the parser accepts are one fact. *)
-let server_flags =
-  List.map (fun (flag : server_flag) -> flag.name) server_flag_table
+let server_flags = List.map (fun (flag : server_flag) -> flag.name) server_flag_table
 
-let flag_spec name =
-  List.find_opt (fun (flag : server_flag) -> flag.name = name) server_flag_table
+let flag_spec name = List.find_opt (fun (flag : server_flag) -> flag.name = name) server_flag_table
 
 (* The keys [Usage] writes on each journal line kind, sorted. Pinned against a
    real journal by test/test_p8_surface.ml. *)
 let journal_fields =
   [
     ( "search",
-      [
-        "cost_usd"; "error"; "fell_back"; "ms"; "provider"; "results"; "run"; "step"; "tool"; "ts";
-      ] );
-    ( "fetch",
-      [ "chars"; "cost_usd"; "error"; "fallback"; "ms"; "run"; "step"; "tool"; "ts" ] );
+      [ "cost_usd"; "error"; "fell_back"; "ms"; "provider"; "results"; "run"; "step"; "tool"; "ts" ]
+    );
+    ("fetch", [ "chars"; "cost_usd"; "error"; "fallback"; "ms"; "run"; "step"; "tool"; "ts" ]);
     ( "answer",
       [
-        "answer_chars"; "cited"; "cited_invalid"; "completion_tokens"; "depth"; "error"; "fetched";
-        "material_chars"; "model"; "model_cost_usd"; "ms"; "prompt_tokens"; "results"; "run";
-        "searches"; "sources"; "tool"; "ts";
+        "answer_chars";
+        "cited";
+        "cited_invalid";
+        "completion_tokens";
+        "depth";
+        "error";
+        "fetched";
+        "material_chars";
+        "model";
+        "model_cost_usd";
+        "ms";
+        "prompt_tokens";
+        "results";
+        "run";
+        "searches";
+        "sources";
+        "tool";
+        "ts";
       ] );
   ]

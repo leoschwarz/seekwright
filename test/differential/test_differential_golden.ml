@@ -25,24 +25,21 @@ open Seekwright_diff
 (* The golden file's shape: a key/value header, then [--- oracle] (always) and
    [--- port] (only for an explicit divergence). One parse shared with nothing
    else, so a malformed golden cannot pass by being unread. *)
-type golden =
-  {
-    area : string;
-    case : string;
-    verification : string;
-    oracle : string;
-    projection : string;
-    reason : string option;
-    oracle_lines : string list;
-    port_lines : string list option;
-  }
+type golden = {
+  area : string;
+  case : string;
+  verification : string;
+  oracle : string;
+  projection : string;
+  reason : string option;
+  oracle_lines : string list;
+  port_lines : string list option;
+}
 
 let lines_of file =
   let channel = open_in_bin file in
   let rec go acc =
-    match input_line channel with
-    | exception End_of_file -> List.rev acc
-    | line -> go (line :: acc)
+    match input_line channel with exception End_of_file -> List.rev acc | line -> go (line :: acc)
   in
   let all = go [] in
   close_in channel;
@@ -68,8 +65,12 @@ let parse path =
       match rest with
       | [] -> List.rev ((name, List.rev acc) :: done_sections)
       | line :: more ->
-          if is_marker line
-          then go ((name, List.rev acc) :: done_sections) [] (String.sub line 4 (String.length line - 4)) more
+          if is_marker line then
+            go
+              ((name, List.rev acc) :: done_sections)
+              []
+              (String.sub line 4 (String.length line - 4))
+              more
           else go done_sections (line :: acc) name more
     in
     List.filter (fun (name, _) -> name <> "") (go [] [] "" (List.tl all))
@@ -92,15 +93,13 @@ let parse path =
     projection = field "projection";
     reason = List.assoc_opt "reason" header;
     oracle_lines = section "oracle";
-    port_lines = (match List.assoc_opt "port" sections with Some [] | None -> None | Some body -> Some body);
+    port_lines =
+      (match List.assoc_opt "port" sections with Some [] | None -> None | Some body -> Some body);
   }
 
 (* Extensions by area: config inputs are TOML, sanitize inputs are raw text,
    everything else is a JSON spec. *)
-let extension_of = function
-  | "config" -> "toml"
-  | "sanitize" -> "txt"
-  | _ -> "json"
+let extension_of = function "config" -> "toml" | "sanitize" -> "txt" | _ -> "json"
 
 let corpus_path area case =
   Filename.concat (Filename.concat "corpus" area) (case ^ "." ^ extension_of area)
@@ -136,50 +135,69 @@ let projection area =
 
 let check (golden : golden) () =
   let input = corpus_path golden.area golden.case in
-  if not (Sys.file_exists input)
-  then failwith (Printf.sprintf "%s/%s: the golden has no corpus input at %s" golden.area golden.case input);
+  if not (Sys.file_exists input) then
+    failwith
+      (Printf.sprintf "%s/%s: the golden has no corpus input at %s" golden.area golden.case input);
   let project = projection golden.area in
   let port = if golden.area = "config" then project input else project (read_text input) in
   match golden.verification with
   | "differential-golden" ->
-    if golden.port_lines <> None then failwith (Printf.sprintf "%s/%s: a agreeing golden carries a --- port section" golden.area golden.case);
-    if golden.oracle <> "python" then failwith (Printf.sprintf "%s/%s: unknown oracle %S" golden.area golden.case golden.oracle);
-    if golden.projection <> golden.area then failwith (Printf.sprintf "%s/%s: projection %S names no area" golden.area golden.case golden.projection);
-    if port <> golden.oracle_lines
-    then
-      failwith
-        (Printf.sprintf
-           "%s/%s: the port diverged from its golden.\n  pinned:\n    %s\n  port now:\n    %s"
-           golden.area golden.case (String.concat "\n    " golden.oracle_lines) (String.concat "\n    " port))
+      if golden.port_lines <> None then
+        failwith
+          (Printf.sprintf "%s/%s: a agreeing golden carries a --- port section" golden.area
+             golden.case);
+      if golden.oracle <> "python" then
+        failwith (Printf.sprintf "%s/%s: unknown oracle %S" golden.area golden.case golden.oracle);
+      if golden.projection <> golden.area then
+        failwith
+          (Printf.sprintf "%s/%s: projection %S names no area" golden.area golden.case
+             golden.projection);
+      if port <> golden.oracle_lines then
+        failwith
+          (Printf.sprintf
+             "%s/%s: the port diverged from its golden.\n  pinned:\n    %s\n  port now:\n    %s"
+             golden.area golden.case
+             (String.concat "\n    " golden.oracle_lines)
+             (String.concat "\n    " port))
   | "explicit-divergence" ->
-    let pinned =
-      match golden.port_lines with
-      | Some body -> body
-      | None -> failwith (Printf.sprintf "%s/%s: an explicit divergence pins no --- port section" golden.area golden.case)
-    in
-    if golden.reason = None
-    then failwith (Printf.sprintf "%s/%s: an explicit divergence carries no reason" golden.area golden.case);
-    if port <> pinned
-    then
-      failwith
-        (Printf.sprintf
-           "%s/%s: the port no longer answers as its divergence was pinned.\n  pinned:\n    %s\n  port now:\n    %s"
-           golden.area golden.case (String.concat "\n    " pinned) (String.concat "\n    " port));
-    if port = golden.oracle_lines
-    then
-      failwith
-        (Printf.sprintf
-           "%s/%s: the port now agrees with the oracle — this divergence has closed, so the golden must become differential-golden (and its row in divergences.tsv retired)"
-           golden.area golden.case)
-  | other -> failwith (Printf.sprintf "%s/%s: unknown verification %S" golden.area golden.case other)
+      let pinned =
+        match golden.port_lines with
+        | Some body -> body
+        | None ->
+            failwith
+              (Printf.sprintf "%s/%s: an explicit divergence pins no --- port section" golden.area
+                 golden.case)
+      in
+      if golden.reason = None then
+        failwith
+          (Printf.sprintf "%s/%s: an explicit divergence carries no reason" golden.area golden.case);
+      if port <> pinned then
+        failwith
+          (Printf.sprintf
+             "%s/%s: the port no longer answers as its divergence was pinned.\n\
+             \  pinned:\n\
+             \    %s\n\
+             \  port now:\n\
+             \    %s"
+             golden.area golden.case (String.concat "\n    " pinned) (String.concat "\n    " port));
+      if port = golden.oracle_lines then
+        failwith
+          (Printf.sprintf
+             "%s/%s: the port now agrees with the oracle — this divergence has closed, so the \
+              golden must become differential-golden (and its row in divergences.tsv retired)"
+             golden.area golden.case)
+  | other ->
+      failwith (Printf.sprintf "%s/%s: unknown verification %S" golden.area golden.case other)
 
 (* A missing directory is reported as empty here and turned into a named failure
    by [area_coverage], so a suite that loses an area says which area and why
    instead of dying where it walks the filesystem. *)
 let listed directory =
-  if not (Sys.file_exists directory)
-  then []
-  else Array.to_list (Sys.readdir directory) |> List.filter (fun name -> name <> "." && name <> "..") |> List.sort String.compare
+  if not (Sys.file_exists directory) then []
+  else
+    Array.to_list (Sys.readdir directory)
+    |> List.filter (fun name -> name <> "." && name <> "..")
+    |> List.sort String.compare
 
 let goldens_of area =
   listed (Filename.concat "golden" area)
@@ -192,10 +210,10 @@ let corpus_of area = listed (Filename.concat "corpus" area)
 let area_tests area =
   goldens_of area
   |> List.map (fun path ->
-         let golden = parse path in
-         if golden.area <> area || Filename.remove_extension (Filename.basename path) <> golden.case
-         then failwith (Printf.sprintf "%s: the golden header disagrees with where the file sits" path);
-         (golden.case, `Quick, check golden))
+      let golden = parse path in
+      if golden.area <> area || Filename.remove_extension (Filename.basename path) <> golden.case
+      then failwith (Printf.sprintf "%s: the golden header disagrees with where the file sits" path);
+      (golden.case, `Quick, check golden))
 
 (* the reverse direction and the floor, once per area *)
 let area_coverage area =
@@ -209,21 +227,25 @@ let area_coverage area =
       in
       List.iter
         (fun directory ->
-          if not (Sys.file_exists directory)
-          then
+          if not (Sys.file_exists directory) then
             failwith
-              (Printf.sprintf "area %s has no %s directory — an area is added to the floor, the stanza deps, and the tree together"
+              (Printf.sprintf
+                 "area %s has no %s directory — an area is added to the floor, the stanza deps, \
+                  and the tree together"
                  area directory))
         [ Filename.concat "golden" area; Filename.concat "corpus" area ];
       let goldens = goldens_of area |> List.length in
-      if goldens < expected
-      then failwith (Printf.sprintf "area %s pins %d goldens, below the floor of %d" area goldens expected);
+      if goldens < expected then
+        failwith
+          (Printf.sprintf "area %s pins %d goldens, below the floor of %d" area goldens expected);
       List.iter
         (fun input ->
           let case = Filename.remove_extension input in
           let golden = Filename.concat (Filename.concat "golden" area) (case ^ ".golden") in
-          if not (Sys.file_exists golden)
-          then failwith (Printf.sprintf "corpus input %s/%s has no golden — regenerate, or delete the input" area input))
+          if not (Sys.file_exists golden) then
+            failwith
+              (Printf.sprintf "corpus input %s/%s has no golden — regenerate, or delete the input"
+                 area input))
         (corpus_of area) )
 
 let () =
@@ -236,19 +258,20 @@ let () =
           fun () ->
             List.iter
               (fun (area, _) ->
-                if not (List.mem_assoc area Projection.areas)
-                then failwith (Printf.sprintf "the floor lists area %s, and no projection owns it" area))
+                if not (List.mem_assoc area Projection.areas) then
+                  failwith
+                    (Printf.sprintf "the floor lists area %s, and no projection owns it" area))
               min_cases;
             List.iter
               (fun (area, _) ->
-                if not (List.mem_assoc area min_cases)
-                then failwith (Printf.sprintf "a projection owns area %s, and the floor does not count it" area))
+                if not (List.mem_assoc area min_cases) then
+                  failwith
+                    (Printf.sprintf "a projection owns area %s, and the floor does not count it"
+                       area))
               Projection.areas );
       ] )
   in
   let groups =
-    List.map
-      (fun area -> (area, area_tests area @ [ area_coverage area ]))
-      (List.map fst min_cases)
+    List.map (fun area -> (area, area_tests area @ [ area_coverage area ])) (List.map fst min_cases)
   in
   Alcotest.run "differential-golden" (harness :: groups)

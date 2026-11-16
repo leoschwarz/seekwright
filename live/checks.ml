@@ -9,7 +9,8 @@ type check = { label : string; failure : string option }
 
 let passing label = { label; failure = None }
 
-let expect label condition sentence = { label; failure = if condition then None else Some sentence }
+let expect label condition sentence =
+  { label; failure = (if condition then None else Some sentence) }
 
 let contains haystack needle =
   let h = String.length haystack and n = String.length needle in
@@ -22,8 +23,7 @@ let starts_with_http url =
 let named ~name (response : Model.search_response) =
   expect "the response names the provider that was asked for"
     (String.equal response.Model.provider name)
-    (Printf.sprintf
-       "the response names %S, not %S: an unexpected call, or a route that substituted"
+    (Printf.sprintf "the response names %S, not %S: an unexpected call, or a route that substituted"
        response.Model.provider name)
 
 let nonempty (response : Model.search_response) =
@@ -31,10 +31,12 @@ let nonempty (response : Model.search_response) =
     "the provider answered with no results"
 
 let every_result label predicate (response : Model.search_response) =
-  let failed = List.filter (fun (result : Model.result) -> not (predicate result)) response.Model.results in
-  expect label
-    (failed = [])
-    (Printf.sprintf "%d of %d results fail this" (List.length failed) (List.length response.Model.results))
+  let failed =
+    List.filter (fun (result : Model.result) -> not (predicate result)) response.Model.results
+  in
+  expect label (failed = [])
+    (Printf.sprintf "%d of %d results fail this" (List.length failed)
+       (List.length response.Model.results))
 
 let urls_are_http (response : Model.search_response) =
   every_result "every result carries an http(s) URL"
@@ -79,26 +81,34 @@ let text_instead_of_snippet (response : Model.search_response) =
 
 let first_url_is_http (response : Model.search_response) =
   match response.Model.results with
-  | first :: _ -> expect "the first result's URL is http(s)" (starts_with_http first.Model.url) "the first result's URL is not http(s)"
+  | first :: _ ->
+      expect "the first result's URL is http(s)"
+        (starts_with_http first.Model.url)
+        "the first result's URL is not http(s)"
   | [] -> passing "the first result's URL is http(s) (no results to check)"
 
 let domains_constrain domain response =
-  every_result (Printf.sprintf "every result is from %s" domain)
+  every_result
+    (Printf.sprintf "every result is from %s" domain)
     (fun (result : Model.result) -> contains result.Model.url domain)
     response
 
 let answer_present (response : Model.search_response) =
   expect "the backend synthesised an answer"
-    (match response.Model.answer with Some answer -> String.length (String.trim answer) > 0 | None -> false)
+    (match response.Model.answer with
+    | Some answer -> String.length (String.trim answer) > 0
+    | None -> false)
     "the answer field was absent or empty"
 
 let notice_contains needle (response : Model.search_response) =
-  expect (Printf.sprintf "the response notice carries %S" needle)
+  expect
+    (Printf.sprintf "the response notice carries %S" needle)
     (match response.Model.notice with Some notice -> contains notice needle | None -> false)
     "the response carried no notice, or one without that constraint"
 
 let notice_lacks needle (response : Model.search_response) =
-  expect (Printf.sprintf "the notice does not carry %S" needle)
+  expect
+    (Printf.sprintf "the notice does not carry %S" needle)
     (match response.Model.notice with Some notice -> not (contains notice needle) | None -> true)
     "the response carried that notice"
 
@@ -107,7 +117,8 @@ let provider_step ~name ~step (response : Model.search_response) =
   match (name, step) with
   | "serper", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response ]
   | "serper", 1 -> base @ [ nonempty response; domains_constrain "python.org" response ]
-  | "scrappa", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response ]
+  | "scrappa", 0 ->
+      base @ [ nonempty response; urls_are_http response; titles_are_present response ]
   | "scrappa", 1 -> base @ [ nonempty response; domains_constrain "python.org" response ]
   | "linkup", 0 -> base @ [ nonempty response; answer_present response ]
   | "linkup", 1 -> base @ [ notice_contains "country/language" response ]
@@ -115,27 +126,104 @@ let provider_step ~name ~step (response : Model.search_response) =
       base @ [ nonempty response; first_url_is_http response; notice_lacks "API key" response ]
   | "exa:free", 0 -> base @ [ nonempty response; first_url_is_http response ]
   | "freeserp", 0 ->
-      base @ [ nonempty response; any_url_and_snippet response; urls_are_http response; titles_are_present response; no_text response ]
-  | "parallel", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response; no_snippet response ]
+      base
+      @ [
+          nonempty response;
+          any_url_and_snippet response;
+          urls_are_http response;
+          titles_are_present response;
+          no_text response;
+        ]
+  | "parallel", 0 ->
+      base
+      @ [
+          nonempty response;
+          urls_are_http response;
+          titles_are_present response;
+          no_snippet response;
+        ]
   | "parallel", 1 -> base @ [ nonempty response; domains_constrain "python.org" response ]
   | "parallel:free", 0 -> base @ [ nonempty response; urls_are_http response ]
-  | "searxng", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response ]
+  | "searxng", 0 ->
+      base @ [ nonempty response; urls_are_http response; titles_are_present response ]
   | "tavily", 0 ->
-      base @ [ nonempty response; urls_are_http response; titles_are_present response; text_instead_of_snippet response; answer_present response ]
+      base
+      @ [
+          nonempty response;
+          urls_are_http response;
+          titles_are_present response;
+          text_instead_of_snippet response;
+          answer_present response;
+        ]
   | "tavily", 1 -> base @ [ nonempty response; domains_constrain "python.org" response ]
-  | "tinyfish", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response; snippets_present response; no_text response ]
-  | "algolia", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response; snippets_present response; no_text response ]
-  | "search1api", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response; snippets_present response; no_text response ]
-  | "anysearch", 0 -> base @ [ nonempty response; any_url_and_snippet response; urls_are_http response; titles_are_present response; no_text response ]
-  | "serpapi", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response; snippets_present response; no_text response ]
-  | "querit", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response; snippets_present response; no_text response ]
-  | "deepseek", 0 -> base @ [ nonempty response; urls_are_http response; titles_are_present response; snippets_present response ]
+  | "tinyfish", 0 ->
+      base
+      @ [
+          nonempty response;
+          urls_are_http response;
+          titles_are_present response;
+          snippets_present response;
+          no_text response;
+        ]
+  | "algolia", 0 ->
+      base
+      @ [
+          nonempty response;
+          urls_are_http response;
+          titles_are_present response;
+          snippets_present response;
+          no_text response;
+        ]
+  | "search1api", 0 ->
+      base
+      @ [
+          nonempty response;
+          urls_are_http response;
+          titles_are_present response;
+          snippets_present response;
+          no_text response;
+        ]
+  | "anysearch", 0 ->
+      base
+      @ [
+          nonempty response;
+          any_url_and_snippet response;
+          urls_are_http response;
+          titles_are_present response;
+          no_text response;
+        ]
+  | "serpapi", 0 ->
+      base
+      @ [
+          nonempty response;
+          urls_are_http response;
+          titles_are_present response;
+          snippets_present response;
+          no_text response;
+        ]
+  | "querit", 0 ->
+      base
+      @ [
+          nonempty response;
+          urls_are_http response;
+          titles_are_present response;
+          snippets_present response;
+          no_text response;
+        ]
+  | "deepseek", 0 ->
+      base
+      @ [
+          nonempty response;
+          urls_are_http response;
+          titles_are_present response;
+          snippets_present response;
+        ]
   | _ ->
       [
-        expect "this case has a ported assertion for the step"
-          false
+        expect "this case has a ported assertion for the step" false
           (Printf.sprintf
-             "no assertion is ported for %s step %d: add the adapter's arm rather than a generic check"
+             "no assertion is ported for %s step %d: add the adapter's arm rather than a generic \
+              check"
              name step);
       ]
 
@@ -150,7 +238,8 @@ let status_is code (page : Model.fetch_response) =
        (match page.Model.status_code with Some code -> string_of_int code | None -> "absent"))
 
 let content_type_is kind (page : Model.fetch_response) =
-  expect (Printf.sprintf "the content type is %s" kind)
+  expect
+    (Printf.sprintf "the content type is %s" kind)
     (page.Model.content_type = Some kind)
     (Printf.sprintf "the content type was %s"
        (match page.Model.content_type with Some kind -> kind | None -> "absent"))
@@ -161,19 +250,24 @@ let text_arrives (page : Model.fetch_response) =
     "the extraction was empty: on a page this simple that means the envelope moved"
 
 let text_carries needle (page : Model.fetch_response) =
-  expect (Printf.sprintf "the extracted text carries %S" needle)
+  expect
+    (Printf.sprintf "the extracted text carries %S" needle)
     (contains (String.lowercase_ascii (text_of page)) needle)
     "the extraction came back without the page's text"
 
 let no_vendor_media_type (page : Model.fetch_response) =
-  expect "no vendor media type is reported: the fallback parses its own body and answers in page text"
+  expect
+    "no vendor media type is reported: the fallback parses its own body and answers in page text"
     (page.Model.content_type = None)
-    (Printf.sprintf "the response reported content type %S, which is the vendor's body, not the page's"
+    (Printf.sprintf
+       "the response reported content type %S, which is the vendor's body, not the page's"
        (match page.Model.content_type with Some kind -> kind | None -> ""))
 
 let has_a_title (page : Model.fetch_response) =
   expect "the page has a title"
-    (match page.Model.title with Some title -> String.length (String.trim title) > 0 | None -> false)
+    (match page.Model.title with
+    | Some title -> String.length (String.trim title) > 0
+    | None -> false)
     "the title was absent or empty"
 
 let asked_url url (page : Model.fetch_response) =
@@ -182,8 +276,7 @@ let asked_url url (page : Model.fetch_response) =
     (Printf.sprintf "the response was for %S" page.Model.requested_url)
 
 let landed_url url (page : Model.fetch_response) =
-  expect "the response names the URL the page landed on"
-    (String.equal page.Model.url url)
+  expect "the response names the URL the page landed on" (String.equal page.Model.url url)
     (Printf.sprintf "the response names %S as where the page landed" page.Model.url)
 
 (* One arm per fetch case, each the assertion list the oracle's live test for
@@ -222,8 +315,7 @@ let verify_fetch case (page : Model.fetch_response) =
         has_a_title page;
         asked_url fetch_url page;
       ]
-  | Cases.Scrappa ->
-      [ status_is 200 page; text_carries "example" page; asked_url fetch_url page ]
+  | Cases.Scrappa -> [ status_is 200 page; text_carries "example" page; asked_url fetch_url page ]
   | Cases.Tavily ->
       [ status_is 200 page; text_arrives page; no_vendor_media_type page; asked_url fetch_url page ]
   | Cases.Linkup ->
@@ -239,8 +331,7 @@ let verify_fetch case (page : Model.fetch_response) =
          error channel, because what it proves is a refusal. Reaching it with a
          page in hand is the failure — the guardrail let the request out. *)
       [
-        expect "the cloud-metadata case has no page to assert on"
-          false
+        expect "the cloud-metadata case has no page to assert on" false
           "a page came back for the metadata URL: the public-web grant let the request out";
       ]
 
@@ -251,9 +342,11 @@ let verify_agent ~depth ~model (response : Model.answer_response) =
     | _ -> false
   in
   [
-    expect "the answer carries prose" (String.length (String.trim response.Model.answer) > 0)
+    expect "the answer carries prose"
+      (String.length (String.trim response.Model.answer) > 0)
       "the model returned no prose";
-    expect "the response names the operator's model" (String.equal response.Model.model model)
+    expect "the response names the operator's model"
+      (String.equal response.Model.model model)
       (Printf.sprintf "the response names %S, not %S" response.Model.model model);
     expect "the response reports the depth that was asked for" depth_ok
       "the response's depth differs from the requested one";
@@ -273,7 +366,8 @@ let verify_agent ~depth ~model (response : Model.answer_response) =
 
 let quota_limited message = contains message "Do not retry immediately."
 
-let failed_count checks = List.length (List.filter (fun check -> Option.is_some check.failure) checks)
+let failed_count checks =
+  List.length (List.filter (fun check -> Option.is_some check.failure) checks)
 
 let summary checks =
   let total = List.length checks in

@@ -10,25 +10,23 @@ let body_suffix = ".body"
 
 let meta_suffix = ".meta.json"
 
+(** Streaming read size; only the head, never the whole body, is held. It has to fit the grant's
+    read ceiling, which is what the factory's written root sets above the per-entry cap. *)
 let chunk_bytes = 65_536
-(** Streaming read size; only the head, never the whole body, is held. It has to
-    fit the grant's read ceiling, which is what the factory's written root sets
-    above the per-entry cap. *)
 
+(** The directory cap, 256 MiB: room for pages by the hundred, small enough that a burst of large
+    pages cannot fill a disk. *)
 let default_max_bytes = 268_435_456
-(** The directory cap, 256 MiB: room for pages by the hundred, small enough that
-    a burst of large pages cannot fill a disk. *)
 
+(** The per-entry cap, 32 MiB: a page above it is never stored, so it is fetched live on every read
+    rather than staking a lifetime of disk. *)
 let default_max_entry_bytes = 33_554_432
-(** The per-entry cap, 32 MiB: a page above it is never stored, so it is fetched
-    live on every read rather than staking a lifetime of disk. *)
 
+(** The default freshness window: five minutes is a page a caller pagers over, not an archive; an
+    operator who wants longer sets [cache_ttl_seconds]. *)
 let default_ttl_seconds = 300.0
-(** The default freshness window: five minutes is a page a caller pagers over,
-    not an archive; an operator who wants longer sets [cache_ttl_seconds]. *)
 
-let entry_name ~rung ~url =
-  Digestif.SHA256.(to_hex (digest_string (rung ^ "\000" ^ url)))
+let entry_name ~rung ~url = Digestif.SHA256.(to_hex (digest_string (rung ^ "\000" ^ url)))
 
 type cached_page = {
   url : string;
@@ -54,28 +52,30 @@ let create ~fs ?(max_bytes = default_max_bytes) ?(max_entry_bytes = default_max_
     ?(ttl_seconds = default_ttl_seconds) ~(now : unit -> float) () =
   { fs; max_bytes; max_entry_bytes; ttl_seconds; now; evictions = Eio.Mutex.create () }
 
-let of_page (page : Seekwright_wire.Page.page) : cached_page = {
-  url = page.url;
-  title = page.title;
-  text = page.text;
-  content_type = page.content_type;
-  status_code = page.status_code;
-  path_addressable = page.path_addressable;
-  total_chars = page.total_chars;
-  truncated = false;
-}
+let of_page (page : Seekwright_wire.Page.page) : cached_page =
+  {
+    url = page.url;
+    title = page.title;
+    text = page.text;
+    content_type = page.content_type;
+    status_code = page.status_code;
+    path_addressable = page.path_addressable;
+    total_chars = page.total_chars;
+    truncated = false;
+  }
 
-let to_page (entry : cached_page) : Seekwright_wire.Page.page = {
-  url = entry.url;
-  title = entry.title;
-  text = entry.text;
-  content_type = entry.content_type;
-  status_code = entry.status_code;
-  truncated = entry.truncated;
-  total_chars = entry.total_chars;
-  path_addressable = entry.path_addressable;
-  image = None;
-}
+let to_page (entry : cached_page) : Seekwright_wire.Page.page =
+  {
+    url = entry.url;
+    title = entry.title;
+    text = entry.text;
+    content_type = entry.content_type;
+    status_code = entry.status_code;
+    truncated = entry.truncated;
+    total_chars = entry.total_chars;
+    path_addressable = entry.path_addressable;
+    image = None;
+  }
 
 let body_name name = name ^ body_suffix
 let meta_name name = name ^ meta_suffix
@@ -101,7 +101,7 @@ let walk (text : string) (limit : int) :
      every byte of the head a paged read takes, so a closure per codepoint would
      cost the head again in the minor heap — and what a paged read allocates is the
      promise [get_window] makes. *)
-  while !i < len && !seen < limit && not !bad && !cut < 0 do
+  while !i < len && !seen < limit && (not !bad) && !cut < 0 do
     let lead = Char.code text.[!i] in
     (* A continuation byte in lead position, [C0]/[C1] (overlong), or [F5].. (out of
        range) is [width = 0]: no decoder takes it. *)
@@ -119,7 +119,7 @@ let walk (text : string) (limit : int) :
       let whole = ref true in
       while !whole && !k < width do
         let at = !i + !k in
-        if (Char.code text.[at] land 0xC0) = 0x80 then incr k else whole := false
+        if Char.code text.[at] land 0xC0 = 0x80 then incr k else whole := false
       done;
       if not !whole then bad := true
       else begin
@@ -136,8 +136,7 @@ let walk (text : string) (limit : int) :
 (* A whole body has to end on a codepoint boundary, so [walk] reaching the end of
    the text is the only shape that says valid: [Truncated] there is a body cut in
    mid-sequence, and [Invalid] is the corrupt one. *)
-let is_valid_utf8 text =
-  match walk text max_int with `Complete _ -> true | _ -> false
+let is_valid_utf8 text = match walk text max_int with `Complete _ -> true | _ -> false
 
 (* The sidecar is this module's own record, written by [put] and read back by the
    two read paths; the only foreign file it has to survive is a half write from an
@@ -146,8 +145,8 @@ let meta_of (page : cached_page) ~(created : float) =
   `Assoc
     [
       ("url", `String page.url);
-      ("title", (match page.title with None -> `Null | Some title -> `String title));
-      ("content_type", (match page.content_type with None -> `Null | Some t -> `String t));
+      ("title", match page.title with None -> `Null | Some title -> `String title);
+      ("content_type", match page.content_type with None -> `Null | Some t -> `String t);
       ("status_code", `Int page.status_code);
       ("path_addressable", `Bool page.path_addressable);
       ("total_chars", `Int page.total_chars);
@@ -159,8 +158,7 @@ let meta_of (page : cached_page) ~(created : float) =
 let meta_str fields key =
   match List.assoc_opt key fields with Some (`String v) -> Some v | _ -> None
 
-let meta_int fields key =
-  match List.assoc_opt key fields with Some (`Int v) -> v | _ -> 0
+let meta_int fields key = match List.assoc_opt key fields with Some (`Int v) -> v | _ -> 0
 
 let meta_float fields key default =
   match List.assoc_opt key fields with Some (`Float v) -> v | _ -> default
@@ -176,13 +174,12 @@ let read_meta t name =
   match Fs.read_file t.fs (meta_name name) with
   | Error _ -> None
   | Ok text -> (
-      match (try Ok (Yojson.Safe.from_string text) with _ -> Error ()) with
+      match try Ok (Yojson.Safe.from_string text) with _ -> Error () with
       | Error () -> None
       | Ok (`Assoc fields) -> (
           match List.assoc_opt "created" fields with
           | Some (`Float created) ->
-              if t.now () -. created > t.ttl_seconds
-              then begin
+              if t.now () -. created > t.ttl_seconds then begin
                 ignore (Fs.unlink t.fs (body_name name));
                 ignore (Fs.unlink t.fs (meta_name name));
                 None
@@ -198,12 +195,13 @@ let touch t name fields =
   let set key value fields =
     let rec go = function
       | [] -> [ (key, value) ]
-      | (k, _) as row :: rest -> if k = key then (k, value) :: rest else row :: go rest
+      | ((k, _) as row) :: rest -> if k = key then (k, value) :: rest else row :: go rest
     in
     go fields
   in
   let fields = set "accessed" (`Float (t.now ())) fields in
-  ignore (Fs.atomic_write t.fs ~path:(meta_name name) ~contents:(Yojson.Safe.to_string (`Assoc fields)))
+  ignore
+    (Fs.atomic_write t.fs ~path:(meta_name name) ~contents:(Yojson.Safe.to_string (`Assoc fields)))
 
 let page_of_fields fields ~url ~text ~truncated =
   {
@@ -244,7 +242,7 @@ let read_head t name ~want =
     else
       match Fs.read_range ~max_bytes:chunk_bytes t.fs ~offset:pos (body_name name) with
       | Error _ -> None
-      | Ok (chunk, more) ->
+      | Ok (chunk, more) -> (
           if chunk = "" then if more then None else Some (Buffer.contents head)
           else
             let part = if String.equal carry "" then chunk else carry ^ chunk in
@@ -262,7 +260,7 @@ let read_head t name ~want =
                 else begin
                   Buffer.add_substring head part 0 at;
                   go seen next (String.sub part at (String.length part - at))
-                end
+                end)
   in
   go 0 0 ""
 
@@ -299,8 +297,8 @@ let list_bodies t =
   | Ok names ->
       List.filter_map
         (fun name ->
-          if Filename.check_suffix name body_suffix
-          then Some (String.sub name 0 (String.length name - String.length body_suffix))
+          if Filename.check_suffix name body_suffix then
+            Some (String.sub name 0 (String.length name - String.length body_suffix))
           else None)
         names
   | Error _ -> []
@@ -329,8 +327,7 @@ let evict_to_cap t =
      visitor measures the directory by. *)
   let ranked = List.filter_map (entry_rank t) (list_bodies t) in
   let total = List.fold_left (fun total (_accessed, size, _name) -> total + size) 0 ranked in
-  if total <= t.max_bytes
-  then ()
+  if total <= t.max_bytes then ()
   else
     let sorted =
       List.sort
@@ -341,8 +338,7 @@ let evict_to_cap t =
     let remaining = ref total in
     List.iter
       (fun (_accessed, size, name) ->
-        if !remaining > t.max_bytes
-        then begin
+        if !remaining > t.max_bytes then begin
           ignore (Fs.unlink t.fs (body_name name));
           ignore (Fs.unlink t.fs (meta_name name));
           remaining := !remaining - size
@@ -351,8 +347,7 @@ let evict_to_cap t =
 
 let put t ~rung ~url ~(page : cached_page) =
   let body = page.text in
-  if String.length body > t.max_entry_bytes
-  then false
+  if String.length body > t.max_entry_bytes then false
   else
     let name = entry_name ~rung ~url in
     let created = t.now () in

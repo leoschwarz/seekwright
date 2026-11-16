@@ -38,7 +38,7 @@ let factory_sources () =
   let names =
     Sys.readdir dir |> Array.to_list
     |> List.filter (fun name ->
-         Filename.check_suffix name ".ml" || Filename.check_suffix name ".mli")
+        Filename.check_suffix name ".ml" || Filename.check_suffix name ".mli")
     |> List.sort String.compare
   in
   if names = [] then Alcotest.failf "no modules found under %s" dir;
@@ -86,6 +86,32 @@ let count_occurrences ~haystack ~needle =
     in
     go 0 0
   end
+
+(* A source-text needle is matched with every whitespace run collapsed to one
+   space. The tree is formatter-pinned (`.ocamlformat`), so a call a needle names
+   can be wrapped wherever the formatter chooses; collapsing keeps the claim —
+   this call, these arguments, in this order, in this file — and drops the claim
+   about where the line breaks fall. *)
+let flatten (text : string) : string =
+  let buffer = Buffer.create (String.length text) in
+  let rec go index pending =
+    if index = String.length text then Buffer.contents buffer
+    else
+      match text.[index] with
+      | ' ' | '\t' | '\n' | '\r' -> go (index + 1) true
+      | ch ->
+          if pending && Buffer.length buffer > 0 then Buffer.add_char buffer ' ';
+          Buffer.add_char buffer ch;
+          go (index + 1) false
+  in
+  go 0 false
+
+let source_includes label needle haystack = includes label (flatten needle) (flatten haystack)
+
+let source_excludes label needle haystack = excludes label (flatten needle) (flatten haystack)
+
+let source_count_occurrences ~haystack ~needle =
+  count_occurrences ~haystack:(flatten haystack) ~needle:(flatten needle)
 
 let check_string = Alcotest.(check string)
 let check_int = Alcotest.(check int)

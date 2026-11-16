@@ -1,11 +1,7 @@
-(** The shared half of a remote fetch fallback: failure types,
-    the network seam, and JSON response parsing. *)
+(** The shared half of a remote fetch fallback: failure types, the network seam, and JSON response
+    parsing. *)
 
-type error =
-  | Url_blocked of string
-  | Rejected of string
-  | Quota of string
-  | Failed of string
+type error = Url_blocked of string | Rejected of string | Quota of string | Failed of string
 
 type page = Seekwright_wire.Page.page
 
@@ -13,7 +9,7 @@ type net = {
   request :
     max_response_bytes:int option ->
     Mcp_caps.Authority.Net.request ->
-    (Mcp_caps.Authority.Net.response, Mcp_caps.Error.t) result
+    (Mcp_caps.Authority.Net.response, Mcp_caps.Error.t) result;
 }
 
 val of_grant : Mcp_caps.Authority.Net.t -> net

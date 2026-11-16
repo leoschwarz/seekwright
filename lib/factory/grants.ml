@@ -10,16 +10,12 @@ let reserved_audit_fields = [ "operation"; "outcome"; "bytes" ]
 
 let audit_fields (event : Caps.Event.t) : (string * Yojson.Safe.t) list =
   let note (key, value) =
-    let key =
-      if List.mem key reserved_audit_fields then "note_" ^ key else key
-    in
+    let key = if List.mem key reserved_audit_fields then "note_" ^ key else key in
     (key, `String value)
   in
   ("operation", `String (Caps.Event.operation event))
   :: ("outcome", `String (Caps.Event.outcome_to_string (Caps.Event.outcome event)))
-  :: (match Caps.Event.bytes event with
-      | None -> []
-      | Some bytes -> [ ("bytes", `Int bytes) ])
+  :: (match Caps.Event.bytes event with None -> [] | Some bytes -> [ ("bytes", `Int bytes) ])
   @ List.map note (Caps.Event.notes event)
 
 let audit_sink (log : Engine.log) (event : Caps.Event.t) : unit =
@@ -34,15 +30,12 @@ let grant_of_decision ~mono_clock ~timeout_seconds ?audit decision =
        (Eio.Time.Timeout.seconds mono_clock timeout_seconds)
        (Authority.Net.of_confinement ~mono_clock decision))
 
-let grant_of_endpoint ~sw ~net ~mono_clock ~timeout_seconds ?audit
-    (endpoint : Policy.endpoint) =
+let grant_of_endpoint ~sw ~net ~mono_clock ~timeout_seconds ?audit (endpoint : Policy.endpoint) =
   match
-    Policy.with_endpoints ~sw ~net
-      ~max_response_bytes:Policy.default_max_response_bytes
+    Policy.with_endpoints ~sw ~net ~max_response_bytes:Policy.default_max_response_bytes
       [ endpoint ]
   with
-  | Ok decision ->
-      Ok (grant_of_decision ~mono_clock ~timeout_seconds ?audit decision)
+  | Ok decision -> Ok (grant_of_decision ~mono_clock ~timeout_seconds ?audit decision)
   | Error error -> Error (Caps.Error.render error)
 
 let probe_net ~sw ~net ~mono_clock ~timeout_seconds ?audit endpoints =
@@ -51,31 +44,26 @@ let probe_net ~sw ~net ~mono_clock ~timeout_seconds ?audit endpoints =
       {
         Provider.Net.request =
           (fun _request ->
-            Error
-              (Caps.Error.make Caps.Error.Unavailable
-                 ~message:"no endpoints configured"));
+            Error (Caps.Error.make Caps.Error.Unavailable ~message:"no endpoints configured"));
       }
   | endpoints -> (
       match
-        Policy.with_endpoints ~sw ~net
-          ~max_response_bytes:Policy.default_max_response_bytes endpoints
+        Policy.with_endpoints ~sw ~net ~max_response_bytes:Policy.default_max_response_bytes
+          endpoints
       with
       | Ok decision ->
-          Provider.Net.of_grant
-            (grant_of_decision ~mono_clock ~timeout_seconds ?audit decision)
+          Provider.Net.of_grant (grant_of_decision ~mono_clock ~timeout_seconds ?audit decision)
       | Error _ ->
           {
             Provider.Net.request =
               (fun _request ->
-                Error
-              (Caps.Error.make Caps.Error.Unavailable
-                 ~message:"no endpoints configured"));
-      })
+                Error (Caps.Error.make Caps.Error.Unavailable ~message:"no endpoints configured"));
+          })
 
 let fs_grant_of_written_root ~sw ~parent ~mono_clock ~max_bytes ~max_entries ?audit dir =
   match
-    Policy.with_written_root ~sw ~max_read_bytes:max_bytes ~max_write_bytes:max_bytes
-      ~max_entries ~parent dir
+    Policy.with_written_root ~sw ~max_read_bytes:max_bytes ~max_write_bytes:max_bytes ~max_entries
+      ~parent dir
   with
   | Ok decision -> Ok (with_audit ?audit (Authority.Fs.of_confinement ~mono_clock decision))
   | Error error -> Error (Caps.Error.render error)

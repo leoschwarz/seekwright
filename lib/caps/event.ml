@@ -1,6 +1,4 @@
-type outcome =
-  | Ok
-  | Failed of Error.kind
+type outcome = Ok | Failed of Error.kind
 
 type t = {
   operation : string;
@@ -25,20 +23,11 @@ let outcome t = t.outcome
 let bytes t = t.bytes
 let notes t = t.notes
 
-let outcome_to_string = function
-  | Ok -> "ok"
-  | Failed kind -> "failed:" ^ Error.kind_to_string kind
+let outcome_to_string = function Ok -> "ok" | Failed kind -> "failed:" ^ Error.kind_to_string kind
 
 let render t =
-  let bytes =
-    match t.bytes with
-    | None -> ""
-    | Some bytes -> " bytes=" ^ string_of_int bytes
-  in
+  let bytes = match t.bytes with None -> "" | Some bytes -> " bytes=" ^ string_of_int bytes in
   let notes =
-    List.fold_left
-      (fun acc (key, value) -> acc ^ " " ^ key ^ "=" ^ value)
-      ""
-      (List.rev t.notes)
+    List.fold_left (fun acc (key, value) -> acc ^ " " ^ key ^ "=" ^ value) "" (List.rev t.notes)
   in
   "caps." ^ t.operation ^ " " ^ outcome_to_string t.outcome ^ bytes ^ notes

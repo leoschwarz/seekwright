@@ -1,24 +1,14 @@
-(** The live harness case inventory: selector vocabulary, prerequisites, cost
-    class, and search specifications. *)
+(** The live harness case inventory: selector vocabulary, prerequisites, cost class, and search
+    specifications. *)
 
 module Config = Seekwright.Config
 module Model = Seekwright.Model
 
-type fetch_case =
-  | Local
-  | Metadata
-  | Jina
-  | Scrappa
-  | Tavily
-  | Linkup
+type fetch_case = Local | Metadata | Jina | Scrappa | Tavily | Linkup
 
 (** What one invocation selects: exactly one of these, never a set. *)
-type selector =
-  | Provider of Config.name
-  | Fetch of fetch_case
-  | Agent of Model.depth
+type selector = Provider of Config.name | Fetch of fetch_case | Agent of Model.depth
 
-(** One search a provider case issues. *)
 type query_spec = {
   query : string;
   max_results : int;
@@ -27,6 +17,7 @@ type query_spec = {
   country : string option;
   recency : Model.recency option;
 }
+(** One search a provider case issues. *)
 
 type step = { label : string; spec : query_spec }
 

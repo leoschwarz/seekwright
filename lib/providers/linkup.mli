@@ -1,12 +1,12 @@
 (** Linkup — answer synthesis and web search backend.
 
-    Supports two payload shapes via {!output}: [Sourced_answer] returns a prose
-    answer with citation sources; [Search_results] returns structured web search hits.
+    Supports two payload shapes via {!output}: [Sourced_answer] returns a prose answer with citation
+    sources; [Search_results] returns structured web search hits.
 
     Endpoint: [POST https://api.linkup.so/v1/search] with bearer token.
 
-    Supports [recency] mapped to [fromDate] timestamp, plus [include_domains] and
-    [exclude_domains]. 429 indicates rate limiting (10 QPS org-wide). *)
+    Supports [recency] mapped to [fromDate] timestamp, plus [include_domains] and [exclude_domains].
+    429 indicates rate limiting (10 QPS org-wide). *)
 
 val name : string
 (** ["linkup"], the config key and the [provider] every response names. *)
@@ -17,9 +17,7 @@ val endpoint : Uri.t
 val policy_endpoint : Mcp_caps.Policy.endpoint
 (** Policy grant destination matching {!endpoint}. *)
 
-type output =
-  | Sourced_answer
-  | Search_results
+type output = Sourced_answer | Search_results
 
 val show_output : output -> string
 (** Serialises to "sourcedAnswer" or "searchResults". *)

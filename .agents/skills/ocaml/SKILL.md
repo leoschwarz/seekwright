@@ -61,6 +61,14 @@ Verified against `opam list` on 2026-11-13 (switch `default`):
 - Provenance to recheck before an upgrade: the opam entry names Nomadic Labs and
   `gitlab.com/nomadic-labs/ai-harness/ocaml-mcp`, while the pinned archive's tree
   says "Epure Team" / `github.com/epure-team/mcp-kit`. Unexplained. (2026-11-10)
+- `opam install ocamlformat` needs `OCAMLPATH=$HOME/.opam/default/lib`. The host
+  ships a findlib dir `/usr/lib/x86_64-linux-gnu/ocaml/5.3.0/camlp-streams` holding
+  only a `META` and `camlp_streams.cma`, which shadows the switch's `camlp-streams`,
+  and `ocamlformat-lib`'s vendored odoc-parser then dies on `Unbound module
+  "Stream"`. (2026-11-17)
+- An aborted `opam install` can leave the switch short of a package the gate needs:
+  one such abort took `odoc` out and `dune build @doc` answered `Program odoc not
+  found`. Re-check `@doc` after any opam transaction that fails. (2026-11-17)
 
 ## mcp-kit 0.2.0 API (verified against the installed `.mli`, 2026-11-13)
 
@@ -131,6 +139,9 @@ Verified against `opam list` on 2026-11-13 (switch `default`):
 - Commits: one lowercase line, area first (`plans: …`, `caps: …`, `skills: …`).
 - Gate before reporting done: `eval $(opam env --switch=default) && dune build
   @install && dune runtest --force && dune build @doc`.
+- Formatting is pinned by `.ocamlformat` (ocamlformat 0.29.0, `margin = 100`,
+  spacing options that preserve the tree's blank lines): run
+  `ocamlformat --inplace` over the files you touched. No gate target runs it.
 - The twenty-point review checklist and its examples live in
   `plans/reviews/2026-11-12-style-review.md` §3; the correctness findings in
   `plans/reviews/2026-11-12-quality-review.md`. Use those, not a copy here.
@@ -518,6 +529,10 @@ Each entry cost a build; one or two lines, dated. Group by the tool that bit.
 
 ### Tests, shell and git
 
+- A source-text needle must not quote a line break or a paren: `ocamlformat`
+  wraps long calls and docks the closing `)` with a space. `Test_support`'s
+  `source_includes`/`source_excludes`/`source_count_occurrences` match with
+  whitespace collapsed; a needle that ends in `)` still fails. (2026-11-17)
 - `test_usage.exe` writes a cwd-relative `usage-journal/` that is not in
   `.gitignore`; delete it before committing. (2026-11-11)
 - `pkill -f <pattern>` matches the `bash -c` line carrying the pattern and kills

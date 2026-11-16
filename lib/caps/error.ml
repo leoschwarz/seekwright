@@ -1,9 +1,4 @@
-type kind =
-  | Denied
-  | Invalid
-  | Unavailable
-  | Timeout
-  | Failed
+type kind = Denied | Invalid | Unavailable | Timeout | Failed
 
 let max_message_bytes = 512
 
@@ -15,7 +10,7 @@ let is_control char =
 let utf8_start text limit =
   let length = String.length text in
   let off = min limit length in
-  let is_continuation char = (Char.code char land 0xC0) = 0x80 in
+  let is_continuation char = Char.code char land 0xC0 = 0x80 in
   if off >= length || not (is_continuation text.[off]) then off
   else
     let rec lead index =

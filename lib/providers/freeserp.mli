@@ -4,9 +4,8 @@
 
     Endpoint: [GET https://freeserp.ai/api.php?index=web].
 
-    [engine_fallback: true] indicates upstream web engine unavailability, treated as
-    a transient refusal. Supports [language] and [recency]; domain and safe-search
-    constraints are dropped. *)
+    [engine_fallback: true] indicates upstream web engine unavailability, treated as a transient
+    refusal. Supports [language] and [recency]; domain and safe-search constraints are dropped. *)
 
 val name : string
 (** ["freeserp"], the config key and the [provider] every response names. *)
@@ -30,8 +29,8 @@ val make :
   net:Seekwright.Provider.Net.t ->
   unit ->
   Seekwright.Provider.t
-(** Constructs the FreeSerp provider. [now] must return the current timestamp in
-    seconds since Unix epoch. *)
+(** Constructs the FreeSerp provider. [now] must return the current timestamp in seconds since Unix
+    epoch. *)
 
 val parse : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** Parses hits from [results[]]. *)

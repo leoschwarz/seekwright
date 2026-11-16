@@ -32,9 +32,8 @@ module Linkup = Seekwright_providers.Linkup
 module A = Alcotest
 open Test_support
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -51,14 +50,10 @@ let test_key = "test-key"
 
 (* The list accessors, so a missing record fails with its label rather than
    [Stdlib.Failure("hd")]. *)
-let hd label = function
-  | x :: _ -> x
-  | [] -> A.failf "%s was empty" label
+let hd label = function x :: _ -> x | [] -> A.failf "%s was empty" label
 
 let nth label index xs =
-  match List.nth_opt xs index with
-  | Some x -> x
-  | None -> A.failf "%s has no item %d" label index
+  match List.nth_opt xs index with Some x -> x | None -> A.failf "%s has no item %d" label index
 
 (* The instant every date assertion below is true of: 2023-11-14T22:13:20Z. The
    oracle reads the wall clock, so a ported date has to name its own. *)
@@ -92,8 +87,8 @@ let sample_json =
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?(depth = "standard") ?(output = Linkup.Sourced_answer) () =
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?(depth = "standard")
+    ?(output = Linkup.Sourced_answer) () =
   let sent = ref None in
   let net =
     {
@@ -105,23 +100,18 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
   in
   let provider =
     Linkup.make ?cost_per_1k ~snippet_chars ~depth ~output ~key:test_key
-      ~now:(fun () -> fixed_now) ~net ()
+      ~now:(fun () -> fixed_now)
+      ~net ()
   in
   (provider, fun () -> Option.get !sent)
 
 let refusal kind ~message =
-  let net =
-    {
-      Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message));
-    }
-  in
+  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
   Linkup.make ~key:test_key ~now:(fun () -> fixed_now) ~net ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?depth ?output ?(query = query ()) () =
-  let provider, sent =
-    dial ~status ~body ~snippet_chars ?cost_per_1k ?depth ?output ()
-  in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?depth ?output
+    ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k ?depth ?output () in
   match Provider.search provider query with
   | Ok outcome -> (outcome, sent ())
   | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
@@ -153,7 +143,14 @@ let source fields =
   `Assoc (("name", `String "t") :: ("url", `String "https://example.com/a") :: fields)
 
 let the_citations_become_results () =
-  let hits = sources (`Assoc [ ("sources", `List [ source []; source [ ("url", `String "https://example.com/wal-explained") ] ]) ]) in
+  let hits =
+    sources
+      (`Assoc
+         [
+           ( "sources",
+             `List [ source []; source [ ("url", `String "https://example.com/wal-explained") ] ] );
+         ])
+  in
   check_int "two results" 2 (List.length hits);
   check_string "the name is the title" "Write-Ahead Logging"
     (hd "results" (sources sample_json)).result.title;
@@ -163,13 +160,22 @@ let the_citations_become_results () =
     (nth "results" 1 (sources sample_json)).result.url
 
 let a_citation_without_a_name_is_titled_by_its_url () =
-  let hits = sources (`Assoc [ ("sources", `List [ `Assoc [ ("url", `String "https://example.com/a"); ("snippet", `String "s") ] ]) ]) in
+  let hits =
+    sources
+      (`Assoc
+         [
+           ( "sources",
+             `List [ `Assoc [ ("url", `String "https://example.com/a"); ("snippet", `String "s") ] ]
+           );
+         ])
+  in
   check_string "the url stands in for the name" "https://example.com/a"
     (hd "results" hits).result.title
 
 let citations_without_a_url_are_dropped () =
   check_int "no url" 0
-    (List.length (sources (`Assoc [ ("sources", `List [ `Assoc [ ("name", `String "no url") ] ]) ])))
+    (List.length
+       (sources (`Assoc [ ("sources", `List [ `Assoc [ ("name", `String "no url") ] ]) ])))
 
 let a_citation_that_is_not_an_object_is_skipped () =
   check_int "the string is dropped, the object survives" 1
@@ -185,8 +191,8 @@ let the_limit_slices_the_citation_list_before_filtering () =
   let payload =
     `Assoc
       [
-        ( "sources"
-        , `List
+        ( "sources",
+          `List
             [
               `Assoc [ ("name", `String "no url") ];
               source [ ("url", `String "https://example.com/kept") ];
@@ -205,15 +211,10 @@ let result_row ?(url = "https://example.com/a") fields =
 let results_fill_snippet_and_never_text () =
   let hits =
     results
-      (`Assoc
-         [
-           ( "results"
-           , `List [ result_row [ ("content", `String "The default method.") ] ] );
-         ])
+      (`Assoc [ ("results", `List [ result_row [ ("content", `String "The default method.") ] ]) ])
   in
   let hit = hd "results" hits in
-  check_opt_string "content becomes the snippet" (Some "The default method.")
-    hit.result.snippet;
+  check_opt_string "content becomes the snippet" (Some "The default method.") hit.result.snippet;
   check_opt_string "text is never filled" None hit.result.text
 
 let image_rows_are_skipped_and_the_walk_keeps_going () =
@@ -222,8 +223,8 @@ let image_rows_are_skipped_and_the_walk_keeps_going () =
   let payload =
     `Assoc
       [
-        ( "results"
-        , `List
+        ( "results",
+          `List
             [
               result_row [ ("type", `String "image") ];
               result_row ~url:"https://example.com/one" [];
@@ -238,11 +239,7 @@ let image_rows_are_skipped_and_the_walk_keeps_going () =
 let a_row_without_a_name_is_titled_by_its_url () =
   let hits =
     results
-      (`Assoc
-         [
-           ( "results"
-           , `List [ `Assoc [ ("url", `String "https://example.com/unnamed") ] ] );
-         ])
+      (`Assoc [ ("results", `List [ `Assoc [ ("url", `String "https://example.com/unnamed") ] ]) ])
   in
   check_string "the url stands in for the name" "https://example.com/unnamed"
     (hd "results" hits).result.title
@@ -254,8 +251,7 @@ let missing_results_is_empty_not_an_error () =
 let the_answer_reaches_the_caller () =
   let outcome, _ = search_of () in
   check_opt_string "the prose rides through"
-    (Some "WAL lets readers proceed while one writer commits.")
-    outcome.answer
+    (Some "WAL lets readers proceed while one writer commits.") outcome.answer
 
 let the_other_shape_promises_no_answer () =
   (* A payload that carries [answer] anyway is not a field the caller was
@@ -263,7 +259,8 @@ let the_other_shape_promises_no_answer () =
      body holds. *)
   let outcome, _ =
     search_of ~output:Linkup.Search_results
-      ~body:{|{"results":[{"name":"t","url":"https://example.com/a","content":"c"}],"answer":"unasked prose"}|}
+      ~body:
+        {|{"results":[{"name":"t","url":"https://example.com/a","content":"c"}],"answer":"unasked prose"}|}
       ()
   in
   check_opt_string "no answer from a shape that has none" None outcome.answer;
@@ -297,8 +294,7 @@ let a_non_string_answer_is_dropped_and_the_call_succeeds () =
           (`Assoc
              [
                ("answer", value);
-               ( "sources"
-               , `List [ source [ ("snippet", `String "The default method.") ] ] );
+               ("sources", `List [ source [ ("snippet", `String "The default method.") ] ]);
              ])
       in
       let outcome, _ = search_of ~body () in
@@ -310,8 +306,7 @@ let a_non_string_citation_snippet_is_dropped_and_the_call_succeeds () =
   List.iter
     (fun (what, value) ->
       let body =
-        Yojson.Safe.to_string
-          (`Assoc [ ("sources", `List [ source [ ("snippet", value) ] ]) ])
+        Yojson.Safe.to_string (`Assoc [ ("sources", `List [ source [ ("snippet", value) ] ]) ])
       in
       let outcome, _ = search_of ~body () in
       check_int "the citation survives" 1 (List.length outcome.results);
@@ -324,10 +319,7 @@ let a_non_string_result_content_is_dropped_and_the_call_succeeds () =
       let body =
         Yojson.Safe.to_string
           (`Assoc
-             [
-               ( "results"
-               , `List [ result_row [ ("content", value); ("type", `String "text") ] ] );
-             ])
+             [ ("results", `List [ result_row [ ("content", value); ("type", `String "text") ] ]) ])
       in
       let outcome, _ = search_of ~output:Linkup.Search_results ~body () in
       check_int "the row survives" 1 (List.length outcome.results);
@@ -337,18 +329,13 @@ let a_non_string_result_content_is_dropped_and_the_call_succeeds () =
 let a_string_answer_still_reaches_the_model () =
   (* The guard must not change behaviour for a well-formed payload. *)
   let outcome, _ = search_of () in
-  check_opt_string
-    "the answer"
-    (Some "WAL lets readers proceed while one writer commits.")
+  check_opt_string "the answer" (Some "WAL lets readers proceed while one writer commits.")
     outcome.answer
 
 let a_string_snippet_still_reaches_the_model () =
   let outcome, _ = search_of () in
-  check_opt_string
-    "the snippet"
-    (Some
-       "The default method by which SQLite implements atomic commit is a rollback \
-        journal.")
+  check_opt_string "the snippet"
+    (Some "The default method by which SQLite implements atomic commit is a rollback journal.")
     (hd "results" outcome.results).result.snippet
 
 let post_to_the_search_endpoint_with_the_bearer_token () =
@@ -356,21 +343,18 @@ let post_to_the_search_endpoint_with_the_bearer_token () =
   check_bool "the method" true (request.Caps.Authority.Net.meth = `POST);
   check_string "the URI" (Uri.to_string Linkup.endpoint)
     (Uri.to_string request.Caps.Authority.Net.uri);
-  check_opt_string "the credential rides Authorization as a bearer token"
-    (Some "Bearer test-key")
+  check_opt_string "the credential rides Authorization as a bearer token" (Some "Bearer test-key")
     (List.assoc_opt "Authorization" request.Caps.Authority.Net.headers);
   check_opt_string "and a JSON body needs its content type" (Some "application/json")
     (List.assoc_opt "Content-Type" request.Caps.Authority.Net.headers);
   check_opt_string "the query" (Some "wal mode") (body_field "q" request);
-  check_opt_string "maxResults follows max_results" (Some "3")
-    (body_field "maxResults" request)
+  check_opt_string "maxResults follows max_results" (Some "3") (body_field "maxResults" request)
 
 let the_key_never_rides_the_url () =
   let _, request = search_of () in
   check_bool "the URI names no key" false
     (contains ~haystack:(Uri.to_string request.Caps.Authority.Net.uri) ~needle:test_key);
-  check_bool "and no key in the query" true
-    (Uri.query request.Caps.Authority.Net.uri = [])
+  check_bool "and no key in the query" true (Uri.query request.Caps.Authority.Net.uri = [])
 
 let the_settings_decide_the_payload_shape () =
   (* [depth] and [output_type] are the two operator settings, and both are on the
@@ -381,8 +365,7 @@ let the_settings_decide_the_payload_shape () =
   check_opt_string "the answer-shaped output" (Some "sourcedAnswer")
     (body_field "outputType" request);
   let _, request = search_of ~output:Linkup.Search_results () in
-  check_opt_string "the list-shaped output" (Some "searchResults")
-    (body_field "outputType" request)
+  check_opt_string "the list-shaped output" (Some "searchResults") (body_field "outputType" request)
 
 let max_results_reaches_the_request_verbatim () =
   (* The wire model owns [max_results]'s bounds, and the adapter passes the
@@ -391,8 +374,7 @@ let max_results_reaches_the_request_verbatim () =
   let _, request = search_of ~query:(query ~max_results:3 ()) () in
   check_opt_string "carried as asked" (Some "3") (body_field "maxResults" request);
   let _, request = search_of ~query:(query ~max_results:20 ()) () in
-  check_opt_string "and at the schema ceiling" (Some "20")
-    (body_field "maxResults" request)
+  check_opt_string "and at the schema ceiling" (Some "20") (body_field "maxResults" request)
 
 let the_recency_windows_are_fixed_day_counts () =
   check_int "day" 1 (Linkup.age_days Model.Day);
@@ -419,8 +401,7 @@ let fromDate_is_the_window_from_the_adapters_own_clock () =
       let _, request = search_of ~query:(query ~recency:period ()) () in
       check_opt_string
         (Printf.sprintf "%s reaches fromDate" word)
-        (Some date)
-        (body_field "fromDate" request))
+        (Some date) (body_field "fromDate" request))
     [
       (Model.Day, "2023-11-13T22:13:20Z", "day");
       (Model.Week, "2023-11-07T22:13:20Z", "week");
@@ -434,8 +415,7 @@ let fromDate_is_the_window_from_the_adapters_own_clock () =
 let the_domain_filters_are_native () =
   let _, request =
     search_of
-      ~query:
-        (query ~include_domains:[ "sqlite.org" ] ~exclude_domains:[ "spam.example" ] ())
+      ~query:(query ~include_domains:[ "sqlite.org" ] ~exclude_domains:[ "spam.example" ] ())
       ()
   in
   check_opt_string "includeDomains is the vendor's own spelling" (Some "[\"sqlite.org\"]")
@@ -451,15 +431,13 @@ let the_geo_bucket_is_reported_joined () =
   check_bool "no gl" false (has_body_field "gl" request);
   check_bool "no language" false (has_body_field "language" request);
   let outcome, _ = search_of ~query:(query ~country:"de" ~language:"de" ()) () in
-  check_string "the joined bucket"
-    "cannot filter by country/language; that constraint was ignored"
+  check_string "the joined bucket" "cannot filter by country/language; that constraint was ignored"
     (Option.get outcome.notice)
 
 let a_language_alone_is_reported_joined () =
   let outcome, _ = search_of ~query:(query ~language:"de" ()) () in
   check_string "still the joined bucket"
-    "cannot filter by country/language; that constraint was ignored"
-    (Option.get outcome.notice)
+    "cannot filter by country/language; that constraint was ignored" (Option.get outcome.notice)
 
 let a_safe_search_is_noticed_for_both_values () =
   List.iter
@@ -468,8 +446,7 @@ let a_safe_search_is_noticed_for_both_values () =
       check_bool "no safe_search" false (has_body_field "safe_search" request);
       let outcome, _ = search_of ~query:(query ~safe_search:value ()) () in
       check_string "the safe-search sentence"
-        "cannot filter by safe-search; that constraint was ignored"
-        (Option.get outcome.notice))
+        "cannot filter by safe-search; that constraint was ignored" (Option.get outcome.notice))
     [ true; false ]
 
 let an_unconstrained_query_carries_no_notice () =
@@ -480,10 +457,7 @@ let the_domains_and_the_window_draw_no_notice () =
   (* Domains and [fromDate] are native here, so the two buckets that stay are
      exactly the two with no parameter behind them. *)
   let outcome, _ =
-    search_of
-      ~query:
-        (query ~include_domains:[ "sqlite.org" ] ~recency:Model.Week ())
-      ()
+    search_of ~query:(query ~include_domains:[ "sqlite.org" ] ~recency:Model.Week ()) ()
   in
   check_opt_string "no notice at all when nothing unasked is dropped" None outcome.notice
 
@@ -512,16 +486,14 @@ let the_payment_lane_stays_an_ordinary_http_failure () =
       match Provider.search provider (query ()) with
       | Ok _ -> A.failf "HTTP %d was accepted" status
       | Error failure ->
-          check_string (Printf.sprintf "HTTP %d says the status" status)
-            (Printf.sprintf "HTTP %d" status)
-            failure.message;
+          check_string
+            (Printf.sprintf "HTTP %d says the status" status)
+            (Printf.sprintf "HTTP %d" status) failure.message;
           check_bool "and is not quota" true (failure.kind = Provider.Failure))
     [ 400; 402; 504 ]
 
 let a_body_that_quotes_the_key_is_not_echoed () =
-  let body =
-    Printf.sprintf "<html>upstream echoed %s on a payment page</html>" test_key
-  in
+  let body = Printf.sprintf "<html>upstream echoed %s on a payment page</html>" test_key in
   let provider, _ = dial ~status:402 ~body () in
   match Provider.search provider (query ()) with
   | Ok _ -> A.failf "HTTP 402 was accepted"
@@ -568,14 +540,11 @@ let the_snippet_cap_follows_the_policy () =
   in
   let outcome, _ = search_of ~snippet_chars:10 ~body () in
   let hit = hd "results" outcome.results in
-  check_opt_string "clipped with the ellipsis" (Some (String.make 10 'x' ^ "…"))
-    hit.result.snippet;
-  check_bool "the pre-cap length is reported" true
-    (hit.uncapped_chars = Some 40)
+  check_opt_string "clipped with the ellipsis" (Some (String.make 10 'x' ^ "…")) hit.result.snippet;
+  check_bool "the pre-cap length is reported" true (hit.uncapped_chars = Some 40)
 
 let the_endpoint_is_the_one_the_grant_allows () =
-  check_string "the endpoint" "https://api.linkup.so/v1/search"
-    (Uri.to_string Linkup.endpoint);
+  check_string "the endpoint" "https://api.linkup.so/v1/search" (Uri.to_string Linkup.endpoint);
   check_string "the policy host" "api.linkup.so" Linkup.policy_endpoint.Caps.Policy.host;
   check_bool "https" true (Linkup.policy_endpoint.Caps.Policy.scheme = `Https);
   check_bool "the default port" true (Linkup.policy_endpoint.Caps.Policy.port = None);
@@ -584,112 +553,107 @@ let the_endpoint_is_the_one_the_grant_allows () =
     (Uri.host request.Caps.Authority.Net.uri = Some Linkup.policy_endpoint.Caps.Policy.host)
 
 let () =
-  A.
-    (run "seekwright/linkup"
-       [
-         ( "parsing the citation list"
-         , [
-             test_case "the citations become results" `Quick
-               the_citations_become_results;
-             test_case "a citation without a name is titled by its url" `Quick
-               a_citation_without_a_name_is_titled_by_its_url;
-             test_case "citations without a url are dropped" `Quick
-               citations_without_a_url_are_dropped;
-             test_case "a citation that is not an object is skipped" `Quick
-               a_citation_that_is_not_an_object_is_skipped;
-             test_case "missing sources is empty, not an error" `Quick
-               missing_sources_is_empty_not_an_error;
-             test_case "the limit slices the citation list before filtering" `Quick
-               the_limit_slices_the_citation_list_before_filtering;
-           ] );
-         ( "parsing the result list"
-         , [
-             test_case "results fill snippet and never text" `Quick
-               results_fill_snippet_and_never_text;
-             test_case "image rows are skipped and the walk keeps going" `Quick
-               image_rows_are_skipped_and_the_walk_keeps_going;
-             test_case "a row without a name is titled by its url" `Quick
-               a_row_without_a_name_is_titled_by_its_url;
-             test_case "missing results is empty, not an error" `Quick
-               missing_results_is_empty_not_an_error;
-           ] );
-         ( "the answer follows the shape"
-         , [
-             test_case "the answer reaches the caller" `Quick the_answer_reaches_the_caller;
-             test_case "the other shape promises no answer" `Quick
-               the_other_shape_promises_no_answer;
-             test_case "the answer is read from the key the shape uses" `Quick
-               the_answer_is_read_from_the_key_the_shape_uses;
-           ] );
-         ( "the upstream field guards"
-         , [
-             test_case "a non-string answer is dropped and the call succeeds" `Quick
-               a_non_string_answer_is_dropped_and_the_call_succeeds;
-             test_case "a non-string citation snippet is dropped and the call succeeds" `Quick
-               a_non_string_citation_snippet_is_dropped_and_the_call_succeeds;
-             test_case "a non-string result content is dropped and the call succeeds" `Quick
-               a_non_string_result_content_is_dropped_and_the_call_succeeds;
-             test_case "a string answer still reaches the model" `Quick
-               a_string_answer_still_reaches_the_model;
-             test_case "a string snippet still reaches the model" `Quick
-               a_string_snippet_still_reaches_the_model;
-           ] );
-         ( "the request"
-         , [
-             test_case "POST to the search endpoint, bearer token in the header" `Quick
-               post_to_the_search_endpoint_with_the_bearer_token;
-             test_case "the key never rides the URL" `Quick the_key_never_rides_the_url;
-             test_case "the settings decide the payload shape" `Quick
-               the_settings_decide_the_payload_shape;
-             test_case "maxResults reaches the request verbatim" `Quick
-               max_results_reaches_the_request_verbatim;
-             test_case "the domain filters are native" `Quick the_domain_filters_are_native;
-           ] );
-         ( "the date computation"
-         , [
-             test_case "the recency windows are fixed day counts" `Quick
-               the_recency_windows_are_fixed_day_counts;
-             test_case "UTC is the format the endpoint documents" `Quick
-               utc_is_the_format_the_endpoint_documents;
-             test_case "fromDate is the window from the adapter's own clock" `Quick
-               fromDate_is_the_window_from_the_adapters_own_clock;
-           ] );
-         ( "the constraint report"
-         , [
-             test_case "the geo bucket is reported joined" `Quick
-               the_geo_bucket_is_reported_joined;
-             test_case "a language alone is reported joined" `Quick
-               a_language_alone_is_reported_joined;
-             test_case "a safe-search is noticed for both values" `Quick
-               a_safe_search_is_noticed_for_both_values;
-             test_case "an unconstrained query carries no notice" `Quick
-               an_unconstrained_query_carries_no_notice;
-             test_case "the domains and the window draw no notice" `Quick
-               the_domains_and_the_window_draw_no_notice;
-           ] );
-         ( "the failures this adapter owns"
-         , [
-             test_case "the rate limit is the spent-credit status" `Quick
-               the_rate_limit_is_the_spent_credit_status;
-             test_case "the payment lane stays an ordinary HTTP failure" `Quick
-               the_payment_lane_stays_an_ordinary_http_failure;
-             test_case "a body that quotes the key is not echoed" `Quick
-               a_body_that_quotes_the_key_is_not_echoed;
-             test_case "a network failure does not echo the request" `Quick
-               a_network_failure_does_not_echo_the_request;
-           ] );
-         ( "cost and endpoint"
-         , [
-             test_case "the cost is flat per call" `Quick the_cost_is_flat_per_call;
-             test_case "the result carries the flat figure" `Quick
-               the_result_carries_the_flat_figure;
-             test_case "the default price is the row's figure" `Quick
-               the_default_price_is_the_rows_figure;
-             test_case "an operator-corrected cost reaches the adapter" `Quick
-               an_operator_corrected_cost_reaches_the_adapter;
-             test_case "the snippet cap follows the policy" `Quick
-               the_snippet_cap_follows_the_policy;
-             test_case "the endpoint is the one the grant allows" `Quick
-               the_endpoint_is_the_one_the_grant_allows;
-           ] );
-       ])
+  A.(
+    run "seekwright/linkup"
+      [
+        ( "parsing the citation list",
+          [
+            test_case "the citations become results" `Quick the_citations_become_results;
+            test_case "a citation without a name is titled by its url" `Quick
+              a_citation_without_a_name_is_titled_by_its_url;
+            test_case "citations without a url are dropped" `Quick
+              citations_without_a_url_are_dropped;
+            test_case "a citation that is not an object is skipped" `Quick
+              a_citation_that_is_not_an_object_is_skipped;
+            test_case "missing sources is empty, not an error" `Quick
+              missing_sources_is_empty_not_an_error;
+            test_case "the limit slices the citation list before filtering" `Quick
+              the_limit_slices_the_citation_list_before_filtering;
+          ] );
+        ( "parsing the result list",
+          [
+            test_case "results fill snippet and never text" `Quick
+              results_fill_snippet_and_never_text;
+            test_case "image rows are skipped and the walk keeps going" `Quick
+              image_rows_are_skipped_and_the_walk_keeps_going;
+            test_case "a row without a name is titled by its url" `Quick
+              a_row_without_a_name_is_titled_by_its_url;
+            test_case "missing results is empty, not an error" `Quick
+              missing_results_is_empty_not_an_error;
+          ] );
+        ( "the answer follows the shape",
+          [
+            test_case "the answer reaches the caller" `Quick the_answer_reaches_the_caller;
+            test_case "the other shape promises no answer" `Quick the_other_shape_promises_no_answer;
+            test_case "the answer is read from the key the shape uses" `Quick
+              the_answer_is_read_from_the_key_the_shape_uses;
+          ] );
+        ( "the upstream field guards",
+          [
+            test_case "a non-string answer is dropped and the call succeeds" `Quick
+              a_non_string_answer_is_dropped_and_the_call_succeeds;
+            test_case "a non-string citation snippet is dropped and the call succeeds" `Quick
+              a_non_string_citation_snippet_is_dropped_and_the_call_succeeds;
+            test_case "a non-string result content is dropped and the call succeeds" `Quick
+              a_non_string_result_content_is_dropped_and_the_call_succeeds;
+            test_case "a string answer still reaches the model" `Quick
+              a_string_answer_still_reaches_the_model;
+            test_case "a string snippet still reaches the model" `Quick
+              a_string_snippet_still_reaches_the_model;
+          ] );
+        ( "the request",
+          [
+            test_case "POST to the search endpoint, bearer token in the header" `Quick
+              post_to_the_search_endpoint_with_the_bearer_token;
+            test_case "the key never rides the URL" `Quick the_key_never_rides_the_url;
+            test_case "the settings decide the payload shape" `Quick
+              the_settings_decide_the_payload_shape;
+            test_case "maxResults reaches the request verbatim" `Quick
+              max_results_reaches_the_request_verbatim;
+            test_case "the domain filters are native" `Quick the_domain_filters_are_native;
+          ] );
+        ( "the date computation",
+          [
+            test_case "the recency windows are fixed day counts" `Quick
+              the_recency_windows_are_fixed_day_counts;
+            test_case "UTC is the format the endpoint documents" `Quick
+              utc_is_the_format_the_endpoint_documents;
+            test_case "fromDate is the window from the adapter's own clock" `Quick
+              fromDate_is_the_window_from_the_adapters_own_clock;
+          ] );
+        ( "the constraint report",
+          [
+            test_case "the geo bucket is reported joined" `Quick the_geo_bucket_is_reported_joined;
+            test_case "a language alone is reported joined" `Quick
+              a_language_alone_is_reported_joined;
+            test_case "a safe-search is noticed for both values" `Quick
+              a_safe_search_is_noticed_for_both_values;
+            test_case "an unconstrained query carries no notice" `Quick
+              an_unconstrained_query_carries_no_notice;
+            test_case "the domains and the window draw no notice" `Quick
+              the_domains_and_the_window_draw_no_notice;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "the rate limit is the spent-credit status" `Quick
+              the_rate_limit_is_the_spent_credit_status;
+            test_case "the payment lane stays an ordinary HTTP failure" `Quick
+              the_payment_lane_stays_an_ordinary_http_failure;
+            test_case "a body that quotes the key is not echoed" `Quick
+              a_body_that_quotes_the_key_is_not_echoed;
+            test_case "a network failure does not echo the request" `Quick
+              a_network_failure_does_not_echo_the_request;
+          ] );
+        ( "cost and endpoint",
+          [
+            test_case "the cost is flat per call" `Quick the_cost_is_flat_per_call;
+            test_case "the result carries the flat figure" `Quick the_result_carries_the_flat_figure;
+            test_case "the default price is the row's figure" `Quick
+              the_default_price_is_the_rows_figure;
+            test_case "an operator-corrected cost reaches the adapter" `Quick
+              an_operator_corrected_cost_reaches_the_adapter;
+            test_case "the snippet cap follows the policy" `Quick the_snippet_cap_follows_the_policy;
+            test_case "the endpoint is the one the grant allows" `Quick
+              the_endpoint_is_the_one_the_grant_allows;
+          ] );
+      ])

@@ -20,10 +20,7 @@ module Parallel = Seekwright_providers.Parallel
 
 let ( let* ) = Result.bind
 
-type context_cap =
-  | Snippets
-  | Text
-  | Snippets_and_text
+type context_cap = Snippets | Text | Snippets_and_text
 
 type credential =
   | No_credential
@@ -31,22 +28,14 @@ type credential =
   | App_id_and_key of { id_header : string; key_header : string }
   | Key_in_query of string
 
-type prerequisite =
-  | Api_key
-  | Config_url
-  | App_id
-  | Index
+type prerequisite = Api_key | Config_url | App_id | Index
 
 type cost_model =
   | Flat
   | Extra_results of { first : int; per_extra_1k : float }
   | Credit_multiplier of { over : int; multiplier : int }
 
-type endpoint_source =
-  | Fixed_uri of Uri.t
-  | Url_override of Uri.t
-  | Url_required
-  | Algolia_index
+type endpoint_source = Fixed_uri of Uri.t | Url_override of Uri.t | Url_required | Algolia_index
 
 type args = {
   net : Provider.Net.t;
@@ -65,9 +54,7 @@ type build =
   | Adapter_session of (args -> Provider.session)
   | Deferred of string
 
-type probe_source =
-  | No_probe
-  | Probe of (Config.t -> string option -> string option)
+type probe_source = No_probe | Probe of (Config.t -> string option -> string option)
 
 type row = {
   name : Config.name;
@@ -84,17 +71,9 @@ type row = {
   ocaml_live_tested : bool;
 }
 
-let make_row ~name ~endpoint ~build
-    ?(credential = No_credential)
-    ?(requires = [ Api_key ])
-    ?(default_cost = Some 0.0)
-    ?(cost_model = Flat)
-    ?(timeout_floor = 0.0)
-    ?(context = Snippets)
-    ?(probe = No_probe)
-    ?(settings = [])
-    ?(ocaml_live_tested = false)
-    () =
+let make_row ~name ~endpoint ~build ?(credential = No_credential) ?(requires = [ Api_key ])
+    ?(default_cost = Some 0.0) ?(cost_model = Flat) ?(timeout_floor = 0.0) ?(context = Snippets)
+    ?(probe = No_probe) ?(settings = []) ?(ocaml_live_tested = false) () =
   {
     name;
     build;
@@ -156,8 +135,7 @@ let require_key name args =
 let require_setting name setting value =
   match value with
   | Some value -> value
-  | None ->
-      invalid_arg (Printf.sprintf "Registry: %s was built with no %s" name setting)
+  | None -> invalid_arg (Printf.sprintf "Registry: %s was built with no %s" name setting)
 
 let rows =
   [
@@ -170,20 +148,18 @@ let rows =
        one derivation ({!Algolia.endpoint_of_deployment}) three ways. *)
     make_row ~name:"algolia" ~endpoint:Algolia_index
       ~credential:
-        (App_id_and_key
-           { id_header = "x-algolia-application-id"; key_header = "x-algolia-api-key" })
+        (App_id_and_key { id_header = "x-algolia-application-id"; key_header = "x-algolia-api-key" })
       ~requires:[ Api_key; App_id; Index ] ~default_cost:(Some 0.50)
       ~probe:(Probe Health.algolia_endpoint)
       ~settings:[ "app_id"; "index"; "snippet_attr"; "title_attr"; "url_attr" ]
       ~build:
         (Adapter
            (fun a ->
-             Algolia.make
-               ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Algolia.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
                ~app_id:(require_setting "algolia" "app_id" a.entry.Config.app_id)
                ?title_attr:a.entry.Config.title_attr ?url_attr:a.entry.Config.url_attr
-               ?snippet_attr:a.entry.Config.snippet_attr
-               ~key:(require_key "algolia" a) ~endpoint:a.endpoint ~net:a.net ()))
+               ?snippet_attr:a.entry.Config.snippet_attr ~key:(require_key "algolia" a)
+               ~endpoint:a.endpoint ~net:a.net ()))
       ();
     (* Keyless and priced at zero, but built only because this config named it:
        the explicit-only stance keeps it out of the keyless default and the free
@@ -195,8 +171,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Anysearch.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
-               ~net:a.net ()))
+             Anysearch.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars ~net:a.net ()))
       ();
     (* Keyed, and the only name here with no free tier to be keyed {i despite}:
        billed per successful request. It is also the one name that fills [snippet]
@@ -216,8 +191,7 @@ let rows =
        without a key there is no billed fallback, and without a free tier the key
        is what spends. The floor is the MCP handshake's headroom; the [url]
        override and [free_cooldown_seconds] are the two settings its builder reads. *)
-    make_row ~name:"exa"
-      ~endpoint:(Url_override Exa.default_uri) ~credential:bearer
+    make_row ~name:"exa" ~endpoint:(Url_override Exa.default_uri) ~credential:bearer
       ~default_cost:(Some 7.00) ~timeout_floor:30.0 ~context:Text
       ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
       ~settings:[ "free_cooldown_seconds"; "url" ]
@@ -232,9 +206,8 @@ let rows =
        zero rather than offering it as a default, and the one name whose key is
        never read even when the environment holds one. No ladder behind it, because
        it cannot bill. *)
-    make_row ~name:"exa:free"
-      ~endpoint:(Url_override Exa.default_uri)
-      ~requires:[] ~default_cost:None ~timeout_floor:30.0 ~context:Text
+    make_row ~name:"exa:free" ~endpoint:(Url_override Exa.default_uri) ~requires:[]
+      ~default_cost:None ~timeout_floor:30.0 ~context:Text
       ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
       ~settings:[ "url" ] ~ocaml_live_tested:true
       ~build:
@@ -253,8 +226,8 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Freeserp.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
-               ~now:a.now ~net:a.net ()))
+             Freeserp.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars ~now:a.now
+               ~net:a.net ()))
       ();
     (* An answer-or-results API whose [depth] is a ~10x cost cliff, so the rung is
        operator-configured and never model-chosen; [20s] is the deep-rung budget.
@@ -268,17 +241,16 @@ let rows =
         (Adapter
            (fun a ->
              Linkup.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
-               ~depth:a.entry.depth ~output:(linkup_output a.entry.output_type)
+               ~depth:a.entry.depth
+               ~output:(linkup_output a.entry.output_type)
                ~key:(require_key "linkup" a) ~now:a.now ~net:a.net ()))
       ();
     (* Keyed despite the free tier — it is an account quota, and the key names
        whose quota a search spends. REST, not the authenticated MCP, is the surface
        that carries the filter fields, and [mode] is the preset that decides price. *)
-    make_row ~name:"parallel"
-      ~endpoint:(Fixed_uri Parallel.endpoint)
+    make_row ~name:"parallel" ~endpoint:(Fixed_uri Parallel.endpoint)
       ~credential:(key_header "x-api-key") ~default_cost:(Some 1.00) ~context:Text
-      ~probe:(probe_at Parallel.endpoint)
-      ~settings:[ "mode" ]
+      ~probe:(probe_at Parallel.endpoint) ~settings:[ "mode" ]
       ~build:
         (Adapter
            (fun a ->
@@ -289,11 +261,10 @@ let rows =
        its MCP handshake rather than a bodyless GET — the readiness contract's
        vocabulary cannot drive a handshake, so its {!Provider.session.warmup} is
        the proof this row carries instead. *)
-    make_row ~name:"parallel:free"
-      ~endpoint:(Url_override Parallel.mcp_uri)
-      ~requires:[] ~timeout_floor:30.0 ~context:Text ~settings:[ "url" ]
+    make_row ~name:"parallel:free" ~endpoint:(Url_override Parallel.mcp_uri) ~requires:[]
+      ~timeout_floor:30.0 ~context:Text ~settings:[ "url" ]
       ~ocaml_live_tested:true
-      (* [ParallelMcpProvider] is a subclass of [ExaMcpProvider] in the oracle, so
+        (* [ParallelMcpProvider] is a subclass of [ExaMcpProvider] in the oracle, so
          its [cost_for] is Exa's rung and this row spells the same shape; a config
          [cost_per_1k] on this name would buy the rung, which is why the row models
          it rather than calling the name flat. *)
@@ -308,7 +279,8 @@ let rows =
        [default_cost] is the free plan and the PAYG tier corrects it in config. *)
     make_row ~name:"querit"
       ~endpoint:(Fixed_uri (Uri.of_string "https://api.querit.ai/v1/search"))
-      ~credential:bearer ~probe:(probe_at (Uri.of_string "https://api.querit.ai/v1/search"))
+      ~credential:bearer
+      ~probe:(probe_at (Uri.of_string "https://api.querit.ai/v1/search"))
       ~build:
         (Adapter
            (fun a ->
@@ -319,8 +291,7 @@ let rows =
        query, which is what the 15-second floor buys. One credit per request on
        every endpoint, so the row is [Flat] where [serper] above is not, and the
        cheapest figure in the table. *)
-    make_row ~name:"scrappa"
-      ~endpoint:(Fixed_uri Scrappa.endpoint)
+    make_row ~name:"scrappa" ~endpoint:(Fixed_uri Scrappa.endpoint)
       ~credential:(key_header "x-api-key") ~default_cost:(Some 0.30) ~timeout_floor:15.0
       ~probe:(probe_at Scrappa.endpoint)
       ~build:
@@ -375,8 +346,7 @@ let rows =
        figure doubles past {!Seekwright_providers.Serper.credit_over} results —
        two credits for more than ten — so [--check --live] and the caller's notice
        both report the search that actually bills. *)
-    make_row ~name:"serper"
-      ~endpoint:(Fixed_uri Serper.endpoint)
+    make_row ~name:"serper" ~endpoint:(Fixed_uri Serper.endpoint)
       ~credential:(key_header "X-API-KEY") ~default_cost:(Some 1.00)
       ~cost_model:(Credit_multiplier { over = Serper.credit_over; multiplier = 2 })
       ~probe:(probe_at Serper.endpoint)
@@ -408,13 +378,12 @@ let rows =
            (fun a ->
              Tinyfish.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
                ~key:(require_key "tinyfish" a) ~net:a.net ()))
-      ()
+      ();
   ]
 
 let row name = List.find_opt (fun r -> r.name = name) rows
 let names = List.map (fun r -> r.name) rows
-let is_built r =
-  match r.build with Adapter _ | Adapter_session _ -> true | Deferred _ -> false
+let is_built r = match r.build with Adapter _ | Adapter_session _ -> true | Deferred _ -> false
 
 (* The one gate a destination passes before it becomes a grant entry. A config
    value is operator text, and an operator can write anything in it — including a
@@ -422,19 +391,19 @@ let is_built r =
    never echoes the value that failed. *)
 let http_uri (uri : Uri.t) =
   match (Uri.scheme uri, Uri.host uri) with
-  | (Some ("http" | "https"), Some host) when String.length host > 0 -> true
+  | Some ("http" | "https"), Some host when String.length host > 0 -> true
   | _ -> false
 
 let absolute ~what raw =
   let uri = Uri.of_string raw in
-  if http_uri uri then (
+  if http_uri uri then
     (* A URL is an address, not a credential: [SEEKWRIGHT_*] is the only place a
        key comes from, and a userinfo in an operator's [url] would ride every
        request as Basic auth. The refusal names the key and never echoes the
        value, which is the same rule [Provider.redact_url] exists for. *)
     match Uri.userinfo uri with
     | Some _ -> Error (Printf.sprintf "[providers.%s] url must not carry credentials" what)
-    | None -> Ok uri)
+    | None -> Ok uri
   else Error (Printf.sprintf "[providers.%s] url is not an absolute http(s) URL" what)
 
 (* A present string, or [None] for the absent and the empty form: the oracle's
@@ -445,9 +414,7 @@ let uri (row : row) (pc : Config.provider_config) =
   match row.endpoint with
   | Fixed_uri uri -> Ok uri
   | Url_override default -> (
-      match pc.Config.url with
-      | None -> Ok default
-      | Some raw -> absolute ~what:row.name raw)
+      match pc.Config.url with None -> Ok default | Some raw -> absolute ~what:row.name raw)
   | Url_required -> (
       match non_empty pc.Config.url with
       | Some raw -> absolute ~what:row.name raw
@@ -459,9 +426,7 @@ let uri (row : row) (pc : Config.provider_config) =
          the request, the header and the grant. *)
       match (non_empty pc.Config.app_id, non_empty pc.Config.index) with
       | Some app_id, Some index -> Ok (Algolia.endpoint_of_deployment ~app_id ~index)
-      | _ ->
-          Error
-            (Printf.sprintf "[providers.%s] app_id and index are not set" row.name))
+      | _ -> Error (Printf.sprintf "[providers.%s] app_id and index are not set" row.name))
 
 (* The grant entry, through the seam's one URI-to-endpoint derivation: scheme
    pinned, host, and an explicit port when the URI carries one, so an override
@@ -495,7 +460,7 @@ let cost_of row ~cost_per_1k n =
      [cost_for] bit for bit rather than only to a tolerance. *)
   | Credit_multiplier { over; multiplier } ->
       let credits = if n > over then multiplier else 1 in
-      (cost_per_1k /. 1000.) *. float_of_int credits
+      cost_per_1k /. 1000. *. float_of_int credits
 
 (* The credential decision, in one place: a keyless row answers [None] whatever the
    environment holds, so [exa:free] stays anonymous while [exa] spends the same
@@ -528,7 +493,7 @@ let missing_prerequisite (row : row) (pc : Config.provider_config) =
    is what any line naming that URL must go through. *)
 let probe_headers credential : Config.t -> string option -> (string * string) list =
   match credential with
-  | No_credential | Key_in_query _ -> (fun _config _key -> [])
+  | No_credential | Key_in_query _ -> fun _config _key -> []
   | Header { header; prefix } -> Health.probe_headers_const ~prefix header
   | App_id_and_key _ -> Health.algolia_headers
 

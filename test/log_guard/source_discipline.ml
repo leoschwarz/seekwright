@@ -30,14 +30,13 @@ let read path =
 let rec walk dir =
   Sys.readdir dir |> Array.to_list |> List.sort String.compare
   |> List.concat_map (fun name ->
-         let path = Filename.concat dir name in
-         match (try Some (Sys.is_directory path) with _ -> None) with
-         | Some true -> walk path
-         | Some false -> [ path ]
-         | None -> [])
+      let path = Filename.concat dir name in
+      match try Some (Sys.is_directory path) with _ -> None with
+      | Some true -> walk path
+      | Some false -> [ path ]
+      | None -> [])
 
-let is_source path =
-  Filename.check_suffix path ".ml" || Filename.check_suffix path ".mli"
+let is_source path = Filename.check_suffix path ".ml" || Filename.check_suffix path ".mli"
 
 let scan roots = List.concat_map walk roots |> List.filter is_source
 
@@ -48,9 +47,7 @@ let files = scan [ "../../lib"; "../../bin" ]
 let test_the_scan_is_not_vacuous () =
   A.(check bool) "the scan found a substantial tree" true (List.length files >= 40);
   List.iter
-    (fun path ->
-      A.(check bool) (path ^ " is an input to this suite") true
-        (List.mem path files))
+    (fun path -> A.(check bool) (path ^ " is an input to this suite") true (List.mem path files))
     [
       "../../lib/log.ml";
       "../../lib/server.ml";
@@ -68,8 +65,7 @@ let test_no_exception_is_rendered_outside_the_cli () =
     (fun path ->
       if path <> cli_boundary then
         A.(check int)
-          (path ^ " renders no exception")
-          0
+          (path ^ " renders no exception") 0
           (count_occurrences ~haystack:(read path) ~needle:"Printexc."))
     files
 
@@ -77,9 +73,9 @@ let test_the_cli_boundary_is_the_declared_exception () =
   (* The exemption is a file, not a mood: if this path moves, the allowlist
      above moves with it, and the case names it. The positive control is the
      stderr write that makes the exemption necessary in the first place. *)
-  A.(check bool) "the thin CLI is where the exemption points" true
-    (List.mem cli_boundary files);
-  A.(check bool) "and it is the stderr boundary the allowlist exists for" true
+  A.(check bool) "the thin CLI is where the exemption points" true (List.mem cli_boundary files);
+  A.(check bool)
+    "and it is the stderr boundary the allowlist exists for" true
     (contains ~haystack:(read cli_boundary) ~needle:"prerr_endline")
 
 let stderr_writers = [ "../../lib/log.ml"; cli_boundary ]
@@ -130,13 +126,13 @@ let test_the_serving_path_has_no_untyped_escape () =
 let caps_sources = scan [ "../../lib/caps" ]
 
 let test_mcp_kit_stays_behind_the_adapter_interfaces () =
-  A.(check bool) "the capability core was found" true
-    (List.length caps_sources >= 10);
+  A.(check bool) "the capability core was found" true (List.length caps_sources >= 10);
   let adapters = [ "../../lib/caps/server.ml"; "../../lib/caps/server.mli" ] in
   List.iter
     (fun path ->
-      A.(check bool) (path ^ " is the adapter interface or implementation") true
-        (List.mem path caps_sources);
+      A.(check bool)
+        (path ^ " is the adapter interface or implementation")
+        true (List.mem path caps_sources);
       (* Positive control: both the implementation and the interface really do
          name the transport, so the negative scan below can fail. *)
       A.(check bool) (path ^ " names Mcp_kit") true (count path > 0))
@@ -158,7 +154,8 @@ let test_the_core_dune_stanza_names_only_the_core_transport () =
         | Some stop -> String.sub rest 0 stop
         | None -> rest
       in
-      A.(check bool) "the core links mcp-kit, which server.ml uses" true
+      A.(check bool)
+        "the core links mcp-kit, which server.ml uses" true
         (contains ~haystack:stanza ~needle:"mcp-kit");
       List.iter
         (fun transport ->
@@ -171,8 +168,7 @@ let test_the_core_dune_stanza_names_only_the_core_transport () =
 let () =
   A.run "log-source-discipline"
     [
-      ( "the scan",
-        [ A.test_case "is not vacuous" `Quick test_the_scan_is_not_vacuous ] );
+      ("the scan", [ A.test_case "is not vacuous" `Quick test_the_scan_is_not_vacuous ]);
       ( "exceptions",
         [
           A.test_case "no exception is rendered outside the CLI" `Quick
@@ -186,10 +182,8 @@ let () =
             test_only_the_sink_and_the_cli_write_stderr;
         ] );
       ( "the serving path",
-        [
-          A.test_case "has no untyped escape" `Quick
-            test_the_serving_path_has_no_untyped_escape;
-        ] );
+        [ A.test_case "has no untyped escape" `Quick test_the_serving_path_has_no_untyped_escape ]
+      );
       ( "the capability core",
         [
           A.test_case "mcp-kit stays behind the adapter interfaces" `Quick

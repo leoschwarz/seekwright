@@ -12,20 +12,12 @@ let policy_endpoint = Provider.policy_of_uri endpoint
 
 (* Output format: Sourced_answer returns prose answer and citations;
    Search_results returns structured hits. *)
-type output =
-  | Sourced_answer
-  | Search_results
+type output = Sourced_answer | Search_results
 
-let show_output = function
-  | Sourced_answer -> "sourcedAnswer"
-  | Search_results -> "searchResults"
+let show_output = function Sourced_answer -> "sourcedAnswer" | Search_results -> "searchResults"
 
 (* Coarse freshness to day count: Day (1), Week (7), Month (30), Year (365). *)
-let age_days = function
-  | Model.Day -> 1
-  | Model.Week -> 7
-  | Model.Month -> 30
-  | Model.Year -> 365
+let age_days = function Model.Day -> 1 | Model.Week -> 7 | Model.Month -> 30 | Model.Year -> 365
 
 (* The injected clock is what makes the vendor's date field testable. *)
 let format_utc = Civil.iso_utc_seconds
@@ -47,8 +39,7 @@ let request_body ~depth ~output ~(from_date : string option) (q : Provider.searc
     if q.Model.include_domains <> [] then
       fields
       @ [
-          ( "includeDomains",
-            `List (List.map (fun domain -> `String domain) q.Model.include_domains) );
+          ("includeDomains", `List (List.map (fun domain -> `String domain) q.Model.include_domains));
         ]
     else fields
   in
@@ -56,15 +47,12 @@ let request_body ~depth ~output ~(from_date : string option) (q : Provider.searc
     if q.Model.exclude_domains <> [] then
       fields
       @ [
-          ( "excludeDomains",
-            `List (List.map (fun domain -> `String domain) q.Model.exclude_domains) );
+          ("excludeDomains", `List (List.map (fun domain -> `String domain) q.Model.exclude_domains));
         ]
     else fields
   in
   let fields =
-    match from_date with
-    | Some date -> fields @ [ ("fromDate", `String date) ]
-    | None -> fields
+    match from_date with Some date -> fields @ [ ("fromDate", `String date) ] | None -> fields
   in
   Yojson.Safe.to_string (`Assoc fields)
 
@@ -93,9 +81,7 @@ let hit ~snippet_chars ~title url item field =
   }
 
 let source_url item =
-  match Provider.Json.string_field "url" item with
-  | Some url when url <> "" -> Some url
-  | _ -> None
+  match Provider.Json.string_field "url" item with Some url when url <> "" -> Some url | _ -> None
 
 let parse_sources ~snippet_chars data ~limit =
   let records =
@@ -105,10 +91,7 @@ let parse_sources ~snippet_chars data ~limit =
   in
   let rec take n items acc =
     if n <= 0 then List.rev acc
-    else
-      match items with
-      | [] -> List.rev acc
-      | item :: rest -> take (n - 1) rest (item :: acc)
+    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
   in
   List.filter_map
     (fun item ->
@@ -159,9 +142,7 @@ let search ~cost_per_1k ~snippet_chars ~depth ~output ~key ~(now : unit -> float
     (net : Provider.Net.t) (q : Provider.search_query) =
   let ( let* ) = Result.bind in
   let date =
-    match q.Model.recency with
-    | Some period -> Some (from_date now period)
-    | None -> None
+    match q.Model.recency with Some period -> Some (from_date now period) | None -> None
   in
   let request =
     {

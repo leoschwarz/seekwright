@@ -26,9 +26,8 @@ module Serper = Seekwright_providers.Serper
 module A = Alcotest
 open Test_support
 
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () :
-    Model.search_query =
+let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
+    ?language ?recency ?safe_search () : Model.search_query =
   {
     Model.query = text;
     max_results;
@@ -81,18 +80,11 @@ let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ()
           Ok { Caps.Authority.Net.status; headers = []; body });
     }
   in
-  let provider =
-    Serper.make ?cost_per_1k ~snippet_chars ~key:test_key ~net ()
-  in
+  let provider = Serper.make ?cost_per_1k ~snippet_chars ~key:test_key ~net () in
   (provider, fun () -> Option.get !sent)
 
 let refusal kind ~message =
-  let net =
-    {
-      Provider.Net.request =
-        (fun _ -> Error (Caps.Error.make kind ~message));
-    }
-  in
+  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
   Serper.make ~key:test_key ~net ()
 
 (* The adapter, driven: [search_of ()] answers with the fixture and hands back
@@ -135,11 +127,9 @@ let the_fixture_yields_both_records () =
   check_int "two results" 2 (List.length hits);
   check_string "the title" "Write-Ahead Logging" (List.hd hits).result.title;
   check_string "the url" "https://www.sqlite.org/wal.html" (List.hd hits).result.url;
-  check_string "the second url" "https://example.com/wal-explained"
-    (List.nth hits 1).result.url
+  check_string "the second url" "https://example.com/wal-explained" (List.nth hits 1).result.url
 
-let the_limit_is_honoured () =
-  check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
+let the_limit_is_honoured () = check_int "one of two" 1 (List.length (parse ~limit:1 sample_json))
 
 let a_serp_record_fills_snippet_and_never_text () =
   let hits = parse sample_json in
@@ -153,11 +143,14 @@ let the_date_is_kept_only_when_a_string () =
 
 let records_without_a_url_are_dropped () =
   check_int "no link" 0
-    (List.length (parse (`Assoc [ ("organic", `List [ `Assoc [ ("title", `String "No url here") ] ]) ])))
+    (List.length
+       (parse (`Assoc [ ("organic", `List [ `Assoc [ ("title", `String "No url here") ] ]) ])))
 
 let records_without_a_title_are_dropped () =
   check_int "no title" 0
-    (List.length (parse (`Assoc [ ("organic", `List [ `Assoc [ ("link", `String "https://example.com") ] ]) ])))
+    (List.length
+       (parse
+          (`Assoc [ ("organic", `List [ `Assoc [ ("link", `String "https://example.com") ] ]) ])))
 
 let a_record_that_is_not_an_object_is_skipped () =
   check_int "the string is dropped, the object survives" 1
@@ -174,14 +167,20 @@ let missing_organic_is_empty_not_an_error () =
    the field dropped, exactly as the sibling adapters drop a non-string. *)
 
 let non_strings =
-  [ ("a nested object", `Assoc [ ("nested", `String "object") ]); ("a list", `List [ `String "a"; `String "b" ]); ("a number", `Int 7) ]
+  [
+    ("a nested object", `Assoc [ ("nested", `String "object") ]);
+    ("a list", `List [ `String "a"; `String "b" ]);
+    ("a number", `Int 7);
+  ]
 
 let a_non_string_date_is_dropped_and_the_call_succeeds () =
   List.iter
     (fun (what, value) ->
       let body = Yojson.Safe.to_string (organic [ record [ ("date", value) ] ]) in
       let outcome, _ = search_of ~body ~query:(query ~max_results:1 ()) () in
-      check_int (Printf.sprintf "the call succeeded through %s" what) 1 (List.length outcome.results);
+      check_int
+        (Printf.sprintf "the call succeeded through %s" what)
+        1 (List.length outcome.results);
       check_opt_string what None (List.hd outcome.results).result.published_date)
     non_strings
 
@@ -190,22 +189,21 @@ let a_non_string_snippet_is_dropped_and_the_call_succeeds () =
     (fun (what, value) ->
       let body = Yojson.Safe.to_string (organic [ record [ ("snippet", value) ] ]) in
       let outcome, _ = search_of ~body ~query:(query ~max_results:1 ()) () in
-      check_int (Printf.sprintf "the call succeeded through %s" what) 1 (List.length outcome.results);
+      check_int
+        (Printf.sprintf "the call succeeded through %s" what)
+        1 (List.length outcome.results);
       check_opt_string what None (List.hd outcome.results).result.snippet)
     non_strings
 
 let a_string_date_still_reaches_the_model () =
   (* The guard must not change behaviour for a well-formed payload. *)
   let outcome, _ = search_of ~query:(query ~max_results:1 ()) () in
-  check_opt_string "the date" (Some "2024-11-03")
-    (List.hd outcome.results).result.published_date
+  check_opt_string "the date" (Some "2024-11-03") (List.hd outcome.results).result.published_date
 
 let a_string_snippet_still_reaches_the_model () =
   let outcome, _ = search_of ~query:(query ~max_results:1 ()) () in
-  check_opt_string
-    "the snippet"
-    (Some
-       "The default method by which SQLite implements atomic commit is a rollback journal.")
+  check_opt_string "the snippet"
+    (Some "The default method by which SQLite implements atomic commit is a rollback journal.")
     (List.hd outcome.results).result.snippet
 
 let post_to_the_search_endpoint_with_the_key_header () =
@@ -226,18 +224,14 @@ let the_key_never_rides_the_url () =
   let _, request = search_of () in
   check_bool "the URI names no key" false
     (contains ~haystack:(Uri.to_string request.Caps.Authority.Net.uri) ~needle:test_key);
-  check_bool "and no key in the query" true
-    (Uri.query request.Caps.Authority.Net.uri = [])
+  check_bool "and no key in the query" true (Uri.query request.Caps.Authority.Net.uri = [])
 
 let the_country_reaches_gl_and_the_recency_reaches_tbs () =
   List.iter
     (fun (period, code) ->
-      let _, request =
-        search_of ~query:(query ~country:"de" ~recency:period ()) ()
-      in
+      let _, request = search_of ~query:(query ~country:"de" ~recency:period ()) () in
       check_opt_string "gl carries the country" (Some "de") (body_field "gl" request);
-      check_opt_string (Printf.sprintf "%s reaches tbs" code) (Some code)
-        (body_field "tbs" request))
+      check_opt_string (Printf.sprintf "%s reaches tbs" code) (Some code) (body_field "tbs" request))
     [ (Model.Day, "qdr:d"); (Model.Week, "qdr:w"); (Model.Month, "qdr:m"); (Model.Year, "qdr:y") ];
   (* Unasked, neither field is sent: a bare [num] with no [tbs] is the
      unfiltered SERP, and a default there would narrow the search unasked. *)
@@ -279,8 +273,7 @@ let a_safe_search_is_noticed_for_both_values () =
     (fun value ->
       let outcome, _ = search_of ~query:(query ~safe_search:value ()) () in
       check_string "the safe-search sentence"
-        "cannot filter by safe-search; that constraint was ignored"
-        (Option.get outcome.notice))
+        "cannot filter by safe-search; that constraint was ignored" (Option.get outcome.notice))
     [ true; false ]
 
 let an_unconstrained_query_carries_no_notice () =
@@ -294,8 +287,7 @@ let the_honoured_buckets_draw_no_notice () =
   let outcome, _ =
     search_of
       ~query:
-        (query ~include_domains:[ "sqlite.org" ] ~country:"de" ~language:"de"
-           ~recency:Model.Week ())
+        (query ~include_domains:[ "sqlite.org" ] ~country:"de" ~language:"de" ~recency:Model.Week ())
       ()
   in
   check_opt_string "no notice at all when safe-search is unasked" None outcome.notice
@@ -323,9 +315,7 @@ let spent_credits_and_rate_limit_are_quota () =
     [ 402; 429 ]
 
 let a_body_that_quotes_the_key_is_not_echoed () =
-  let body =
-    Printf.sprintf "<html>upstream echoed %s on a payment page</html>" test_key
-  in
+  let body = Printf.sprintf "<html>upstream echoed %s on a payment page</html>" test_key in
   let provider, _ = dial ~status:402 ~body () in
   match Provider.search provider (query ()) with
   | Ok _ -> A.failf "HTTP 402 was accepted"
@@ -334,9 +324,7 @@ let a_body_that_quotes_the_key_is_not_echoed () =
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
 let a_network_failure_does_not_echo_the_request () =
-  let provider =
-    refusal Caps.Error.Denied ~message:"connection refused to X-API-KEY: test-key"
-  in
+  let provider = refusal Caps.Error.Denied ~message:"connection refused to X-API-KEY: test-key" in
   match Provider.search provider (query ()) with
   | Ok _ -> A.failf "a refused grant was accepted"
   | Error failure ->
@@ -348,8 +336,10 @@ let the_cost_doubles_past_ten_results () =
   (* "2 credits for more than 10 results" is the published rule, and the flat
      [cost_per_1k /. 1000.] reading would under-report a 20-result search by
      half. *)
-  check_number "one credit at the threshold" 0.001 (Provider.cost_for (fst (dial ())) Serper.credit_over);
-  check_number "two credits past it" 0.002 (Provider.cost_for (fst (dial ())) (Serper.credit_over + 1));
+  check_number "one credit at the threshold" 0.001
+    (Provider.cost_for (fst (dial ())) Serper.credit_over);
+  check_number "two credits past it" 0.002
+    (Provider.cost_for (fst (dial ())) (Serper.credit_over + 1));
   check_number "the schema ceiling is two credits" 0.002 (Provider.cost_for (fst (dial ())) 20)
 
 let the_result_carries_the_credit_figure () =
@@ -380,79 +370,78 @@ let the_endpoint_is_the_one_the_grant_allows () =
     (Uri.host request.Caps.Authority.Net.uri = Some Serper.policy_endpoint.Caps.Policy.host)
 
 let () =
-  A.
-    (run "seekwright/serper"
-       [
-         ( "parsing",
-             [
-               test_case "the live fixture yields both records" `Quick the_fixture_yields_both_records;
-               test_case "the limit is honoured" `Quick the_limit_is_honoured;
-               test_case "a SERP record fills snippet and never text" `Quick
-                 a_serp_record_fills_snippet_and_never_text;
-               test_case "the date is kept only when a string" `Quick
-                 the_date_is_kept_only_when_a_string;
-               test_case "records without a url are dropped" `Quick records_without_a_url_are_dropped;
-               test_case "records without a title are dropped" `Quick
-                 records_without_a_title_are_dropped;
-               test_case "a record that is not an object is skipped" `Quick
-                 a_record_that_is_not_an_object_is_skipped;
-               test_case "missing organic is empty, not an error" `Quick
-                 missing_organic_is_empty_not_an_error;
-             ] );
-         ( "the upstream field guards",
-             [
-               test_case "a non-string date is dropped and the call succeeds" `Quick
-                 a_non_string_date_is_dropped_and_the_call_succeeds;
-               test_case "a non-string snippet is dropped and the call succeeds" `Quick
-                 a_non_string_snippet_is_dropped_and_the_call_succeeds;
-               test_case "a string date still reaches the model" `Quick
-                 a_string_date_still_reaches_the_model;
-               test_case "a string snippet still reaches the model" `Quick
-                 a_string_snippet_still_reaches_the_model;
-             ] );
-         ( "the request",
-             [
-               test_case "POST to the search endpoint, key in the header" `Quick
-                 post_to_the_search_endpoint_with_the_key_header;
-               test_case "the key never rides the URL" `Quick the_key_never_rides_the_url;
-               test_case "the country reaches gl and the recency reaches tbs" `Quick
-                 the_country_reaches_gl_and_the_recency_reaches_tbs;
-               test_case "the language maps onto hl lowercased" `Quick
-                 the_language_maps_onto_hl_lowercased;
-               test_case "hl is absent without a language" `Quick hl_is_absent_without_a_language;
-               test_case "the domain filters ride in the query" `Quick domain_filters_ride_in_the_query;
-               test_case "no safe-search parameter is ever sent" `Quick
-                 no_safe_search_parameter_is_ever_sent;
-             ] );
-         ( "the constraint report",
-             [
-               test_case "a safe-search is noticed for both values" `Quick
-                 a_safe_search_is_noticed_for_both_values;
-               test_case "an unconstrained query carries no notice" `Quick
-                 an_unconstrained_query_carries_no_notice;
-               test_case "the honoured buckets draw no notice" `Quick
-                 the_honoured_buckets_draw_no_notice;
-             ] );
-         ( "the failures this adapter owns",
-             [
-               test_case "spent credits and the rate limit are quota" `Quick
-                 spent_credits_and_rate_limit_are_quota;
-               test_case "the body behind the payment status is not echoed" `Quick
-                 a_body_that_quotes_the_key_is_not_echoed;
-               test_case "a network failure does not echo the request" `Quick
-                 a_network_failure_does_not_echo_the_request;
-             ] );
-         ( "cost and endpoint",
-             [
-               test_case "the cost doubles past ten results" `Quick
-                 the_cost_doubles_past_ten_results;
-               test_case "the result carries the credit figure" `Quick
-                 the_result_carries_the_credit_figure;
-               test_case "the default price is the row's figure" `Quick
-                 the_default_price_is_the_rows_figure;
-               test_case "an operator-corrected cost reaches the adapter" `Quick
-                 an_operator_corrected_cost_reaches_the_adapter;
-               test_case "the endpoint is the one the grant allows" `Quick
-                 the_endpoint_is_the_one_the_grant_allows;
-             ] );
-       ])
+  A.(
+    run "seekwright/serper"
+      [
+        ( "parsing",
+          [
+            test_case "the live fixture yields both records" `Quick the_fixture_yields_both_records;
+            test_case "the limit is honoured" `Quick the_limit_is_honoured;
+            test_case "a SERP record fills snippet and never text" `Quick
+              a_serp_record_fills_snippet_and_never_text;
+            test_case "the date is kept only when a string" `Quick
+              the_date_is_kept_only_when_a_string;
+            test_case "records without a url are dropped" `Quick records_without_a_url_are_dropped;
+            test_case "records without a title are dropped" `Quick
+              records_without_a_title_are_dropped;
+            test_case "a record that is not an object is skipped" `Quick
+              a_record_that_is_not_an_object_is_skipped;
+            test_case "missing organic is empty, not an error" `Quick
+              missing_organic_is_empty_not_an_error;
+          ] );
+        ( "the upstream field guards",
+          [
+            test_case "a non-string date is dropped and the call succeeds" `Quick
+              a_non_string_date_is_dropped_and_the_call_succeeds;
+            test_case "a non-string snippet is dropped and the call succeeds" `Quick
+              a_non_string_snippet_is_dropped_and_the_call_succeeds;
+            test_case "a string date still reaches the model" `Quick
+              a_string_date_still_reaches_the_model;
+            test_case "a string snippet still reaches the model" `Quick
+              a_string_snippet_still_reaches_the_model;
+          ] );
+        ( "the request",
+          [
+            test_case "POST to the search endpoint, key in the header" `Quick
+              post_to_the_search_endpoint_with_the_key_header;
+            test_case "the key never rides the URL" `Quick the_key_never_rides_the_url;
+            test_case "the country reaches gl and the recency reaches tbs" `Quick
+              the_country_reaches_gl_and_the_recency_reaches_tbs;
+            test_case "the language maps onto hl lowercased" `Quick
+              the_language_maps_onto_hl_lowercased;
+            test_case "hl is absent without a language" `Quick hl_is_absent_without_a_language;
+            test_case "the domain filters ride in the query" `Quick domain_filters_ride_in_the_query;
+            test_case "no safe-search parameter is ever sent" `Quick
+              no_safe_search_parameter_is_ever_sent;
+          ] );
+        ( "the constraint report",
+          [
+            test_case "a safe-search is noticed for both values" `Quick
+              a_safe_search_is_noticed_for_both_values;
+            test_case "an unconstrained query carries no notice" `Quick
+              an_unconstrained_query_carries_no_notice;
+            test_case "the honoured buckets draw no notice" `Quick
+              the_honoured_buckets_draw_no_notice;
+          ] );
+        ( "the failures this adapter owns",
+          [
+            test_case "spent credits and the rate limit are quota" `Quick
+              spent_credits_and_rate_limit_are_quota;
+            test_case "the body behind the payment status is not echoed" `Quick
+              a_body_that_quotes_the_key_is_not_echoed;
+            test_case "a network failure does not echo the request" `Quick
+              a_network_failure_does_not_echo_the_request;
+          ] );
+        ( "cost and endpoint",
+          [
+            test_case "the cost doubles past ten results" `Quick the_cost_doubles_past_ten_results;
+            test_case "the result carries the credit figure" `Quick
+              the_result_carries_the_credit_figure;
+            test_case "the default price is the row's figure" `Quick
+              the_default_price_is_the_rows_figure;
+            test_case "an operator-corrected cost reaches the adapter" `Quick
+              an_operator_corrected_cost_reaches_the_adapter;
+            test_case "the endpoint is the one the grant allows" `Quick
+              the_endpoint_is_the_one_the_grant_allows;
+          ] );
+      ])

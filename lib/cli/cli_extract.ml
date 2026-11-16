@@ -10,8 +10,7 @@ type scanned = {
 
 let boolean_flags = [ "--json"; "--structure"; "--safe-search"; "--no-safe-search" ]
 
-let is_long_flag token =
-  String.length token > 2 && String.sub token 0 2 = "--"
+let is_long_flag token = String.length token > 2 && String.sub token 0 2 = "--"
 
 let scan_args argv =
   let rec go scanned = function
@@ -29,14 +28,11 @@ let scan_args argv =
           let eq = String.index flag '=' in
           let name = String.sub flag 0 eq in
           let value = String.sub flag (eq + 1) (String.length flag - eq - 1) in
-          if List.mem name boolean_flags then
-            Error (name ^ " takes no value")
-          else
-            go { scanned with flags = (name, [ value ]) :: scanned.flags } rest
+          if List.mem name boolean_flags then Error (name ^ " takes no value")
+          else go { scanned with flags = (name, [ value ]) :: scanned.flags } rest
         else
           match rest with
-          | value :: rest'
-            when not (String.length value > 2 && String.sub value 0 2 = "--") ->
+          | value :: rest' when not (String.length value > 2 && String.sub value 0 2 = "--") ->
               go { scanned with flags = (flag, [ value ]) :: scanned.flags } rest'
           | _ -> Error (flag ^ " needs a value"))
     | arg :: rest -> go { scanned with positional = arg :: scanned.positional } rest
@@ -47,7 +43,8 @@ let scan_args argv =
 let flag_values scanned name =
   List.concat_map (fun (flag, values) -> if flag = name then values else []) scanned.flags
 
-let flag_one scanned name = match flag_values scanned name with value :: _ -> Some value | [] -> None
+let flag_one scanned name =
+  match flag_values scanned name with value :: _ -> Some value | [] -> None
 let flag_bool scanned name = List.mem name scanned.bools
 
 let usage_error message = Error message
@@ -62,7 +59,9 @@ let recency_of_string = function
 let int_flag scanned name ~default =
   match flag_one scanned name with
   | Some text -> (
-      match int_of_string_opt text with Some n -> Ok n | None -> usage_error (name ^ " needs a number"))
+      match int_of_string_opt text with
+      | Some n -> Ok n
+      | None -> usage_error (name ^ " needs a number"))
   | None -> Ok default
 
 let bool_flag scanned name =
@@ -136,7 +135,7 @@ let fetch_body scanned =
     @ (match offset with Some v -> [ ("offset", v) ] | None -> [])
     @ (match flag_one scanned "--path" with Some p -> [ ("path", `String p) ] | None -> [])
     @ (if flag_bool scanned "--structure" then [ ("structure", `Bool true) ] else [])
-    @ (match flag_one scanned "--provider" with Some p -> [ ("provider", `String p) ] | None -> [])
+    @ match flag_one scanned "--provider" with Some p -> [ ("provider", `String p) ] | None -> []
   in
   validate_request Model.fetch_request_of_yojson (`Assoc fields)
 
