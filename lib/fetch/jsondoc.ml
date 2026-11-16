@@ -1,4 +1,5 @@
 module Repr = Seekwright_text.Repr
+module Utf8 = Seekwright_text.Utf8
 
 type key =
   | Name of string

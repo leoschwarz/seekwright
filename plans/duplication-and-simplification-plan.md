@@ -1,6 +1,7 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **proposals only; nothing here is landed.** Tree read at `6e4ad90`;
+Status: **§5 step 1 (S-005) is landed; everything else on this page is a
+proposal.** Tree read at `6e4ad90`;
 reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
 unchanged between the two commits — the diff is plans only). The corrections are
 recorded in §8; the §4 decisions remain the maintainer's.
@@ -253,7 +254,7 @@ build from set fields only, so they remain the one hand-spelled half.
 **Gate.** `bin/smoke.expected` pins the schemas. Key order must not change; a
 schema derived from a list has to order the list as the golden already does.
 
-### S-005 — micro-duplication with existing owners
+### S-005 — micro-duplication with existing owners · **landed**
 
 - `Health.url_escape` is byte-for-byte `Provider.escape_path_segment`: the same
   unreserved set, the same `%%%02X` buffer. Keep one. `Uri.pct_encode` is already
@@ -273,6 +274,21 @@ schema derived from a list has to order the list as the golden already does.
   a three-line interface, with two consumers: `Extractors_stdlib` and one case in
   `test_text.ml` whose assertion is that the re-export is the same module. Delete
   the shim, name the real module, and the tautological case goes with it.
+
+**Landed.** `Health` now calls `Provider.escape_path_segment` and its copy is
+gone; `Engine.base64` sits inside `Engine.Fetch` beside `image_notice` and
+`finish_image`; `grouped` is deleted, because its comma was never a promise —
+`test_fetch_engine.ml` already asserts that sentence with `string_of_int`. The
+proposal's consumer count for the shim was wrong: six `lib/fetch/` modules name
+`Utf8` unqualified, so deleting `lib/fetch/utf8.ml` leaves one
+`module Utf8 = Seekwright_text.Utf8` alias per consumer, which is the spelling
+every other library in the tree already uses, and `seekwright.fetch.stdlib`
+links `seekwright.text` for it. `{!Utf8.ascii_lower}` in `extractor.mli` and
+`extractor.ml` becomes a named symbol rather than an odoc link: a cross-package
+reference has no precedent here, and `dune build @doc` has to stay green. No
+golden moved — `surface.expected`, the prose goldens and
+`test/router_dependencies.expected` are byte-stable, `health.ml` having already
+named `Provider`.
 
 ### S-006 — `Agent.tally` and `Usage`'s answer line are one field set twice
 
@@ -504,7 +520,7 @@ in the same commit.
 
 |Order|Step|Expected effect|
 |---|---|---|
-|1|S-005 micro-duplication: the percent-encoder, `base64`/`grouped`, the `Utf8` re-export shim|small, no golden|
+|1|S-005 micro-duplication: the percent-encoder, `base64`/`grouped`, the `Utf8` re-export shim|**landed** — small, no golden, no re-pin|
 |2|S-001 adapter skeleton, `take` landing in `Provider`|−700 to −900 lines in `lib/providers/`; `parallel`'s notices move onto the shared sentence|
 |3|S-002 test harness|−~1,800 test lines, no production change|
 |4|S-003 one dispatch per verb, answering Q-002|the 400/502 mapping has one owner; the `api_answer` pre-check asymmetry is decided|

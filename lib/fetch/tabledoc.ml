@@ -1,3 +1,5 @@
+module Utf8 = Seekwright_text.Utf8
+
 let table_types = [ "text/csv"; "application/csv"; "text/tab-separated-values" ]
 (** The types that name a delimited table by themselves.
 

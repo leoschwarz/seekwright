@@ -122,7 +122,8 @@ in codepoints, and the count of matching chunks the budget cut.
 Tokens are word runs of the casefolded query, length >= 2, deduplicated
 (Python's [\w] is Unicode-wide; this port carries the ASCII members plus
 every non-ASCII codepoint, and [casefold] is the ASCII lowercasing
-{!Utf8.ascii_lower} already records). Chunks are consecutive paragraphs
+[Seekwright_text.Utf8.ascii_lower] already records). Chunks are
+consecutive paragraphs
 packed to 1500 characters, a lone paragraph over the mark hard-split. A
 chunk scores by distinct query tokens; zero scores are never candidates.
 Candidates are taken best-first — score, then position — while the budget

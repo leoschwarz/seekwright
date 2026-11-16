@@ -65,35 +65,6 @@ let result_fields
   | Some true -> base @ [ ("text_truncated", `Bool true) ]
   | _ -> base
 
-let base64 (body : string) : string =
-  let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" in
-  let buffer = Buffer.create ((String.length body / 3 * 4) + 4) in
-  let byte at = if at < String.length body then Char.code body.[at] else -1 in
-  let i = ref 0 in
-  while !i < String.length body do
-    let a = byte !i in
-    let b = byte (!i + 1) in
-    let c = byte (!i + 2) in
-    let bits = (a lsl 16) lor (max b 0 lsl 8) lor max c 0 in
-    Buffer.add_char buffer alphabet.[(bits lsr 18) land 63];
-    Buffer.add_char buffer alphabet.[(bits lsr 12) land 63];
-    Buffer.add_char buffer (if b < 0 then '=' else alphabet.[(bits lsr 6) land 63]);
-    Buffer.add_char buffer (if c < 0 then '=' else alphabet.[bits land 63]);
-    i := !i + 3
-  done;
-  Buffer.contents buffer
-
-let grouped (n : int) : string =
-  let digits = string_of_int n in
-  let last = String.length digits - 1 in
-  let buffer = Buffer.create (String.length digits + (String.length digits / 3) + 1) in
-  String.iteri
-    (fun i ch ->
-      Buffer.add_char buffer ch;
-      if i < last && (last - i) mod 3 = 0 then Buffer.add_char buffer ',')
-    digits;
-  Buffer.contents buffer
-
 let strip (text : string) : string =
   Utf8.strip text
 
@@ -986,14 +957,32 @@ module Fetch = struct
            (Printf.sprintf "offset %d is past the end of the page (%d chars); nothing returned" offset
               page.total_chars))
 
+  let base64 (body : string) : string =
+    let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" in
+    let buffer = Buffer.create ((String.length body / 3 * 4) + 4) in
+    let byte at = if at < String.length body then Char.code body.[at] else -1 in
+    let i = ref 0 in
+    while !i < String.length body do
+      let a = byte !i in
+      let b = byte (!i + 1) in
+      let c = byte (!i + 2) in
+      let bits = (a lsl 16) lor (max b 0 lsl 8) lor max c 0 in
+      Buffer.add_char buffer alphabet.[(bits lsr 18) land 63];
+      Buffer.add_char buffer alphabet.[(bits lsr 12) land 63];
+      Buffer.add_char buffer (if b < 0 then '=' else alphabet.[(bits lsr 6) land 63]);
+      Buffer.add_char buffer (if c < 0 then '=' else alphabet.[bits land 63]);
+      i := !i + 3
+    done;
+    Buffer.contents buffer
+
   let image_notice image size carried =
     if carried
     then
-      image.media_type ^ " image of " ^ grouped size
+      image.media_type ^ " image of " ^ string_of_int size
       ^ " bytes returned as image bytes: an image has no extracted text for"
       ^ " `query`, `path` or `offset` to address"
     else
-      image.media_type ^ " image of " ^ grouped size
+      image.media_type ^ " image of " ^ string_of_int size
       ^ " bytes was fetched: `answer` builds its material from text, so its"
       ^ " bytes are not returned"
 

@@ -1,3 +1,5 @@
+module Utf8 = Seekwright_text.Utf8
+
 type extract_result = {
   text : string;
   title : string option;
@@ -475,8 +477,8 @@ let is_word_char (c : int) : bool =
   || c = 0x5F
   || c >= 0x80
   (** Python's [\w] is Unicode-wide; this port carries the ASCII members plus
-      every non-ASCII codepoint, the approximation {!Utf8.ascii_lower} already
-      records for [casefold] — queries and pages are matched under the same
+      every non-ASCII codepoint, the approximation [Seekwright_text.Utf8.ascii_lower]
+      already records for [casefold] — queries and pages are matched under the same
       normal form, which is what the scorer needs. *)
 
 let contains (needle : Utf8.t) (hay : Utf8.t) : bool =

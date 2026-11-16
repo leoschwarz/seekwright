@@ -8,4 +8,4 @@
 (library
  (name seekwright_fetch_stdlib)
  (public_name seekwright.fetch.stdlib)
- (libraries seekwright.fetch))
+ (libraries seekwright.fetch seekwright.text))

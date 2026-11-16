@@ -210,17 +210,6 @@ let test_the_log_repr_is_the_one_a_refusal_quotes_with () =
   A.(check string) "a refusal quotes a non-ascii token the same way" "'caf\xc3\xa9'"
     (R.py_repr "caf\xc3\xa9")
 
-let test_the_fetch_path_walk_is_this_walk () =
-  (* [lib/fetch/utf8.ml] is a re-export, so a fetch-path call site and an engine
-     call site cannot drift into two walks again. This is a compile-time fact:
-     the two [t]s are one type, and it fails the build if the re-export is
-     dropped. *)
-  let pin : Seekwright_fetch.Utf8.t -> Seekwright_text.Utf8.t = Fun.id in
-  let page = "caf\xc3\xa9 \xe2\x82\xac" in
-  A.(check int) "and it counts the same" (Seekwright_fetch.Utf8.count page)
-    (U.count page);
-  ignore pin
-
 let () =
   A.run "text"
     [
@@ -257,7 +246,4 @@ let () =
             A.test_case "the log repr is the one a refusal quotes with" `Quick
               test_the_log_repr_is_the_one_a_refusal_quotes_with;
           ] );
-      ( "one owner",
-          [ A.test_case "the fetch path walks this walk" `Quick test_the_fetch_path_walk_is_this_walk ];
-      );
     ]

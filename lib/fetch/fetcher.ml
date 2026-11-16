@@ -2,6 +2,7 @@ module Caps = Mcp_caps
 module E = Extractor
 module J = Jsondoc
 module Repr = Seekwright_text.Repr
+module Utf8 = Seekwright_text.Utf8
 
 type fetched_image = Seekwright_wire.Page.image = {
   media_type : string;

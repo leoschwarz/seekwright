@@ -1,4 +1,5 @@
 module Caps = Mcp_caps
+module Utf8 = Seekwright_text.Utf8
 
 type error =
   | Url_blocked of string

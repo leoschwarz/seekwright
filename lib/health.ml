@@ -109,19 +109,6 @@ let probe_headers_const ?(prefix = "") (header : string) :
   fun _ key ->
     match key with Some k -> [ (header, prefix ^ k) ] | None -> []
 
-let url_escape (value : string) : string =
-  let unreserved = function
-    | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '.' | '-' | '~' -> true
-    | _ -> false
-  in
-  let out = Buffer.create (String.length value * 3) in
-  String.iter
-    (fun c ->
-      if unreserved c then Buffer.add_char out c
-      else Buffer.add_string out (Printf.sprintf "%%%02X" (Char.code c)))
-    value;
-  Buffer.contents out
-
 let url_form_escape (value : string) : string =
   let out = Buffer.create (String.length value * 3) in
   String.iter
@@ -168,7 +155,7 @@ let algolia_endpoint (config : Config.t) (_key : string option) : string option 
   | Some (app_id, index) ->
     Some
       (Printf.sprintf "https://%s-dsn.algolia.net/1/indexes/%s/query" app_id
-         (url_escape index)
+         (Provider.escape_path_segment index)
       ^ "?query=probe&hitsPerPage=notanumber")
 
 let algolia_headers (config : Config.t) (key : string option) :

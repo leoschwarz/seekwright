@@ -1,7 +1,7 @@
 module E = Seekwright_fetch.Extractor
 module J = Seekwright_fetch.Jsondoc
 module T = Seekwright_fetch.Tabledoc
-module U = Seekwright_fetch.Utf8
+module U = Seekwright_text.Utf8
 
 (* Never the answer: what a browser executes or draws, and the sectioning
    elements whose job is the furniture around the content. *)
