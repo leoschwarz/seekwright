@@ -1,9 +1,9 @@
 # The fetch role's deny-list: hosts `fetch` must not reach, however the caller phrased the URL.
-# One host per line, in the spelling Squid reads: a leading dot matches that domain and every host under
-# it, and a bare host matches that one host only. Blank lines and `#` lines are for the reader -- Squid
-# reads deploy/compose/generated/fetch-deny.txt, the comment-free rendering of this file
-# (tools/egress_lists.py).
-# Add the host you want refused here, re-run `uv run python -m tools.egress_lists`, restart the fetch proxy.
+# One host per line, in the spelling Squid's dstdomain reads: a leading dot matches that domain and every
+# host under it, and a bare host matches that one host only. Blank lines and `#` lines are for the
+# reader -- deploy/compose/generated/fetch-deny.txt is the comment-free rendering of this file
+# (ocaml-tools/egress_lists.ml) and the inventory the host firewall enforces.
+# Add the host you want refused here, re-run `dune runtest ocaml-tools --auto-promote`.
 #
 # A deny-list is a policy, not a defence: any host not named here stays reachable, and a caller that
 # controls a name outside this list can carry bytes out through it. What it does stop, cheaply and at the
@@ -41,8 +41,9 @@
 .file.io
 .tmpfiles.org
 
-# Cloud metadata service names. The address-side rule is the app's SSRF guard and the `nonpublic`
-# ACL in deploy/compose/squid/, which already cover 169.254.169.254 and the rest of link-local; these are the
-# names some clouds resolve, refused here so the fetch tool says so before connecting.
+# Cloud metadata service names. The app's SSRF guard covers 169.254.169.254 and the rest of
+# link-local at the address level; these are the names some clouds resolve, listed so the egress
+# inventory names them too. Both names are pinned in ocaml-tools/egress_lists.ml as well, so
+# deleting them here does not drop them from the rendering.
 metadata.google.internal
 metadata.goog
