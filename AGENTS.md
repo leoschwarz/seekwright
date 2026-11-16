@@ -1,16 +1,17 @@
 # AGENTS.md
 
-> **Branch notice (ocaml-port only).** This branch is a **port of seekwright to
-> OCaml**. Everything Python below — `src/`, `tests/`, `docs/`, `tools/`,
-> `pyproject.toml` — is the *existing implementation*, kept as a read-only
-> reference and differential oracle; do not modify it for port work. The port's
-> plans live in `plans/` and are the only editable planning area; they are the
-> authority for the OCaml side: `plans/capability-gated-mcp-server.md` (the
-> `mcp-caps` capability layer over `mcp-kit`), `plans/seekwright-ocaml-port.md`
-> (the P1–P8 port plan) and `plans/project-structure.md` (root dune workspace;
-> packages `mcp-caps` and `seekwright`). New OCaml code lands in `lib/`, `bin/`,
-> `test/` at the root. `VISION.md` remains the spec both implementations steer
-> by; a conflict with it is raised in `plans/`, never resolved by editing it.
+> **Scope.** This repository is the seekwright implementation: one root dune
+> workspace — `lib/`, `bin/`, `test/`, `live/`, `ocaml-tools/`, `examples/` —
+> holding two packages, `mcp-caps` (the capability layer) and `seekwright` (the
+> server). There is no second implementation in the tree and nothing to port:
+> `ocaml-tools/surface.expected`, the differential corpus under
+> `test/differential/`, the prompt goldens and the three egress lists are this
+> tree's own, re-rendered from this tree's code at every `dune runtest`.
+> `VISION.md` is the spec both the goals and the non-goals come from; a conflict
+> with it is raised in `plans/`, never resolved by editing it.
+> `plans/` is the only editable planning area and the authority for design
+> decisions not yet in code; everything else in the repository is either the
+> implementation, its gate, or a page an operator reads.
 
 Guidance for AI agents working in this repository.
 
@@ -19,410 +20,384 @@ Guidance for AI agents working in this repository.
 An MCP server that fronts web-search providers behind one normalised tool
 surface. Three tools: `search` (one query to one provider), `fetch` (a URL in,
 extracted page text out) and `answer` (agent mode, off by default). Seventeen
-provider names over fifteen adapter modules — the inventory, in its three
-billing groups, is [`docs/reference/providers.md`](docs/reference/providers.md)'s;
-`exa` and `parallel` each appear twice (`exa`/`exa:free`,
-`parallel`/`parallel:free`) because each answers anonymously for free and
-bills with a key.
+provider names over fifteen adapter modules, `exa` and `parallel` each appearing
+twice (`exa`/`exa:free`, `parallel`/`parallel:free`) because each answers
+anonymously for free and bills with a key; five fetch fallbacks behind the local
+reader. The same surface is served over stdio, streamable HTTP, the
+`POST /api/v1/…` REST projection and three CLI verbs.
 
-This is v1: a proxy and nothing else. There is deliberately **no cache** — every
-`search` call reaches a provider. [`VISION.md`](VISION.md) holds the goals,
-their precedence and the non-goals; `docs/architecture.md`'s "Deliberate
-non-features" records what was refused on purpose and why, and is worth reading
-before changing anything structural.
+**One native executable** — musl-linked, 16.5 MB stripped on a 37 MB Alpine
+runtime layer, no interpreter and no package-manager state at run time.
+`mcp-caps` makes the guardrails structural rather than conventional: a tool
+declares the authority its operations need in its `'caps` type,
+`Registry.add ~grant` supplies an abstract grant of exactly that kind, and the
+policy constructors (`Policy.with_root`, `with_written_root`, `with_endpoints`,
+`with_public_web`) own filesystem and network confinement. Forging a grant,
+matching one open, or calling a raw operation is a compile error here, not a
+convention. Every outbound call and every filesystem write goes through one:
+adapters dial only the endpoint in their `Registry` row, `fetch` reads behind the
+SSRF-validated `Net` grant, and the page cache and journal write behind an `Fs`
+grant. That is what keeps "which tool may reach what" a property of
+`lib/factory/` — every grant is built there, from a config decision — instead
+of a review question.
 
-`answer` (agent mode) is built and **off by default** (`[agent] enabled =
-false`); its contract is [`docs/reference/agent-mode.md`](docs/reference/agent-mode.md).
-With it on, one operator-configured model writes prose over material the server
-retrieved, and the server builds `sources` from the citations it can validate.
-The model never drives retrieval. Open questions are in
-[`docs/ROADMAP.md`](docs/ROADMAP.md).
+Status: **production candidate**, with four exclusions disclosed in
+`ocaml-docs/divergences.md` and `plans/seekwright-ocaml-port.md` §38 — no PDF page
+text (measured, not incidental); the extraction backend is this port's own
+`stdlib` reader and `trafilatura` is refused by name; live verification covers
+only the keyless names and two fetch cases, and every keyed name is announced
+untested; and there is no outbound proxy. Calling the port a *limited production
+release* is a maintainer decision, not a branch one, and it carries the PDF
+exclusion with the label. "Full behavioural parity" is not a claim this tree may
+make while that exclusion stands.
 
-The 0.1.0 freeze holds the request surface: the three tools and their
-parameters, the three `POST /api/v1/…` routes and the four operational paths,
-the three client verbs, the ten server flags, the seventeen provider names and
-every config key, and the usage-journal fields behind `GET /dashboard`.
-[`docs/reference/surface.md`](docs/reference/surface.md) is that surface printed
-from the tree by `tools/surface.py`; `--check` re-reads the tree and fails on
-drift, so a frozen name moves by changing the code, re-printing the manifest and
-re-pinning `tools/value_sets.json` in one pull request, with the reasoning in its
-body. **Values** are not frozen: adding a name, a key or a rung is config.
-**Prose** is not frozen: tool descriptions are model-facing copy, not a wire
-contract.
+One operator serves one deployment, and the non-goals follow: **no auth or
+tenancy on the listener**, **no search cache and no stored corpus** (every
+`search` reaches a provider — that is a decision, not a gap), and **no accounting
+ledger** (`Usage` is an in-memory aggregate plus an optional append-only journal
+for the dashboard, never a billing record). `[fetch] cache_dir` is an
+off-by-default *page* cache of extracted text, bounded by `cache_ttl_seconds`,
+`cache_max_entry_bytes` and `cache_max_bytes`.
 
 ## Commands
 
-All commands go through `uv` (Python 3.14, `uv_build` backend). The gate is the
-first eight; run them before calling any change done.
+Every shell needs the switch and, on this host, the GMP search paths — the exact
+exports are in the `ocaml` skill (`.agents/skills/ocaml/SKILL.md`; CI installs
+`libgmp-dev` and needs none of it). The gate is three targets and all three must
+be green before a change is called done:
 
 ```bash
-uv lock --check                            # pyproject.toml and uv.lock agree
-uv sync                                    # dev group included, which
-                                           # self-includes seekwright[trafilatura],
-                                           # the default fetch extraction backend
-uv run python -m tools.surface --check      # the frozen surface vs docs/reference/surface.md
-uv run python -m tools.egress_lists --check # deploy/compose/generated/ vs the endpoints src/ dials
-uv run python -m tools.value_sets --check   # the six frozen value sets vs tools/value_sets.json
-uv run ruff check                          # lint (pinned via dev deps / uv.lock)
-uv run ty check                            # types (pinned; rules in pyproject.toml)
-uv run pytest                              # hermetic suite
-
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live -k exa_free       # keyless & free
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live -k parallel_free  # keyless & free
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live -k freeserp       # keyless & free
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live -k anysearch      # keyless & free
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live                   # billed; needs keys
-uv run seekwright --check                  # self-check: config, provider connectivity
-uv run seekwright --http                   # streamable HTTP at /mcp on 127.0.0.1:8000
-uv build                                   # wheel, as the release lane builds it
-podman build -t seekwright:dev .           # OCI image; see docs/reference/container.md
+dune build @install        # both libraries, both executables, the generated .opam files
+dune runtest --force       # every suite under test/, every pinned diff, the live inventory
+dune build @doc            # odoc: a broken cross-reference is a defect
 ```
 
-No formatter is configured, and ruff has no rule selection, so it checks
-whatever its pinned version enables by default — bump that dependency
-deliberately. `ty` is the only type checker; it reads the `[tool.ty.src]` and
-[`tool.ty.rules`] blocks in `pyproject.toml`, so a change there is a change to
-the gate ([`docs/reference/typing.md`](docs/reference/typing.md) explains the
-rules).
+`dune runtest` is the interesting one: it runs the alcotest suites **and** the
+diff rules that pin whole outputs — the surface manifest, the stdio transcript,
+the embedded prose and the dashboard page, the three egress lists, the `--check`
+reports, the differential goldens and matrix, the negative-compilation
+diagnostics. A green run means both.
 
-## Releases
+```bash
+dune runtest ocaml-tools --auto-promote     # re-render and re-pin a golden you meant to move
+./_build/default/test/test_engine.exe test "<suite name>"    # one suite, from _build/default/test
 
-A release is a tag push, and the version has to be on `main` before the tag is
-cut. The version lives in three places that must agree —
-`src/seekwright/__init__.py`, `pyproject.toml`'s `[project] version`, and the
-Containerfile's `image.version` label — plus `uv lock`, which records the
-project's own version; any `docs/` page quoting the User-Agent version moves
-with it, and `tests/repo/test_packaging.py` fails the suite if they disagree.
-Land the bump on `main` through a pull request, then push the tag at main's
-head: `git push origin refs/tags/v<version>`. `publish.yml`'s first step
-refuses a tag that names any other commit, and the `scan` job on that main
-commit is what security-covers the release — the published wheel and image
-are built from a tree CI scanned green. What a publish run has to show is
-listed in [`docs/reference/publishing.md`](docs/reference/publishing.md).
+VERSION="$(dune build version.txt >/dev/null; cat _build/default/version.txt)"
+docker build -f Containerfile.ocaml --build-arg SEEKWRIGHT_VERSION="$VERSION" -t seekwright-ocaml:dev .
+trivy image --severity CRITICAL,HIGH --ignore-unfixed=false seekwright-ocaml:dev
+
+_build/install/default/bin/seekwright-live --list                       # hermetic: the inventory
+SEEKWRIGHT_LIVE_TESTS=1 _build/install/default/bin/seekwright-live freeserp
+```
+
+Running the server itself: `_build/install/default/bin/seekwright --check`
+(config, provider construction, and one keyless readiness probe per built name
+that has one — a bodyless GET to the real endpoint, so it needs egress and never
+sends a key), and the same binary with no arguments for stdio, or `--http` for
+streamable HTTP. `--check --live` adds one billed search per ready provider.
+Conformance against the pinned official runner is `test/conformance/` and needs
+Node ≥ 22 plus an npm fetch; it is setup, not a gate step, and its traps are in
+the `ocaml` skill.
+
+## The frozen surface
+
+A frozen name moves by changing the code, promoting the pin and justifying the
+move in the pull request body. Every row below is a `dune runtest` rule that
+fails the moment the contract moves — the surface manifest, the prose goldens,
+the three egress lists and the matrix are diffs, not assertions buried in a
+suite, so a green run is the only evidence they hold. Nothing here is re-typed by
+hand except where it says so.
+
+| Pin | Where | What it refuses |
+|---|---|---|
+| The surface manifest — `3 MCP tools, 3 REST routes, 3 CLI verbs, 10 server flags, 17 provider names, 49 section config keys over 6 tables, 12 per-provider config keys, 4 operational routes, 37 usage-journal fields` | `ocaml-tools/surface.expected`, re-rendered by `surface.ml` | any drift in the names a consumer sees, journal fields included |
+| The embedded prose — `server_instructions`, `search_description`, `fetch_description`, `answer_description`, `answer_system` — and the dashboard page | the `.expected` goldens beside `ocaml-tools/resources.ml` | a deployed sentence or a reformatted page changing without a reader noticing |
+| The deployment's host lists — `search-allow` from `Registry.rows`, `fetch-allow` and `fetch-deny` from `known_fetch_fallbacks` plus the operator's own files | `deploy/compose/generated/`, re-rendered by `ocaml-tools/egress_lists.ml` | a provider or fallback row moving without the deployment that proxies it |
+| The six value sets, written out by hand | `test/test_config.ml`'s frozen-vocabulary case: `Config.known_providers`, `permitted_fetch_names`, `known_extractors`, `keyless_providers`, `untested_providers`, `known_fetch_fallbacks` — plus that list's billable subset, `renamed_providers` and `default_user_agent` | a widened or narrowed set landing as a silent config change |
+| The parity matrix | `test/differential/matrix/`'s four TSVs, re-read by `test_differential_matrix.ml` | a row that names no consumer on this port, a blank cell, a state outside the closed vocabularies, a `pending-*` verification on a row claimed ported |
+| The routing core's dependency list | `test/router_dependencies.expected`, generated by `ocamldep` | `lib/router.ml` reaching for any sibling module |
+
+The surface golden and the prose goldens are the manifest a *model* reads back
+(tool descriptions, schemas, refusal sentences), which is why they are pinned
+rather than asserted in a unit test. The matrix records which suite or corpus
+area is the evidence for each row, so a module rename is a matrix edit in the
+same commit, and the source globs in `test/differential/dune` are what make its
+pointer check real rather than decorative.
+
+## Version and releases
+
+`dune-project`'s `(version …)` is the **one version owner**. `lib/version.ml` is
+generated from it, `dune build version.txt` renders it for a step that cannot
+read a dune file, `test/test_metadata.ml` cross-checks it against the generated
+module, both `.opam` manifests, the User-Agent defaults and the MCP identity, and
+`Containerfile.ocaml`'s build stage compares the `SEEKWRIGHT_VERSION` build arg
+against that line and fails if they disagree. Never spell the number anywhere
+else; a bump lands on `dune-project` plus the regenerated `.opam` files, which
+are committed and never hand-edited.
+
+`Version.mcp_server` is deliberately not the release version: it is the MCP
+`serverInfo` identity, a separate protocol value pinned by the stdio transcript.
+
+A release is a **tag push**, and the artifact is the container image:
+`publish.yml` refuses a tag that does not name `main`'s head and refuses one that
+is not `v` plus `dune-project`'s version, scans the built image, then pushes
+`ghcr.io/<repo>:<version>` and `:latest` from the same local image and smokes the
+pulled bytes. There is no wheel, no package index and no release asset. The
+package is private until the repository's package visibility is set to Public, so
+a pull may need `docker login ghcr.io` — `SECURITY.md` records that caveat, not
+this file.
+
+`ci-ocaml.yml` is the ordinary gate; `ocaml-image.yml` builds, scans and runs the
+container contract (UID 10001, `--help` as a usage error, stdio `tools/list`,
+`/healthz`, a 400 REST refusal, SIGTERM drain to exit 0, read-only rootfs,
+mounted config and journal, layer size).
 
 ## Code style and conventions
 
-- Python 3.14, fully typed. Match the existing style: descriptive docstrings
-  that explain *why*. The codebase documents design trade-offs inline — follow
-  suit, don't just restate the code.
-- **No decorative section banners or separators** (`# ----...---- #` +
-  `# Title` + `# ----...---- #`, `# ====`, `# ----------`, and similar).
-  Sectioning comes from the module docstring and the function/class structure
-  itself; a banner only duplicates that structure and rots when the code moves.
-  Inline comments attach to the code they explain — they never label regions.
-- **A comment states a constraint; prose belongs in `docs/`.** The comment worth
-  keeping is the one the code cannot state itself: a pin, an ordering, a name
-  that has to match another file. A paragraph in comment syntax rots when the
-  code moves, so it belongs in a `docs/` page and the file carries the link
-  instead of the argument. Config files
-  (`pyproject.toml`, `Containerfile`, `.gitignore`, the workflow YAML) take a
-  comment only where a value would otherwise surprise a reader.
-- Package lives under `src/seekwright/`; `tests/` mirrors the modules it
-  exercises (`test_config.py` ↔ `config.py`, etc.). The top level holds one
-  module per core module, and four families sit in their own directory:
-  `tests/providers/` (one module per adapter, plus `provider_base` and
-  `provider_contract`), `tests/fetch/` (the fetcher, the fetch engine, the
-  fallbacks, the extractors and `jsondoc`), `tests/repo/` (the guards that read
-  this tree rather than the package: `packaging`, `surface`, `docs_conventions`,
-  `doc_cites`, `egress_lists`, `value_sets`, the CI-workflow
-  guards), and `tests/features/` (Gherkin). `tests/live/test_live.py` holds the
-  live tests.
-- Tests use pytest-asyncio in auto mode; no fixtures are needed for async tests.
-  The exception is `tests/features/` — the agent-facing tool contract is
-  specified in Gherkin (`*.feature`) and run by pytest-bdd from the step modules
-  beside them, whose step functions **must be synchronous** (see Gotchas below).
-- Keep `import seekwright` cheap: `__init__.py` imports `cli` lazily precisely
-  so importing the package does not trigger config loading.
-
-## Commits
-
-One line per commit, lowercase, the area named first (`deploy: …`). A
-description body is added only when the line alone would drop a constraint a
-reader of the diff needs — the reasoning lives in the code, its comments and
-`docs/`, not in history prose.
+- Read the `ocaml` skill before writing OCaml here: verified toolchain, mcp-kit
+  0.2.0 API, the dune and warning traps that already cost a build. Read
+  `.agents/skills/comment-discipline/SKILL.md` before writing or trimming
+  comments — it is the operational form of "a comment states a constraint the
+  code cannot state".
+- **Plans are living documents**: when code settles differently from the plan,
+  the same commit updates the plan. Wave and milestone history goes in
+  `plans/seekwright-ocaml-port.md` as a new `## NN.` section, never in commit
+  prose.
+- Commits: one lowercase line, area first (`engine: …`, `matrix: …`, `plans: …`).
+  A body only when the line would drop a constraint a reader of the diff needs.
+- Every module gets an `.mli`; the public surface is deliberate. `lib/caps/dune`
+  keeps `policy_fs` and `controls_raw` in `private_modules` and `controls_raw.ml`
+  has no interface — the raw-bounds record has no name outside the library, so a
+  `~controls` argument cannot be filled by a consumer. Preserve that boundary.
+- Library direction is fixed: `mcp-caps` → `seekwright` → `seekwright.providers`,
+  `seekwright.fetch` (+ `seekwright.fetch.stdlib`), `seekwright.factory`,
+  `seekwright.cli`, with `seekwright.text` and `seekwright.wire` as the
+  stdlib-only floor both big libraries link. A factory that builds adapters
+  cannot live in `lib/`; it would close the cycle. `mcp-caps` never depends back
+  on `seekwright`, which is what keeps dropping the layer a `seekwright`-side
+  change.
+- Tests mirror modules by name: `test/test_router.ml` ↔ `lib/router.ml`. Adapter
+  suites drive `Provider.Net` as a fake or a loopback listener, so no billed
+  socket opens and the request that would have gone out is asserted on instead.
+- **No line-number cites**, anywhere: not in code, not in a comment, not in a
+  page. No `file.ml:NNN`, no "line 379". The number moves the next time the file
+  is edited and nothing catches it, so name the symbol (`Policy_net.with_public_web`,
+  `Registry.rows`, `known_fetch_fallbacks`, `validate_url`) or the page and its
+  section.
+- **Log discipline.** Logs go to stderr only, because stdout is the JSON-RPC
+  channel. An event name is a constant dotted name; a value reaches a line only
+  by being named in the field list. Never a traceback, never an exception
+  object — `Log.classify_exn` is the only exception → string conversion on a
+  serving path and it returns one of a finite set of constants. Caller and
+  provider content rides its own event (`search.result`, `search.answer`,
+  `fetch.content`), never extra fields on `search.ok` or `fetch.ok`.
+- **An unhonourable constraint is reported, not dropped.** An adapter that cannot
+  apply a filter the caller passed names it in the result's `notice`; silence
+  there is a silently dropped filter.
+- **Absent-field rule at the wire boundary.** An unset field never serialises as
+  `null`: the `Model` encoders build the JSON from only the set fields, and a new
+  wire model inherits the rule rather than re-deciding it.
+- **Provenance comments may name the Python implementation in the past tense** —
+  "the Python reader answered this differently" is a reason the differential
+  golden exists. They may never name a path that no longer exists in this
+  checkout: a pointer to a deleted file is a broken citation, not provenance.
+- Reviews: the twenty-point checklist is `plans/reviews/2026-11-12-style-review.md`,
+  the correctness findings sit beside it, and the owner's running read is
+  `plans/reviews/code_review_ledger.md`.
 
 ## Architecture
 
-The table is the agent-facing copy of the module map;
-[`docs/architecture.md`](docs/architecture.md) is the same map for a reader and
-explains the request paths and the seams.
+The table is the agent-facing copy of the module map; `lib/caps/README.md` is the
+capability layer's own contract, and `ocaml-docs/` is the operator's map.
 
-| Module | Role |
+| Path | Role |
 |---|---|
-|`models.py`|pydantic models for the tool surface and the provider boundary: `SearchQuery`, `Result`, `SearchResponse`, `FetchRequest`/`FetchResponse`, `AnswerRequest`/`AnswerResponse`, `ProviderResult`; `WireModel` is the base that drops unset fields|
-|`prompts.py`|every model-facing string -- server instructions, the three tool descriptions and agent mode's system prompt -- read from `resources/`; prose only, no logic|
-|`resources/`|the text of those prompts (`server_instructions.txt`, `search_description.txt`, `fetch_description.txt`, `answer_system.txt`, `answer_description.txt`) and `dashboard.html`, shipped in the wheel as package data|
-|`sanitize.py`|the escape pass on text that leaves the proxy: `sanitize_text` inserts one U+200B after the opening delimiter of every model special-token literal (`<\|endoftext\|>`, the ChatML-shaped `<\|…\|>` forms) so a scraped page cannot make a tokenizer reject the whole request; reversible, idempotent, deterministic. `TEXT_FIELDS` / `sanitize_model` are the field set `models.py` applies it over at the serialisation boundary|
-|`config.py`|`Config` and its sections: enabled providers, both search ladders, the fetch limits, logging, dashboard, agent mode. Validates provider, extractor and fallback names, resolves `default_provider`|
-|`router.py`|the routing decisions, alone in one pure module: `resolve_search` and `resolve_fetch` answer *which* name serves, `free_walk` and `fallback_rungs` the order, and the refusal, substitution, exhaustion and retry-menu sentences are its too. Its input is a frozen routing table of plain strings and tuples — built names, default, permission set, both ladders, the free set and its order — so the module **imports nothing of `seekwright`**: standard library only, machine-checked by `tests/test_router.py`, and the rule a change there has to keep. The engines build their table lazily, never once in `__init__`, because a caller may swap `providers`/`fetcher`/`fallbacks` afterwards|
-|`engine.py`|execution around those decisions: `SearchEngine` dispatches the name `router.resolve_search` answered, records every dispatch on the health board, and walks the default-route ladder (`search.fallback`) rung by rung as `router.fallback_rungs` says when an unnamed search that resolved to a default fails — on a deployment where every enabled name is free and no default is configured, an unnamed search walks the free fallbacks (`search.free_fallback`, else `FREE_PROVIDER_ORDER`) instead; a named provider stays terminal. `FetchEngine` reads through the primary route (`fetch.primary`, default the local reader), then walks `fetch.fallback` — only where the route asked for the walk (`fetch.auto_fallback`); a fallback primary drops the local read from the unnamed route. Its `resolve` wrappers translate a `router.RouteRefused` into `SearchRefused` / `FetchRefused`, which is what the REST projection reports as 400|
-|`agent.py`|agent mode behind the `answer` tool: the model client (one OpenAI-compatible chat call on the shared httpx client — no SDK, no tokenizer) and the **fixed** retrieval plan. The model writes prose over material the server retrieved; it never drives retrieval, and there is exactly one model call per `answer`. Contract: [`docs/reference/agent-mode.md`](docs/reference/agent-mode.md)|
-|`fetcher.py`|URL fetching behind SSRF guardrails; `HttpFetcher` (the free primary, the extraction backend **injected**, no default) plus five fallbacks — `Crawl4aiFetcher` (a self-hosted renderer, needs `fetch.crawl4ai_url`), `JinaFetcher` (the keyless third-party reader), and the billable `ScrappaFetcher`, `TavilyFetcher` and `LinkupFetcher` — declared in the `KNOWN_FALLBACKS` registry beside them, one row per fallback giving its name, whether it can bill, the endpoint it dials and how to build it. `fetch.fallback` validates against that registry, `factory.build_fetch_stack` loops it, building only the fallbacks whose row says it has what it needs, and `FetchEngine` walks them in that order|
-|`extractors/`|one module per extraction backend, all implementing the `base.py` protocol; `base.py` holds the protocol, the `KNOWN_EXTRACTORS` registry (`trafilatura`, `stdlib`), the shared plumbing (decode, sniff, normalise, `describe_types`, `is_supported`) and passage selection. The wiring list for adding a backend is in its docstring|
-|`jsondoc.py`|the JSON half of the fetch path: which media types are JSON, the one-line-per-node rendering a JSON page arrives as, the `path` grammar `fetch(path=…)` selects with, and `render_schema`, the shape-only structure view `fetch(structure=true)` answers with — stdlib only, and the reason no dependency was added|
-|`tabledoc.py`|the CSV half of the fetch path: which media types name a delimited table, and `render_table`, which writes `jsondoc`'s line grammar so `path` and `structure` need no new machinery; `_emit(columns, rows, …)` is the seam a later record format rides on — stdlib only, so no dependency was added|
-|`health.py`|the provider board: `HealthBoard` gates a name out of the **fallbacks** for a cooldown after the failures real traffic records, and `HealthMonitor` re-verifies it with the same bodyless GET `--check` uses. The first attempt of any search is never gated: a breaker saves the second attempt, it does not pre-empt the first|
-|`logs.py`|loguru setup to stderr, the stdlib `InterceptHandler`, and the `bind`/`query_fields`/`safe` helpers every log call goes through|
-|`usage.py`|`UsageRecorder`: in-memory aggregation of every terminal call plus the optional append-only JSONL journal the dashboard backfills from — content-free; the journal *file* is never read on the serving path (the dashboard backfills from it, and agent mode's per-call ceiling reads the recorder's in-memory totals, not the file)|
-|`dashboard.py`|`DASHBOARD_HTML`, the one self-contained page `GET /dashboard` serves, read from `resources/dashboard.html`; the routes and their `_guard` live in `server.py`|
-|`providers/`|one module per provider adapter, all implementing the `base.py` protocol — the contract, its two duck-typed extras and the six wiring points are in [`docs/reference/provider-contract.md`](docs/reference/provider-contract.md)|
-|`server.py`|MCP wiring: the three tools, both transports, `_transport_security`, the process-level `build_app_context`, and the custom routes — `/healthz`, the dashboard, and the REST projection (`POST /api/v1/search`, `POST /api/v1/fetch`, `POST /api/v1/answer`, behind the same `_guard` as `/dashboard`; the answer route is registered like its siblings and answers 404 while `[agent] enabled = false`)|
-|`cli.py`|the entry point: the server on either transport, `--check` for a diagnosis that never imports FastMCP, and, dispatching on `argv[0]`, `seekwright search`/`fetch`/`answer` as a client of the REST projection (no config, no provider, no key)|
-|`factory.py`|construction: `build_providers`, `build_extractor`, `build_fetch_stack`, kept out of `server.py` so `--check` can diagnose without FastMCP|
-|`tools/`|the three instruments that read this checkout rather than a running process, each a `--check` step in CI: `surface.py` prints the frozen surface and diffs it against `docs/reference/surface.md`; `egress_lists.py` renders the Squid host lists under `deploy/compose/generated/` from the endpoints `src/` names; `value_sets.py` compares the six frozen value sets against the pinned manifest `tools/value_sets.json`, which is what makes a widened `Literal` or a new registry member fail a run instead of being noticed in a diff. Stdlib-only, reading source text with `ast` rather than importing the package, so each reports what the tree says instead of what an interpreter resolved. Tested in `tests/repo/`, one module per instrument; shipped nowhere — `.containerignore` drops the directory and `uv_build` packages only `src/`|
-|`skills/`|Two Agent Skills for clients that do not speak MCP: `skills/seekwright` calls a deployment the operator already runs over the REST projection, `skills/seekwright-deploy` installs, verifies and debugs one. Markdown only, one `SKILL.md` each, every directory self-contained because the directory is the unit of distribution; guarded by `tests/repo/test_skills.py`, which refuses a name the frozen surface no longer carries and refuses the usage skill any install or key vocabulary. Like `tools/`, they ship nowhere — `.containerignore` drops the directory and `uv_build` packages only `src/`.|
+| `lib/caps/` | package `mcp-caps`, wrapped as `Mcp_caps`: `authority` (the `'caps` GADT, `Fs`/`Net` operations, `of_confinement`), `policy` / `policy_fs` / `policy_net` (the confinement decisions, never the grants), `tool`, `registry` (`add ~grant` — the one place a grant meets a tool), `budget`, `controls` / `controls_raw`, `event`, `error`, `server` (the only module that knows mcp-kit: `Mcp_caps.Server.of_registry` folds a `Registry.t` into an `Mcp_kit.Server.t`) |
+| `lib/router.ml` | the routing decisions, stdlib-only by machine check: which name serves, the free walk, the fallback rungs, the refusal sentences |
+| `lib/model.ml`, `lib/wire/` | the wire records and their `Yojson` encoders (the absent-field rule); `wire/page.ml` is the page and image record both halves of the fetch path speak |
+| `lib/text/` | package `seekwright.text`: `Utf8` — every length cap and offset in the tree counts codepoints, not bytes — and `Repr`, the quoting that keeps scraped text from fabricating a log record |
+| `lib/sanitize.ml` | the U+200B escape pass on text that leaves the proxy: reversible, idempotent, byte-faithful |
+| `lib/config.ml` | TOML config and every key of the frozen surface; credentials from `SEEKWRIGHT_*` env only; an enabled name without its key is startup-fatal; the vocabulary lists (`known_providers`, `free_providers`, `keyless_providers`, `known_fetch_fallbacks`, `known_extractors`) |
+| `lib/provider.ml`, `lib/providers/` | package `seekwright.providers`: the adapter contract (`module type S`, `Provider.Net` as the HTTP seam, the constraint report, the caps) and fifteen adapters over seventeen names; `mcp_client.ml` is the narrow streamable-HTTP MCP client `exa:free` and `parallel:free` use |
+| `lib/engine.ml`, `lib/health.ml`, `lib/usage.ml` | execution around the routing decisions, the circuit-breaker board (the first attempt of any search is never gated, and the board gates fallbacks only), the in-memory aggregate and the append-only JSONL journal |
+| `lib/fetch/` | package `seekwright.fetch`: `fetcher` behind the SSRF-validated `Net` grant, `remote_target`, `extractor` + `extractors/stdlib` (own stanza, `seekwright.fetch.stdlib`), `extract_pool` (bounded worker domains), `fallback` + the five `fallback_*` readers, `jsondoc`, `tabledoc`, `utf8`, `page_cache` |
+| `lib/factory/` | package `seekwright.factory`: one facade (`Factory.build_providers`, `build_fetch_stack`, `build_app`, `grant_of_endpoint`) over `providers_build`, `fetch_stack`, `provider_set`, `registry`, `grants`, `verdict`, `app`; `Registry.rows` is one declarative row per name — endpoint, credential, cost model, live status — and `grants.ml` is the single funnel every served grant goes through |
+| `lib/agent.ml` | agent mode: the fixed retrieval plan and **exactly one** model call; the model writes prose, never drives retrieval |
+| `lib/server.ml` | the three tools, both transports, `/healthz`, the dashboard, the REST projection, the Host allowlist, the drain |
+| `lib/cli/` | package `seekwright.cli` (`Cli_flags`, `Cli_check`, `Cli_client`, `Cli_extract`, `Cli_metrics`, `Cli_serve`): the decisions and reports, each taking its input and its network as arguments — no module here writes a stream or calls `exit` |
+| `lib/log.ml`, `lib/prompts.ml`, `lib/dashboard_html.ml`, `lib/http_head.ml`, `lib/version.ml` | dotted event names on stderr; the embedded model-facing prose; the one self-contained dashboard page; the request/response byte ceilings; the generated version module |
+| `bin/main.ml` | the audit surface: one `Registry.add` per tool with its grant named, the loop the grants are opened on, the transport dispatch and the exit status. Its `dune` also carries the stdio smoke and the `--check` report pins |
+| `test/` | the suites, one per module it exercises; `support/` (`Test_support`, the one copy of each helper), `differential/` (corpus, goldens, properties, matrix, `drive.exe`), `should_not_compile/`, `log_guard/`, `conformance/`, `corpus_html/`, `fetch_support/` |
+| `live/` | `seekwright-live`: the explicit live runner, its case inventory (`Cases`), its per-case assertions (`Checks`) and its own hermetic suite |
+| `ocaml-tools/` | tree-reading instruments: `surface.ml` (the frozen manifest), `resources.ml` (the prose and dashboard pins), `egress_lists.ml` (the deployment's host lists), `oracle/` (the frozen corpus, golden and matrix generators plus the `DIVERGENCES` table), `extract_bench/` (the extraction corpus bench and its digests) |
+| `ocaml-docs/` | the operator's pages; see the last section |
+| `deploy/compose/` | the two-role unit set: `compose.yaml`, one config per role, the egress inputs under `egress/`, the rendered lists under `generated/`, reference Squid ACLs under `squid/` |
+| `plans/` | the planning area and the decision record — read before changing a frozen fact, write on the same commit |
+| `examples/` | four runnable servers, the layer's own audit surface: `echo.ml` (mcp-kit with no capability code, the plan's fallback path), `caps_echo.ml` (the same tool registered through `mcp-caps`, no power), `read_source.ml` (a filesystem grant), `gated_search.ml` (a network grant) |
+| `skills/` | the operator-facing agent skills (`seekwright`, `seekwright-deploy`); the engineering skills are under `.agents/skills/` |
 
 ## Gotchas
 
-- **Nothing infers a provider from the query.** With several enabled and no
-  `default_provider`, a bare `search` is an error listing what's available —
-  unless every provider the deployment may dispatch is one that cannot bill, in
-  which case it walks that free set instead. Four scoped exceptions are on
-  record, and all of them are a caller or an operator naming a route: the
-  default-route `search` walks the operator-ordered `[search] fallback` ladder
-  when the default fails (a named provider stays terminal); a caller-declared
-  `search(mode="free")` route restricted to providers that cannot bill; a bare
-  `search` with no default on a deployment whose reachable names are all free;
-  and `exa`'s free-tier-first ladder inside one adapter. Both free-set
-  conditions read the *effective* set (`enabled ∩ permitted`), so
-  `permitted_providers` narrows them — see
-  [`docs/reference/allow-list.md`](docs/reference/allow-list.md). Adding a
-  "pick the cheapest" fallback reverses a decision. Routing *by task* stays
-  declined until measured per-task defaults exist, and then only from a
-  caller-declared `task`.
-- **Providers are opt-in; the empty set is the keyless set.** A config that
-  enables nothing — no `[providers]` block, an empty one, or every entry
-  disabled — resolves to `exa:free`, `parallel:free` and `freeserp`
-  (`config.KEYLESS_PROVIDERS`), the names that reach their endpoint
-  anonymously with no account, no key and no card. The startup line and
-  `--check` say so: the default may exist but may not be silent. An enabled
-  provider with no API key is startup-fatal; keys come from the environment
-  only, `SEEKWRIGHT_*` prefixed, and the variable is named for the backend
-  segment (`SEEKWRIGHT_EXA_API_KEY` also serves `exa:free`). `searxng` is
-  gated on a config `url` instead — enabled without one is a startup error.
-  `anysearch` needs nothing and is still not an install default: explicit-only.
-  **`exa`, `parallel`, `tavily`, `tinyfish`, `algolia`, `search1api`,
-  `serpapi`, `querit` and `deepseek` are not exempt** despite free tiers: the
-  tier is an account quota, and a key names whose quota a search spends.
-  `algolia`'s registration is mandatory on every tier, so its key is never
-  optional.
-- **Shipped is not the same as live-tested.** `config.UNTESTED_PROVIDERS`
-  (`search1api`, `serpapi`, `querit`, `deepseek`) names adapters whose live test
-  has never run in-repo; the startup line and `--check` say so. A name leaves
-  that set only once a live run has passed, and never through a config key.
-- **The image base has to scan clean at CRITICAL/HIGH.** The `scan` job builds
-  the `Containerfile` on main and on dispatch and fails the image on those
-  severities. The runtime base is Alpine because the Debian slim bases carry
-  OS packages with unfixed upstream HIGH CVEs, and the runtime stage removes
-  pip because its vendored msgpack/urllib3/setuptools copies get flagged too.
-  The reasoning is in the `Containerfile` comments and
-  [`docs/reference/container.md`](docs/reference/container.md) — re-run the
-  scan locally before changing either base or that `RUN` line.
-- **The extraction backend is a named opt-in too, and its library is a separate
-  install.** `fetch.extractor` picks one module in `extractors/`; the default
-  `trafilatura` ships as the `trafilatura` extra, which a bare `uv sync` gets
-  only through the dev group's self-include. An enabled `fetch` whose backend
-  library is missing is **startup-fatal**, naming the extra and the name that
-  needs no library — so `--no-dev` consumers (the container) must pass
-  `--extra trafilatura` explicitly or write `fetch.extractor = "stdlib"`, the
-  second registry member: it reads HTML with `html.parser`, claims no PDF type,
-  and is what keeps `fetch` buildable on a bare install.
-  `HttpFetcher` takes the backend injected with **no default** on purpose: a
-  default would import a backend at `fetcher` import time. The six places a new
-  backend has to be wired are listed in `extractors/base.py`'s docstring.
-- **`fetch` stops at its primary route unless the route asks for the walk.**
-  `fetch.auto_fallback` is off: MCP, REST and CLI reads return the primary's
-  sentence naming the ladder as `provider` values to retry with, instead of
-  spending a second vendor. The `answer` plan passes `auto_fallback=True` on
-  every page it reads, because its steps run unattended. `fetch.fallback` may
-  name only `KNOWN_FALLBACKS` rows, each at most once, and at most one billable
-  name, last — config reads each row's `billable` flag rather than checking a
-  name, so a new priced vendor inherits the rule.
-- **`exa` spends Exa's free tier before it spends the key**, via
-  `TieredExaProvider`: two fallbacks, escalating on *any* free-fallback error
-  (not just a classified `QuotaExhausted` — the rate-limit sniff has never seen
-  Exa's real wording), with a cooldown before free is retried and a `notice`
-  whenever the key was used. This is not the "pick the cheapest" reversal: both
-  fallbacks are the backend the caller named, and the ladder can only undercharge
-  it. `exa:free` has no ladder and cannot bill.
-- **An adapter that can't honour a constraint must say so** via
-  `providers.base.ignored_constraints`, in `ProviderResult.notice`. Nothing
-  filters incapable providers out before dispatch, so silence there is a
-  silently dropped filter.
-- **A provider name is `backend` or `backend:flavour`** (`exa`, `exa:free`). A
-  flavour only ever exists on a backend that exists, and only the two anonymous
-  halves are qualified today. Three consequences: a config table for a flavoured
-  name must be quoted (`[providers."exa:free"]`), the API key comes from the
-  backend segment alone (`:` is not legal in a POSIX variable name), and where a
-  name has to be a Python identifier it is written snake_case
-  (`test_exa_free_search`), which is what the `-k` selectors in this file use.
-  `tests/test_config.py::TestProviderNameScheme` is the guard; the scheme and
-  the inventory for renaming one are in
-  [`docs/reference/provider-contract.md`](docs/reference/provider-contract.md).
-- **A tool schema cannot be built from config.** FastMCP freezes it at
-  registration and `from __future__ import annotations` means the annotations
-  are `eval`'d against module globals, so a closure over a config object raises
-  `NameError`. Hence `search(provider=…)` is a `Literal` of all seventeen names,
-  not the enabled subset, and `tests` asserting on that schema must expect all
-  seventeen. `fetch(provider=…)` is the counter-example: which fetch providers
-  exist is a function of config, a key and a permission set, so it is a plain
-  `str | None` validated at call time by `router.resolve_fetch` behind
-  `FetchEngine.resolve`, whose refusal lists the names this deployment did build.
-- **A `fetch` page is read three ways, and a fallback's body is never one of
-  them.** `offset` continues a truncated page, `query` returns matching passages
-  with their offsets, and `path` addresses a JSON document or a CSV table — both
-  `jsondoc` and `tabledoc` write the one line grammar the selector reads. A fallback parses its
-  own response and answers in page text, so `path_addressable` stays false for
-  every rung: forwarding a vendor's JSON body would make `path` select inside the
-  vendor's response rather than inside the page the caller named.
-- **A result carries `snippet` or `text`, never both.** SERP adapters fill the
-  first, content adapters the second, and each has its own policy cap
-  (`max_snippet_chars` / `max_result_text_chars`). Filling both ships the same
-  prose twice — the snippet is a prefix of the extract. Leaving `text` unbounded
-  is worse: it lets `max_results`, which the *calling model* picks, decide what
-  a response costs, and it measured 133k characters before the cap existed.
-- **Unset fields must not reach a caller as `null`.** `models.WireModel`
-  enforces it with a serialiser, because `exclude_none` is an argument to
-  `model_dump` and FastMCP is what calls it. A new wire model inherits from
-  `WireModel`, not `BaseModel`.
-- **`ProviderConfig.cost_per_1k` is `None` by default** and nothing routes on
-  it; it only corrects the figure `--check --live` prints. `fetch.cost_per_1k`
-  is the same reporting-only figure for the priced fallback.
-- **pytest-bdd step functions must be `def`, never `async def`.** pytest-bdd
-  calls them directly, so a coroutine step is never awaited and the scenario
-  passes having asserted nothing. Auto mode does not cover it — the generated
-  test is sync. Run the async span in one `asyncio.run` inside the when-step, as
-  `tests/features/test_provider_selection.py` does.
-- **Live tests hit billed endpoints** unless the key is absent (they skip) or
-  the provider is a free one: `exa:free`, `parallel:free`, `freeserp`,
-  `anysearch` (all keyless), `searxng` (needs `SEEKWRIGHT_SEARXNG_URL` set), or
-  `tinyfish` (free but keyed) — and `algolia` (free tier, keyed and
-  index-scoped, so its live test also needs `SEEKWRIGHT_ALGOLIA_APP_ID` and
-  `SEEKWRIGHT_ALGOLIA_INDEX`). Those, plus `SEEKWRIGHT_SEARXNG_URL`, are
-  **live-test fixtures only**: the server reads `app_id`/`index` from
-  `[providers.algolia]` and `url` from `[providers.searxng]` in TOML, and
-  `tests/live/test_live.py` is the sole reader. Agent mode's live run needs
-  `SEEKWRIGHT_AGENT_BASE_URL`, `SEEKWRIGHT_AGENT_MODEL` and
-  `SEEKWRIGHT_AGENT_API_KEY`, and selects on `-k agent_mode`. Never run
-  `-m live` without the `SEEKWRIGHT_LIVE_TESTS=1` gate, and always name the
-  provider under test — there is no default when several are configured. The
-  `-k` selectors spell the free names snake_case because `-k` matches *test
-  names* and a `:` cannot appear in a Python identifier; every string a test
-  passes as a provider name carries the real spelling. `-k exa` is **not** the
-  free run: it matches the free half's test name too, but the `exa` tests bill.
-- **`lifespan` is the session manager's, not the process's.** Under stdio it is
-  entered once; under `--http` mcp 2's session manager enters it at startup, so
-  its scope is the server's, and the shared httpx client has to outlive nothing
-  but the socket — which only `_serve_http` can express. So the client and the
-  provider handshakes live in `build_app_context`, which the HTTP path enters
-  once and parks in `server._shared` for `lifespan` to hand out. Constructing
-  anything expensive in `lifespan` re-does it wherever it is entered, silently
-  and only in production. `tests/test_server.py::TestSharedContext` is the guard.
-- **Logs go to stderr or stdio breaks.** stdout is the JSON-RPC channel, so a
-  `print()` on the serving path corrupts the protocol — `--check` is the sole
-  exception, because it never runs a server. `tests/test_logs.py` asserts an
-  empty stdout with `capfd`, not `capsys`: the leak worth catching is a handler
-  that grabbed the original stream at `basicConfig` time.
-- **Never render a traceback.** No `logger.exception`, no `logger.catch`, no
-  `diagnose=True`/`backtrace=True`, and never log an exception object — only
-  `ProviderError.message`, which the adapters sanitise for exactly this reason.
-  loguru's *defaults* are the hazard: `diagnose=True` prints local variable
-  values, and every adapter has `headers = {"x-api-key": ...}` in scope at the
-  point it fails. `tests/test_logs.py::TestSourceDiscipline` enforces it by
-  walking the AST, so a new call site fails the suite rather than review.
-- **A log message is a constant dotted event name; values go through `bind()`.**
-  No f-strings, no `%s`. That is what lets one call site render as text or JSON,
-  and it is what makes the no-secrets rule checkable — a value reaches a line
-  only by being named. Same test class enforces it.
-- **Caller and provider content rides its own log event, never `search.ok` or
-  `fetch.ok`.** `[logging] log_content` adds `search.result` (one per hit),
-  `search.answer` and `fetch.content`; the two `*.ok` events keep a fixed field
-  set whatever it is set to, or `max_results` — chosen by the *calling model* —
-  would decide how long a log line gets.
-  `tests/fetch/test_fetch_fallback.py::test_the_url_is_reduced_to_a_host_by_default`
-  stringifies the whole `fetch.ok` field dict, so it fails if page text lands
-  there. The length a policy cap discarded is *counts*, not content, and rides
-  its own per-hit `search.cap` (`uncapped_chars` / `chars` / `cap` / `field` /
-  `rank`) whether `log_content` is on or not: it is what makes
-  `max_snippet_chars` and `max_result_text_chars` measurable from real traffic
-  without editing either value.
-- **`setup_logging()` must run after `server` is imported.** Constructing
-  FastMCP calls `logging.basicConfig` at import time, and `basicConfig` is a
-  no-op once root has handlers, so an earlier call sits behind FastMCP's handler
-  and doubles every line. `cli.py` imports `server` lazily inside `main()`,
-  which is what makes the call from `server.main` safe.
-- **`uvicorn.Config(log_config=None, log_level=<library level as int>)` is
-  load-bearing.** uvicorn's built-in config points `uvicorn.access` at *stdout*
-  with `propagate: False`, and its `configure_logging` re-applies `log_level` to
-  three loggers *after* `setup_logging` ran — so the default silently restores
-  stdout access logs and overrides `[logging] library_level`. `access_log=`
-  carries `[logging] access_log` on the same call.
-- **`/healthz` is outside the Host allowlist, and must stay secret-free.** The
-  check lives inside the streamable-HTTP transport rather than as middleware, so
-  a `custom_route` bypasses it — which is the only reason a kubelet probe (pod
-  IP in `Host`) works. It reports provider names and uptime; adding anything
-  else hands it to an unauthenticated caller.
-- **`tests/conftest.py` holds two loguru fixtures and nothing else.** loguru is
-  process-global and its pre-installed handler has `diagnose=True`, so a failing
-  test would otherwise print a stub's API key into the pytest report. Stubs
-  still live next to the tests that use them.
-- **The HTTP listener has no auth, deliberately**, and every call it serves is
-  billed — the bind address is the access control, which is why `--host`
-  defaults to `127.0.0.1`. DNS-rebinding protection stays on; `--allowed-host`
-  adds to FastMCP's loopback-only allowlist rather than replacing it. A `421
-  Invalid Host header` means a name is missing from that list, not that the
-  check should be disabled.
-- **The model in agent mode must never drive retrieval** (`answer` is the third
-  tool). The shape it takes: a fixed plan — the caller's query plus ≤2 extra
-  queries, `max_results=5` each, up to three pages for `depth="report"` —
-  feeding **exactly one** model call over the material, so the per-call cost is
-  bounded by arithmetic and not by accounting. A loop in which the model asks
-  for another search would make the cost the model's decision and put
-  accounting back on the serving path — the ledger a spend ceiling would need,
-  which is declined. `[agent]` is off by default; the model, the prompt, the
-  temperature and the token budget are the server's, never tool parameters; the
-  citations are the server's (validated against what it retrieved), only the
-  prose is the model's. `search` and `fetch` are untouched by all of it
-  ([`docs/reference/agent-mode.md`](docs/reference/agent-mode.md)).
+- **`dune build` fails at graph construction on a missing named dep.** A `(deps …)`
+  entry naming an absent file is a `File unavailable` error, and a bare
+  `dune build` fails too, not just `runtest`. A suite that reads an operator page
+  or a golden has to declare it, or the sandbox will not carry it.
+- **A failing diff rule is usually a legitimate re-pin.** For the goldens under
+  `ocaml-tools/` the re-pin path is `dune runtest ocaml-tools --auto-promote`.
+  A bare `dune promote` promotes only what a **runtest** diff flagged, one
+  mismatched file per run; the promoted file lands read-only — `chmod +w` before
+  committing. `test/router_dependencies.expected` is the frequent one: any module
+  added under `lib/` adds `ocamldep` lines. It can be stale on a branch base;
+  check `git show HEAD:test/router_dependencies.expected` before blaming your
+  change.
+- **A test's cwd is `_build/default/<dir>`, not the source directory.** Suites
+  that read repository files need them declared in `(deps …)` and read with
+  `../`; running a built exe from the repo root fails exactly those cases, and
+  `dune exec` re-roots the CWD, so the corpus and golden reads fail there too.
+- **`lib/router.ml`'s isolation is a machine-checked dependency fact.**
+  `test/dune` diffs `ocamldep`'s answer for every file in `lib/` against
+  `test/router_dependencies.expected`, so the router leaning on a sibling fails
+  `runtest`. `ocamldep` needs `-I ../lib` or every cross-module line is empty and
+  the pin is vacuous. The router may not reference `Seekwright.Config`; its
+  callers build the routing table from `Config`'s lists.
+- **The grant boundary is the audit surface, and it is why a test builds its app
+  through the factory.** A grant has no constructor outside `mcp-caps`'s policy
+  functions, so a suite cannot hand-wire an I/O-capable app: it calls
+  `Factory.build_app` (or `build_providers` / `build_fetch_stack`) and injects at
+  the seam instead — a loopback listener, a scripted `Provider.Net`, a temp
+  directory for the `Fs` grant. `lib/factory/grants.ml` is the one funnel that
+  sets the operation bound and wraps a grant in the audit sink;
+  `test/test_caps_audit.ml` fails the build when another module constructs or
+  wraps one, and `test/should_not_compile/` holds fourteen programs — one of them,
+  `grant_path.ml`, the positive half — whose compiler diagnostics are pinned, so
+  a new capability-shaped feature has to keep that set honest.
+- **Refusal compilation is part of the gate, and its failure mode is inverted.**
+  `test/should_not_compile/` compiles each snippet under
+  `with-accepted-exit-codes (not (or 0))` and diffs the diagnostic against its
+  `.expected`: a snippet that starts compiling fails the build. The diagnostics
+  pin exact line numbers, so editing a snippet — even its comment — re-promotes
+  its `.expected` in the same change.
+- **Logs go to stderr or stdio breaks**, and stdout is the JSON-RPC channel.
+  `test/log_guard/` walks the AST (`field_sets.ml` for the per-event field sets,
+  `source_discipline.ml` for which module may write a stream), and
+  `bin/smoke.expected` / `smoke_notes.expected` pin that the protocol transcript
+  and the startup notes stay separate streams.
+- **There is no `--help` and no `--version`.** An unknown flag prints
+  `seekwright: unknown flag --help` and exits 2 (`Cli_flags`); `README.md` is the
+  usage prose, and the flag list is what the surface golden prints. Do not add a
+  help screen.
+- **`--check` is a network diagnosis whose exit code is narrower than its
+  report.** It prints the enabled, effective and built sets, the `untested` line
+  and one row per name, and probes every built name that has a probe. Two rows are
+  deliberately not counted: a name this build carries with no probe
+  (`exa:free`, `parallel:free` print `no connectivity probe`) and an enabled name
+  the deployment could not build for want of a key (`not built on this port`). So
+  a keyless MCP-only deployment exits **0**, and that is pinned by
+  `bin/check_unbuilt.expected`. Exit 1 means the config names something this
+  binary cannot honour or a probe failed (`test/check_unreachable.expected`,
+  `test/check_probe_gap.expected`); exit 2 is usage. `--check --live` adds one
+  real search per ready provider — the one path on this port that bills.
+- **The provider enum on the tool schemas is every registered name, not the
+  enabled subset.** `bin/smoke.expected` carries all seventeen while
+  `bin/smoke.toml` enables none, because the schema is the vocabulary and the
+  filter is dispatch: a `provider` argument is checked against the effective set
+  and refused with a sentence naming what this build carries. Adding a provider
+  therefore re-pins the schema even in a deployment that never enables it.
+- **`/healthz` is outside the Host allowlist and stays secret-free.** It is
+  exempt on purpose, so a kubelet probe whose `Host` is the pod IP works; every
+  other route answers 421 for a name missing from `--allowed-host`. It answers
+  `status`, the built providers' names, `default_provider` and `uptime_s` and
+  reads no journal. `test_p8_server.ml` is the suite.
+- **Embedded prose has a golden, not a twin.** Every string in `lib/prompts.ml`
+  and `lib/dashboard_html.ml` has a committed `.expected` beside
+  `ocaml-tools/resources.ml`, and `runtest` diffs the literal against it. A
+  reworded sentence or a reformatted dashboard page fails the gate; a deliberate
+  change re-promotes the golden in the same commit.
+- **Divergences are registered, never smoothed over.** `DIVERGENCES` in
+  `ocaml-tools/oracle/` gives each accepted difference a reason, and the reason
+  lands in the golden's header as `explicit-divergence`. Such a golden fails if
+  the port changes shape *or* if the difference closes on its own — closing one
+  is a decision that edits the registration, not a drive-by fix. Corpus
+  regeneration is frozen; the differential suite is a behaviour baseline, and
+  `plans/evidence-tiers.md` says what that is evidence of.
+- **A live run is evidence only once it is recorded.** `dune runtest` dials
+  nothing, by construction. The live half is `seekwright-live` behind
+  `SEEKWRIGHT_LIVE_TESTS=1`: exactly one named case per invocation, no `all`, no
+  `*`, no empty selector; missing configuration skips with the variable named and
+  exits 0; a quota or rate limit exits 3 and is **inconclusive**, never a pass.
+  After a passing run, the same change adds a row to the live-run table in
+  `plans/seekwright-ocaml-port.md`, flips `ocaml_live_tested` on that name's
+  `Registry` row and — for a fetch or agent case — adds the selector to
+  `Cases.recorded_non_provider_runs`. Never through a config key.
+  `live/test_live_cases.ml` pins the inventory and every assertion arm
+  hermetically, so an arm that never fires fails a suite instead of letting a
+  live case pass vacuously.
+- **`exa:free` and `parallel:free` are providers, not live cases.** A colon is a
+  provider flavour and is parsed before the `fetch:` / `agent:` prefix split, so
+  the free names get the bare provider selector; the cases are the seventeen
+  names, six `fetch:*` selectors and `agent:brief` / `agent:report`.
+- **A free tier is an account quota, not an exemption.** `Config.keyless_providers`
+  is the three names that need no account, no key and no card; `Config.free_providers`
+  is the wider set a `mode="free"` route may walk, and it excludes every name
+  whose free tier can meter into a bill — a metered tier is out of the free walk
+  by construction. So `tavily`, `search1api`, `serpapi`, `querit` and `algolia`
+  need their `SEEKWRIGHT_*_API_KEY` like any other name, and a config that
+  enables one without it is startup-fatal.
+- **The keyless set is the empty-set rule, not a fallback.** A config that
+  enables nothing resolves to `exa:free`, `parallel:free` and `freeserp` rather
+  than to nothing, and both the startup line and `--check` print the resolution;
+  `Config.enabled_providers` is the single reader they report from.
+- **Extraction is the `stdlib` backend only, and that is measured.**
+  `Config.known_extractors` is `["stdlib"]`, and `trafilatura` is refused at load
+  rather than at the first fetch. No backend claims a PDF media type, so a
+  fetched PDF is a named refusal. `test/corpus_html/` plus
+  `ocaml-tools/extract_bench/` hold the fixture corpus, the per-case quality bar
+  (`cases.json`, enforced by `bench.exe --check`) and the byte digests of each
+  side's `stdlib` output — a quality bar cannot pin bytes, so
+  `digest_cases.exe --check-parity` does.
+- **The corpus bar is a wall-clock ceiling, so it is load-sensitive.** A single
+  miss on a busy three-CPU host is reported, not hidden, and the bar is not to be
+  moved to make a run green.
+- **Two config keys are read and refused**: `logging.library_level` and
+  `logging.access_log`, because there is no per-request server loop whose
+  loggers or access line could honour them. Refusing is the honest answer;
+  ignoring is not. `config-fields.tsv` records them as `refused`.
+- **The drain has one owner and two suites.** `test_drain.ml` drives the stopping
+  state in-process (both `Drained` and `Grace_expired`); `test_binary_drain.ml`
+  sends a real SIGTERM to `bin/main.exe` over a raw loopback socket and pins the
+  503 sentence, the refused reconnect and exit 0. Anything that lengthens
+  shutdown has to satisfy both.
 
-## Docs
+## Documentation
 
-[`VISION.md`](VISION.md) holds the project's goals, their precedence and its
-non-goals: read it before deciding whether something belongs in this project at
-all. [`docs/index.md`](docs/index.md) is the map, and the only place the shape of
-`docs/` is written down: every page, its kind, which kind goes where, and why a
-page's path and dated headings are never renamed for tidiness — both are cited
-from `src/` and `tests/` comments and from other pages, so a move is a sweep no
-check reads. Place a document by that map, not by a restatement here. Operator
-working notes live outside the repository; conclusions graduate out of them into
-the page that owns the contract. `AGENTS.md` travels with the checkout, so it may
-promise only what the published tree carries: `.containerignore` drops `tests/`,
-`docs/` and `tools/`, and `uv_build` packages only `src/`.
-[`CONTRIBUTING.md`](CONTRIBUTING.md) is the shorter path to the same conventions.
+`ocaml-docs/` is the whole operator-facing doc tree, and every page in it
+describes this tree only: `configuration.md` (every key this build reads, refuses
+or ignores, the flags and the exit codes), `reference-config.md` (the example
+`test_config.ml` loads), `container.md` (the image, its base, the scan, the
+runtime contract), `deploying.md` (the two role configs `test_config.ml` loads),
+`egress.md` (what the process dials, per row), `divergences.md` (what behaves
+differently from a Python deployment — read it before promising parity),
+`testing.md` (the gate and its pins), `live-tests.md` (what has run live, against
+which commit, and what has not), `privacy.md` (what is written to disk and to the
+log).
 
-There is **no changelog**: a change a consumer sees lands in the reference page
-that owns it — `public-api.md`, `configuration.md`, `providers.md`,
-`metrics.md`, or the re-printed `surface.md` — and its reasoning goes beside the
-rule, in that page and in the pull request that makes it. An Added/Changed/Fixed
-log would restate the contract pages rather than record a delta; what is not
-built yet is [`docs/ROADMAP.md`](docs/ROADMAP.md)'s, never a release note's.
+`README.md` is the front door and nothing else: what the thing is, how to run it,
+where the detail lives. Usage prose lives there because the binary has no help
+screen. `CONTRIBUTING.md` is the shorter path to these conventions plus the
+provider checklist; it must agree with this file rather than extend it.
+`SECURITY.md` owns the disclosure scope, the egress stance and the release
+caveats.
 
-Before writing or changing a provider adapter, read
-[`docs/reference/provider-contract.md`](docs/reference/provider-contract.md):
-the protocol and its two duck-typed extras, the status-code → exception mapping,
-the redaction rule, and the six places a provider name has to be wired.
+There is **no changelog**: a change a consumer sees lands in the `ocaml-docs/`
+page that owns it, with its reasoning beside the rule and in the pull request.
+What is not built yet belongs in `plans/`, never in a release note. Page content
+is load-tested rather than quoted — `test_config.ml` parses the example and both
+role blocks through the real loader, so a page cannot offer a key the parser
+refuses — which is what makes a docs change a reviewed change.
 
-- **Documentation never cites a code line.** Not `file.ext:NNN`, not
-  `file.ext:NNN-MMM`, not a bare `` `:NNN` `` continuation, not "line 379": the
-  number moves the next time the file it points at is edited, and no check can
-  tell a reader the pointer went stale — the tree has samples of cites landing on
-  blank lines. Name the **symbol** instead: `UsageRecorder._append`,
-  `KNOWN_PROVIDERS`, `[project.urls]`; for prose in another page, the page and
-  its section (`provider-contract.md`, "Failures"); for a config file, the key or
-  table. A source comment names a symbol the same way.
-  `tests/repo/test_doc_cites.py` refuses a line cite in `docs/` and in the
-  front-door markdown.
-
-The README is the front door only: what it is, the three tools, setup, the data
-privacy statement, and the links out. The caveats and any detail that grows
-belong in `docs/`, linked from there.
+Pages and comments name a **symbol** or a page and its section, never a line
+number, for the reason given under Conventions: the number is the one fact about
+a file that is guaranteed to move and the one fact no check reads. Nothing in
+this tree enforces that rule mechanically, so it is a review obligation on every
+documentation and comment change — `ocaml-docs/`, `plans/` and this file
+included.

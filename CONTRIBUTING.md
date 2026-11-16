@@ -1,24 +1,24 @@
 # Contributing to seekwright
 
 seekwright is an MCP server that fronts web-search providers behind one
-normalised `search`/`fetch` surface. Those two surfaces are the contract; the
-provider set and the config keys are not, and may change between 0.x releases.
-There is no changelog: 0.1.0 is the first release, and each change lands in the
-`docs/reference/` page that owns the fact, beside the reasoning it rests on.
+normalised `search`/`fetch` surface, with `answer` as its third, opt-in tool.
+Those three surfaces are the contract; the provider set and the config keys are
+not, and may change between 0.x releases. There is no changelog: each change
+lands in the `ocaml-docs/` page that owns the fact, beside the reasoning it
+rests on.
 
 Bug reports, provider adapters, documentation corrections and small behaviour
-fixes are all welcome. `AGENTS.md` is the source of truth for how this repository
-is written; this file is the shorter path to the same conventions, plus the
-commands CI runs.
+fixes are all welcome. [`AGENTS.md`](AGENTS.md) is the source of truth for how
+this repository is written; this file is the shorter path to the same
+conventions, plus the commands CI runs.
 
 ## Where to send what
 
 - **Bugs and feature requests** — the issue tracker at
-  <https://github.com/leoschwarz/seekwright/issues>. The bug template asks
-  for the output of `uv run seekwright --check`, which is the first thing anyone
-  will need.
-- **Security problems** — not the tracker. [SECURITY.md](SECURITY.md) says what is
-  in scope and where to report it privately.
+  <https://github.com/leoschwarz/seekwright/issues>. The bug template asks for
+  the output of `seekwright --check`, which is the first thing anyone will need.
+- **Security problems** — not the tracker. [SECURITY.md](SECURITY.md) says what
+  is in scope and where to report it privately.
 - **Code and documentation** — a pull request. `main` is protected, so work on
   a branch and never push or force-push to it. The gate a change has to pass is
   the block of commands below; a PR body says what changed, why, and which of
@@ -31,159 +31,175 @@ evidence.
 
 ## Set up
 
-Python 3.14 (pinned in `.python-version`) and [`uv`](https://docs.astral.sh/uv/).
-Everything else comes from the lock file:
+OCaml 5.3.0 and dune ≥ 3.11, from the pin in `.github/workflows/ci-ocaml.yml`.
+The dependency inventory is the two `.opam` manifests; the toolchain and the API
+facts a build already proved are in [`.agents/skills/ocaml/SKILL.md`](.agents/skills/ocaml/SKILL.md).
 
 ```bash
 git clone https://github.com/leoschwarz/seekwright.git
 cd seekwright
-uv sync
+opam install . --deps-only --with-test --with-doc -y
 ```
 
-`uv sync` installs the dev group, which self-includes the project with the
-`trafilatura` extra, so a fresh clone already has a working `fetch`. No API key
-is needed for the default suite: keys are opt-in per provider, and the live tests
-skip without them.
+`libgmp-dev` is required: zarith, reached through `tls → mirage-crypto-pk`,
+links `-lgmp`. No API key is needed for the default suite: keys are opt-in per
+provider, and the live harness refuses to run without an explicit opt-in.
 
 ## The gate a change has to pass
 
-These are the commands CI runs, in order (`.github/workflows/ci.yml`), and the
-ones to run before opening a pull request:
+These are the commands CI runs, in order
+(`.github/workflows/ci-ocaml.yml`), and the ones to run before opening a pull
+request:
 
 ```bash
-uv lock --check                            # pyproject.toml and uv.lock must agree
-uv sync
-uv run python -m tools.surface --check      # the frozen surface manifest
-uv run python -m tools.egress_lists --check # the rendered egress lists
-uv run python -m tools.value_sets --check   # the frozen value sets
-uv run ruff check
-uv run ty check
-uv run pytest -q
+dune build @install       # the executables, the images' input, version.txt
+dune runtest --force      # the suites, the property tests, and every pin
+dune build @doc
 ```
 
-`ty` is the single type checker, pinned in the dev group. It reads the
-`[tool.ty.src]` and `[tool.ty.rules]` blocks in `pyproject.toml`, so a change
-there is a change to the gate — [typing.md](docs/reference/typing.md) explains
-which rules are on and why, and what the previous checker caught that `ty`
-cannot.
-
-CI additionally builds the wheel, installs it into a venv with no source tree on
-the path and runs the entry point from outside the checkout, and builds the
-container image and smokes it. Those two steps are worth reproducing locally
-before a packaging change:
+`dune runtest` is where the frozen facts live, not beside them. It re-renders
+the surface manifest and diffs it against `ocaml-tools/surface.expected`; it
+re-renders the five model-facing prompts and the dashboard page and diffs them
+against their `.expected` files in `ocaml-tools/`; it re-renders the Squid egress
+host lists from the provider and fetch-fallback rows and diffs them against
+`deploy/compose/generated/`; it re-reads the parity matrix in
+`test/differential/matrix/` and refuses a row that names no consumer on this
+port; and it compiles the refusal cases in `test/should_not_compile/`, which are
+expected to fail. A frozen name moves by changing the code, promoting the pin and
+saying why in the PR body:
 
 ```bash
-uv build
-podman build -t seekwright:dev .
+dune runtest ocaml-tools --auto-promote   # refresh a pin you meant to move
 ```
+
+CI also builds the container image and smokes it. Reproduce that locally before a
+packaging change:
+
+```bash
+VERSION="$(dune build version.txt >/dev/null; cat _build/default/version.txt)"
+docker build -f Containerfile.ocaml --build-arg SEEKWRIGHT_VERSION="$VERSION" \
+  -t seekwright:dev .
+```
+
+The build stage refuses a version label that does not equal `dune-project`'s;
+`Containerfile.ocaml`, `dune-project` and the `seekwright.opam` version are one
+agreement, and a disagreement fails `test/test_metadata.ml`.
 
 ## Tests
 
 The default suite is hermetic — no network, no keys, no billing:
 
 ```bash
-uv run pytest
+dune runtest --force
 ```
 
-The live tests hit real provider endpoints and never run by default. They are
-gated on an explicit opt-in and always name the provider under test:
+The live harness hits real provider endpoints and never runs by default:
 
 ```bash
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live -k exa_free        # keyless, free
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live -k parallel_free   # keyless, free
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live -k freeserp        # keyless & free
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live -k anysearch       # keyless & free
-SEEKWRIGHT_LIVE_TESTS=1 uv run pytest -m live                    # billed; needs keys
+dune build @install
+_build/default/live/main.exe --list                                    # dials nothing
+SEEKWRIGHT_LIVE_TESTS=1 _build/default/live/main.exe freeserp          # keyless, free
+SEEKWRIGHT_LIVE_TESTS=1 _build/default/live/main.exe anysearch         # keyless, free
+SEEKWRIGHT_LIVE_TESTS=1 _build/default/live/main.exe fetch:local       # offline fetch arm
+SEEKWRIGHT_LIVE_TESTS=1 _build/default/live/main.exe exa              # billed: needs a key
 ```
 
-Two traps worth knowing before you run them. `-k exa` is **not** the free run: it
-matches `exa_free` too, but the `exa` tests bill. And a provider's free tier is an
-account quota, not an exemption — `tavily`, `tinyfish` and `algolia` need a key
-like any other provider.
+Two traps worth knowing. `exa:free` is a **provider**, not a case: the free
+names get the bare provider selector, and `--list` prints what each case will and
+will not dial. And a provider's free tier is an account quota, not an exemption —
+`tavily`, `tinyfish` and `algolia` need a key like any other provider. The
+harness's own contract (`live/test_live_cases.ml`) runs under `dune runtest` and
+dials nothing; `ocaml-docs/live-tests.md` is the operator's page.
 
 Where a test belongs:
 
-- `tests/` mirrors `src/seekwright/`: one module per core module at the top
-  level, `tests/providers/` for an adapter, `tests/fetch/` for the fetch path,
-  `tests/repo/` for a guard that reads the tree, and `tests/live/test_live.py`
-  for a live test.
-- `tests/features/` is the exception — the agent-facing tool contract is Gherkin,
-  run by pytest-bdd from the step modules beside it. Step functions **must** be
-  `def`, never `async def`: pytest-bdd calls them directly, so a coroutine step
-  is never awaited and the scenario passes green having asserted nothing. Run the
-  async span in one `asyncio.run` inside the when-step, as
-  `tests/features/test_provider_selection.py` does.
-- A test about what a model reads back over the wire goes in the feature file;
-  everything else stays a plain pytest module.
-
-`tests/providers/test_scrappa.py` is the template for a provider adapter's tests: a
-`SAMPLE` payload copied from the documented response, a `provider(...)` helper,
-`httpx.MockTransport` for the client, and the five classes `TestParsing`,
-`TestRequestShape`, `TestErrors`, `TestCost` and `TestWiring` — including the
-leak regression that asserts an exception carrying the API key produces exactly
-`"network error"` with the key absent from the message.
+- `test/` mirrors `lib/`: one module per module it exercises, named after it
+  (`test_router.ml` ↔ `lib/router.ml`), with the adapter suites beside it.
+- `test/support/` holds the stubs — one module per test double, including the
+  `mcp-kit` client and transport doubles the session suites drive.
+- `test/differential/` is the behaviour baseline: the ten areas' golden files,
+  the property tests over the routing and selection rules, and the parity matrix.
+  A golden pins what the server does; changing one is a contract change and the
+  PR body carries the reason.
+- `test/should_not_compile/` pins what must fail to build — the capability
+  bypasses and the private-boundary hops, each with its `.expected` message.
+- A contract a *model* reads back (a tool description, a refusal sentence a
+  caller acts on) goes in the surface pin or the differential golden, not only
+  in a unit test.
 
 ## Conventions
 
-The whole list is in [`AGENTS.md`](AGENTS.md). The ones that catch people:
+The whole list is in [`AGENTS.md`](AGENTS.md); the comment rules are
+[`.agents/skills/comment-discipline/SKILL.md`](.agents/skills/comment-discipline/SKILL.md)
+and the toolchain facts are
+[`.agents/skills/ocaml/SKILL.md`](.agents/skills/ocaml/SKILL.md). The ones that
+catch people:
 
-- **Python 3.14, fully typed.** Match the house style: docstrings explain *why*
-  (the codebase documents its design trade-offs inline), not what the next line
-  does.
-- **No decorative section banners or separators** in code — no `# ---- #` +
-  `# Title` + `# ---- #`, no `# ====`. Structure comes from the module docstring
-  and the functions themselves; inline comments attach to the code they explain.
-- **Never render a traceback.** No `logger.exception`, no `logger.catch`, no
-  `diagnose=True`/`backtrace=True`, and never log an exception object — only
-  `ProviderError.message`, which the adapters sanitise for exactly that reason.
-  loguru's defaults would print local variable values, and every adapter has
-  `headers = {"x-api-key": ...}` in scope where it fails.
-- **A log message is a constant dotted event name; values go through `bind()`.**
-  No f-strings, no `%s`.
+- **Every interface is an `.mli`.** A module's surface is what its signature
+  says; a helper that has no place in it stays private.
+- **Comments state a constraint the code cannot state** — a pin, an ordering, a
+  name that has to match another file. No banners, no region labels, no prose
+  that restates the statement below it.
+- **Nothing cites a line number**, in code, in a comment or in a page: the
+  number moves the next time the file is edited and no check notices. Name the
+  symbol (`Registry.rows`, `known_fetch_fallbacks`, `validate_logging_on_this_port`)
+  or the page and its section.
+- **Never let a secret reach a log line.** No exception object is logged: adapters
+  sanitise what they raise, and the message that leaves is the one that is safe.
+  A log message is a constant dotted event name; values go through the field list,
+  so a value reaches a line only by being named.
 - **Caller and provider content rides its own event** (`search.result`,
   `search.answer`, `fetch.content`), never extra fields on `search.ok` or
-  `fetch.ok`.
+  `fetch.ok` — `max_results` is chosen by the calling model and must not decide
+  how long a log line gets.
 - **An unhonourable constraint must be reported, not dropped.** An adapter that
-  cannot apply a filter the caller passed names it in `notice` via
-  `ignored_constraints`; silence there is a silently dropped filter.
-- **Keep `import seekwright` cheap** — `__init__.py` imports `cli` lazily so that
-  importing the package does not load config.
+  cannot apply a filter the caller passed names it in the result's `notice`;
+  silence there is a silently dropped filter.
+- **Unset fields must not reach a caller as `null`.** The wire models serialise
+  with the absent-field rule; a new wire model inherits it.
 
 ## Documentation
 
 Docs live with the reason for a thing, not next to it, and
-[`docs/index.md`](docs/index.md) is the one place the shape of `docs/` is written:
-it names every page, labels each with its kind, and says which kind goes where.
-Read it before adding a file under `docs/`. Two paths carry a rule of their own:
+[`ocaml-docs/`](ocaml-docs/) is the whole tree: `configuration.md` and
+A docs change gets the same review as a code change: `test/test_config.ml` loads
+`ocaml-docs/reference-config.md`'s TOML example and Secrets block, and the role
+tables of `ocaml-docs/deploying.md`, through the real loader — so a page cannot
+offer a key or a table the parser refuses. The key counts themselves are frozen:
+`ocaml-tools/surface.expected` pins 49 section keys over 6 tables and 12
+per-provider keys, and the frozen-vocabulary cases near the end of
+`test_config.ml` write the known names out rather than recomputing them, so a
+widened set fails there before it reaches a reviewer.
+authorised it (`plans/`).
 
-- [`docs/architecture.md`](docs/architecture.md) — why the code is shaped this
-  way, each section naming the alternative it rejected. Read it before changing
-  anything structural; a structure change edits the section it breaks.
-- [`README.md`](README.md) — the front door only. Detail that grows belongs in
-  `docs/`, linked from there.
-
-A docs change gets the same review as a code change: `tests/test_config.py` loads
-the configuration reference's example through the real loader, so that page
-cannot drift from what the code accepts, and `tests/repo/test_docs_conventions.py`
-reads the map against the tree, so a page that arrives without its entry fails
-the gate.
+A docs change gets the same review as a code change: `test/test_config.ml` loads
+the configuration reference's example through the real loader and pins the
+key/section vocabulary of every page against the parser's own tables, so those
+pages cannot drift from what the code accepts.
 
 ## Adding a provider
 
-Read [`docs/reference/provider-contract.md`](docs/reference/provider-contract.md)
-first — it is the checklist, and it is longer than this section. The shape:
+The checklist is longer than this section, and the row is the contract: a name
+exists once every one of these moves together, and the gate refuses a partial
+wiring.
 
-1. Write the `docs/reference/providers.md` entry first (endpoint, request and
-   response shapes, cost, env var, gotchas). Review then checks the doc against
-   the code rather than the other way round.
-2. `src/seekwright/providers/<name>.py` — module docstring stating the billing
-   model and why this endpoint, a module-level `ENDPOINT`, the class,
-   `cost_for`, `search`, `aclose`.
-3. The six wiring points (config, key requirement, factory, the tool schema's
-   `Literal`, the health probe, the live-test set).
-4. `tests/providers/test_<name>.py` and a live test in `tests/live/test_live.py`.
-5. The prose that hardcodes the provider count, in `AGENTS.md` and the
-   `docs/` pages; the README carries no count.
+1. Write the inventory entry first — endpoint, request and response shapes,
+   billing model, env var, gotchas — in `ocaml-docs/` and the matrix row, so
+   review checks the code against the doc rather than the other way round.
+2. Add the `Registry.rows` row: the name (`backend` or `backend:flavour`), its
+   endpoint shape (`Fixed_uri`, `Url_override`, `Url_required`, `Algolia_index`),
+   its credential rule, its cost model and its live status.
+3. Write the adapter in `lib/providers/`, with a module comment stating the
+   billing model and why this endpoint.
+4. Add its row to `test/differential/matrix/providers.tsv`, pointing at the suite
+   that pins its parsing and request shape, and write that suite with a sample
+   payload copied from the documented response — including the case where an
+   error body carries the API key and must not reach the message.
+5. Add its live case to `live/cases.ml`, and say on `ocaml-docs/live-tests.md`
+   whether it has run.
+6. Run `dune runtest`: the surface manifest gains the name, the egress lists gain
+   its host, and the frozen-vocabulary cases notice the widened sets. Promote the
+   pins the change is supposed to move.
 
 ## Licence
 
