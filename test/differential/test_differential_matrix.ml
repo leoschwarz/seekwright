@@ -22,7 +22,11 @@
      written fails the row that credits it;
    - the provider rows are exactly [Config.known_providers], and the corpus
      areas the golden runner pins are exactly the areas the behaviour rows
-     claim to cover.
+     claim to cover;
+   - the accepted divergences are the record in [divergences.tsv] and the
+     [explicit-divergence] goldens are its evidence: every row names a golden
+     whose [reason] header repeats the row, and every such golden is either a
+     row or a member of one of the two systematic reason families.
 
    The [baseline] columns are the frozen corpus's counterpart: a cell names the
    corpus area, provider golden set or port suite that carries the evidence, so a
@@ -409,6 +413,173 @@ let check_corpus_areas () =
         (String.concat ", " (List.filter (fun area -> not (List.mem area claimed_areas)) areas))
         (String.concat ", " (List.filter (fun area -> not (List.mem area areas)) claimed_areas)))
 
+(* The registered-divergence record.
+
+   [divergences.tsv] holds the reason beside every accepted behavioural
+   divergence, one row per [DIVERGENCES] entry the golden generator once
+   carried. The generator cannot run here — the implementation its projections
+   imported is gone — so the reasons are committed data the suite reads. Both
+   directions are checked, because either half can drift alone:
+
+   - a row that names no golden, or names one that does not verify as
+     [explicit-divergence], or whose reason differs from the golden's [reason]
+     header, fails: the record and the pinned evidence are one statement;
+   - an [explicit-divergence] golden with no row fails unless a systematic rule
+     explains it. Those rules stamp one reason across a whole family of
+     goldens, so a family member shares its reason text instead of carrying a
+     row; the wording rule and the extractor-default rule are the two families
+     the suite accepts, and a one-off reason is nobody's rule. *)
+let divergences_file = "divergences.tsv"
+
+let divergences_header = [ "area"; "case"; "reason" ]
+
+(* A golden header is the [key: value] lines above the first [---] section. *)
+let golden_header path =
+  let rec go acc = function
+    | [] -> List.rev acc
+    | line :: more -> if starts "--- " line then List.rev acc else go (line :: acc) more
+  in
+  go [] (read_lines path)
+
+let golden_field header name =
+  let prefix = name ^ ": " in
+  let rec go = function
+    | [] -> None
+    | line :: more ->
+      if starts prefix line
+      then Some (String.sub line (String.length prefix) (String.length line - String.length prefix))
+      else go more
+  in
+  go header
+
+let goldens () =
+  Array.to_list (Sys.readdir "golden")
+  |> List.filter (fun area -> Sys.is_directory (Filename.concat "golden" area))
+  |> List.concat_map (fun area ->
+    Array.to_list (Sys.readdir (Filename.concat "golden" area))
+    |> List.filter (fun entry -> Filename.check_suffix entry ".golden")
+    |> List.map (fun entry ->
+      let path = Filename.concat (Filename.concat "golden" area) entry in
+      (area, Filename.remove_extension entry, path)))
+
+let read_divergences () =
+  if not (Sys.file_exists divergences_file)
+  then
+    failwith
+      (Printf.sprintf "test/differential/%s is the committed record of accepted divergences; a missing file is a deleted record"
+         divergences_file);
+  match read_lines divergences_file with
+  | [] -> failwith (Printf.sprintf "%s is empty" divergences_file)
+  | first :: lines ->
+    let header = String.split_on_char '\t' first in
+    if header <> divergences_header
+    then
+      failwith
+        (Printf.sprintf "%s: the header changed.\n  expected: %s\n  found:    %s" divergences_file
+           (String.concat " | " divergences_header) (String.concat " | " header));
+    List.map
+      (fun line ->
+        let row = String.split_on_char '\t' line in
+        if List.length row <> List.length header
+        then
+          failwith
+            (Printf.sprintf "%s: a row has %d columns, the header has %d: %S" divergences_file
+               (List.length row) (List.length header) line);
+        if List.exists (fun value -> String.trim value = "") row
+        then failwith (Printf.sprintf "%s: a cell is blank in the row about %S" divergences_file (List.hd row));
+        row)
+      lines
+
+let check_divergences () =
+  let rows = read_divergences () in
+  if rows = [] then failwith (Printf.sprintf "%s has a header and no rows" divergences_file);
+  let area_of row = List.nth row 0 in
+  let case_of row = List.nth row 1 in
+  let reason_of row = List.nth row 2 in
+  let keys = List.map (fun row -> (area_of row, case_of row)) rows in
+  let unique = List.sort_uniq compare keys in
+  let duplicated = List.filter (fun key -> List.length (List.filter (fun other -> other = key) keys) > 1) unique in
+  if duplicated <> []
+  then
+    failwith
+      (Printf.sprintf "%s: two rows describe the same divergence: %s" divergences_file
+         (String.concat ", " (List.map (fun (area, case) -> area ^ "/" ^ case) duplicated)));
+  if keys <> unique
+  then
+    failwith
+      (Printf.sprintf "%s: the rows are not sorted by area then case, so a moved reason is not a visible diff" divergences_file);
+  (* every row is a golden, and the golden repeats the reason *)
+  List.iter
+    (fun row ->
+      let area = area_of row and case = case_of row and reason = reason_of row in
+      let path = Filename.concat (Filename.concat "golden" area) (case ^ ".golden") in
+      if not (Sys.file_exists path)
+      then
+        failwith
+          (Printf.sprintf
+             "%s: %s/%s is registered with a reason, but %s does not exist — a row about a golden the tree does not carry outlived its evidence"
+             divergences_file area case path);
+      let header = golden_header path in
+      (match golden_field header "verification" with
+       | Some "explicit-divergence" -> ()
+       | Some other ->
+         failwith
+           (Printf.sprintf "%s: %s/%s is registered as a divergence yet its golden verifies as %S" divergences_file area case
+              other)
+       | None -> failwith (Printf.sprintf "%s: %s/%s has no [verification] header" divergences_file area case));
+      match golden_field header "reason" with
+      | Some pinned when pinned = reason -> ()
+      | Some pinned ->
+        failwith
+          (Printf.sprintf "%s: %s/%s — the record and the golden disagree about the reason.\n  record: %s\n  golden: %s"
+             divergences_file area case reason pinned)
+      | None ->
+        failwith
+          (Printf.sprintf "%s: %s/%s carries a reason in the record but none in the golden" divergences_file area case))
+    rows;
+  (* every [explicit-divergence] golden is a row or a systematic family member *)
+  let explicit =
+    List.filter_map
+      (fun (area, case, path) ->
+        let header = golden_header path in
+        match golden_field header "verification" with
+        | Some "explicit-divergence" ->
+          (match golden_field header "reason" with
+           | Some reason -> Some (area, case, reason)
+           | None ->
+             failwith
+               (Printf.sprintf "golden/%s/%s.golden is an explicit divergence with no [reason] header" area case))
+        | _ -> None)
+      (goldens ())
+  in
+  let unregistered =
+    List.filter (fun (area, case, _) -> not (List.mem (area, case) keys)) explicit
+  in
+  let name (area, case) = area ^ "/" ^ case in
+  let families =
+    List.fold_left
+      (fun acc (area, case, reason) ->
+        match List.assoc_opt reason acc with
+        | Some members -> (reason, name (area, case) :: members) :: List.remove_assoc reason acc
+        | None -> (reason, [ name (area, case) ]) :: acc)
+      [] unregistered
+  in
+  let members_of (_, members) = String.concat ", " (List.sort String.compare members) in
+  let singletons = List.filter (fun (_, members) -> List.length members < 2) families in
+  if singletons <> []
+  then
+    failwith
+      (Printf.sprintf
+         "%s: these explicit-divergence goldens name no row and share their reason with no other golden, so no systematic rule explains them: %s"
+         divergences_file (String.concat "; " (List.map members_of singletons)));
+  if List.length families > 2
+  then
+    failwith
+      (Printf.sprintf
+         "%s and the goldens accept %d reason families with no row each; the wording rule and the extractor-default rule are the two systematic classifications, and anything beyond them is a registered divergence: %s"
+         divergences_file (List.length families)
+         (String.concat "; " (List.map members_of families)))
+
 let () =
   let groups =
     List.map
@@ -421,4 +592,6 @@ let () =
            [ ("the provider rows are Config.known_providers", `Quick, check_provider_names)
            ; ("the behaviour rows are the corpus areas", `Quick, check_corpus_areas)
            ] )
+       ; ( "divergences",
+           [ ("the record and the goldens name the same divergences", `Quick, check_divergences) ] )
        ])

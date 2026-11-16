@@ -169,7 +169,7 @@ let check (golden : golden) () =
     then
       failwith
         (Printf.sprintf
-           "%s/%s: the port now agrees with the oracle — this divergence has closed, so the golden must become differential-golden (and the reason in gen_goldens.py retired)"
+           "%s/%s: the port now agrees with the oracle — this divergence has closed, so the golden must become differential-golden (and its row in divergences.tsv retired)"
            golden.area golden.case)
   | other -> failwith (Printf.sprintf "%s/%s: unknown verification %S" golden.area golden.case other)
 

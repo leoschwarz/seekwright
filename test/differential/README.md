@@ -1,6 +1,6 @@
 # Differential harness and parity matrix (F0.1)
 
-Two artefacts live here, and they answer two different questions.
+Three artefacts live here, and they answer three different questions.
 
 - `matrix/` — *what is the parity story, row by row?* One row per provider, config
   key, behaviour and surface item, naming the port consumer, the baseline
@@ -10,22 +10,29 @@ Two artefacts live here, and they answer two different questions.
 - `corpus/` + `golden/` — *does the port answer the way the Python
   implementation answered?*
   A case in, a pinned answer out, diffed by a plain `dune runtest`.
+- `divergences.tsv` — *why is each accepted difference accepted?* One row per
+  registered divergence, and the reason in the row is the record; nothing else
+  keeps it.
 
 Nothing here reaches the network, a provider endpoint, an API key, or a Python
-interpreter. The Python answers are pinned in `golden/`; the tooling that pins
-them lives in `../../ocaml-tools/oracle/` and is never run by the gate.
+interpreter. The Python answers are pinned in `golden/`; the tooling that
+produced them lived in `../../ocaml-tools/oracle/`, and that generation is
+frozen — the corpus and the goldens are committed baseline data. The accepted
+divergences are the record in `divergences.tsv`, read by
+`test_differential_matrix.ml`.
 
 ## Layout
 
 | Path | Role |
 | --- | --- |
-| `canon.ml` | The canonical rendering the corpus and goldens are written in: escaping, float formatting, sorted JSON, byte-as-hex. Shared by the driver and the runner, and mirrored by `ocaml-tools/oracle/projections.py`. |
+| `canon.ml` | The canonical rendering the corpus and goldens are written in: escaping, float formatting, sorted JSON, byte-as-hex. Shared by the driver and the runner, and the form the retired oracle projection mirrored. |
 | `projection.ml` | One projection per area: reads a corpus input, calls the port, renders answer lines. |
 | `drive.ml` | `drive.exe <area> <corpus-dir>` — prints `case<TAB>line` for every input. Regeneration only; `dune runtest` never runs it. |
 | `test_differential_golden.ml` | The golden runner. One test per golden, plus coverage and floor checks per area. |
 | `test_differential_properties.ml` | The property runner: deterministic QCheck properties over the same port surfaces the corpus pins. |
-| `test_differential_matrix.ml` | The matrix validator. One test per table, plus cross-checks against `Config.known_providers` and the corpus areas. |
-| `corpus/<area>/` | The inputs, written by `ocaml-tools/oracle/gen_corpus.py`. |
+| `test_differential_matrix.ml` | The matrix validator. One test per table, cross-checks against `Config.known_providers` and the corpus areas, and one check holding `divergences.tsv` to the `explicit-divergence` goldens. |
+| `divergences.tsv` | The registered divergences: `area`, `case`, `reason`. The reason is the record, and each one repeats in the golden's `reason` header. |
+| `corpus/<area>/` | The inputs, as the retired generator wrote them. |
 | `golden/<area>/` | The pinned answers. |
 | `matrix/*.tsv` | The parity tables: hand-committed, one row per thing, each naming the port consumer, the baseline evidence this tree keeps, and the verification. |
 
@@ -48,9 +55,12 @@ url-refused= invalid port: 99999 is not a port in 1-65535
 ```
 
 - `area`, `case`, `verification`, `oracle`, `projection` are required; `reason`
-  only accompanies an explicit divergence. `oracle` is `python` — the only oracle
-  this harness has. `projection` must equal `area`: the runner refuses a golden
-  that claims one area and sits in another's directory.
+  only accompanies an explicit divergence — and for one, the matrix suite
+  requires it to be the text `divergences.tsv` records. `oracle` is `python` —
+  the only oracle this harness has. `projection` must equal `area`, and the
+  runner refuses an area no projection in `Projection.areas` owns; the mirror
+  that once paired each of those with a Python projection per area is retired,
+  so the port's own registry is the check.
 - `verification` is `differential-golden` (the two trees agree and the golden
   pins that answer) or `explicit-divergence` (they do not, the reason is on the
   record, and the golden pins both answers). The runner refuses any other value,
@@ -74,7 +84,8 @@ answer, and the header is self-consistent. For every `explicit-divergence`
 golden: a `reason`, a `--- port` section, the port still answering exactly that
 section, **and** the port still disagreeing with the oracle — a divergence that
 closes on its own fails the suite the same way a regression does, because the
-golden and the `DIVERGENCES` entry in `gen_goldens.py` both have to change.
+golden and its row in `divergences.tsv` (or, for a systematic family, the rule
+that classifies it) both have to change.
 
 For every area: at least `min_cases` goldens (the floor list in
 `test_differential_golden.ml`), and every corpus input has a golden. Those two
@@ -161,6 +172,9 @@ afterwards.
 | remove an area's `golden/<area>/` directory | `coverage:<area>` fails: *an area is added to the floor, the stanza deps, and the tree together* |
 | change a `--- port` sentence in an explicit divergence | the case fails: *the port no longer answers as its divergence was pinned* |
 | rewrite a golden's oracle section to match a pinned divergence | the case fails: *this divergence has closed, so the golden must become differential-golden* |
+| change a reason in `divergences.tsv` | the matrix suite fails: *the record and the golden disagree about the reason* |
+| delete a row from `divergences.tsv`, leaving its golden | the matrix suite fails: *these explicit-divergence goldens name no row and share their reason with no other golden* |
+| register a row for a `case` with no golden | the matrix suite fails: *a row about a golden the tree does not carry outlived its evidence* |
 | delete a `matrix/*.tsv` | the table's test fails: *the matrix has no …* |
 | put `unknown consumer` in any matrix cell | the table fails: *the matrix names a consumer or a verification, never a shrug* |
 | point a matrix row at a module that does not exist | the table fails: *points at …, which is not in the sandbox the test runs in* |
@@ -170,46 +184,55 @@ afterwards.
 | raise an area's `min_cases` above its golden count | `coverage:<area>` fails: *pins N goldens, below the floor of N+1* |
 | invert the `utf8` slice-partition assertion in the property suite | `utf8: the codepoint slices are the input, in order` fails with a shrunk counterexample |
 
-## Regenerating
+## Regeneration is closed
 
-Only when a corpus case or an oracle answer legitimately changes, and only from a
-checkout that still carries the Python tree: `gen_corpus.py` reads its
-`docs/reference/` pages, both projections import `seekwright` from `src/`, and
-`gen_goldens.py` is run through the `uv` environment `pyproject.toml` pins. This
-branch carries none of that, and the baseline is frozen — see
-`ocaml-docs/testing.md`, "The differential harness". The port's half stays
-buildable and runnable:
+The corpus and the goldens are a committed baseline; nothing on this branch
+re-derives them. The generator that did — a corpus writer, a Python projection
+per area, and a golden generator over both — read the Python implementation's
+`docs/reference/` pages, imported that implementation's modules, and ran under
+the dependency set it pinned. This branch carries none of that and the files are
+gone. Re-deriving the baseline would need a checkout of the implementation the
+baseline was taken from, and what it produced would be a new baseline rather
+than a correction — see `ocaml-docs/testing.md`, "The differential harness".
+
+The port's half stays buildable and runnable:
 
 ```bash
 dune build test/differential/drive.exe        # the port half
 dune runtest test/differential --force        # the gate, with no Python involved
 ```
 
-`gen_goldens.py` runs the Python projection and `drive.exe` over the same
-directory and writes one golden per case. **An unregistered mismatch aborts the
-run**: accepting a divergence is a decision made in that file, in the open, and
-it lands in the golden's `reason` line. Two systematic shapes are classified
-there rather than listed case by case — the extractor-default difference
-(`trafilatura` vs `stdlib`, a P6 decision) and pydantic's structured validation
-report vs the port's one sentence. Everything else must be named in `DIVERGENCES`.
+The generator ran the Python projection and `drive.exe` over the same directory
+and wrote one golden per case, aborting on an unregistered mismatch: accepting a
+divergence was a decision made in the open, and it landed in the golden's
+`reason` line. Those decisions are now rows in `divergences.tsv`, and the matrix
+suite refuses a row without its `explicit-divergence` golden, a golden without a
+row (unless a systematic rule covers it), and a reason that does not repeat in
+the golden's header. The two systematic shapes carry the rule's reason instead
+of a row each: the extractor-default difference (`trafilatura` vs `stdlib`, a P6
+decision) and pydantic's structured validation report vs the port's one sentence.
+A corpus input the port could not read aborted regeneration rather than pinning
+a golden — an invariant of the baseline, which is now why an unreadable input is
+a frozen case the port must still answer.
 
 `matrix/*.tsv` is hand-maintained committed data: the validator reads the tables
 in the tree, so a column change is an edit to the table and to the pinned header
 in `test_differential_matrix.ml`.
 
-### Adding a case, adding an area
+### Changing the harness
 
-A **case** goes in `gen_corpus.py` (the case list is the reviewable form; the
-files it writes are not hand-edited), then regenerate that area. Both projections
-must already handle it: a corpus input the port cannot read aborts regeneration
-rather than pinning a golden.
+A **case** cannot be added: the baseline is fixed, and the case lists that made
+one were the deleted generator's reviewable form. Editing a golden to match the
+port is the same move in disguise — the pinned answer is the evidence, and a
+golden rewritten to agree with the port is a divergence erased rather than
+closed.
 
-An **area** costs four coordinated changes, and the harness refuses to run with
-fewer than all four: a projection in `projection.ml` and the matching one in
-`ocaml-tools/oracle/projections.py` (registered in `Projection.areas` and
-`projections.AREAS`), a floor entry plus a glob pair in this `dune` file, and a
-row in `behaviours.tsv` pointing at `corpus/<area>` — the matrix validator
-compares those claims against the directories that actually exist.
+An **area** would need its baseline from a checkout that carries the Python
+tree. If one ever arrives, it costs three coordinated changes and the harness
+refuses to run with fewer: a projection in `projection.ml` registered in
+`Projection.areas`, a floor entry plus a glob pair in this `dune` file, and a row
+in `behaviours.tsv` pointing at `corpus/<area>` — the matrix validator compares
+those claims against the directories that actually exist.
 
 ## The matrix
 
@@ -241,9 +264,14 @@ the areas `corpus/` carries.
 
 ## Accepted divergences
 
-`gen_goldens.py` is the source of truth: its `DIVERGENCES` table gives each
-accepted difference a reason, and every one of them is pinned as an
-`explicit-divergence` golden, so the suite notices if any of them changes shape.
-There is no open gap left: `fetch/12-url-ipv6-broken` used to be one, and it is
-now an ordinary `differential-golden` because the port refuses `http://[::1/x`
-with the oracle's sentence.
+`divergences.tsv` is the record: one `area`, `case`, `reason` row per accepted
+divergence, and each row's reason is repeated in that golden's `reason` header.
+`test_differential_matrix.ml` holds the two directions together — a row without
+its `explicit-divergence` golden says nothing, and a golden with no row (unless a
+systematic rule covers it) or no reason is a decision nobody wrote — so the
+reasons are committed data rather than a comment in a generator that no longer
+runs. Two shapes are systematic and carry no row of their own: pydantic's
+structured validation report against the port's one sentence (the wording rule),
+and the port's `stdlib` `fetch.extractor` default against the oracle's
+`trafilatura` (the extractor-default rule, a P6 backend decision). Everything
+else that answers differently is a row.

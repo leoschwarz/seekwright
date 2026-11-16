@@ -1,14 +1,14 @@
 (** The OCaml half of every corpus projection.
 
     One function per corpus area, each taking the corpus input as text and
-    answering with the projection lines the golden pins. [../ocaml-tools/oracle/
-    projections.py] is the Python half, written against the Python implementation,
-    and the golden file is what makes the two agree: neither side's rendering is
-    trusted, only the pinned one.
+    answering with the projection lines the golden pins. The Python half these
+    renderings were mirrored against was written against the implementation the
+    baseline came from and is gone with it; the golden file is what made the two
+    agree, and it is still the only rendering this suite trusts.
 
     The area names and the line grammar are the corpus format's, written down in
     [README.md] beside this module. Two rules every area follows, because they
-    are what keeps a golden re-generable:
+    are what keep a pinned answer reproducible from its input alone:
 
     - no clock and no environment: {!Seekwright_diff.Canon.reset_key_environment}
       runs once in the driver, and any value a golden would have to re-read from

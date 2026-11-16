@@ -1,57 +1,59 @@
-# Oracle tooling for the differential harness
+# The frozen differential baseline
 
-The Python side of the F0.1 harness. Everything here reads the Python tree
-(`src/`, `tests/`, `docs/`) **read-only** and writes only under
-`../test/differential/`. Nothing in this directory is on the serving path, ships
-in a package, or runs during `dune runtest` — the gate consumes the pinned
-goldens, not Python.
+This directory has no generator left. It keeps the record of how the baseline
+under `test/differential/` was produced, and why a divergence in it is accepted
+rather than a bug to chase.
 
-| Tool | What it does | Run |
-| --- | --- | --- |
-| `gen_corpus.py` | Writes every corpus input under `test/differential/corpus/`. The case lists in this file are the reviewable form of the corpus: a reviewer reads the matrix of cases here rather than diffing 294 files. It reads no oracle and no port. | `python3 ocaml-tools/oracle/gen_corpus.py` |
-| `projections.py` | The oracle half of each area: the same projection the OCaml side writes, expressed against `seekwright`'s own modules and canonicalised the way `test/differential/canon.ml` does. | imported by `gen_goldens.py` |
-| `gen_goldens.py` | Runs both projections over one corpus directory and writes one golden per case. | see below |
-| `gen_matrix.py` | Writes the four parity tables under `test/differential/matrix/`. The TSVs are committed data; the validator reads the tables, not this generator. | `python3 ocaml-tools/oracle/gen_matrix.py` |
+**Generation is frozen.** The corpus under `test/differential/corpus/` and the
+goldens under `test/differential/golden/` *are* the baseline: they are the
+answers the Python implementation gave, written down once, read-only for this
+branch. Nothing here regenerates them, and `dune runtest` never needs a Python
+interpreter, a provider endpoint or a network — it runs the port's own
+projection and diffs it against the pinned answer.
 
-## Re-pinning the goldens
+Re-deriving the baseline would need a checkout that still carries the
+implementation the baseline was taken from: the corpus generator read the
+implementation's `docs/reference/` pages, the oracle projections imported the
+implementation's own modules, and the golden generator drove both projections
+through the dependency set that implementation pinned. This branch carries none
+of that, so a re-derivation here would be a new oracle, not the same one — a
+comparison against a different authority dressed as a refresh. If the baseline
+ever has to move, do it from such a checkout, and treat the result as a new
+baseline rather than a correction.
 
-```bash
-dune build test/differential/drive.exe            # the port half, if it changed
-uv run python ocaml-tools/oracle/gen_goldens.py [area ...]
-```
+## Where the accepted divergences went
 
-`uv run` is what puts the Python tree and its dependencies on the path; a bare
-`python3` has no pydantic. Key variables (`SEEKWRIGHT_*_API_KEY`,
-`SEEKWRIGHT_CONFIG`, the agent key) are cleared before any case runs, so a golden
-cannot capture what the operator's shell exports.
+The reason beside each accepted behavioural divergence is now data, not code:
+`test/differential/divergences.tsv` has one row per registered divergence —
+`area`, `case`, `reason` — and `test/differential/test_differential_matrix.ml`
+holds it and the `explicit-divergence` goldens to each other in both directions,
+including the `reason` header the golden was pinned with. There is no
+`DIVERGENCES` dict to edit any more; adding a row to that TSV is how a
+divergence is registered.
 
-The tool prints `MISMATCH <area>/<case>` with both answers and exits non-zero
-without writing those goldens unless the difference is registered. Registration
-happens here, in the open:
+Two differences are classified systematically rather than listed case by case,
+and both are recorded in `test/differential/README.md`:
 
-- `DIVERGENCES` maps `(area, case)` to the reason the two trees answer
-  differently and why that is acceptable. The reason lands in the golden's
-  `reason` header line, and the golden pins both answers.
-- Two systematic shapes are classified instead of listed case by case, because
-  they are single decisions with many instances: the port's `fetch.extractor`
-  default being `stdlib` where the oracle's is `trafilatura` (a P6 backend
-  decision), and pydantic's structured validation report where the port states
-  one sentence. Each classifier is an exact structural check on the pair of
-  answers, not a similarity threshold — anything that is not exactly that shape
-  still aborts.
+- **the wording rule** — same verdict, different sentence. The Python tree's
+  validator reports a structured validation list; the port states one sentence
+  naming the key and the fault. The golden keeps both sentences.
+- **the extractor-default rule** — the port has one extraction backend, so its
+  default `fetch.extractor` is `stdlib`; the oracle's default was `trafilatura`,
+  a library this tree carries but the port has not wrapped. A P6 backend
+  decision, and the port refuses any other name.
 
-An unexplained mismatch is never a silent golden. Either the projection that
-drifts gets fixed, or a reason gets written here and the difference becomes
-evidence the suite keeps.
+A family member carries the rule's reason and no TSV row. Everything else that
+answers differently from the baseline is a row, or the suite fails: an
+unexplained mismatch was never a silent golden, and after the freeze it is not a
+silent row either.
 
-## What this tooling deliberately does not do
+## The extraction benchmark's Python halves
 
-- It never writes outside `test/differential/`, and never reads a live endpoint.
-  Provider adapters are exercised through the projections, which call the pure
-  parts of the Python tree; live provider behaviour is the live lanes' job, not
-  the corpus's.
-- It never runs during `dune runtest`. A gate that shells out to `uv` would stop
-  being hermetic and would make the Python tree a build dependency of the port.
-- It does not generate the corpus from a fuzz or a random walk. Random inputs
-  make a golden suite unauditable; every case here is written down with a name
-  that says what it pins.
+`ocaml-tools/extract_bench/` keeps its OCaml programs — the bar and metric
+definitions, the fixture check, the bench and the digest runner — and none of
+the Python scripts that once printed the three-backend table and the oracle's
+digests. Those scripts read the implementation this branch deleted, so like the
+oracle generators they cannot run here; the table they produced is recorded in
+`plans/seekwright-ocaml-port.md`, the oracle's parity digests are committed
+beside the corpus in `test/corpus_html/parity/`, and the gate checks the
+port's own half.

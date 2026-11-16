@@ -1,9 +1,9 @@
 (** The one canonical rendering the differential corpus is written in.
 
     A golden is only comparable if both trees render the same fact the same way,
-    so the rules that make a value safe to check in live here, once, and the
-    corpus generator on the Python side states the same rules in
-    [ocaml-tools/oracle/projections.py]. Three properties matter:
+    so the rules that make a value safe to check in live here, once. The corpus
+    generator stated the same rules on the other side, in a half that is gone
+    with the implementation it was written against. Three properties matter:
 
     - {b ASCII-only}. Every text value is escaped to printable ASCII, so a
       golden survives a checkout, a diff tool, and a locale nobody chose. The

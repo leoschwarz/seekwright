@@ -86,6 +86,8 @@
  (libraries seekwright_diff alcotest)
  (deps
   (glob_files matrix/*.tsv)
+  divergences.tsv
+  (glob_files golden/*/*.golden)
   (glob_files ../../lib/*.ml)
   (glob_files ../../lib/fetch/*.ml)
   (glob_files ../../lib/fetch/extractors/*.ml)

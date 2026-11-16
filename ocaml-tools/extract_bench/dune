@@ -37,8 +37,9 @@
 ; The OCaml half of the metric table: runs the port's [stdlib] backend over the
 ; corpus and prints one metric row per case as JSON. [yojson] builds the row,
 ; [unix] is the wall clock and the GC counters. The operator commands are in the
-; header of [bench.ml], and [metrics_table.py] puts the three backends' rows
-; into the table that gets recorded.
+; header of [bench.ml]. The script that put the three backends' rows into the
+; recorded table is gone with the implementation it ran; that table is
+; checked-in data now.
 (executable
  (name bench)
  (modules bench)

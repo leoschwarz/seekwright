@@ -70,12 +70,15 @@ that pins it).
 A divergence is registered rather than smoothed over: such a golden carries
 `verification: explicit-divergence` and a `reason` line, pins the port's answer next
 to the Python answer, and fails if either changes shape — including a difference that
-closes on its own. Two systematic shapes were classified instead of listed case by
-case, the `fetch.extractor` default and pydantic's structured validation report
-against this port's one sentence; each classifier is an exact structural check on the
-pair, which is why a new kind of difference could not hide inside it. That classifier
-lives in `ocaml-tools/oracle/gen_goldens.py`, part of the frozen tooling: it runs only
-if someone un-freezes the baseline.
+closes on its own. Each registered difference is a row in
+`test/differential/divergences.tsv`, and `test_differential_matrix` holds the rows and
+the `explicit-divergence` goldens to each other in both directions — a row without its
+golden, a golden without a row and a row whose reason does not repeat in the golden's
+header all fail there. Two shapes are systematic and carry no row of their own: the
+`fetch.extractor` default, and pydantic's structured validation report against this
+port's one sentence. The corpus and the goldens are a committed baseline, and
+regeneration is closed: re-deriving them would need a checkout of the implementation
+the baseline was taken from, which this branch does not carry.
 
 ## Conformance against the official runner
 
@@ -92,15 +95,16 @@ part of the gate. Its rules and traps are in the `ocaml` skill's
 
 ## Extraction quality is measured, not asserted
 
-`test/corpus_html/` holds the fixture corpus; `ocaml-tools/extract_bench/` runs
-the port's `stdlib` backend and the two oracle backends over it and writes
-`test/corpus_html/metrics.md`; the gate enforces the per-case bar in
+`test/corpus_html/` holds the fixture corpus; `ocaml-tools/extract_bench/` carries
+the bar and the metric definitions. The gate enforces the per-case bar in
 `test/corpus_html/cases.json` (`bench.exe --check`), and adds a byte-level pin
 beside it: `parity/port-stdlib.txt` and `parity/oracle-stdlib.txt` are digests of
 what each side's `stdlib` backend produced, checked by
-`digest_cases.exe --check-parity`, because a quality bar cannot pin bytes. This
-is where the PDF refusal and the boilerplate numbers in
-[`divergences.md`](divergences.md) come from.
+`digest_cases.exe --check-parity`, because a quality bar cannot pin bytes. The
+three-backend table in `test/corpus_html/metrics.md` is the one the benchmark's
+Python half printed before this tree was retired: recorded evidence, not a gate
+step the branch can rerun. This is where the PDF refusal and the boilerplate
+numbers in [`divergences.md`](divergences.md) come from.
 
 ## Live runs are outside the gate
 

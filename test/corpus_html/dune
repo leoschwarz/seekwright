@@ -24,10 +24,9 @@
 ; what the backend answers for every case, and this rule recomputes it. A bar is a
 ; floor on recall, so an edit that trades one paragraph for another still passes
 ; it; a digest does not. [parity/oracle-stdlib.txt] beside it is the oracle's own
-; digests, printed by [ocaml-tools/extract_bench/py_digest.py] — the gate cannot
-; run it (no Python in the sandbox, and the tree it imports is gone from this
-; branch), so the two files are diffed by hand, and the only line that differs is
-; [encoding-cp1252], where this port implements the cp1252 codec and the
+; digests, printed by a script that ran the tree this baseline came from. The
+; gate cannot run it, so the two files are diffed by hand, and the only line that
+; differs is [encoding-cp1252], where this port implements the cp1252 codec and the
 ; oracle's strict codec replaces fifteen bytes.
 (rule
  (alias runtest)
