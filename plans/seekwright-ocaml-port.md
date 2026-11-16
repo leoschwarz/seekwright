@@ -3131,3 +3131,49 @@ narrative.
 - §38's `cr_f3e67d7f27e4` finding is closed by this section: the payload that was
   rejected for touching protected paths without approval is, in substance, what
   this branch did deliberately, with the lanes moved first.
+
+## 40. The 2026-11-16 code-quality wave, and what it settled (2026-11-17)
+
+The owner's read of the tree filed R-001…R-011 in
+`plans/reviews/code_review_ledger.md`; the plan page those entries pointed at,
+`plans/code-quality-plan.md`, has now been removed, so this section is the wave's
+record. The findings, their evidence and their dispositions stay in the ledger —
+an entry is never deleted — and the argument behind each fix is in the commit that
+landed it.
+
+| Finding | Disposition | Commit |
+|---|---|---|
+| R-001 `Cli_serve`'s two wrappers around one `Server.serve_http` call; half refuted as filed — no `run_stdio` ever existed | landed, plus D3 | `71110c3` |
+| R-002 quadratic append in `Caps.Registry.add` and `Server.of_registry` | landed | `b8e6704` |
+| R-003 fetch-fallback prices spelled in the factory, not on the row | landed — `default_cost` moved onto `Config.fetch_fallback` | `a56ccab` |
+| R-004 `Providers_build.go` rebuilt its accumulator per name, and shadowed the local reader's binder | landed | `d01a0ba` |
+| R-005 `Fetch_stack.build_fallback`'s three arms re-derived the gates, the grant prologue and the floor | landed, step A only | `818a605` |
+| R-006 the URL gate had three owners and one refusal sentence four spellings | landed — `Remote_target` owns validate → host → vet | `197a681` |
+| R-007 the two post-`produce` arms of `Providers_build.go` were identical but for one cons | landed with R-004 | `d01a0ba` |
+| R-008 `Extractors_stdlib`'s 274-pair `entity_table` scanned with `List.assoc_opt` | landed — keyed table, first-binding insertion, pinned byte-exact by `test/corpus_html` | `78f1f27` |
+| R-009 civil-date arithmetic copied six times | landed — `seekwright.time` is the third stdlib-only floor, and the wave found a real defect on the way: the adapters' `days_since_epoch` floored a negative count with `Int64.succ` where `pred` belongs, so a pre-epoch instant named the wrong day; `test_linkup` pins the fix | `828bd1c` |
+| R-010 `fallback_fixtures.ml` appended its request log while every consumer matched one element | landed | `9b61d9a` |
+| R-011 quadratic field insertion in `Usage.ensure`/`set` | **declined, measured** — 13 alternating pairs against a worktree at `9b61d9a`, a 356,142-line journal over 370 days: lists 6.97 s mean, the `Hashtbl` variant 6.87 s, paired −92 ms with a standard error of 86 ms. Inside the run-to-run spread, so the rewrite was reverted and the cost rule stated instead | `6e4ad90` |
+
+The three decisions taken while landing them:
+
+- **D1 — fix the bounded appends (R-002, R-004, R-010). Yes.** Each is one small
+  commit and each removes a shape a later reader has to reason about; none of the
+  three was slow.
+- **D2 — R-005 step B: defer, with the blocker named.** A per-name fallback
+  builder table beside the row it describes is not expressible today: every
+  `Fallback_*.config` carries a `'tag` parameter that exists only so
+  `Remote_target.check` can reach `Policy_net.vet_public_host`, because an Eio flow
+  record is parameterised by the backend's resource tag and cannot carry an
+  existential. Erasing that tag — handing each fallback an injected guard built
+  once by the factory — makes the vendor records tag-free, lets the table sit with
+  the row, and deletes `fallback_fixtures.ml`'s scripted resolver, which exists
+  only because the fixture must answer a DNS lookup the guard performs.
+- **D3 — stdio closes providers. Yes.** `run_stdio` now runs `close_providers` at
+  EOF while the switch and env are still live, so a warmed remote MCP session gets
+  its `DELETE`; the local adapters' `aclose` is `()`, so the call is cheap.
+
+What the wave did **not** cover is the shape of the adapters and their suites: it
+read four adapter files and the `Fallback_*` bodies only as far as R-005 needed,
+and the ledger's coverage table says so. The structural pass that does cover them
+is `plans/duplication-and-simplification-plan.md`.
