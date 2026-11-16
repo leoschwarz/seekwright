@@ -89,20 +89,15 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit ?log config =
                                   log;
                                 }
                               in
-                              match produce args with
-                              | adapter', Some warmup ->
-                                  go
-                                    ((name, adapter') :: built)
-                                    ((name, Registry.probe_spec row) :: table)
-                                    (adapter.endpoint :: endpoints)
-                                    errors unsupported
-                                    ((name, warmup) :: warmups)
-                                    rest
-                              | adapter', None ->
-                                  go
-                                    ((name, adapter') :: built)
-                                    ((name, Registry.probe_spec row) :: table)
-                                    (adapter.endpoint :: endpoints)
-                                    errors unsupported warmups rest))))
+                              let (adapter', warmup) = produce args in
+                              go
+                                ((name, adapter') :: built)
+                                ((name, Registry.probe_spec row) :: table)
+                                (adapter.endpoint :: endpoints)
+                                errors unsupported
+                                (match warmup with
+                                | Some warmup -> (name, warmup) :: warmups
+                                | None -> warmups)
+                                rest))))
   in
   go [] [] [] [] [] [] config.Config.providers
