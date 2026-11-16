@@ -73,6 +73,39 @@ let wrap_fallback (name : Config.name) cost fetch =
     aclose = (fun () -> ());
   }
 
+(* The keyed vendor rows, and no others: a registry row outside this list has no
+   builder here and stays unbuilt, like a name a gate refuses. *)
+let keyed_vendor name =
+  match name with
+  | "scrappa" -> Some `Scrappa
+  | "tavily" -> Some `Tavily
+  | "linkup" -> Some `Linkup
+  | _ -> None
+
+(* [fetch.timeout_seconds] bounds a static read; a vendor browser or extraction
+   waits longer, so a remote rung's grant floors here. *)
+let grant_floor = 30.0
+
+(* Tavily's own [timeout_seconds] is a body parameter [Fallback_tavily] clamps
+   to 1–60 seconds. It is not this grant's timeout; the two floors only look
+   alike. *)
+let tavily_body_floor = 30.0
+
+(* The remote prologue every vendor rung shares: the row's constant endpoint, the
+   grant on it, and the target the rung re-vets on each call. *)
+let grant_and_target ~sw ~net ~mono_clock ?audit config row =
+  let endpoint =
+    Provider.policy_of_uri
+      (Uri.of_string (Option.value ~default:"" row.Config.endpoint))
+  in
+  let* grant =
+    Grants.grant_of_endpoint ~sw ~net ~mono_clock
+      ~timeout_seconds:
+        (Float.max config.Config.fetch.Config.timeout_seconds grant_floor)
+      ?audit endpoint
+  in
+  Ok (grant, Remote_target.make net)
+
 let build_fallback ~sw ~net ~mono_clock ?audit config name =
   let fetch = config.Config.fetch in
   let row =
@@ -87,9 +120,6 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
            (String.concat ", " (List.sort compare (List.map (fun r -> r.Config.name)
               Config.known_fetch_fallbacks))))
   | Some row -> (
-      (* The credential gate, for the keyed vendors: an empty [api_key] is an
-         absent one, and a permission set that omits the name leaves the
-         fallback unbuilt rather than firing it. *)
       let keyed () =
         match Config.api_key name with
         | Some key when key <> "" -> Some key
@@ -99,19 +129,15 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
       | "jina" ->
           if not (Config.is_permitted config name) then Ok None
           else
-            let* grant =
-              Grants.grant_of_endpoint ~sw ~net ~mono_clock
-                ~timeout_seconds:(Float.max fetch.Config.timeout_seconds 30.0)
-                ?audit (Provider.policy_of_uri (Uri.of_string (Option.value ~default:"" row.Config.endpoint)))
+            let* (grant, target) =
+              grant_and_target ~sw ~net ~mono_clock ?audit config row
             in
-            let target = Remote_target.make net in
-            let vendor_net = Fallback.of_grant grant in
             Ok
               (Some
                  (wrap_fallback name (fallback_cost config row)
                     (Seekwright_fetch.Fallback_jina.fetch
                        {
-                         net = vendor_net;
+                         net = Fallback.of_grant grant;
                          target;
                          max_text_chars = fetch.Config.max_text_chars;
                          user_agent = fetch.Config.user_agent;
@@ -141,62 +167,43 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                            token = fetch.Config.crawl4ai_token;
                          }))))
       | _ ->
-          (* The keyed third parties share the two gates and the timeout
-             floor: [fetch.timeout_seconds] bounds a static read, and a
-             vendor browser or extraction waits longer. *)
+          (* Both keyed gates before anything is built: a permission set that
+             omits the name, or an empty [api_key], leaves the rung unbuilt
+             rather than firing it. *)
           if not (Config.is_permitted config name) then Ok None
           else
             match keyed () with
             | None -> Ok None
             | Some api_key -> (
-                match Provider.policy_of_uri (Uri.of_string (Option.value ~default:"" row.Config.endpoint)) with
-                | endpoint -> (
-                    match
-                      Grants.grant_of_endpoint ~sw ~net ~mono_clock
-                        ~timeout_seconds:(Float.max fetch.Config.timeout_seconds 30.0)
-                        ?audit endpoint
-                    with
-                    | Error message -> Error message
-                    | Ok grant ->
-                        let target = Remote_target.make net in
-                        let vendor_net = Fallback.of_grant grant in
-                        let built =
-                          match name with
-                          | "scrappa" ->
-                              Some
-                                (Seekwright_fetch.Fallback_scrappa.fetch
-                                   {
-                                     net = vendor_net;
-                                     target;
-                                     max_text_chars = fetch.Config.max_text_chars;
-                                     api_key;
-                                   })
-                          | "tavily" ->
-                              Some
-                                (Seekwright_fetch.Fallback_tavily.fetch
-                                   {
-                                     net = vendor_net;
-                                     target;
-                                     max_text_chars = fetch.Config.max_text_chars;
-                                     api_key;
-                                     timeout_seconds =
-                                       Float.max fetch.Config.timeout_seconds 30.0;
-                                   })
-                          | "linkup" ->
-                              Some
-                                (Seekwright_fetch.Fallback_linkup.fetch
-                                   {
-                                     net = vendor_net;
-                                     target;
-                                     max_text_chars = fetch.Config.max_text_chars;
-                                     api_key;
-                                   })
-                          | _ -> None
-                        in
-                        match built with
-                        | Some fetch_fn ->
-                            Ok (Some (wrap_fallback name (fallback_cost config row) fetch_fn))
-                        | None -> Ok None)))
+                match keyed_vendor name with
+                | None -> Ok None
+                | Some vendor ->
+                    let* (grant, target) =
+                      grant_and_target ~sw ~net ~mono_clock ?audit config row
+                    in
+                    let vendor_net = Fallback.of_grant grant in
+                    let max_text_chars = fetch.Config.max_text_chars in
+                    let rung =
+                      match vendor with
+                      | `Scrappa ->
+                          Seekwright_fetch.Fallback_scrappa.fetch
+                            { net = vendor_net; target; max_text_chars; api_key }
+                      | `Linkup ->
+                          Seekwright_fetch.Fallback_linkup.fetch
+                            { net = vendor_net; target; max_text_chars; api_key }
+                      | `Tavily ->
+                          Seekwright_fetch.Fallback_tavily.fetch
+                            {
+                              net = vendor_net;
+                              target;
+                              max_text_chars;
+                              api_key;
+                              timeout_seconds =
+                                Float.max fetch.Config.timeout_seconds
+                                  tavily_body_floor;
+                            }
+                    in
+                    Ok (Some (wrap_fallback name (fallback_cost config row) rung))))
 
 
 

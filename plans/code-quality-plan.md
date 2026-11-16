@@ -293,22 +293,25 @@ differ only in Tavily's extra `timeout_seconds` — which is the *vendor's* body
 parameter, clamped to 1–60 inside `Fallback_tavily`, not the grant timeout; the two
 floors share a literal and a name and mean different things.
 
-**Fix, step A (this plan).** One `build_keyed ~sw ~net ~mono_clock ?audit config row
-api_key` that resolves the row endpoint, the one timeout floor (named, so the
-grant floor and the vendor parameter stop sharing a literal), the grant and the
-target, and returns them; then one `match name` whose arms are three-to-five lines
-of record construction. The unification is the keyed branch's: its permission and
-key gates move above its inner match (permission, then key, then `build_keyed`), and
-the inner `_ -> None` arm and the `match built with Some … | None -> Ok None`
-scaffolding are deleted — both are dead, because the row was resolved from
-`Config.known_fetch_fallbacks` before the dispatch and `build_keyed` always returns
-`Some` (warning 37/39 would otherwise bite the rewrite). `jina` shares the
-endpoint/grant/target prologue — the same helper, no key gate, it is keyless — and
-keeps its permission gate; `crawl4ai` keeps its own shape: the operator's
-`fetch.crawl4ai_url`, `crawl4ai_timeout_seconds`, no permission gate and no key gate,
-the exemption the evidence above records. Behaviour and the refusal order are
-unchanged: an unpermitted or unkeyed name is still `Ok None`, an unknown name is
-still the registry's `supported:` sentence.
+**Fix, step A (landed).** One `grant_and_target ~sw ~net ~mono_clock ?audit config
+row` — the row endpoint through `Provider.policy_of_uri`, the grant on it, and the
+target — shared by the keyed rungs and by `jina`, which is keyless and so takes the
+prologue without the key gate. Both floors are named: `grant_floor` is the rung's
+grant timeout, `tavily_body_floor` is the vendor's own body parameter, so they no
+longer share a literal. In the keyed arm the gates sit above the dispatch —
+permission, then key, then the prologue — and the `match built with Some … | None`
+scaffolding is gone. The dead `| _ -> None` is gone too, but not by trusting the
+row lookup: a string match cannot be exhaustive, so the keyed names go through one
+`keyed_vendor` table that returns a closed polymorphic variant, and the
+record-construction match is exhaustive over that variant with no fallthrough — a
+keyed row added later fails to compile until its arms are written. `keyed_vendor`'s
+own `None` answers *before* the prologue runs, so a registry row with no builder
+costs no grant; that is the only skip left, and it is what the old code did.
+`crawl4ai` keeps its own shape: the operator's `fetch.crawl4ai_url`,
+`crawl4ai_timeout_seconds`, no permission gate and no key gate, the exemption the
+evidence above records. Behaviour and the refusal order are unchanged: an
+unpermitted or unkeyed name is still `Ok None`, an unknown name is still the
+registry's `supported:` sentence.
 
 **Fix, step B (deferred — D2).** A per-name builder *table* at module level
 — the shape `lib/factory/registry.ml`'s rows already have (`~endpoint`,
