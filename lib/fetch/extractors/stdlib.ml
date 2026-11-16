@@ -97,11 +97,19 @@ let extended_entities =
     ("REG", 174); ("TRADE", 8482);
   ]
 
-let entity_table : (string * int) list =
-  List.concat_map
-    (fun (name, cp) -> [ (name ^ ";", cp); (name, cp) ])
-    legacy_entities
-  @ List.map (fun (name, cp) -> (name ^ ";", cp)) extended_entities
+(* Keyed, and built once: the lookup below retries every prefix of a name run,
+   so this list was scanned 274 pairs at a time by every [&] in a page.
+   [add] keeps the first binding, which is what [List.assoc_opt] over the
+   appended lists answered — a name that landed in both source lists would
+   otherwise answer the other list's codepoint. *)
+let entity_table : (string, int) Hashtbl.t =
+  let table = Hashtbl.create 288 in
+  let add name cp =
+    if not (Hashtbl.mem table name) then Hashtbl.replace table name cp
+  in
+  List.iter (fun (name, cp) -> add (name ^ ";") cp; add name cp) legacy_entities;
+  List.iter (fun (name, cp) -> add (name ^ ";") cp) extended_entities;
+  table
 
 (* The numeric-reference remap: the defined Windows-1252 specials come through
    that table, the five bytes it leaves undefined stay raw, and [0], a
@@ -220,7 +228,7 @@ let charref_at (s : string) (amp : int) : (string * int) option =
       let with_semi = stop < n && s.[stop] = ';' in
       let name = String.sub s (amp + 1) (stop - (amp + 1)) in
       let whole = if with_semi then name ^ ";" else name in
-      let lookup key = List.assoc_opt key entity_table in
+      let lookup key = Hashtbl.find_opt entity_table key in
       match lookup whole with
       | Some cp -> Some (U.encode cp, stop + if with_semi then 1 else 0)
       | None -> (

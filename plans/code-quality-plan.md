@@ -430,6 +430,15 @@ deleting the association list, a throwaway script should assert old and new agre
 every table key, every prefix of every key, and the corpus's wrong-form references;
 the permanent pin is the corpus digest, and the differential script is not kept.
 
+**Landed.** A `Hashtbl` built once at module init, with `lookup` the one call to
+`Hashtbl.find_opt`; insertion checks `mem` first, so the table keeps the *first*
+binding of a name exactly as `List.assoc_opt` did over the appended lists rather
+than trusting the "all 274 keys are distinct" probe to stay true. The throwaway
+differential reported no difference over the 274 keys, every prefix of every
+key, the wrong-form probes, and every ampersand run of `entities_soup.html`; the
+corpus rules then passed — 32/32 cases on the bar and `digest_cases.exe
+--check-parity` silent, which is the byte proof.
+
 ## R-009 — civil-date arithmetic, six times
 
 **Evidence (`read`, md5-probed).** Four byte-identical copies of `civil_from_days`
