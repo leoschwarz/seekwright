@@ -1,20 +1,18 @@
 (* AnySearch: response parsing, request shape, cost and failures.
 
-   Port of tests/providers/test_anysearch.py. The fixture is the documented
-   [/v1/search] envelope from the operator's API docs (read 2026-10-16, the same
-   shape the keyless probe observed), and the cases run through a fake
-   {!Seekwright.Provider.Net.t} rather than a socket — the position
-   [httpx.MockTransport] holds in Python.
+   The fixture is the documented [/v1/search] envelope from the operator's API
+   docs (read 2026-10-16, the same shape the keyless probe observed), and the
+   cases run through a fake {!Seekwright.Provider.Net.t} rather than a socket —
+   the position [httpx.MockTransport] holds in Python.
 
    The wiring cases (built when enabled without a key, a disabled entry not
    built) belong to the config and factory suites, P3 and P5. What [anysearch]
    owes this suite that [freeserp] does not is the credential-bearing 402 body:
    the one response in this port whose text must never reach a failure message.
 
-   The live run that cleared Python's untested-provider status for this name
-   (tests/live/test_live.py, 2026-10-17) has no OCaml equivalent yet: there is no
-   live harness in this tree, so the endpoint's real behaviour is unproven on
-   this side of the port. *)
+   The keyless live case in [live/] is what proves the endpoint's real
+   behaviour; these hermetic cases pin the parse and the request, not the
+   vendor. *)
 
 module Caps = Mcp_caps
 module Model = Seekwright.Model

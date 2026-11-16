@@ -1,13 +1,12 @@
 (* The JSON half of the fetch path: the rendering a model reads, and the
    grammar that addresses it.
 
-   Port of tests/fetch/test_jsondoc.py. Nothing here reaches the network. What
-   is pinned is the pair of contracts the rest of the tree stands on: that
-   every line [render_json] writes is readable by [parse_path], because a
-   caller copies a path out of a page and gets that value back by asking for
-   it; and that [select_paths] spends [fetch.max_match_chars] the way
-   [select_passages] does, so one config key bounds both selectors with one
-   meaning.
+   Nothing here reaches the network. What is pinned is the pair of contracts the
+   rest of the tree stands on: that every line [render_json] writes is readable
+   by [parse_path], because a caller copies a path out of a page and gets that
+   value back by asking for it; and that [select_paths] spends
+   [fetch.max_match_chars] the way [select_passages] does, so one config key
+   bounds both selectors with one meaning.
 
    One Python case is not ported: the tracemalloc probe that measures the
    walk's peak allocation. OCaml has no tracemalloc, the walk is the same

@@ -1,12 +1,11 @@
 (* SearXNG: response parsing, the paging walk, request shape and cost.
 
-   Port of tests/providers/test_searxng.py. The fixture is the documented
-   JSON-API payload (see docs/reference/providers.md), and the request-shape
-   cases drive the adapter through a fake {!Seekwright.Provider.Net.t} — the
-   position [httpx.MockTransport] holds in Python, and possible here for the
-   same reason: the client is injected. Paging needs more than one canned
-   answer, so [dial_pages] hands the grant a handler that reads the [pageno]
-   parameter the adapter sent.
+   The fixture is the documented JSON-API payload, and the request-shape cases
+   drive the adapter through a fake {!Seekwright.Provider.Net.t} — the position
+   [httpx.MockTransport] holds in Python, and possible here for the same reason:
+   the client is injected. Paging needs more than one canned answer, so
+   [dial_pages] hands the grant a handler that reads the [pageno] parameter the
+   adapter sent.
 
    The wiring cases from that suite ([test_built_when_a_url_is_configured],
    [test_enabled_without_a_url_is_a_config_error]) belong to the registry and

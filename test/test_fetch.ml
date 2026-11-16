@@ -1,11 +1,10 @@
 (* The fetch stack's pure half: URL validation, the response window, image
    sniffing, the extractor plumbing, passage selection, and the stdlib backend.
 
-   Port of tests/fetch/test_fetcher.py (TestWindowText), test_fetch_guardrails.py
-   (TestSchemeAndShape, TestImages' signature table) and test_extractors.py (the
-   stdlib-backend and shared-plumbing classes). The networked half of the
-   fetcher — redirects, the cap, the type gate over a real grant — lives in
-   test_fetch_http.ml. *)
+   The cases are the Python suite's windowing, URL-shape, signature-table,
+   stdlib-backend and shared-plumbing classes, gathered here into one file. The
+   networked half of the fetcher — redirects, the cap, the type gate over a real
+   grant — lives in test_fetch_http.ml. *)
 
 module F = Seekwright_fetch.Fetcher
 module E = Seekwright_fetch.Extractor

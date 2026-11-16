@@ -31,8 +31,8 @@ type credential =
     [[providers.<name>]] keys. Config validation already refuses an enabled
     [searxng] without a [url] and an enabled [algolia] without [app_id]/[index],
     so a row's answer here is what narrows those values to a present string in the
-    builder — the job [factory.py]'s guards do — and a deployment built around
-    validation is refused rather than half-built. *)
+    builder — the job the oracle's factory guards do — and a deployment built
+    around validation is refused rather than half-built. *)
 type prerequisite =
   | Api_key
   | Config_url

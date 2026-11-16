@@ -1,6 +1,6 @@
-; The provider adapters: one module per adapter, the way
-; [src/seekwright/providers/] is laid out, and every one of them satisfies
-; [Seekwright.Provider.S].
+; The provider adapters: one module per adapter, [algolia.ml] beside [exa.ml],
+; and every one of them satisfies [Seekwright.Provider.S]. [mcp_client.ml] is
+; the shared MCP transport those adapters dial through, not an adapter.
 ;
 ; This is a separate library rather than a subdirectory of [seekwright] because
 ; [(include_subdirs qualified)] in the parent directory would not allow the
@@ -12,9 +12,8 @@
 ; The dependency direction is the constraint worth remembering: these adapters
 ; depend on [seekwright] (the contract in [../provider.ml] and the wire models in
 ; [../model.ml]), never the reverse. Nothing in [lib/] may name an adapter, so
-; the module that builds a name into a provider — Python's [factory._PROVIDERS] —
-; needs its own stanza (P5) rather than a [lib/factory.ml] here, which would
-; close a cycle.
+; the module that builds a name into a provider needs its own stanza (P5) rather
+; than a [lib/factory.ml] here, which would close a cycle.
 (library
  (name seekwright_providers)
  (public_name seekwright.providers)

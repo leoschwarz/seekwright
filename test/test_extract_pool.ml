@@ -1,12 +1,11 @@
 (* The extraction runner: a parse must cost its own core, never the Eio
    loop's, and it must come back on a deadline rather than hold everyone else's
-   request. The oracle's shape is tests/fetch/test_fetch_guardrails.py's
-   [_GrindingExtractor] and [TestExtractionTime] — the loop-open case, the
-   overrunning parse, the bounded pressure — ported onto the pool directly
-   rather than through the fetcher; test_fetch_workers.ml carries the same
-   backend through the fetch path. The oracle's real-PDF case (a content
-   stream shared by every page) waits with PDF support, not here: this port
-   ships no PDF backend.
+   request. The oracle's shape is the grinding extractor and the
+   extraction-time cases — the loop-open case, the overrunning parse, the
+   bounded pressure — ported onto the pool directly rather than through the
+   fetcher; test_fetch_workers.ml carries the same backend through the fetch
+   path. The oracle's real-PDF case (a content stream shared by every page) waits
+   with PDF support, not here: this port ships no PDF backend.
 
    Everything is hermetic: loopback AF_UNIX sockets under the temp dir,
    backends that grind on flags the suite releases, and no outcome decided by

@@ -1,12 +1,11 @@
 (* Querit: response parsing, request shape and cost.
 
-   Port of tests/providers/test_querit.py. The fixture is the documented
-   [/v1/search] payload: [results] is an object and the hits live under its
-   [result] key — the wire's shape. Each hit carries [url], [title], [snippet],
-   [page_age] and [site_name]; every result field is documented optional.
-   [sentence] (body text) exists upstream only behind [needContent: true] and
-   [highlights] only behind its request field, which this adapter never sends —
-   so a parsed result fills [snippet] and never [text].
+   The fixture is the documented [/v1/search] payload: [results] is an object
+   and the hits live under its [result] key — the wire's shape. Each hit carries
+   [url], [title], [snippet], [page_age] and [site_name]; every result field is
+   documented optional. [sentence] (body text) exists upstream only behind
+   [needContent: true] and [highlights] only behind its request field, which this
+   adapter never sends — so a parsed result fills [snippet] and never [text].
 
    The wiring cases from that suite belong to the registry and config suites;
    what stays here is the adapter's own default price — the free plan's zero —

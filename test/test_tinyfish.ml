@@ -1,11 +1,10 @@
 (* TinyFish: the keyed aggregator whose search costs nothing, the comma-joined
    domain lists, and the result cap that lives only in the parse.
 
-   Port of tests/providers/test_tinyfish.py. Every constraint but safety has a
-   native parameter here — [include_domains] and [exclude_domains] as
-   comma-separated lists, [recency_minutes] as a window, [location] and
-   [language] — so a fully constrained query draws no notice, and the missing
-   safe-search parameter is the whole of what one can say.
+   Every constraint but safety has a native parameter here — [include_domains]
+   and [exclude_domains] as comma-separated lists, [recency_minutes] as a window,
+   [location] and [language] — so a fully constrained query draws no notice, and
+   the missing safe-search parameter is the whole of what one can say.
 
    The result count is the odd one out in a different direction: there is {i} no
    count parameter upstream at all, so the slice in the parse is the only place

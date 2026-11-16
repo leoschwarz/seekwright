@@ -1,6 +1,6 @@
-(* Port of [tests/test_cli.py]'s client-argument classes: which flag becomes
-   which field of which request body. The Python drives the client's
-   [_extract] and reads the payload dict; this drives {!Cli_extract} and
+(* The client-argument classes: which flag becomes
+   which field of which request body. The Python suite drove the client's
+   [_extract] and read the payload dict; this drives {!Cli_extract} and
    reads the JSON body — the one thing the client actually sends. *)
 
 module Extract = Cli_extract

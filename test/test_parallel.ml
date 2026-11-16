@@ -1,14 +1,13 @@
 (* Parallel: the billed REST half's request grammar and hand-composed notices, the
    result parser both halves share, and the anonymous hosted-MCP half.
 
-   Port of tests/providers/test_parallel.py. The REST half is driven through a
-   fake {!Seekwright.Provider.Net.t} — the position the oracle's
-   [httpx.MockTransport] holds — so nothing is dialed and the request that would
-   have gone out is asserted on instead. The free half shares {!parse_results}
-   with it, so the oracle tests its MCP surface without a session; here the
-   session is scripted at the transport (the fixture is test_exa's), which pins
-   the tool arguments where the client puts them rather than where the adapter
-   builds them.
+   The REST half is driven through a fake {!Seekwright.Provider.Net.t} — the
+   position the oracle's [httpx.MockTransport] holds — so nothing is dialed and
+   the request that would have gone out is asserted on instead. The free half
+   shares {!parse_results} with it, so the oracle tests its MCP surface without a
+   session; here the session is scripted at the transport (the fixture is
+   test_exa's), which pins the tool arguments where the client puts them rather
+   than where the adapter builds them.
 
    [source_policy.after_date] is the one date this adapter computes, so the clock
    is injected and every date assertion names the instant it is true of — the

@@ -15,8 +15,8 @@
 ;
 ; The stdlib extraction backend sits in [extractors/] with its own stanza
 ; ([seekwright.fetch.stdlib]) for the same reason [lib/providers/] has one:
-; a backend is a separate install unit — Python ships trafilatura as an
-; extra — and the directory keeps the layout the Python tree has.
+; a backend is a separate install unit, and [extractors/] is where the next one
+; lands without the fetcher naming it.
 (library
  (name seekwright_fetch)
  (public_name seekwright.fetch)

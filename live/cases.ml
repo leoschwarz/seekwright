@@ -183,7 +183,7 @@ let cost_prose selector =
             Printf.sprintf "billed at %s%s; %s" note extra calls)
   | Fetch (Scrappa | Tavily | Linkup) ->
       Printf.sprintf
-        "billed — the vendor's per-call price applies (docs/reference/providers.md); %s"
+        "billed — the vendor's per-call price applies; %s"
         (calls_note selector)
   | Fetch (Local | Metadata | Jina) -> Printf.sprintf "unbilled — %s" (calls_note selector)
   | Agent _ ->

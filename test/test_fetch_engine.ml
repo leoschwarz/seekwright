@@ -1,6 +1,5 @@
 (* Engine.Fetch: the route, the notices, the escape pass, and what the operator and
-   the dashboard get out of a page read. Ported case for case from
-   [tests/fetch/test_fetch_engine.py].
+   the dashboard get out of a page read.
 
    Two families of the Python suite are deliberately not ported, and both are
    pinned elsewhere rather than dropped:
@@ -14,7 +13,7 @@
      refusal of a selector that cannot be addressed.  The line grammar itself
      stays pinned where it lives.
 
-   - the module-shape assertions of [tests/fetch/test_engine_structure.py] (no
+   - the module-shape assertions of the Python suite (no
      FastMCP import, no cache, the shared httpx client, the never-callable
      [_read_page], and the discipline that no test patches a read method).  The
      OCaml counterpart of the import guards is the [lib/dune] dependency pin that
@@ -729,12 +728,12 @@ let an_unreadable_path_is_refused_before_anything_is_fetched () =
     (refused board ~path:"$.items[?(@.id)]" url);
   check_int "nothing was fetched" 0 !(local.calls)
 
-(* The engine's half of [tests/fetch/test_engine_structure.py]: that a shape
-   read replaces the page's text with the schema before the escape pass, that it
-   reads the whole document, that it never escalates to the fallback ladder over
-   emptiness, and that it refuses to share an axis with a drill. The shape
-   grammar itself is P6 and stays pinned with the readers that build it, so the
-   schema text here is a stand-in for what [render_schema] would render. *)
+(* The engine-side shape rules: that a shape read replaces the page's text with
+   the schema before the escape pass, that it reads the whole document, that it
+   never escalates to the fallback ladder over emptiness, and that it refuses to
+   share an axis with a drill. The shape grammar itself is P6 and stays pinned
+   with the readers that build it, so the schema text here is a stand-in for what
+   [render_schema] would render. *)
 
 let schema =
   "$.total  number\n\

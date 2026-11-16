@@ -1,11 +1,10 @@
 (* The failure rows every HTTP adapter owes, driven over every adapter module
    on disk.
 
-   Port of the guarantee in tests/providers/test_provider_contract.py: the six
-   rows docs/reference/provider-contract.md's Failures table fixes are one
-   promise, and an adapter that skips one skips it silently — which is why the
-   Python suite drives the table over every adapter rather than trusting each
-   adapter's own file to have copied it.
+   The guarantee in the Python suite's provider-contract cases: the six rows
+   provider-contract.md's Failures table fixes are one promise, and an adapter
+   that skips one skips it silently — which is why the table is driven over
+   every adapter rather than trusting each adapter's own file to have copied it.
 
    That suite reads the table out of the document so code and contract cannot
    drift in either direction. This one names the rows instead, because the

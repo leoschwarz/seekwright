@@ -1,7 +1,6 @@
-(* The server-flag scanner and the startup refusals — port of [tests/test_cli.py]'s
-    [TestDispatch] and [TestTransportDispatch]: every valid and invalid flag
-    combination reads as its exact sentence here, and the executable rules in
-    [bin/] pin what the binary does with it (print on stderr, exit 2). *)
+(* The server-flag scanner and the startup refusals: every valid and invalid
+   flag combination reads as its exact sentence here, and the executable rules
+   in [bin/] pin what the binary does with it (print on stderr, exit 2). *)
 
 module Flags = Cli_flags
 

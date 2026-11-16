@@ -1,12 +1,12 @@
 (* Algolia: the schemaless-record mapping, the config-derived deployment, and
    the quota pair this name answers with its own 402.
 
-   Port of tests/providers/test_algolia.py. The fixture is a captured-style
-   [/1/indexes/{index}/query] payload, and because records are schemaless JSON the
-   five hits deliberately walk the whole mapping: the [title/name/question] and
-   [url/link] chains, the DocSearch [hierarchy] shape whose title lives at the
-   deepest non-empty level, the two drop cases (no title, no url) and the snippet
-   chain's [description/summary/excerpt/content/answer] run. An explicitly
+   The fixture is a captured-style [/1/indexes/{index}/query] payload, and
+   because records are schemaless JSON the five hits deliberately walk the whole
+   mapping: the [title/name/question] and [url/link] chains, the DocSearch
+   [hierarchy] shape whose title lives at the deepest non-empty level, the two
+   drop cases (no title, no url) and the snippet chain's
+   [description/summary/excerpt/content/answer] run. An explicitly
    configured [*]_attr is used alone — no chain, no hierarchy fallback — which is
    what the third hit of the explicit-attrs case costs its slot for.
 

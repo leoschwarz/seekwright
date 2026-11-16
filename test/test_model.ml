@@ -1,4 +1,4 @@
-(* Port of tests/test_models.py: the wire shapes and the absent-field rule.
+(* The wire shapes and the absent-field rule.
 
    The Python oracle is pydantic; the cases here assert the same observable
    JSON. An OCaml record's arity is the field-list guard, so the Python

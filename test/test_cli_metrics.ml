@@ -1,7 +1,6 @@
-(* The [--metrics] report — port of [tests/test_cli.py]'s [TestMetrics]:
-   the default table from a snapshot, the "no history" sentence, the journal
-   states, and the column alignment. The snapshot is the JSON
-   [Usage.snapshot] writes, fed in by hand; [now] is the window's right
+(* The [--metrics] report: the default table from a snapshot, the "no history"
+   sentence, the journal states, and the column alignment. The snapshot is the
+   JSON [Usage.snapshot] writes, fed in by hand; [now] is the window's right
    edge, so the dates are pinned. *)
 
 let endpoints ?(window_days = 14) providers =

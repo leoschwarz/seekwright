@@ -1,13 +1,13 @@
 (* The table half of the fetch path: which bodies are tables, and the
    rendering [path] addresses.
 
-   Port of tests/fetch/test_tabledoc.py. Nothing here reaches the network and
-   no extractor is involved. What is pinned is that [render_table] writes
-   [Jsondoc]'s own line grammar — one line per row or cell, each starting at
-   the root and labelled with the path that addresses it — because that shared
-   grammar is the whole reason [fetch]'s [path], [structure] and [offset]
-   answer a CSV with no new machinery, and a rendering that drifted from it
-   would be silently misread as a JSON shape. The two cuts are pinned here too:
+   Nothing here reaches the network and no extractor is involved. What is pinned
+   is that [render_table] writes [Jsondoc]'s own line grammar — one line per row
+   or cell, each starting at the root and labelled with the path that addresses
+   it — because that shared grammar is the whole reason [fetch]'s [path],
+   [structure] and [offset] answer a CSV with no new machinery, and a rendering
+   that drifted from it would be silently misread as a JSON shape. The two cuts
+   are pinned here too:
    a rendering is bounded by [Jsondoc]'s budget, and a record stream that stops
    parsing stops printing rather than failing the fetch. *)
 

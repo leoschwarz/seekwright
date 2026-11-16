@@ -1,6 +1,6 @@
 (* The provider contract's machinery, tested apart from any adapter.
 
-   Port of the parts of tests/providers/ that are not about one backend: the
+   The parts of the provider contract that are not about one backend: the
    constraint report and its sentence, the snippet and text caps, and the
    failure rows provider-contract.md's Failures table fixes. The rows are driven
    over real adapters by test_provider_contract.ml; what stays here is the
@@ -171,8 +171,8 @@ let the_cap_counts_characters_not_bytes () =
   check_int "the source is seventeen bytes" 17 (String.length "éééé éééé");
   check_opt_int "measured in characters" (Some 9) uncapped
 
-(* Differential, driven over the corpus the P4 review diffed against
-   [src/seekwright/providers/base.py]. These eight pairs are the ones where the
+(* Differential, driven over the corpus the P4 review diffed against the
+   oracle's provider base module. These eight pairs are the ones where the
    byte length and the codepoint length fall on opposite sides of the cap, so a
    byte-wise guard clips or ellipsises what Python returns whole — and reports
    the cut where Python reports none. Rows are (text, limit, snippet, uncapped

@@ -389,7 +389,7 @@ let cap_body max_download_bytes (body : string) : string * bool =
     (String.sub body 0 max_download_bytes, true)
   else (body, false)
 
-(* The oracle's parse-deadline sentence ([fetcher.py]'s [TimeoutError] arm),
+(* The oracle's parse-deadline sentence (its [TimeoutError] arm),
    with the port's [Timeout.t]-carrying clock removed: the seconds the caller
    passed to [make] are quoted back so the remedy named in the sentence is the
    key the operator actually raises. [%g] is Python's [f"{x:g}"]. *)

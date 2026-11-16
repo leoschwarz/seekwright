@@ -2,15 +2,16 @@
 
 `seekwright-live` is the port's explicit live runner: one named provider, fetch
 or agent case per invocation, a gate variable that must be set, and the live
-assertions ported per adapter from `tests/live/test_live.py`. It is the F4.3
+assertions ported per adapter from the Python live suite. It is the F4.3
 acceptance instrument from `plans/ocaml-finalisation.md`, not part of the
 hermetic gate.
 
-The Python suite is the oracle and stays read-only. This harness re-implements
-its *assertions* — a SERP backend fills `snippet` and never `text`, a content
-backend the reverse, a domain filter constrains the returned URLs — against the
-OCaml adapters, so a passing run says something about the port rather than about
-a call having returned.
+The ported assertions are the baseline: a SERP backend fills `snippet` and never
+`text`, a content backend the reverse, a domain filter constrains the returned
+URLs — re-implemented here against the OCaml adapters, so a passing run says
+something about the port rather than about a call having returned. The Python
+live suite answered those questions for the Python deployment, and it is not
+consulted from this branch.
 
 ## Running it
 

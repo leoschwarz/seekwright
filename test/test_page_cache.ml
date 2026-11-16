@@ -1,7 +1,6 @@
 (* The disk page cache: the entry format, the three bounds, and the window cut.
 
-   Port of [tests/fetch/test_page_cache.py], with two additions the port itself
-   makes necessary:
+   Two additions beyond the Python suite's cases are the port's own:
 
    - the window is cut by [Fetcher.window_text], the same function a live read
      uses, where the oracle mirrors that cut as [_cut] because it may not import

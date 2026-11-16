@@ -1,10 +1,10 @@
 (* FreeSerp: response parsing, request shape, cost and failures.
 
-   Port of tests/providers/test_freeserp.py. The fixture is the live
-   [index=web] payload that suite pins, trimmed to two results (probed
-   2026-10-14). The request-shape cases drive the adapter through a fake
-   {!Seekwright.Provider.Net.t} — the same position [httpx.MockTransport] holds
-   in Python, and possible here for the same reason: the client is injected.
+   The fixture is the live [index=web] payload the Python suite pinned, trimmed
+   to two results (probed 2026-10-14). The request-shape cases drive the adapter
+   through a fake {!Seekwright.Provider.Net.t} — the same position
+   [httpx.MockTransport] holds in Python, and possible here for the same reason:
+   the client is injected.
 
    The wiring cases from that suite ([test_built_with_no_key_in_the_environment],
    the [KNOWN_PROVIDERS] membership checks) belong to the config and factory

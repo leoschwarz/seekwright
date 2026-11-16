@@ -1,4 +1,4 @@
-(* Port of tests/test_sanitize.py: the rule, its two passes, the boundary.
+(* The sanitize rule, its two passes, the boundary.
 
    The Python oracle defines the expected strings; the cases here are the same
    ones, written against alcotest. *)
@@ -282,7 +282,7 @@ let test_a_cached_response_reread_escapes_once () =
   let second = M.search_response_to_yojson reread in
   Alcotest.(check bool) "byte-identical" true (Yojson.Safe.equal first second)
 
-(* The incident payload pinned verbatim in tests/test_sanitize.py; the MD5
+(* The incident payload pinned verbatim from the Python suite's case; the MD5
    assertion makes a transcription slip fail instead of weakening the case. *)
 let golden_incident_text =
   {|## Bug Description

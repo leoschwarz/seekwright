@@ -1,7 +1,6 @@
-(* Port of [tests/fetch/test_crawl4ai_fetcher.py]'s cases: the POST shape on
-   the pinned API, the per-request bearer, the operator-token sentence on
-   401/403, the missing quota arm (a self-hosted service does not meter
-   this deployment), and the two-layer envelope. *)
+(* The POST shape on the pinned API, the per-request bearer, the operator-token
+   sentence on 401/403, the missing quota arm (a self-hosted service does not
+   meter this deployment), and the two-layer envelope. *)
 
 module Caps = Mcp_caps
 module Crawl = Seekwright_fetch.Fallback_crawl4ai

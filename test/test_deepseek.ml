@@ -1,12 +1,11 @@
 (* DeepSeek Search: parsing, the query fold, the 128-codepoint budget and cost.
 
-   Port of tests/providers/test_deepseek.py. The fixture is the documented
-   [/v1/tools/search] payload: each hit carries [rerank_score], [title], [url],
-   [snippet], [summary], [content], [site_name], [site_icon], [date] and
-   [authority]. [snippet] is the short UI preview and [summary] the longer one
-   "intended to be read by a model", so a parsed result fills [snippet] and
-   [text] while [content] — the page body, filled only behind [need_content],
-   which this adapter never sends — never appears in one.
+   The fixture is the documented [/v1/tools/search] payload: each hit carries
+   [rerank_score], [title], [url], [snippet], [summary], [content], [site_name],
+   [site_icon], [date] and [authority]. [snippet] is the short UI preview and
+   [summary] the longer one "intended to be read by a model", so a parsed result
+   fills [snippet] and [text] while [content] — the page body, filled only behind
+   [need_content], which this adapter never sends — never appears in one.
 
    The clock is pinned to 2026-10-21T00:00:00Z (epoch 1,792,540,800), the
    instant the Python suite hand-passes as [today=date(2026, 10, 21)]: the

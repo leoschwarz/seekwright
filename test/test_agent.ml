@@ -1,6 +1,6 @@
 (* Agent mode: the fixed plan, the one model call, and the citations the server
-   validates. Ported case for case from [tests/test_agent.py]'s engine-level
-   classes -- TestThePlan, TestCitations, TestFailureContract, TestTheAllowList,
+   validates. Ported case for case from the Python suite's engine-level classes
+   -- TestThePlan, TestCitations, TestFailureContract, TestTheAllowList,
    TestUsageAccounting, TestSpecialTokenEscaping -- with the real
    [Engine.Search] and [Engine.Fetch] wired over stub providers and a stub
    fetcher, and only the model endpoint stubbed.

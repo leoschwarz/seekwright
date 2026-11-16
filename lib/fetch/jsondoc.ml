@@ -286,7 +286,7 @@ let parse_one text =
    is one entry per level it is inside — the rendering's own budget bounds the
    walk with it. An eager walk of a wide container cost a stack entry and a
    path string per member before any of them were printed — 2.3 GB for one
-   8 MB page, measured at the Python tree. *)
+   8 MB page, measured on the Python implementation. *)
 
 type entry =
   | Node of string * int * Yojson.Safe.t

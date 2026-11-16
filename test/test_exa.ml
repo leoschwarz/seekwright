@@ -1,17 +1,16 @@
 (* Exa: the block-format parser, the one tool call behind an MCP session, and
    the free-before-key ladder the billed name runs.
 
-   Port of tests/providers/test_exa_parser.py and tests/providers/test_exa_tiers.py.
-   There is no [test_exa.py] in the oracle: the parser and the ladder are separate
-   suites because they are separate risks — the parser is the only thing standing
-   between a caller and dropped results, since the endpoint answers in formatted
-   plain text and leaves [structuredContent] empty; the ladder is about money, in
-   that one endpoint answers both anonymously (free) and authenticated (~$7/1k), so
-   which credential served a search {i is} the cost of that search.
+   The parser and the ladder are separate risk surfaces and so are separate
+   suites here: the parser is the only thing standing between a caller and
+   dropped results, since the endpoint answers in formatted plain text and leaves
+   [structuredContent] empty; the ladder is about money, in that one endpoint
+   answers both anonymously (free) and authenticated (~$7/1k), so which
+   credential served a search {i is} the cost of that search.
 
    The oracle swaps its two fallbacks on the instance with [monkeypatch] because a
-   constructor parameter no production caller passes would be scaffolding shipped
-   in [src/]. This port cannot swap what the builder closed over, and it does not
+   constructor parameter no production caller passes would be scaffolding. This
+   port cannot swap what the builder closed over, and it does not
    need to: {!Seekwright.Provider.Net.t} sits where the MCP client's transport
    does, so the ladder runs end to end over a scripted endpoint that answers the
    handshake and then hands out tool replies per credential — the anonymous caller

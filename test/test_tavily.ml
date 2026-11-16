@@ -1,12 +1,11 @@
 (* Tavily: the content-style payload, the closed country enum, the request body,
    and the one constraint drop that is per-call rather than per-adapter.
 
-   Port of tests/providers/test_tavily.py. Tavily is a content backend, so
-   [results[].content] becomes [Result.text] and [snippet] stays empty — filling
-   both would ship the same prose twice, with the snippet as a prefix of the
-   extract. That makes the text cap the one that matters here, and
-   [text_truncated] the flag that tells a caller whether it is reading a whole
-   page or the front of one.
+   Tavily is a content backend, so [results[].content] becomes [Result.text] and
+   [snippet] stays empty — filling both would ship the same prose twice, with the
+   snippet as a prefix of the extract. That makes the text cap the one that
+   matters here, and [text_truncated] the flag that tells a caller whether it is
+   reading a whole page or the front of one.
 
    The country enum is the part of this adapter that cannot be read off the
    request surface: [country] is ISO alpha-2 in the tool schema and a closed list

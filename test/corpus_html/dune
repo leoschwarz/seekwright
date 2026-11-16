@@ -8,7 +8,8 @@
 ; The check lives here, beside the corpus, and the code it runs lives in
 ; [../ocaml-tools/extract_bench/]: one implementation of a bar, so the gate's
 ; verdict and the operator's recorded table cannot drift. The full three-backend
-; timing and memory table is the operator's run (it needs the Python venv), and
+; timing and memory table is the operator's run — it needs the Python tree and
+; the `uv` environment that tree pins, neither of which this branch carries — and
 ; the table it produced is recorded in [../../plans/seekwright-ocaml-port.md].
 
 (rule
@@ -24,9 +25,10 @@
 ; floor on recall, so an edit that trades one paragraph for another still passes
 ; it; a digest does not. [parity/oracle-stdlib.txt] beside it is the oracle's own
 ; digests, printed by [ocaml-tools/extract_bench/py_digest.py] — the gate cannot
-; run it (no Python in the sandbox), so the two files are diffed by hand, and the
-; only line that differs is [encoding-cp1252], where this port implements the
-; cp1252 codec and the oracle's strict codec replaces fifteen bytes.
+; run it (no Python in the sandbox, and the tree it imports is gone from this
+; branch), so the two files are diffed by hand, and the only line that differs is
+; [encoding-cp1252], where this port implements the cp1252 codec and the
+; oracle's strict codec replaces fifteen bytes.
 (rule
  (alias runtest)
  (deps

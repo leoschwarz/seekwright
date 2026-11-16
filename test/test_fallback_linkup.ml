@@ -1,6 +1,5 @@
-(* Port of [tests/fetch/test_linkup_fetcher.py]'s fetch cases: the fixed
-   request knobs, the single 429 quota arm — Linkup's 402 belongs to the
-   x402 lane this tree never enters — and the [markdown]-only mapping. *)
+(* The fixed request knobs, the single 429 quota arm — Linkup's 402 belongs to
+   the x402 lane this tree never enters — and the [markdown]-only mapping. *)
 
 module Caps = Mcp_caps
 module Linkup = Seekwright_fetch.Fallback_linkup

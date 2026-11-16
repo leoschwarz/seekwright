@@ -14,15 +14,14 @@
  (name test_event)
  (libraries mcp-caps alcotest))
 
-; P1: the routing core, ported from tests/test_router.py as the first
-; differential proof. The suite needs no transport and no loop — the router is
-; pure — and lib/dune gives the library no [libraries], so this is the whole
-; dependency story.
+; P1: the routing core, the first differential proof. The suite needs no
+; transport and no loop — the router is pure — and lib/dune gives the library
+; no [libraries], so this is the whole dependency story.
 (test
  (name test_router)
  (libraries seekwright alcotest test_support))
 
-; The port of tests/test_router.py's stdlib-only case, as a dependency fact.
+; The routing core's stdlib-only case, as a dependency fact.
 ; Two checks, and each catches what the other cannot: a reference to
 ; [Mcp_caps] or any other out-of-library library fails the compile with
 ; "Unbound module"; and [ocamldep] run with [-I ../lib] resolves references
@@ -127,18 +126,18 @@
  (name test_sanitize)
  (libraries seekwright yojson alcotest test_support))
 
-; P3: config loading and validation, ported from tests/test_config.py. The
-; suite reads the two operator pages beside the model — the documented example
-; and the two role blocks are load-tested rather than quoted, so a renamed key
-; fails here instead of at an operator's first start — and it writes one config
-; file per case, which needs Unix. Those pages are deps, so the suite runs
+; P3: config loading and validation. The suite reads two operator pages this
+; port owns — [ocaml-docs/reference-config.md] and [ocaml-docs/deploying.md],
+; whose example and role blocks are load-tested rather than quoted, so a renamed
+; key fails here instead of at an operator's first start — and it writes one
+; config file per case, which needs Unix. The pages are deps, so the suite runs
 ; against the same text a reader of the repo sees.
 (test
  (name test_config)
  (libraries seekwright alcotest test_support unix)
  (deps
-  ../docs/reference/configuration.md
-  ../docs/reference/deploying.md))
+  ../ocaml-docs/reference-config.md
+  ../ocaml-docs/deploying.md))
 
 ; F9.1: the packaging metadata has one owner ([dune-project]) and generated
 ; manifests; the suite compares the owner with [lib/version.ml], both opam
@@ -378,9 +377,9 @@
  (libraries seekwright yojson alcotest test_support))
 
 ; P6: the fetch stack's pure half — URL validation, windowing, image sniffing,
-; the extractor plumbing, passage selection and the stdlib backend. Ported from
-; tests/fetch/test_fetcher.py, test_fetch_guardrails.py (the URL-shape and
-; signature-table classes) and test_extractors.py.
+; the extractor plumbing, passage selection and the stdlib backend. The cases
+; are the Python suite's windowing, URL-shape and signature-table classes plus
+; its extractor plumbing.
 (test
  (name test_fetch)
  (libraries seekwright.fetch seekwright.fetch.stdlib alcotest test_support))
@@ -404,7 +403,7 @@
 
 ; F2.2: the extraction runner — a fixed pool of worker domains behind
 ; AF_UNIX sockets, so a parse costs its own core and not the loop's. The
-; oracle's [_GrindingExtractor] cases from tests/fetch/test_fetch_guardrails.py
+; oracle's grinding-extractor and extraction-time cases
 ; at the pool seam, and the same backend through the fetcher's parse deadline.
 (test
  (name test_extract_pool)
@@ -430,8 +429,7 @@
   uri
   alcotest test_support))
 
-; P6: the JSON and table halves of the fetch path — the renderers' cases from
-; tests/fetch/test_jsondoc.py and test_tabledoc.py.
+; P6: the JSON and table halves of the fetch path — the renderers' cases.
 (test
  (name test_jsondoc)
  (libraries seekwright.fetch alcotest test_support)
@@ -887,8 +885,7 @@
 
 ; F6.1: the five vendor fallback modules over the scripted seam in
 ; [fetch_support/] — request shape, status arms, and envelope mapping, with no
-; socket and no third party. Each suite is the port of its Python test module
-; under tests/fetch/.
+; socket and no third party. Each suite is the port of its Python test module.
 (test
  (name test_fallback_jina)
  (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))

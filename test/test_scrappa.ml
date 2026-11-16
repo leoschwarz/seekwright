@@ -1,7 +1,6 @@
 (* Scrappa: response parsing, request shape and cost.
 
-   Port of tests/providers/test_scrappa.py. The fixture is the documented
-   [/api/search-light] payload (see docs/reference/providers.md), and the
+   The fixture is the documented [/api/search-light] payload, and the
    request-shape cases drive the adapter through a fake
    {!Seekwright.Provider.Net.t} — the position [httpx.MockTransport] holds in
    Python, and possible here for the same reason: the client is injected.

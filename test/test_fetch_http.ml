@@ -4,10 +4,9 @@
    fixture shape test_authority_net.ml uses, because the grant's own policy is
    pinned there and what is pinned here is what the fetcher adds on top.
 
-   Port of the networked cases of tests/fetch/test_fetch_guardrails.py
-   (TestRedirects, TestBodyHandling, TestImages, TestExtractionTime's refusal
-   shape) and test_fetcher.py (TestJsonIsFetchable, TestCsvIsFetchable,
-   TestTheBackendDecidesWhatIsReadable). The DNS-level address blocking is the
+   The networked cases: the redirect chain, body handling, images, the
+   extraction-time refusal shape, a fetchable JSON body, a fetchable CSV body,
+   and the backend's readability decision. The DNS-level address blocking is the
    grant's, covered by test_authority_net.ml; what lands here as a refusal is
    the grant's [Denied] mapped onto the fetcher's provenance tags. *)
 

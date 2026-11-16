@@ -1,7 +1,6 @@
-(* The fetch path with its extraction off the loop: the port of
-   tests/fetch/test_fetch_guardrails.py's [TestExtractionTime] — the parse that
-   holds the loop open, the overrunning parse refused with the deadline
-   sentence, and the chain budget answering when no parse deadline is set.
+(* The fetch path with its extraction off the loop: the parse that holds the
+   loop open, the overrunning parse refused with the deadline sentence, and the
+   chain budget answering when no parse deadline is set.
    Same loopback fixture and [Policy.with_endpoints] grant as
    [test_fetch_http.ml], with the pool from [test_extract_pool.ml] wired into
    the fetcher exactly as the factory wires it ([~workers] beside

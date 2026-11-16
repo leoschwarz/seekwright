@@ -1,7 +1,6 @@
 (* The fallback ladder as the factory builds it: which names a deployment gets,
-   and what each built row carries. Port of [tests/fetch/test_fetch_fallback.py]
-   ([TestTheAllowList] and the two price cases), plus the credential and
-   prerequisite gates the oracle's [_build_*] functions state.
+   what each built row carries, the allow-list, the two price cases, and the
+   credential and prerequisite gates the oracle's [_build_*] functions state.
 
    What this suite owns is the {i wiring}, not the vendor protocols: a name
    whose gates this deployment does not satisfy is absent from the ladder

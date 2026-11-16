@@ -1,9 +1,9 @@
 (* SerpAPI: response parsing, request shape, redaction and cost.
 
-   Port of tests/providers/test_serpapi.py. The fixture is the documented
-   [/search] payload: [organic_results[]] with [position], [title], [link],
-   [snippet] and an optional display [date] ("Sep 20, 2018"), beside
-   [search_metadata] and the other element families that are dropped.
+   The fixture is the documented [/search] payload: [organic_results[]] with
+   [position], [title], [link], [snippet] and an optional display [date]
+   ("Sep 20, 2018"), beside [search_metadata] and the other element families
+   that are dropped.
 
    Two facts shape the tests here. The API key rides in the query string — the
    operator's documented shape, which diverges from this tree's header

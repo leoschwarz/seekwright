@@ -1,6 +1,5 @@
 ; The port's library, wrapped as Seekwright: the module a test or bin/ refers
-; to as [Seekwright.Model] is [lib/model.ml]. The Python tree's own src/ is not
-; part of this workspace.
+; to as [Seekwright.Model] is [lib/model.ml].
 ;
 ; F9.1: [dune-project]'s [(version …)] is the one version owner. This rule
 ; generates the module every OCaml reader uses, so the package version is never

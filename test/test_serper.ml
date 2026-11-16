@@ -1,15 +1,14 @@
 (* Serper: response parsing, the guard on upstream field shapes, the request
    body, and the one constraint the adapter cannot honour.
 
-   Port of tests/providers/test_serper.py. Serper is a raw SERP backend —
-   [organic[]] records carry a [snippet] and a [date], both documented as
-   strings — but nothing upstream enforces that. A nested object, list or
-   number in [date] used to reach [Result.published_date] unguarded in the
-   oracle, and the same shape in [snippet] raised out of the shared truncate
-   helper; neither was a provider error, so both escaped the engine's handling
-   as an internal error rather than being dropped the way every sibling drops a
-   non-string. [the_upstream_field_guards] pins both guards; the parsing cases
-   pin that a well-formed payload is unchanged.
+   Serper is a raw SERP backend — [organic[]] records carry a [snippet] and a
+   [date], both documented as strings — but nothing upstream enforces that. A
+   nested object, list or number in [date] used to reach [Result.published_date]
+   unguarded in the oracle, and the same shape in [snippet] raised out of the
+   shared truncate helper; neither was a provider error, so both escaped the
+   engine's handling as an internal error rather than being dropped the way every
+   sibling drops a non-string. [the_upstream_field_guards] pins both guards; the
+   parsing cases pin that a well-formed payload is unchanged.
 
    The request-shape cases drive the adapter through a fake
    {!Seekwright.Provider.Net.t} — the position [httpx.MockTransport] holds in

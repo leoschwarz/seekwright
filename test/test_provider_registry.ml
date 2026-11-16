@@ -139,7 +139,7 @@ let every_name_has_a_row_built_or_deferred () =
        [ "anysearch"; "exa:free"; "freeserp"; "parallel:free" ]
        (List.sort String.compare live_tested))
 
-(* [factory.py]'s [_BuildSpec] table: [default_cost] per name, [None] meaning
+(* The oracle's [_BuildSpec] table: [default_cost] per name, [None] meaning
    fixed at zero. Written down here rather than read from the oracle, so a
    figure that moves in one tree fails a run in the other. *)
 let oracle_cost =

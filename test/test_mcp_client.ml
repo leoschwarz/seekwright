@@ -3,12 +3,12 @@
    shape test_fetch_http.ml uses, for the same reason: the grant's own policy is
    pinned elsewhere, and what is pinned here is what the client adds on top.
 
-   Port of the session cases of tests/providers/test_exa_tiers.py and the
-   upstream-error cases of test_exa_mcp.py, plus the framing and lifecycle cases
-   the port's streams needed. Every HTTP exchange is a discrete POST, so the
-   fixture records what the client actually sent: the session header, the
-   negotiated protocol version, the request ids, and whether a failure was
-   retried. No provider endpoint is reached, and no case can bill anything.
+   The session cases behind Exa and Parallel, their upstream-error cases, plus
+   the framing and lifecycle cases the port's streams needed. Every HTTP exchange
+   is a discrete POST, so the fixture records what the client actually sent: the
+   session header, the negotiated protocol version, the request ids, and whether
+   a failure was retried. No provider endpoint is reached, and no case can bill
+   anything.
 
    The failure cases are also leak cases: the fixture echoes a probe key in the
    bodies and headers it answers with, and every expectation renders the

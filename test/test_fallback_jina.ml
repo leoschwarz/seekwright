@@ -1,6 +1,5 @@
-(* Port of [tests/fetch/test_jina_fetcher.py]: the header block, the two
-   placeholder bodies, the IP-meter quota arm, and the fact that this
-   fallback sends no credential of any kind. *)
+(* The header block, the two placeholder bodies, the IP-meter quota arm, and the
+   fact that this fallback sends no credential of any kind. *)
 
 module Caps = Mcp_caps
 module Fallback = Seekwright_fetch.Fallback

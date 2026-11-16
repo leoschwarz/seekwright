@@ -1,14 +1,14 @@
 (* Linkup: the two payload shapes, the one date computation in the adapter
    inventory, and the quota row this name answers differently.
 
-   Port of tests/providers/test_linkup.py. The endpoint answers in one of two
-   shapes, and which one it uses decides where the prose lives, which list holds
-   the material, and {i how} the result cap is applied: [sourcedAnswer] slices
-   [sources[]] before anything is dropped, because that list arrives already sized
-   for the answer the endpoint wrote, while [searchResults] walks until [limit]
-   usable rows are collected, because an image row on an index page should not
-   cost the caller a result it asked for. That asymmetry is invisible from the
-   wire and is what the two parse suites pin separately.
+   The endpoint answers in one of two shapes, and which one it uses decides
+   where the prose lives, which list holds the material, and {i how} the result
+   cap is applied: [sourcedAnswer] slices [sources[]] before anything is
+   dropped, because that list arrives already sized for the answer the endpoint
+   wrote, while [searchResults] walks until [limit] usable rows are collected,
+   because an image row on an index page should not cost the caller a result it
+   asked for. That asymmetry is invisible from the wire and is what the two parse
+   suites pin separately.
 
    [fromDate] is the only date arithmetic an adapter does, so the clock is
    injected and every date assertion here names the instant it is true of — the

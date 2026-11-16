@@ -1,5 +1,5 @@
 (* The usage recorder: the aggregation the dashboard renders, the JSONL journal,
-   and its failure modes — ported case for case from tests/test_usage.py.
+   and its failure modes.
 
    The clock is injected here rather than read from a loop, so every date bucket
    in this suite is exact: the fixed instant below is the process's whole world,

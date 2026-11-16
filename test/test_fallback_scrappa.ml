@@ -1,6 +1,6 @@
-(* Port of [tests/fetch/test_fetch_fallback.py]'s Scrappa cases: the query
-   shape, the credential header, the three status arms, and the two-layer
-   envelope — Scrappa's own success and the origin's [site_status_code]. *)
+(* The Scrappa cases: the query shape, the credential header, the three status
+   arms, and the two-layer envelope — Scrappa's own success and the origin's
+   [site_status_code]. *)
 
 module Caps = Mcp_caps
 module Scrappa = Seekwright_fetch.Fallback_scrappa

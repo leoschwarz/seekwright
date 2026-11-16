@@ -1,8 +1,7 @@
-(* The [--check] report's pure parts — port of [tests/test_cli.py]'s
-   [TestCheckStreams] and the inert-feature reporting: what the
-   report says about a config, without dialling anything. The full report
-   needs a network, so this suite drives the pieces the report is built
-   from — the default-route line and the fetch and agent blocks through the
+(* The [--check] report's pure parts — the check-stream and inert-feature
+   reporting: what the report says about a config, without dialling anything. The
+   full report needs a network, so this suite drives the pieces the report is
+   built from — the default-route line and the fetch and agent blocks through the
    [emit] callback, a fetch route's state being the part worth pinning. *)
 
 module Config = Seekwright.Config
@@ -60,7 +59,7 @@ enabled = true
 let test_no_default_all_free () =
   (* the empty set is the keyless set, and a keyless-only deployment walks
      the free set instead of demanding a provider — the same route decision
-     [router.py]'s guard pins, seen from the report's side. *)
+     [Router]'s guard pins, seen from the report's side. *)
   match load {|
 [providers]
 [providers."exa:free"]

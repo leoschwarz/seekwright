@@ -1,6 +1,6 @@
-(* Port of [tests/fetch/test_tavily_fetcher.py]'s extract cases: the request
-   body with its clamped vendor timeout, the 429 {i and} 432 quota arms, and
-   the empty-[results] reading that keeps the ladder walking. *)
+(* The extract cases: the request body with its clamped vendor timeout, the 429
+   {i and} 432 quota arms, and the empty-[results] reading that keeps the ladder
+   walking. *)
 
 module Caps = Mcp_caps
 module Tavily = Seekwright_fetch.Fallback_tavily

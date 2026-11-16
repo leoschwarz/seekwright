@@ -1,5 +1,4 @@
-(* The health board, its probe, and one monitor tick — ported case for case from
-   tests/test_health.py.
+(* The health board, its probe, and one monitor tick.
 
    Two differences are worth stating up front. The board's clock is [asyncio]
    time in Python, and the suite there sleeps 60ms past a 50ms cooldown; this

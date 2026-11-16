@@ -1,10 +1,9 @@
 (* Search1API: response parsing, request shape and cost.
 
-   Port of tests/providers/test_search1api.py. The fixture is the documented
-   [/search] payload from the operator's OpenAPI schema, and the request-shape
-   cases drive the adapter through a fake {!Seekwright.Provider.Net.t} — the
-   position [httpx.MockTransport] holds in Python, and possible here for the
-   same reason: the client is injected.
+   The fixture is the documented [/search] payload from the operator's OpenAPI
+   schema, and the request-shape cases drive the adapter through a fake
+   {!Seekwright.Provider.Net.t} — the position [httpx.MockTransport] holds in
+   Python, and possible here for the same reason: the client is injected.
 
    The wiring cases from that suite ([test_built_only_when_a_key_is_present],
    the cost-correction cases through the factory) belong to the registry and

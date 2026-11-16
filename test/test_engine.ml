@@ -1,7 +1,6 @@
 (* The search engine: dispatch, the two ladders, the allow-list, the zero-results
-   diagnostic, and what the operator and the dashboard get out of a call. Ported
-   case for case from [tests/test_engine.py]'s search half — the fetch half is in
-   [test_fetch_engine.ml].
+   diagnostic, and what the operator and the dashboard get out of a call. The
+   fetch half is in [test_fetch_engine.ml].
 
    Two things about the shape of a port show up here and are worth naming once.
    A provider is a module, so the Python suite's [StubProvider] subclassing

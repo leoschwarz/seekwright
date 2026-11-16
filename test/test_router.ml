@@ -3,29 +3,28 @@
    No engine and no config object: a routing table is the whole input, which is
    the point of the seam — what a rewrite in another language has to reproduce
    is these answers, not the machinery that reads TOML to build a table. The
-   same sentences are pinned from the caller's side by the engine suites; in
-   Python those are tests/test_engine.py and tests/fetch/, and the two files
-   agree because both copy one router.
+   same sentences are pinned from the caller's side by the engine suites, and
+   the two agree because both copy one router.
 
-   The port of tests/test_router.py has one case fewer in this file: "the
-   module imports nothing of seekwright" is not a value to check but a
-   dependency fact, so it lives in the build instead — lib/dune declares no
-   [libraries], which is what refuses a reference outside this library, and
-   test/dune pins what ocamldep resolves inside it. Both are the tools' own
-   answer, which a grep of the source text cannot match. *)
+   This file has one case fewer than the Python suite: "the module imports
+   nothing of seekwright" is not a value to check but a dependency fact, so it
+   lives in the build instead — lib/dune declares no [libraries], which is what
+   refuses a reference outside this library, and test/dune pins what ocamldep
+   resolves inside it. Both are the tools' own answer, which a grep of the source
+   text cannot match. *)
 
 module Router = Seekwright.Router
 module A = Alcotest
 open Test_support
 
-(* The frozen free vocabulary: the oracle's FREE_PROVIDERS and FREE_PROVIDER_ORDER
-   in src/seekwright/config.py. The Python suite imports those two symbols, so
-   the free-vocabulary half of its sentences is recomputed; this suite carries
-   the values and pins the sentences literally, which is the stronger of the two
-   — a name that moves in config.py breaks here until the sentence moves with
-   it, in the pull request that re-prints the frozen surface. P3 gives Config
-   these constants, and the table fields below then read them while the pinned
-   sentences stay. *)
+(* The frozen free vocabulary: the oracle's FREE_PROVIDERS and FREE_PROVIDER_ORDER.
+   The Python suite imported those two symbols, so the free-vocabulary half of
+   its sentences is recomputed; this suite carries the values and pins the
+   sentences literally, which is the stronger of the two
+   — a name that moves in the vocabulary breaks here until the sentence moves
+   with it, in the pull request that re-prints the frozen surface. P3 gives
+   Config these constants, and the table fields below then read them while the
+   pinned sentences stay. *)
 let free_providers = [ "exa:free"; "parallel:free"; "freeserp"; "searxng"; "tinyfish" ]
 let free_order = [ "exa:free"; "parallel:free"; "freeserp"; "searxng"; "tinyfish" ]
 
