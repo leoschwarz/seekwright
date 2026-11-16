@@ -41,7 +41,7 @@ is built to hold:
   because the grant refuses the dial at all — there is no shared client to leak
   through.
 - A key never reaches a log line or an error message. Provider failures carry
-  `Provider.error.message`, prose from a fixed vocabulary: no httpx-style
+  `Provider.error.message`, prose from a fixed vocabulary: no transport
   exception text and no raw response body is ever interpolated, because both can
   echo the request whose headers hold the key. Nothing logs an exception object.
   `test/log_guard/source_discipline.ml` walks the sources so the rule holds at
