@@ -3088,3 +3088,45 @@ nothing was pushed.
 - `test/corpus_html`'s wall-clock bar is load-sensitive on a busy three-CPU host
   (the one flake above). If it keeps costing gate runs, the bar belongs in a
   machine-relative form, which is `test/corpus_html`'s owner's call.
+
+## 39. The Python tree is deleted, and the lanes move with it (2026-11-16)
+
+Executed on this branch: `src/`, `tests/`, `docs/`, `tools/`, `pyproject.toml`,
+`uv.lock`, `.python-version`, the Python `Containerfile` and its
+`.containerignore` are gone, along with `ci.yml` and the wheel half of
+`publish.yml`. The order and the reason for each step are
+`plans/retiring-the-python-tree.md`; this section is the entry in the port's own
+narrative.
+
+- **The gate did not change shape, only its inputs.** The same three targets, and
+  the runtest case count moved by one: the accepted-divergence record is now the
+  12-row `test/differential/divergences.tsv`, held to the 91
+  `explicit-divergence` goldens in both directions (79 of them sit inside the two
+  systematic families), which is the case that moved it. Everything the Python
+  tree used to pin — the surface manifest, the five prompts, the dashboard page,
+  the three egress host lists, the documented example and the two role tables, the
+  matrix's cross-references — is pinned by an OCaml-side artifact now.
+- **A deletion rehearsed before it was done.** With the seven Python paths hidden
+  out of the tree, `dune build @install` and `dune runtest --force` were green and
+  ran the same 2248 cases. That is why the deletion is a `git rm` and not a
+  debugging session.
+- **One posture change, not a cleanup.** `deploy/compose/` stopped enforcing
+  anything at the network layer: this binary reads no `HTTP_PROXY`/`HTTPS_PROXY`,
+  so the Squid pair, the CoreDNS resolver and the socat ingress were either broken
+  or theatre. The two roles now sit on ordinary bridges with outbound NAT and
+  publish their own loopback ports. The sink deny list and the lenient-vs-strict
+  `fetch` choice moved to the operator's firewall, fed from the rendered
+  `deploy/compose/generated/` lists, which `dune runtest` re-renders from
+  `Registry.rows` and `known_fetch_fallbacks`. `SECURITY.md` states what the
+  bundle no longer covers.
+- **The claim about this port does not move.** §38's four exclusions still hold,
+  including no PDF page text, and `production candidate` is still the honest
+  label. Deleting the tree the baseline was taken from removes a kind of evidence,
+  not a defect.
+- **The one dangling pointer left on purpose** is `VISION.md`: three links into
+  `docs/` and a `uv sync && uv run seekwright` first run. The rule is that the spec
+  is never edited to match the tree, so it waits for a maintainer pass; the
+  deletion commit says so in its body.
+- §38's `cr_f3e67d7f27e4` finding is closed by this section: the payload that was
+  rejected for touching protected paths without approval is, in substance, what
+  this branch did deliberately, with the lanes moved first.
