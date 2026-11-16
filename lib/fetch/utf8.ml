@@ -1,1 +1,0 @@
-include Seekwright_text.Utf8

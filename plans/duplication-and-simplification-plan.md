@@ -1,6 +1,9 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **proposals only; nothing here is landed.** Tree read at `6e4ad90`.
+Status: **proposals only; nothing here is landed.** Tree read at `6e4ad90`;
+reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
+unchanged between the two commits — the diff is plans only). The corrections are
+recorded in §8; the §4 decisions remain the maintainer's.
 Successor to the 2026-11-16 code-quality wave recorded in
 `plans/seekwright-ocaml-port.md` §40: that wave read the factory, the URL gate,
 the civil-date arithmetic and four adapter files, and its own ledger coverage
@@ -37,6 +40,10 @@ field name) or by a window scan, whose recipe is reproducible:
 |`lib` + `bin` + `live` + `ocaml-tools` + `examples`|169|30,739|3,604 (12%)|
 |`test`|105|39,162|**5,343 (14%)**|
 
+Line counts are `wc -l` plus one per file. The two whole-tree rows count `.ml`
+and `.mli` alike; the adapter row is the fifteen adapter `.ml` (not
+`mcp_client.ml`), the fallback row the five `.ml`.
+
 Intra-file repetition, same method: `lib/model.ml` 46% at K=6 (the field-name
 lists S-004 names), `lib/config.ml` 27% at K=4 — which is mostly the four
 provider-name vocabularies repeating each other's prefixes, so it is **not**
@@ -59,55 +66,71 @@ Carried forward from the wave, because the same walls bind every item below.
 - **The embedded prose** — `Prompts.search_description`,
   `fetch_description`, `answer_description`, `answer_system`,
   `server_instructions`, `Dashboard_html`, and the refusal sentences — has a
-  committed golden beside `ocaml-tools/resources.ml`. S-016 and S-017 both
+  committed golden beside `ocaml-tools/resources.ml`. S-001 and S-010 both
   threaten a sentence; neither may reword one as a side effect.
 - **The grant boundary.** `lib/factory/grants.ml` stays the only funnel that
   sets an operation bound or wraps a grant in the audit sink, and
-  `test/test_caps_audit.ml` fails the build when another module does. S-009 and
-  D-A/D-F each add network plumbing, and both have to route through it.
+  `test/test_caps_audit.ml` fails the build when another module does. S-009 adds
+  an outbound call and S-010's step 0 moves the fallback host check into the
+  factory; both have to route through it.
 - **The library direction.** `mcp-caps → seekwright → seekwright.providers /
   seekwright.fetch (+ seekwright.fetch.stdlib) / seekwright.factory /
   seekwright.cli`, with `seekwright.text`, `seekwright.wire` and
-  `seekwright.time` as the stdlib-only floor. A helper shared by `lib/`,
-  `lib/providers/` and `lib/cli/` can only land on that floor — which is what
-  decided R-009 and decides S-005 and S-014 too.
+  `seekwright.time` as the stdlib-only floor. `seekwright.providers` and
+  `seekwright.cli` link `seekwright`; `seekwright.fetch` links neither big
+  library. So a helper shared by `lib/`, `lib/providers/` and `lib/cli/` can
+  live in `seekwright` itself — only a helper `seekwright.fetch` also needs is
+  forced onto the floor. R-009's `Civil` sits on that floor, though no
+  fetch-side consumer reads it today; S-001's `take` and S-005's percent-encoder
+  have no fetch-side consumer either, so `Provider` owns them.
 - **`lib/router.ml` stays stdlib-only**, machine-checked by `ocamldep` against
   `test/router_dependencies.expected`. No fix below may make the router reach a
   sibling, and none needs to.
 - **`test/should_not_compile/` diagnostics pin exact line numbers.** Editing a
   snippet — including its comments — re-promotes its `.expected` in the same
-  change. S-014 touches two of the fourteen programs.
-- **D2, deferred by the wave and still binding.** A per-name fetch-fallback
-  builder table cannot exist while every `Fallback_*.config` carries a `'tag`
-  parameter that exists only so `Remote_target.check` can reach
-  `Policy_net.vet_public_host`. S-010 lists the tag erasure as its step 0.
+  change. D-C touches two of the fourteen programs: `grant_path.ml` (the
+  positive half, which calls `Budget.make`) and `controls_record_forge.ml`
+  (which forges a `Controls.t` with a `budget` field).
+- **D2, deferred by the wave.** A per-name fetch-fallback builder table cannot
+  exist while every `Fallback_*.config` carries a `'tag` parameter that exists
+  only so `Remote_target.check` can reach `Policy_net.vet_public_host`. S-010's
+  step 0 proposes to erase the tag and lift the deferral; until it lands, the
+  `'tag` stays.
 - **The no-line-number rule.** This page names files and symbols only.
 
 ## 2. Duplication
 
 ### S-001 — the adapter HTTP skeleton, fifteen times over
 
-**Evidence (`read`, `diff`).** `Serper.parse` and `Serpapi.parse` differ in three
-lines: the record list's key, the `date` field, and one `score`. Each of eleven
-adapters carries its own `let rec take n items acc`; `Algolia.take` is a twelfth
-spelling and `Searxng` holds two copies in one file; `Usage.take_first` and
-`Tabledoc.take` are the thirteenth and fourteenth — fifteen implementations of
-"the first n of a list" in `lib/`. Every `check_status` is the same four branches
-with different status numbers and one different sentence. The tail of every
-`search` — `Provider.transport_error` on the grant failure,
+**Evidence (`read`, `diff`).** `Serper.parse` and `Serpapi.parse` differ in the
+record list's key — `organic` versus `organic_results` — and in `truncate_snippet`
+wrapping; the `date` field reads the same `published_date` (through a local helper
+in `serper`) and both leave `score = None`. Twelve adapters carry their own
+`let rec take n items acc` — `Searxng` holds two copies in one file, thirteen copies
+— `Algolia.take` is a fourteenth spelling and `Usage.take_first` a fifteenth: fifteen
+implementations of "the first n of a list", every one in `seekwright` or
+`seekwright.providers`. Every `check_status` is the same four branches with the
+vendor's own quota sentence; the status numbers are almost everywhere the same
+(`tavily` adds 432, its monthly-credit status, beside 429). The tail of the thirteen
+REST adapters' `search` — `Provider.transport_error` on the grant failure,
 `Provider.decode_json_object`, then the `outcome` record with `answer = None`,
-`cost_usd` and `ignored_constraints` — is the same code under a different name.
-`make` is identical fifteen times, including the same comment about the shared
-network grant. 984 of 2,740 adapter lines sit in windows shared between two or
+`cost_usd` and `ignored_constraints` — is the same code under a different name;
+`parallel`'s REST half spells the transport mapping and the decode inline instead of
+calling the two helpers. `make` is the same shape in the fourteen modules that define
+it — defaults, labels and extra parameters vary — and thirteen carry the same comment
+about the shared network grant; `exa` builds through `make_tiered` and `make_mcp`
+instead. 984 of 2,740 adapter lines sit in windows shared between two or
 more adapters; by file: `tavily` 247, `search1api` 91, `querit` 81, `scrappa`
 77, `serpapi` 74, `tinyfish` 73, `serper` 68, `linkup` 64, `freeserp` 48,
 `anysearch` 45, `searxng` 42, `deepseek` 29, `algolia` 27, `parallel` 10,
 `exa` 8.
 
 **What it risks.** The divergence is not hypothetical: `Parallel.compose_notices`
-builds the "that constraint was ignored" sentence by hand over twenty-eight
-lines instead of calling `Provider.ignored_constraints`, so `parallel` already
-spells the tree's own reporting rule differently from the other fourteen.
+(about 38 lines) builds the REST half's constraint report by hand — the language
+and safe-search clauses re-spell `Provider.ignored_constraints`' sentence, while the
+include/exclude-domains interaction and the upstream-warning tail are beyond that
+helper's vocabulary — and the MCP half already calls `Provider.ignored_constraints`.
+So `parallel` spells the tree's own reporting rule two ways in one file.
 
 **Fix.** Four values in `Seekwright.Provider`, which every adapter already
 links:
@@ -126,15 +149,19 @@ val http_search :
   provider:name -> net:Net.t -> cost_usd:(int -> float) ->
   request:Authority.Net.request ->
   parse:(Yojson.Safe.t -> limit:int -> hit list) ->
-  notice:(search_query -> string option) ->
+  notice:(search_query -> Yojson.Safe.t -> string option) ->
   search_query -> (outcome, error) result
 ```
 
 A vendor whose payload nests (Querit's `results.results`), whose identity field
 is `url` rather than `link`, or whose body lands in `text` rather than `snippet`
-is an argument or a one-line `parse`, not a re-derivation. Exa's
-content-backend parse and the MCP-backed pair stay hand-written — they are not
-this shape — and keep their own `search`.
+is an argument or a one-line `parse`, not a re-derivation. `notice` reads the
+decoded payload as well as the query because `parallel`'s upstream warnings depend
+on it; its domain-interaction clause is one the shared helper does not have, so the
+helper grows that clause or `parallel` keeps a vendor extension — either way the
+sentences stay word-for-word (the gate below). Exa's content-backend parse and the
+MCP-backed pair stay hand-written — they are not this shape — and keep their own
+`search`.
 
 **Gate.** 15 suites keep their vendor cases and lose nothing; `surface.expected`
 does not move, because no `make` signature needs to change. Expect roughly 700–
@@ -142,35 +169,39 @@ does not move, because no `make` signature needs to change. Expect roughly 700�
 sentence is a deliberate behaviour-adjacent change: its sentences must stay
 word-for-word, or the golden re-pin belongs in the same commit.
 
-### S-002 — the adapter suites: 9,545 lines, 102 lines of shared support
+### S-002 — the adapter suites: 9,217 lines, 103 lines of shared support
 
-**Evidence (`read`, window scan).** `Test_support`'s own header states the rule
-— a helper "copied into five files drifts in five directions". Then 13–17 suites
-each define their own `query`, `test_key`, `sample_json`, `dial`, `refusal`,
-`search_of` and `body_of`: 17 files define `query`, 16 `dial`, 18 `refusal`, 14
-`search_of`, 13 each `sample_json` and `test_key`. Seven suites (`serpapi`,
+**Evidence (`read`, window scan).** The set is the fifteen per-adapter suites plus
+`test_mcp_client.ml`; `Test_support`'s own header states the rule — a helper "copied
+into five files drifts in five directions". The per-suite helpers repeat: 17 files
+define `query`, 15 `dial`, 14 each `refusal` and `search_of`, 13 `sample_json`, 12
+`test_key` and 6 `body_of` — top-level `let` definitions counted by name across
+`test/test_*.ml`. Seven suites (`serpapi`,
 `freeserp`, `querit`, `scrappa`, `search1api`, `searxng`, `anysearch`) also
 define the same hand-written UTF-8 codepoint counter `chars`, which duplicates
 `Seekwright_text.Utf8.count` and re-derives byte lead-width stepping that the
 pinned decoder in `lib/text/` already specifies for ill-formed input.
 `test_querit.ml` and `test_search1api.ml` share 73 windows of 8 lines.
 
-**What it risks.** Two of the copies are already wrong in different ways: a
-hand-counted `chars` agrees with `Utf8.count` on the fixtures and not on a
-maximal-subpart boundary, so a cap assertion can pass on a counter the product
-does not use. And the contract rows are driven twice: `test_provider_contract.ml`
-drives authentication, the `>= 400` row, the operation bound, a transport
-failure, a body that does not decode and a non-object body across every adapter,
-while 12–13 per-adapter suites re-drive the transport-failure and malformed-body
-rows they were supposed to leave to it.
+**What it risks.** The seven `chars` copies are byte-identical and already wrong on
+ill-formed input: they step a fixed 2/3/4 bytes off a lead byte, while `Utf8.count`
+steps by the maximal-subpart rule (`Utf8.lead_width`), so an overlong or truncated
+lead counts differently — a cap assertion can pass on a counter the product does not
+use. And the contract rows are driven twice: `test_provider_contract.ml` drives
+authentication, the `>= 400` row, the operation bound, a transport failure, a body
+that does not decode and a non-object body across every adapter, while thirteen
+per-adapter suites still carry their own case for one of those rows — some with a
+vendor-specific assertion the contract row does not make, which has to move with the
+case rather than vanish.
 
 **Fix.** Put `query`, `dial`, `refusal`, `search_of` and `body_of` in
 `Test_support`, parameterised by the adapter's `make`; delete the per-suite
 copies and the seven `chars` in favour of `Seekwright_text.Utf8.count`; delete
-the per-suite transport/malformed-body cases the contract suite owns, keeping
-the per-vendor quota row (which is genuinely vendor-specific, as the contract
-suite's header says). Estimated −1,800 test lines with strictly better coverage,
-because the harness then has one definition to fix.
+the per-suite failure-row cases the contract suite owns, keeping any vendor-specific
+assertion the contract row does not make and the per-vendor quota row (which is
+genuinely vendor-specific, as the contract suite's header says). Estimated −1,800
+test lines with strictly better coverage, because the harness then has one
+definition to fix.
 
 **Gate.** No production change, no golden. `test/dune` already links
 `test_support` for these stanzas.
@@ -179,7 +210,7 @@ because the harness then has one definition to fix.
 
 **Evidence (`read`).** `Server.search_tool`, `fetch_tool` and `answer_tool` pass
 the engine's optional arguments; `Server.api_search`, `api_fetch` and
-`api_answer` pass the same lists again — `Agent.answer` with its ten labelled
+`api_answer` pass the same lists again — `Agent.answer` with its nine labelled
 arguments is spelled twice, verbatim — and the sites have already diverged:
 `api_answer` runs `Engine.Search.resolve` and answers 400 for an unpinnable
 provider, the MCP route does not. Ledger Q-002 is the same ground: the two
@@ -197,21 +228,27 @@ the `/healthz` shape; the `api_answer` pre-check has to be decided — either bo
 surfaces pre-check or neither does — and that decision is the visible part of
 this change.
 
-### S-004 — the wire field vocabulary spelled five to six times per model
+### S-004 — the wire field vocabulary spelled four times per model
 
-**Evidence (window scan, `read`).** The seven `Model.result` field names appear
-five times inside `Model`'s own `reject_extra ~allowed:[ … ]` lists, a sixth time
-in `Model.result_to_yojson`, and again in `Server.result_schema` and
-`Server.fetch_response_schema`. `include_domains` / `exclude_domains` encoding is
-written five times in the request encoders.
+**Evidence (window scan, `read`).** The named `*_allowed` lists already exist for
+every request and response decoder (`Model.result_allowed`, `fetch_response_allowed`,
+`search_request_allowed`, `fetch_request_allowed`, `answer_request_allowed`); it is
+the encoders and the schemas that re-spell them. The seven `Model.result` field names
+appear in `result_allowed`, `result_of_yojson`, `result_to_yojson` and
+`Server.result_schema` — four spellings; the fetch-response set is likewise spelled
+four times, its schema (`Server.fetch_response_schema`) re-listing the page fields
+and the nested `matches` / `image` objects. `include_domains` / `exclude_domains`
+list-encoding is written three times in the request encoders.
 
-**What it risks.** A new result field must be edited in six places, and the only
-thing that catches a missed one is the surface golden's field counts — which
-move for other reasons too, so the failure is not local.
+**What it risks.** A new result field must be edited in four places, and a missed
+schema spelling is caught only by `bin/smoke.expected`'s whole-transcript pin — which
+moves for other reasons too, so the failure is not local.
 
-**Fix.** One key list per wire model (`result_keys`, `search_request_keys`,
-…), used by both the `reject_extra` call and the schema builder. The absent-field
-rule stays where it is: the encoders build from set fields only.
+**Fix.** Wire the schemas to the decoders' key lists — `Server.result_schema`,
+`Server.fetch_response_schema` and the nested `matches` / `image` objects read the
+`*_allowed` lists (or one typed key list per model that both the `reject_extra` call
+and the schema builder read). The absent-field rule stays where it is: the encoders
+build from set fields only, so they remain the one hand-spelled half.
 
 **Gate.** `bin/smoke.expected` pins the schemas. Key order must not change; a
 schema derived from a list has to order the list as the golden already does.
@@ -223,8 +260,9 @@ schema derived from a list has to order the list as the golden already does.
   a dependency, but its encoding varies by component while the probe and path
   segments this helper builds are encoded with one fixed unreserved class, so
   replacing it with the library call is a comparison to do first, not a
-  substitution. The minimal move is one helper owned by `Seekwright.Provider`, or
-  by the stdlib floor if `Health` and `Cli_*` both need it.
+  substitution. The minimal move is one helper owned by `Seekwright.Provider`:
+  `Health` is in `seekwright` and the adapters link it, so both consumers reach it
+  there; no `Cli_*` module calls either escaper today.
 - `Engine.base64` is a hand-rolled 22-line encoder with exactly one consumer,
   `Engine.Fetch`'s image projection. `Engine.grouped` is a thousands separator
   with two consumers, both inside one sentence. Both are presentation helpers
@@ -260,21 +298,24 @@ re-pinned in the same commit, which is a *finding*, not a cosmetic diff.
 
 ### S-007 — the civil-time residue after R-009
 
-**Evidence (`read`).** R-009 put Hinnant's arithmetic on the stdlib floor, and
-six copies went away. Two things remain: `Usage.civil_of` recomputes the
-seconds-into-day by float subtraction and then splits it, while
-`Civil.seconds_of_day` exists and does the same with the floor rule the module
-header argues for; and `Usage.iso_utc_seconds` renders `…+00:00` while
-`Civil.iso_utc_seconds` renders `Z`, with both live — `Cli_metrics` and
-`Linkup.format_utc` on the `Civil` spelling, `Engine` and `Agent`'s
-`retrieved_at` on the `Usage` one.
+**Evidence (`read`).** R-009 put Hinnant's arithmetic on the stdlib floor, and six
+copies went away. Two things remain: `Usage.civil_of` already calls
+`Civil.whole_seconds`, `Civil.days_of_secs` and `Civil.civil_from_days`, but
+re-derives the seconds-into-day by float subtraction and the hour/minute/second
+split, because `Civil.seconds_of_day` is `int -> int` and drops the fraction
+`Usage.iso_utc_full`'s microsecond stamp needs; and `Usage.iso_utc_seconds` renders
+`…+00:00` while `Civil.iso_utc_seconds` renders `Z`, with both live — `Cli_metrics`
+and `Linkup.format_utc` on the `Civil` spelling, `Engine` and `Agent`'s `retrieved_at`
+on the `Usage` one.
 
 **What it risks.** Two timestamp spellings for one instant, no check that they
 mean the same moment, and a hand-rolled floored division beside the checked one.
 
-**Fix.** Build the journal's `+00:00` form on `Civil.seconds_of_day` and
-`Civil.civil_from_days`; state in `Civil`'s interface why the journal suffix and
-the `Z` suffix differ (one is the journal's key, one is a model-facing stamp).
+**Fix.** Give `Civil` a fraction-keeping clock split (`seconds_of_day` is
+`int -> int` today), and build both `Usage.iso_utc_full` and `Usage.iso_utc_seconds`
+on `Civil`'s day arithmetic and that split; state in `Civil`'s interface why the
+journal suffix and the `Z` suffix differ (one is the journal's key, one is a
+model-facing stamp).
 
 ### S-008 — the page cache holds four copies of the page shape
 
@@ -328,7 +369,7 @@ prologue. What remains is the request tail: `Fallback_tavily` and
 one sentence. 150 of 490 lines sit in shared windows: `scrappa` 46, `linkup` 36,
 `crawl4ai` 32, `tavily` 30, `jina` 6. The status checks are also inconsistently
 qualified within a single function (`response.Caps.Authority.Net.status` and then
-`response.status`), which is what a reader trip-wires on.
+`response.status`) in all five readers, which is what a reader trip-wires on.
 
 **Fix.** Step 0 is D2's tag erasure — hand each fallback an injected
 `check : string -> (string, string) result` guard built once by the factory, drop
@@ -343,22 +384,23 @@ the refusal sentences.
 
 ## 3. Weight
 
-Items here are measured, uncontroversial removals. The contested ones are
-decisions, and they are in §4.
+Items here are measured removals; the contested ones are decisions, and they are
+in §4. Two rows are decision-owned — the driver waits on D-A, the matrix tables on
+D-B — and land only if those decisions do. The last row is a keep, not a removal.
 
 |Item|Evidence|Action|
 |---|---|---|
 |The regeneration driver `test/differential/drive.exe`|It prints the **OCaml** projection of every corpus case. It is not run by `dune runtest`. Run by hand and followed by a promote, it replaces the 413 frozen goldens with the output of the code under test — the parity gate becomes a rubber stamp and the `explicit-divergence` goldens then fail for the wrong reason|Delete the executable and its stanza; the goldens stay, labelled for what they now are: snapshot pins of this tree's behaviour|
-|Pages that describe generators that no longer exist|`ocaml-tools/oracle/` holds only `README.md`; `test/differential/dune`'s comment sends a reader to `../../ocaml-tools/oracle/` for regeneration; `AGENTS.md`'s module map still advertises "`oracle/` … plus the `DIVERGENCES` table", and its Gotchas still says the table is in `ocaml-tools/oracle/`|Correct all three to the 12-row `test/differential/divergences.tsv` that §39 recorded, and state the freeze as the reason a golden cannot be regenerated|
+|Pages that describe generators that no longer exist|`ocaml-tools/oracle/` holds only `README.md`; `test/differential/dune`'s comment sends a reader to `../../ocaml-tools/oracle/` for regeneration; `AGENTS.md`'s module map still advertises "`oracle/` … plus the `DIVERGENCES` table", and its Gotchas still says the table is in `ocaml-tools/oracle/`; `test/differential/README.md`'s layout rows and "Regeneration is closed" command block still describe `drive.exe`|Correct all four to the 12-row `test/differential/divergences.tsv` that §39 recorded, and state the freeze as the reason a golden cannot be regenerated|
 |`test/differential/matrix/config-fields.tsv` (63 rows) and `matrix/providers.tsv` (17 rows)|Both re-type facts two other artifacts own: the config-key vocabulary is printed mechanically by `ocaml-tools/surface.ml` from `lib/config.ml`'s records, and the per-provider endpoint / auth / cost / live-status facts live in `Factory.Registry.rows` — which is also what `ocaml-tools/egress_lists.ml` renders the deployment's host lists from. 597 lines of `test_differential_matrix.ml` exist to police the hand-typed copies|Drop both tables and the validator's arms for them; keep `matrix/behaviours.tsv` and `matrix/surface.tsv` if the owner wants a per-behaviour evidence pointer. Update `AGENTS.md`'s frozen-surface row and `ocaml-docs/testing.md` in the same commit|
 |`Factory` façade|`factory.ml` is 41 lines of `let x = Mod.x` over five private submodules whose own interfaces total 169 lines (`app`, `fetch_stack`, `grants`, `providers_build`, `verdict`), restated by a 238-line `factory.mli` and re-exporting `provider_set`'s two records (21 more lines): three places to edit per entry. `provider_set` is two records and no code, public only because a `private_modules` name in a public signature dangles|Either expose the submodules and delete the façade, or derive `factory.mli` from them; fold `provider_set` into `providers_build`|
 |`Registry.row`'s `context : context_cap`|Three constructors, one field, one default, six write sites, **zero readers** in the tree|Delete|
 |`Registry.row`'s `settings : string list`|Read only by the suite that checks the hand-written index is sorted, complete and free of `enabled`/`cost_per_1k`. Which per-provider keys a builder reads is knowable from that builder|Delete the field and the cases that police it|
-|`Registry.row`'s `cost_model`|`registry.mli` admits the arrangement: "an adapter mirrors it in its own `cost_for`, and the registry suite pins the mirror." The credit-doubling rule is `Credit_multiplier { over = Serper.credit_over; multiplier = 2 }` in the row *and* `credits max_results = if max_results > 10 then 2 else 1` in the adapter|One owner. Either the row's model prices everything and the adapters stop exporting `cost_for`, or the row keeps only `default_cost` and `--check --live` reads the adapter|
+|`Registry.row`'s `cost_model`|`registry.mli` admits the arrangement: "an adapter mirrors it in its own `cost_for`, and the registry suite pins the mirror." The credit-doubling rule is `Credit_multiplier { over = Serper.credit_over; multiplier = 2 }` in the row *and* `credits max_results = if max_results > credit_over then 2 else 1` in the adapter|One owner. Either the row's model prices everything and the adapters stop exporting `cost_for`, or the row keeps only `default_cost` and `--check --live` reads the adapter|
 |`Seekwright_extractor`'s double representation|`module type S`, a `backend` record of closures, and `of_module` between them, for the one backend this build can construct (`Config.known_extractors = [ "stdlib" ]`, `trafilatura` refused at load). `Extractor.supported_types` is documented as "kept for the derived-phrase tests, not for dispatch" — a value that exists because a test asserts it|One representation, and drop the union list or point it at dispatch|
 |`seekwright.fetch.stdlib` as its own public library|One module, justified by "a future backend with its own dependencies"; it forces every consumer to link two libraries for one `Extractor.of_module` call|Fold into `seekwright.fetch` unless a second backend is actually planned|
 |Adapter `.mli` internals exported for the suites|738 lines of adapter interfaces export `parse`, `cost_for`, `credit_over`, `policy_endpoint`, `request_body` so suites can reach them. `policy_endpoint` is `Provider.policy_of_uri endpoint`, and the suites then assert its host, scheme and port against a constant the same suite already asserted from `endpoint`|Seal the interfaces to `name`, `endpoint`, `make` and what the factory reads; delete the derived-endpoint cases (Q-001's standard: a name carries it where it can)|
-|One-use and one-element helpers|`Config.permitted_fetch_names = [ "jina" ]` is a vocabulary list with a single member, driving the same refusal code path built for many|Leave the list, but say in the interface that it is the only non-provider name — its current doc reads as if the set were open|
+|One-use and one-element helpers|`Config.permitted_fetch_names = [ "jina" ]` is a vocabulary list with a single member, driving the same refusal code path built for many|Leave it: `config.mli`'s doc and the comment above the definition already say it is the only non-provider name `permitted_providers` may hold. The plural is the vocabulary's shape, not an open set|
 
 ## 4. Decisions the maintainer owns
 
@@ -383,9 +425,10 @@ callers are `test_caps_budget.ml` (431 lines), `test_caps_audit.ml`,
 `test_authority_net.ml`, `should_not_compile/grant_path.ml` and
 `examples/gated_search.ml`. No served grant carries a budget, so the operation
 ceiling `mcp-caps` advertises is unenforced in this deployment. Options: delete
-the seam (21 lines of accounting, the refusal sentence, and the suite;
-`grant_path.ml` is the positive half of the fourteen and uses `Budget.make`, so
-it changes and its pinned diagnostic re-promotes), or give `Agent`'s fixed
+the seam (21 lines of accounting, the refusal sentence, and the suite; two of the
+fourteen change and re-promote their pinned diagnostics — `grant_path.ml`, the
+positive half, uses `Budget.make`, and `controls_record_forge.ml` forges a
+`Controls.t` whose `budget` field goes with the seam), or give `Agent`'s fixed
 retrieval plan a real budget and make it load-bearing. *Recommend: delete now,
 re-add with the agent change that needs it* — keeping it means every future
 `Controls` change is tested against a caller that does not exist.
@@ -401,11 +444,15 @@ not. The requirement (keep the Eio loop responsive while a large page is walked)
 is real; the mechanism is what is in question. *Recommend: measure first, the way
 R-011 was measured* — `ocaml-tools/extract_bench` already times the corpus, so
 run inline-vs-pool A/B against a worktree on the same loaded host before cutting
-anything. Two things must be re-homed if the pool goes: `max_entry_bytes`
-enforcement currently rides the frame ceiling, and the `Timed_out` path is what
-renders the `fetch.timeout_seconds` refusal. Note that the corpus bar is a
-wall-clock ceiling and load-sensitive, so a single A/B pair on a busy machine is
-not evidence — the bar is not to be moved to make a run green.
+anything. One thing must be re-homed if the pool goes: the `Timed_out` path is what
+renders the `fetch.timeout_seconds` refusal (`Fetcher` maps it to
+`parse_timeout_refusal`). The byte ceilings are not the pool's to move —
+`Extract_pool.extract` takes no size bound; the request ceiling is
+`fetch.max_download_bytes`, passed at `Fetch_stack`'s pool construction, the
+response ceiling defaults to four times it, and the download cap is already
+enforced fetcher-side by `Fetcher.cap_body` on the grant-delivered body. Note that
+the corpus bar is a wall-clock ceiling and load-sensitive, so a single A/B pair on
+a busy machine is not evidence — the bar is not to be moved to make a run green.
 
 **D-E — `Config`'s Python numeric-coercion grammar.** `trim`,
 `drop_separators`, `int_from_string`, `float_from_string`, `bool_words`,
@@ -434,8 +481,10 @@ are model-facing and pinned, the free walk's membership rules
 (`Config.keyless_providers` versus `Config.free_providers`, and why a metered tier
 is excluded from the walk) would have to say something new about `exa`, and the
 cost of getting it wrong is a billed search. Take the two halves that are safe:
-route Exa's and Parallel's notices through `Provider.ignored_constraints`
-(S-001), and write down in the port plan that the per-adapter cooldown is a
+route Parallel's REST-half constraint clauses through
+`Provider.ignored_constraints` (S-001) — Exa's already call it; what Exa composes
+privately is the escalation reason, the ladder's own notice, not a constraint
+report — and write down in the port plan that the per-adapter cooldown is a
 deliberate second ladder and why the router's does not serve it.
 
 **D-G — formatting.** There is no `.ocamlformat` and no formatter step in CI, and
@@ -455,14 +504,15 @@ in the same commit.
 
 |Order|Step|Expected effect|
 |---|---|---|
-|1|S-005 micro-duplication: `take`, the percent-encoder, the `Utf8` re-export shim|small, no golden; establishes the shared helpers S-001 needs|
-|2|S-001 adapter skeleton|−700 to −900 lines in `lib/providers/`; `parallel`'s notices move onto the shared sentence|
+|1|S-005 micro-duplication: the percent-encoder, `base64`/`grouped`, the `Utf8` re-export shim|small, no golden|
+|2|S-001 adapter skeleton, `take` landing in `Provider`|−700 to −900 lines in `lib/providers/`; `parallel`'s notices move onto the shared sentence|
 |3|S-002 test harness|−~1,800 test lines, no production change|
 |4|S-003 one dispatch per verb, answering Q-002|the 400/502 mapping has one owner; the `api_answer` pre-check asymmetry is decided|
-|5|S-004 field lists, then S-006, then S-007|six field spellings to one per model; the journal's answer fields gain one owner|
+|5|S-004 field lists, then S-006, then S-007|the schemas read the decoders' key lists; the journal's answer fields gain one owner|
 |6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|
-|7|§3 table + D-A/D-B docs|`drive.exe`, the two matrix tables, `context`, `settings`, `cost_model`, the façade and the extractor duality go; `AGENTS.md`, `ocaml-docs/testing.md` and the port plan move in the same commit|
-|8|D-C … D-G, one decision at a time|each needs its own page section and, for D-E, an operator-visible behaviour change|
+|7|S-010 fallback readers, lifting D2|the `'tag` goes, one `Fallback.run` owns the tail, and the factory builds the host check once|
+|8|§3 table + D-A/D-B docs|`context`, `settings`, `cost_model`, the façade and the extractor duality go; the driver and the two matrix tables only if D-A/D-B decide so; `AGENTS.md`, `ocaml-docs/testing.md`, `test/differential/README.md` and the port plan move in the same commit|
+|9|D-C … D-G, one decision at a time|each needs its own page section and, for D-E, an operator-visible behaviour change|
 
 ## 6. Verification
 
@@ -503,3 +553,61 @@ without a code generator. The three transports, the drain's two suites, the
 `/healthz` Host-allowlist exemption, the absent-field rule, the refusal of
 `logging.library_level` and `logging.access_log`, and the absence of a help
 screen: all as documented, all load-bearing.
+
+## 8. Review record — 2026-11-17
+
+Reviewed and corrected against the tree at `742a9c7`; the code is unchanged from
+the `6e4ad90` read (the diff between them is plans only). Every `read`/`diff`
+claim was re-probed; the substantive corrections, now folded into the sections
+above:
+
+- **§1 walls.** The dangling IDs (`S-016`/`S-017`/`S-014`) resolved to S-001,
+  S-010 and D-C. The floor rule corrected: `seekwright.providers` and
+  `seekwright.cli` link `seekwright`, so only a fetch-shared helper is forced to
+  the stdlib floor — R-009's `Civil` has no fetch-side consumer, and S-001's
+  `take` and S-005's percent-encoder belong in `Provider`. D2 is a deferral S-010
+  proposes to lift, not a binding wall.
+- **S-001.** Serper/Serpapi differ in one record key, not three lines; the take
+  census is fifteen list-take bodies in twelve adapters plus `Algolia` and
+  `Usage` (`Tabledoc.take_chars` is string truncation, not a list take, and is
+  out); `make` is the same shape in fourteen modules, not identical fifteen
+  times; the shared search tail covers the thirteen REST adapters, `parallel`'s
+  REST half spelling it inline; `compose_notices` is ~38 lines with a
+  payload-dependent warning tail, so `notice` reads the decoded JSON; Exa's
+  constraint notices already call `Provider.ignored_constraints`.
+- **S-002.** The suite set named and recounted (9,217 lines under §0's
+  convention, not 9,545); helper counts restated with the counting rule
+  (17/15/14/14/13/12/6); the seven `chars` copies are byte-identical and diverge
+  from `Utf8.count` on ill-formed leads; thirteen suites re-drive contract
+  failure rows, not 12–13 transport/malformed specifically.
+- **S-003 / S-004.** Nine labelled arguments, not ten. Four spellings per model,
+  not five to six; the `*_allowed` lists already exist; `fetch_response_schema`
+  carries the page set, not the result set; `include_domains` encoding is three
+  sites, not five; the missed-schema guard is `bin/smoke.expected`, not the
+  surface manifest's field counts.
+- **S-005 / S-007 / S-010.** No `Cli_*` consumer of either escaper, so `Provider`
+  ownership suffices. `civil_of` already calls `Civil`'s day arithmetic; the
+  residue is the float seconds-of-day and clock split, and `seconds_of_day` is
+  `int -> int`. The qualification mix is in all five fallback readers.
+- **§3.** The driver and matrix rows marked decision-owned; the pages row gains
+  `test/differential/README.md`; the credit quote is `> credit_over`; the jina
+  doc already states singularity, so the row is a keep.
+- **§4.** D-C re-pins a second diagnostic (`controls_record_forge.ml`). D-D: the
+  pool has no `max_entry_bytes` linkage — its ceilings are `max_body_bytes`
+  (`fetch.max_download_bytes`) and `max_result_bytes` (4×), and `Fetcher.cap_body`
+  already enforces the download cap; only `Timed_out` must be re-homed. D-F: only
+  Parallel's REST half needs routing; Exa's private composition is the escalation
+  reason.
+- **§5 / §0.** `take` lands with S-001, not S-005; S-010 inserted as its own step;
+  the line-count convention stated (`wc -l` + 1 per file; `.mli` in the two
+  whole-tree scopes).
+
+**As reported, not re-run:** the window-scan aggregates (984/150/3,604/5,343, the
+per-file numbers, the 73 querit/search1api windows, S-006's nine windows, the
+intra-file percentages) and the −700–900 / −1,800 line estimates. §0's recipe is
+reproducible; the scan itself was not re-executed for this review. The gate was
+not run — this is a plans-only edit.
+
+**Sign-off:** the plan's measurements and proposals are verified against the tree
+as corrected above. The §4 decisions (D-A … D-G) remain the maintainer's; nothing
+here is landed, and no entry was added to `plans/reviews/code_review_ledger.md`.
