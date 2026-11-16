@@ -1,10 +1,11 @@
 name: CI (OCaml image)
 
 # The OCaml OCI image, built and scanned (F9.2, plans/ocaml-finalisation.md).
-# A separate workflow from ci-ocaml.yml on purpose: that one is the source gate,
-# and it must stay runnable on a host with no container engine. Nothing here
-# contacts a provider — the runtime assertions use the keyless default config and
-# one hermetic REST refusal, and SEEKWRIGHT_LIVE_TESTS is never set.
+# A separate workflow from ci-ocaml.yml on purpose: this one builds and scans the
+# image on every pull request, while that one's bundle job starts the services and
+# runs where artifact minutes are free. Nothing here contacts a provider — the
+# runtime assertions use the keyless default config and one hermetic REST refusal,
+# and SEEKWRIGHT_LIVE_TESTS is never set.
 on:
   push:
     branches: [main, ocaml-port]
@@ -24,13 +25,13 @@ jobs:
     timeout-minutes: 60
     steps:
       # Actions are pinned to the commit a release tag resolved to, never the
-      # tag itself: a tag is mutable upstream (docs/reference/publishing.md).
+      # tag itself: a tag is mutable upstream.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # The version label has to equal dune-project's (version), and the
       # Containerfile's own build-stage guard refuses a --build-arg that does
-      # not match the tree it is reading. The same three-way agreement the
-      # Python lane's test_packaging.py enforces, enforced here at build time.
+      # not match the tree it is reading. This step reads the same field with the
+      # same expression, so the label, the build arg and the tree cannot disagree.
       - name: read the version from dune-project
         run: |
           # The same expression the Containerfile's own guard uses, so the two
@@ -46,17 +47,18 @@ jobs:
             --build-arg SEEKWRIGHT_VERSION="$SEEKWRIGHT_VERSION" \
             --tag "$IMAGE" .
 
-      # Same stance as ci.yml's scan job: ignore-unfixed stays off, because an
-      # unfixed CRITICAL/HIGH is a fact about what this build ships. The fix is a
-      # base-pin bump or a lock refresh in the same pull request.
+      # ignore-unfixed stays off, because an unfixed CRITICAL/HIGH is a fact about
+      # what this build ships. The fix is a base-pin bump or a lock refresh in the
+      # same pull request.
       #
       # An image scan is the only scan that means anything here: trivy has no
       # parser for opam or the committed *.opam.locked files, so an `fs` scan of
-      # this tree would read the Python and Node fixtures and nothing OCaml
-      # (measured with trivy 0.76.2: it reports test/conformance/package-lock.json
-      # and uv.lock, and no OCaml dependency). The opam graph is pinned instead by
-      # the committed lock files and the snapshot repository the Containerfile
-      # resolves them against.
+      # this tree would read the MCP conformance runner's pinned requirements and
+      # nothing OCaml (measured with trivy 0.76.2: it reports
+      # test/conformance/package-lock.json and
+      # test/conformance/requirements-2026-07-28-server.txt, and no OCaml
+      # dependency). The opam graph is pinned instead by the committed lock files
+      # and the snapshot repository the Containerfile resolves them against.
       - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: image

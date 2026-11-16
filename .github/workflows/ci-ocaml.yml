@@ -1,11 +1,18 @@
 name: CI (OCaml)
 
-# The port's gate, beside the Python jobs rather than inside them (F0.2,
-# plans/ocaml-finalisation.md). It is a separate workflow so a change to the
-# Python lane cannot silently drop the OCaml one, and it names ocaml-port as
-# well as main so the working branch cannot look green merely because ci.yml
-# triggers on main alone. No step here contacts a provider: the live suites are
-# only reachable behind SEEKWRIGHT_LIVE_TESTS, which this file never sets.
+# The port's gate (F0.2, plans/ocaml-finalisation.md), in two jobs: `gate` is the
+# source tree and needs no container engine, `compose` is the two-role bundle
+# built from that same tree. It names ocaml-port as well as main so the branch the
+# port lands on is gated before the merge. Nothing here bills: the live suites are
+# only reachable behind SEEKWRIGHT_LIVE_TESTS, which this file never sets, and the
+# bundle's shipped search role configures the keyless pair only.
+#
+# The frozen facts are dune's, and `dune runtest` below is where they are checked:
+# ocaml-tools/surface.expected diffs the rendered surface manifest,
+# ocaml-tools/egress_lists re-renders the deployment's host lists from the provider
+# and fallback rows and diffs them against deploy/compose/generated, and test_config's
+# frozen-vocabulary case beside the provider registry and routing suites pins the six
+# value sets.
 on:
   push:
     branches: [main, ocaml-port]
@@ -28,7 +35,7 @@ jobs:
     timeout-minutes: 40
     steps:
       # Actions are pinned to the commit a release tag resolved to, never the
-      # tag itself: a tag is mutable upstream (docs/reference/publishing.md).
+      # tag itself: a tag is mutable upstream.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # zarith, pulled in by tls -> mirage-crypto-pk, links -lgmp. The opam
@@ -72,30 +79,160 @@ jobs:
       - name: build @install
         run: dune build @install
 
-      # This is also the negative-compilation lane: test/should_not_compile
-      # diffs each must-not-compile program, and ocaml-tools/ diffs the surface
-      # manifest and the embedded prompt copy against the read-only Python tree.
+      # This is also the golden-diff lane: test/should_not_compile diffs each
+      # must-not-compile program, ocaml-tools/ diffs the rendered surface manifest
+      # and the embedded prompt copy against their goldens, and the egress lists
+      # Squid reads are diffed against a fresh rendering of the registry rows.
       - name: run tests
         run: dune runtest --force
 
       - name: build @doc
         run: dune build @doc
 
-      # Frozen values are shared with the Python oracle, so the three read-only
-      # checks run here too. The action and SHA are ci.yml's; the Python lint,
-      # type and test lanes stay in ci.yml and are not duplicated.
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-        with:
-          enable-cache: true
+  # The bundle, not the source tree: `deploy/compose/compose.yaml` is the two-role
+  # deployment an operator starts, and this is the only place it is started. Runs
+  # where artifact minutes are free — a pull request keeps the source gate — since
+  # it builds the image the release lane ships.
+  compose:
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' }}
+    timeout-minutes: 45
+    env:
+      COMPOSE_FILE: deploy/compose/compose.yaml
+      # The bundle's own default. Spelled out because every assertion below dials
+      # this address, and sends it as the Host the roles were allowed.
+      SEEKWRIGHT_PUBLISH: 127.0.0.1
+    steps:
+      # Actions are pinned to the commit a release tag resolved to, never the
+      # tag itself: a tag is mutable upstream.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - run: uv lock --check
-      - run: uv sync
+      # dune-project owns the version, and compose.yaml hands it to the
+      # Containerfile as SEEKWRIGHT_VERSION, whose build stage refuses a value
+      # that is not that field: the tag on the built image cannot disagree with
+      # the tree it was built from.
+      - name: read the version from dune-project
+        id: version
+        run: |
+          version=$(sed -n 's/^(version \(.*\))/\1/p' dune-project)
+          test -n "$version" || { echo 'dune-project carries no (version …)'; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: check the frozen surface manifest
-        run: uv run python -m tools.surface --check
+      # --build builds this checkout instead of pulling the published tag, so the
+      # services run the image this tree describes. No API key is in the
+      # environment: the search role's shipped config enables the keyless pair.
+      - name: bring the bundle up from this checkout's image
+        env:
+          SEEKWRIGHT_TAG: ${{ steps.version.outputs.version }}
+        run: |
+          set -eu
+          DOCKER_BUILDKIT=1 docker compose up -d --build
+          docker compose ps
 
-      - name: check the frozen value sets
-        run: uv run python -m tools.value_sets --check
+      # /healthz is exempt from the Host allowlist by design, so the allowlist is
+      # probed on /mcp — the path both roles serve and gate.
+      - name: both roles answer /healthz, and each refuses a Host it was not given
+        run: |
+          set -eu
+          for port in 8000 8001; do
+            code=000
+            for attempt in $(seq 1 90); do
+              code=$(curl -s -o "/tmp/healthz-$port.json" -w '%{http_code}' "http://127.0.0.1:$port/healthz") || code=000
+              test "$code" = 200 && break
+              sleep 2
+            done
+            test "$code" = 200 || {
+              docker compose logs --no-color
+              cat "/tmp/healthz-$port.json" 2>/dev/null || true
+              exit 1
+            }
+            cat "/tmp/healthz-$port.json"
+            grep -q '"status":"ok"' "/tmp/healthz-$port.json"
+            bad=$(curl -s -o "/tmp/host-$port.txt" -w '%{http_code}' \
+              -H 'Host: evil.example' -H 'content-type: application/json' --data '{}' \
+              "http://127.0.0.1:$port/mcp")
+            cat "/tmp/host-$port.txt"
+            test "$bad" = 421
+            grep -q 'Invalid Host header' "/tmp/host-$port.txt"
+            echo ":$port answers /healthz and refuses an unknown Host with 421"
+          done
 
-      - name: check the rendered egress lists
-        run: uv run python -m tools.egress_lists --check
+      # The streamable-HTTP transport, in the shape the pinned conformance harness
+      # already uses against this binary: `MCP-Protocol-Version: 2026-07-28`, the
+      # `Mcp-Method` header, and the `_meta` metadata that version requires on
+      # every request. Proves discovery answers and the three tools are listed; it
+      # is not the conformance suite, whose harness boots its own binary and takes
+      # no URL.
+      - name: the search role's /mcp answers discovery and lists the three tools
+        run: |
+          set -eu
+          meta='"_meta":{"io.modelcontextprotocol/protocolVersion":"2026-07-28","io.modelcontextprotocol/clientCapabilities":{}}'
+          code=$(curl -s -o /tmp/discover.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+            -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: server/discover' \
+            --data "{\"jsonrpc\":\"2.0\",\"id\":\"discover\",\"method\":\"server/discover\",\"params\":{$meta}}" \
+            http://127.0.0.1:8000/mcp)
+          cat /tmp/discover.json
+          test "$code" = 200
+          grep -q '"name":"seekwright"' /tmp/discover.json
+          code=$(curl -s -o /tmp/tools.json -w '%{http_code}' \
+            -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+            -H 'MCP-Protocol-Version: 2026-07-28' -H 'Mcp-Method: tools/list' \
+            --data "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{$meta}}" \
+            http://127.0.0.1:8000/mcp)
+          cat /tmp/tools.json
+          test "$code" = 200
+          for tool in search fetch answer; do
+            grep -q "\"name\":\"$tool\"" /tmp/tools.json || { echo "missing tool $tool"; exit 1; }
+          done
+
+      # The keyless pair only — `search.toml` permits exa:free and freeserp — so
+      # nothing bills. The assertion is a real dispatch rather than the permission
+      # table: a 200 whose body names the provider and carries results. A keyless
+      # provider throttling the runner fails this step, which is the cost of
+      # asserting that the role can reach a provider at all.
+      - name: the search role dispatches a search to the keyless freeserp
+        run: |
+          set -eu
+          code=$(curl -s -o /tmp/search.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            -d '{"query":"example","provider":"freeserp","max_results":2}' \
+            http://127.0.0.1:8000/api/v1/search)
+          cat /tmp/search.json
+          test "$code" = 200
+          grep -q '"provider":"freeserp"' /tmp/search.json
+          grep -q '"results"' /tmp/search.json
+
+      # The split, from both sides. An empty permission set is a declared one, so
+      # the fetch role answers a named search with 400 and an empty `Permitted:`
+      # set; the search role's `[fetch] enabled = false` answers a URL with 404;
+      # and the fetch role reads the one page it is there to read.
+      - name: the fetch role refuses search and reads a page, and the search role refuses a fetch
+        run: |
+          set -eu
+          code=$(curl -s -o /tmp/refuse-search.json -w '%{http_code}' \
+            -H 'content-type: application/json' \
+            -d '{"query":"example","provider":"freeserp"}' \
+            http://127.0.0.1:8001/api/v1/search)
+          cat /tmp/refuse-search.json
+          test "$code" = 400
+          grep -q 'is not permitted on this server' /tmp/refuse-search.json
+          grep -Fq 'Permitted: .' /tmp/refuse-search.json
+          code=$(curl -s -o /tmp/refuse-fetch.json -w '%{http_code}' \
+            -H 'content-type: application/json' -d '{"url":"https://example.com/"}' \
+            http://127.0.0.1:8000/api/v1/fetch)
+          cat /tmp/refuse-fetch.json
+          test "$code" = 404
+          grep -q 'fetch tool disabled' /tmp/refuse-fetch.json
+          code=$(curl -s -o /tmp/fetch.json -w '%{http_code}' \
+            -H 'content-type: application/json' -d '{"url":"https://example.com/"}' \
+            http://127.0.0.1:8001/api/v1/fetch)
+          cat /tmp/fetch.json
+          test "$code" = 200
+          grep -q 'Example Domain' /tmp/fetch.json
+
+      - name: tear the bundle down
+        if: always()
+        env:
+          SEEKWRIGHT_TAG: ${{ steps.version.outputs.version }}
+        run: docker compose down -v --remove-orphans

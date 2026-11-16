@@ -1,11 +1,10 @@
 version: 2
 updates:
-  # The toolchain pair is not covered: `uv_build` and the uv image move by hand.
-  - package-ecosystem: "uv"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-
+  # The action pins are the only dependency a bot can move here. Dependabot has
+  # no opam ecosystem, so the opam graph is bumped by hand against the committed
+  # *.opam.locked files; and the runner in test/conformance/ is pinned to the
+  # baselines recorded beside it, so bumping it is a re-baselining exercise, not
+  # a dependency update.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

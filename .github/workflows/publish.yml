@@ -1,7 +1,7 @@
 name: publish
 
-# A release is a tag push: the wheel becomes an asset of the GitHub Release the tag
-# names, and the image goes to ghcr.io (docs/reference/publishing.md).
+# A release is a tag push: that tag becomes the ghcr.io image for its version and
+# :latest. The image is the artifact; this file writes no release asset.
 
 on:
   push:
@@ -15,21 +15,19 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # A release run is build, upload, install and push. Bounded, or a hung step
-    # inherits the runner default.
-    timeout-minutes: 30
-    # The release write needs contents: write; the ghcr.io push uses the
-    # automatic GITHUB_TOKEN, and naming any scope here zeroes the ones it does
-    # not name, so the package write is spelled out beside it.
+    # Build, scan, push and smoke one image, and the build is the long pole.
+    # Bounded, or a hung step inherits the runner default.
+    timeout-minutes: 60
+    # The ghcr.io push spends the automatic token and checkout spends contents:
+    # naming any scope here zeroes the ones it does not name.
     permissions:
-      contents: write
+      contents: read
       packages: write
     # The runner exposes that token as a workflow context only: it sets no
-    # GITHUB_TOKEN variable in the environment, and `gh` reads GH_TOKEN alone. So
-    # the one name is handed to every step here, and the registry login below
-    # spends GH_TOKEN rather than a variable that reads empty.
+    # GITHUB_TOKEN variable in the environment, so this is the one name the login
+    # below reads.
     env:
-      GH_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ github.token }}
     steps:
       # The tag/main guard below needs `main` to be fetchable, so no shallow clone.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,116 +42,116 @@ jobs:
           MAIN=$(git rev-parse FETCH_HEAD)
           if [ "$MAIN" != "$GITHUB_SHA" ]; then
             echo "FAIL: ${GITHUB_REF_NAME} names ${GITHUB_SHA}, but main names ${MAIN}: this run would publish a commit main does not name, under a release name, on a tree CI never ran on."
-            echo "FAIL: the fix is to move or re-cut ${GITHUB_REF_NAME} from ${GITHUB_SHA} onto ${MAIN}, main's head, and re-run this tag; nothing was uploaded or pushed."
+            echo "FAIL: the fix is to move or re-cut ${GITHUB_REF_NAME} from ${GITHUB_SHA} onto ${MAIN}, main's head, and re-run this tag; nothing was pushed."
             exit 1
           fi
           echo "TAG NAMES MAIN HEAD: ${GITHUB_REF_NAME} at ${GITHUB_SHA}"
 
-      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-
-      # An identical asset skips; a different file fails the release path.
-      - name: build and upload the wheel
-        id: wheel
+      # dune-project owns the version, and this runner has no dune, so it is read
+      # with the expression the Containerfile's build-stage guard compares the
+      # --build-arg against: one field, two readers, no copy. A tag push is the
+      # release path, so the ref has to be `v` plus that version.
+      - name: read the version and refuse a tag that does not name it
+        id: version
         run: |
           set -eu
-          uv build --wheel
-          ls -l dist/
-          WHEEL=$(basename dist/*.whl)
-          # The version comes from the built wheel name, so a bump needs no edit here.
-          VERSION=$(printf '%s' "$WHEEL" | cut -d- -f2)
-          echo "release name ${GITHUB_REF_NAME} WHEEL=$WHEEL VERSION=$VERSION"
-          # The release name is the ref: it has to be `v` plus the built version.
-          if [ "${GITHUB_REF_NAME}" != "v${VERSION}" ]; then
-            echo "FAIL: ${GITHUB_REF_NAME} is a tag push, so this is the release path, and its release name is the ref: ${GITHUB_REF_NAME} does not match v${VERSION}, the version of the wheel just built ($WHEEL)."
-            echo "FAIL: the fix is to cut the tag that matches [project] version in pyproject.toml (v${VERSION}), or to bump that version and re-tag. Nothing was uploaded or pushed."
+          version=$(sed -n 's/^(version \(.*\))/\1/p' dune-project)
+          test -n "$version" || { echo 'dune-project carries no (version …)'; exit 1; }
+          if [ "$GITHUB_REF_NAME" != "v${version}" ]; then
+            echo "FAIL: ${GITHUB_REF_NAME} is a tag push, so this is the release path, and the release name is its version: ${GITHUB_REF_NAME} is not v${version}, the version dune-project carries."
+            echo "FAIL: the fix is to cut the tag that matches (version) in dune-project — v${version} — or to bump that version and re-tag. Nothing was built or pushed."
             exit 1
           fi
-          echo "tag ${GITHUB_REF_NAME} matches the built wheel version ${VERSION}"
-          LOCAL_SHA=$(sha256sum "dist/$WHEEL" | cut -c1-64)
-          echo "built $WHEEL sha256=$LOCAL_SHA"
-          # The already-published rule: the asset list off the release, the file
-          # itself fetched over its public URL with no credential. `--jq` is gh's
-          # own jq and takes one expression with no `--arg`: the name is spliced
-          # in, and `.url` is the browser download URL in `--json assets`.
-          PUBLISHED=$(gh release view "$GITHUB_REF_NAME" --json assets \
-            --jq ".assets[] | select(.name == \"$WHEEL\") | .url" \
-            2>/dev/null || true)
-          if [ -n "$PUBLISHED" ]; then
-            curl -sSL -o /tmp/published.whl "$PUBLISHED"
-            PUB_SHA=$(sha256sum /tmp/published.whl | cut -c1-64)
-            if [ "$PUB_SHA" = "$LOCAL_SHA" ]; then
-              echo "release already holds the identical $WHEEL (sha256 match); skipping upload"
-            else
-              echo "FAIL: the release already holds a different $WHEEL: published sha256=$PUB_SHA, this build sha256=$LOCAL_SHA."
-              echo "FAIL: the fix is deleting that asset from ${GITHUB_REF_NAME} (gh release delete-asset) or a version bump in pyproject.toml, then re-running this tag. Nothing was uploaded or pushed."
-              exit 1
-            fi
-          else
-            gh release create "$GITHUB_REF_NAME" "dist/$WHEEL" --target "$GITHUB_SHA" \
-              --title "seekwright ${VERSION}" \
-              --notes "seekwright ${VERSION}: an MCP server in front of web-search providers. Setup: docs/quickstart.md in the tag's tree."
-            echo "created release ${GITHUB_REF_NAME} carrying $WHEEL"
-          fi
+          image="ghcr.io/${GITHUB_REPOSITORY}:${version}"
+          echo "release ${GITHUB_REF_NAME}: version ${version}, image ${image}"
           {
-            echo "wheel=$WHEEL"
-            echo "version=$VERSION"
-            echo "local_sha=$LOCAL_SHA"
+            echo "version=$version"
+            echo "image=$image"
+            echo "latest=ghcr.io/${GITHUB_REPOSITORY}:latest"
           } >> "$GITHUB_OUTPUT"
 
-      # The cold install a consumer gets: the asset fetched over its public URL with
-      # no credential at all, then installed into a throwaway venv.
-      - name: install the published wheel in a clean venv
+      # The Containerfile compares the --build-arg against the dune-project it
+      # reads, so a wrong version fails the build rather than shipping a
+      # mislabelled image. The revision label is what the smoke reads back off
+      # the pushed tag.
+      - name: build the image
         run: |
           set -eu
-          WHEEL="${{ steps.wheel.outputs.wheel }}"
-          VERSION="${{ steps.wheel.outputs.version }}"
-          LOCAL_SHA="${{ steps.wheel.outputs.local_sha }}"
-          URL=$(gh release view "$GITHUB_REF_NAME" --json assets \
-            --jq ".assets[] | select(.name == \"$WHEEL\") | .url")
-          curl -sSL -o "/tmp/$WHEEL" "$URL"
-          FILE_SHA=$(sha256sum "/tmp/$WHEEL" | cut -c1-64)
-          echo "downloaded anonymously from the release: ${WHEEL} (version ${VERSION}) sha256=$FILE_SHA"
-          if [ "$FILE_SHA" != "$LOCAL_SHA" ]; then
-            echo "FAIL: the asset the release serves is not the wheel this run built: downloaded sha256=$FILE_SHA, built sha256=$LOCAL_SHA."
-            exit 1
-          fi
-          # uv asks before replacing an existing path and a runner step has no
-          # terminal to answer, so the smoke venv is created with --clear.
-          uv venv --clear --python 3.14 /tmp/release-smoke
-          uv pip install --python /tmp/release-smoke/bin/python "/tmp/$WHEEL[trafilatura]"
-          /tmp/release-smoke/bin/seekwright --help | head -8
-          echo "WHEEL INSTALL OK: seekwright ${VERSION} (${WHEEL}) installed from the release asset"
+          DOCKER_BUILDKIT=1 docker build \
+            --file Containerfile.ocaml \
+            --build-arg SEEKWRIGHT_VERSION="${{ steps.version.outputs.version }}" \
+            --build-arg SEEKWRIGHT_REVISION="$GITHUB_SHA" \
+            --tag "${{ steps.version.outputs.image }}" \
+            --tag "${{ steps.version.outputs.latest }}" .
 
-      - name: build and push the image
-        id: image
-        run: |
-          set -eu
-          IMAGE="ghcr.io/${GITHUB_REPOSITORY}:${GITHUB_REF_NAME}"
-          # The release tag names no commit, so GITHUB_SHA goes in as a label.
-          DOCKER_BUILDKIT=1 docker build --file Containerfile --build-arg SEEKWRIGHT_REVISION="$GITHUB_SHA" --tag "$IMAGE" .
-          echo "${GH_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          docker push "$IMAGE"
-          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
-          echo "PUSHED $IMAGE"
+      # The scan gate on the bytes this run pushes: ignore-unfixed stays off, so
+      # an unfixed CRITICAL/HIGH fails the release instead of riding along under a
+      # published tag. The fix is a base-pin bump or a lock refresh, re-cut as the
+      # same version.
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.version.outputs.image }}
+          scanners: vuln
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: "false"
 
-      # `--check` is recorded, not asserted: CI has no provider keys to configure.
-      - name: smoke the published image
+      # Both tags are pushed from the one local image, so :latest and the version
+      # tag are the same manifest.
+      - name: push the image
         run: |
           set -eu
-          IMAGE="${{ steps.image.outputs.image }}"
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          docker push "${{ steps.version.outputs.image }}"
+          docker push "${{ steps.version.outputs.latest }}"
+          echo "PUSHED ${{ steps.version.outputs.image }} and ${{ steps.version.outputs.latest }}"
+
+      # The pull, not the local build: what a deployment resolves is the pushed
+      # tag, so a lost credential, a package the runner cannot read or a manifest
+      # that never landed shows up here. The two labels prove the pulled bytes are
+      # this commit and this version; stdio tools/list proves the three tools are
+      # registered; /healthz proves the HTTP path serves.
+      - name: smoke the pushed image
+        run: |
+          set -eu
+          IMAGE="${{ steps.version.outputs.image }}"
           docker pull "$IMAGE"
-          REVISION=$(docker image inspect \
+          revision=$(docker image inspect \
             --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$IMAGE")
-          if [ "$REVISION" != "$GITHUB_SHA" ]; then
-            echo "FAIL: $IMAGE carries org.opencontainers.image.revision=$REVISION, not $GITHUB_SHA, the commit this run built from."
-            echo "FAIL: the fix is the --build-arg SEEKWRIGHT_REVISION in the build step above; a pushed image is not relabelled from here."
+          test "$revision" = "$GITHUB_SHA" || {
+            echo "FAIL: $IMAGE carries org.opencontainers.image.revision=$revision, not $GITHUB_SHA, the commit this run built from."
             exit 1
-          fi
-          echo "IMAGE REVISION OK: $IMAGE built from $GITHUB_SHA"
-          docker run --rm "$IMAGE" --help | head -6
-          set +e
-          docker run --rm "$IMAGE" --check
-          echo "seekwright --check exit code: $?"
-          set -e
+          }
+          version=$(docker image inspect \
+            --format '{{index .Config.Labels "org.opencontainers.image.version"}}' "$IMAGE")
+          test "$version" = "${{ steps.version.outputs.version }}" || {
+            echo "FAIL: $IMAGE carries org.opencontainers.image.version=$version, not the version its tag names."
+            exit 1
+          }
+          out=$(printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"release","version":"0"}}}' \
+            '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}' \
+            | docker run -i --rm "$IMAGE" | tr -d '\r')
+          echo "$out" | grep -q '"serverInfo"'
+          for tool in search fetch answer; do
+            echo "$out" | grep -q "\"name\":\"$tool\"" || { echo "missing tool $tool"; exit 1; }
+          done
+          container=$(docker run -d -p 127.0.0.1:8000:8000 "$IMAGE" --http --host 0.0.0.0)
+          code=000
+          for attempt in $(seq 1 30); do
+            code=$(curl -s -o /tmp/healthz.json -w '%{http_code}' http://127.0.0.1:8000/healthz) || code=000
+            test "$code" = 200 && break
+            sleep 1
+          done
+          docker logs "$container"
+          cat /tmp/healthz.json
+          test "$code" = 200
+          grep -q '"status":"ok"' /tmp/healthz.json
+          docker stop -t 20 "$container" > /dev/null
+          docker rm "$container" > /dev/null
+          # After the pull, so the digest is the registry's and not an empty list:
+          # this line is what an operator pins.
           docker image inspect --format 'digest={{index .RepoDigests 0}} size={{.Size}}' "$IMAGE"
-          echo "IMAGE SMOKE OK: $IMAGE"
+          echo "PUSHED IMAGE OK: $IMAGE"

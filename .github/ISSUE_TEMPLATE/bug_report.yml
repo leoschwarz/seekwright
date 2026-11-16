@@ -12,9 +12,11 @@ body:
         send it.
 
         Before filing, it is worth knowing what is a known non-feature rather
-        than a bug: there is no cache, the HTTP listener has no authentication,
-        `robots.txt` is not consulted, and fetched text is untrusted by design.
-        `docs/architecture.md` records each of those and why.
+        than a bug: there is no search cache, the HTTP listener has no
+        authentication, `robots.txt` is not consulted, and fetched text is
+        untrusted by design. `ocaml-docs/privacy.md` records what lands on disk
+        and when, and `ocaml-docs/divergences.md` records what a caller can see
+        this binary do differently — no `--help` flag, no `--version` flag.
   - type: textarea
     id: what-happened
     attributes:
@@ -26,19 +28,24 @@ body:
     id: expected
     attributes:
       label: What did you expect instead?
-      description: What the README or docs/reference/ led you to expect.
+      description: What `README.ocaml.md` or `ocaml-docs/` led you to expect.
     validations:
       required: true
   - type: textarea
     id: check
     attributes:
-      label: Output of `uv run seekwright --check`
+      label: Output of `seekwright --check`
       description: >-
-        Paste the whole thing. It validates the config and probes provider
-        connectivity without spending anything, and it prints provider names,
-        status and price — plus the *name* of any missing environment variable,
-        never its value. If the server will not start at all, paste the startup
-        error instead.
+        Paste the whole report. It validates the config, prints the path it
+        read, and lists the enabled, effective and built providers with their
+        state and price, then the fetch stack and the cache. It never prints a
+        key: a provider it cannot use is reported as having no API key. From a
+        source checkout the binary is
+        `_build/install/default/bin/seekwright`. It dials no provider;
+        `--check --live` is the variant that probes them and can spend, so paste
+        that only if you are willing to. If the server will not start at all,
+        paste the startup refusal instead — it names the missing environment
+        variable, never its value.
       render: shell
     validations:
       required: true
@@ -48,11 +55,11 @@ body:
       label: How to reproduce
       description: >-
         The tool call or REST request you made, the provider you named, and the
-        response's `notice`. Redact the query text if it is sensitive — it is
-        not needed to diagnose a transport or provider failure.
+        response's `notice` if it carried one. Redact the query text if it is
+        sensitive — it is not needed to diagnose a transport or provider failure.
       placeholder: |
         search(query="...", provider="serper", max_results=5)
-        -> SearchFailed: provider 'serper' returned HTTP 401
+        -> the error text you got, plus the `notice` field if the response had one
     validations:
       required: true
   - type: dropdown
@@ -73,7 +80,10 @@ body:
     attributes:
       label: Config and environment
       description: >-
-        Which providers you enabled and which `SEEKWRIGHT_*` variable names you
+        The config file path — `$SEEKWRIGHT_CONFIG` if you set it, otherwise
+        `~/.config/seekwright/config.toml`; `--check` prints the one it read,
+        and a mounted `/etc/seekwright/config.toml` is a different file. Then
+        which providers you enabled and which `SEEKWRIGHT_*` variable names you
         set. Never paste the values.
       render: toml
       placeholder: |
@@ -86,17 +96,23 @@ body:
     attributes:
       label: Version
       description: >-
-        The `version` in `pyproject.toml` (`0.1.0` today) or the commit you are
-        on — `git rev-parse --short HEAD`. There is no `--version` flag yet.
+        There is no `--version` flag, so this is how you know the version
+        yourself. Container: the tag you pulled, or `docker image inspect
+        --format '{{index .Config.Labels "org.opencontainers.image.version"}}'`
+        on it. Source build: `dune build version.txt && cat
+        _build/default/version.txt`, with `git rev-parse --short HEAD`.
     validations:
       required: true
   - type: input
     id: runtime
     attributes:
-      label: Runtime
+      label: How you run it
       description: >-
-        Python version (`uv run python -V`), OS, and the MCP client you mounted
-        the server in, if the problem is client-side.
+        The transport and the exact flags — e.g. `--http --host 127.0.0.1
+        --port 8000`, or stdio with no flags — plus the OS and architecture. For
+        a source build, the compiler `ocamlc -version` reports; for the
+        container, the image and tag. Add the MCP client you mounted the server
+        in if the problem is client-side.
     validations:
       required: true
   - type: textarea
