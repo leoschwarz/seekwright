@@ -27,13 +27,15 @@ let entry_of tool ~grant =
         | Ok input -> Tool.run tool grant input);
   }
 
+(* The list is stored newest first and reversed by [entries], which is what
+   makes registration order one [List.rev] rather than one list copy per [add]. *)
 let add registry tool ~grant =
   let name = Tool.name tool in
   if List.exists (fun existing -> String.equal existing.name name) registry then
     Error (Duplicate_tool name)
-  else Ok (registry @ [ entry_of tool ~grant ])
+  else Ok (entry_of tool ~grant :: registry)
 
-let entries registry = registry
+let entries registry = List.rev registry
 
 let find registry name =
   List.find_opt (fun entry -> String.equal entry.name name) registry

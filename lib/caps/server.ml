@@ -79,14 +79,16 @@ let add_all server tools =
     (Ok server)
     tools
 
+(* Consed and reversed once: [add_all] adds in list order, and that order is
+   what [tools/list] advertises — the registry's registration order. *)
 let of_registry ~name ~version registry =
   let* tools =
     List.fold_left
       (fun built entry ->
         let* tools = built in
         let* tool = checked_tool entry in
-        Ok (tools @ [ tool ]))
+        Ok (tool :: tools))
       (Ok [])
       (Registry.entries registry)
   in
-  add_all (Mcp_kit.Server.create ~name ~version ()) tools
+  add_all (Mcp_kit.Server.create ~name ~version ()) (List.rev tools)
