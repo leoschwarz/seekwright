@@ -7,8 +7,9 @@
 > `ocaml-tools/surface.expected`, the differential corpus under
 > `test/differential/`, the prompt goldens and the three egress lists are this
 > tree's own, re-rendered from this tree's code at every `dune runtest`.
-> `VISION.md` is the spec both the goals and the non-goals come from; a conflict
-> with it is raised in `plans/`, never resolved by editing it.
+> `VISION.md` is the spec both the goals and the non-goals come from; a conflict with
+> it is raised in `plans/` first, and only the maintainer amends the page — and then in
+> the change it authorises, recorded in that page's amendment log.
 > `plans/` is the only editable planning area and the authority for design
 > decisions not yet in code; everything else in the repository is either the
 > implementation, its gate, or a page an operator reads.
