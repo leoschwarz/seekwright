@@ -57,8 +57,7 @@ let text_of response =
   | `List [ block ] -> ( match field block "text" with `String text -> text | _ -> "")
   | _ -> ""
 
-(* M0's exit criterion, checked against the layer's own server: a legacy
-   lifecycle, then a call, over the same server value. *)
+(* Legacy lifecycle, then a call, over the same server value. *)
 let legacy_lifecycle_answers _ =
   let server = build (registered (echo ())) in
   let initialize =

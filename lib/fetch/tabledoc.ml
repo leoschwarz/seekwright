@@ -1,27 +1,3 @@
-(** Record tables on the fetch path: what counts as one, and how one is
-    rendered.
-
-    Port of [src/seekwright/tabledoc.py]. A CSV body is the other half of the
-    problem [Jsondoc] solved for JSON: the bytes are content, but read as text
-    they are a wall of commas that passage selection cannot search and [path]
-    cannot address. A table is therefore rendered into [Jsondoc]'s line grammar
-    — one line per node, each labelled with the path that addresses it — so
-    [fetch]'s [path], [structure] and [offset] need no new machinery and a
-    column of every row is one [[*]] step: [$.rows[*].price].
-
-    The row source is the only part that knows about commas: {!emit} takes
-    columns and rows, not a body. The next record format feeds the same emitter
-    and changes nothing in the engine, the path grammar or the cache.
-
-    The CSV reader here is hand-rolled to Python's [csv] excel dialect, because
-    the field cap (131072 characters) and the stop-marker contract ride on its
-    exact behaviour: ["\r"] inside an unquoted field is a hard error, an
-    unterminated quote takes the rest of the input as its field, and a field
-    longer than the cap stops the reader where it stands, leaving the rows
-    above it complete. Every length is a codepoint count — Python's [len] —
-    though the reader itself walks bytes, since every character the dialect
-    acts on is ASCII and UTF-8 continuation bytes are none of them. *)
-
 let table_types = [ "text/csv"; "application/csv"; "text/tab-separated-values" ]
 (** The types that name a delimited table by themselves.
 
@@ -74,7 +50,7 @@ let is_table_media kind = List.mem kind table_types
     [Jsondoc.sniffs_json] refuses [1,2,3] for the same reason and that guard
     stays green. *)
 
-(* The first [n] codepoints of [s], Python's [s[:n]]. *)
+(* The first [n] codepoints of [s]. *)
 
 let take_chars s n =
   let cps = Utf8.of_string s in
@@ -87,15 +63,14 @@ let rec take n = function [] -> [] | x :: rest -> if n <= 0 then [] else x :: ta
 
 type row = Cells of string list | Stopped of string
 
-(* Python's [csv.reader] over the excel dialect: the delimiter one character,
-   doublequote on, the quote character the ASCII double-quote, no escape
-   character, not strict. Reads the text linearly in bytes — every character
-   the dialect acts on is ASCII — while the field cap counts codepoints, as
-   [len] does. A record ends at LF, at CRLF, or at a CR at end of input; a CR
-   followed by anything else is the hard error above. An unterminated quote
-   takes the rest of the input as its field — no error — and an empty line is
-   a record of no cells, which the emitters skip. Parsing stops at the first
-   error, keeping every record before it. *)
+(* CSV reader over the Excel dialect: delimiter is one character, doublequote
+   on, quote character ASCII double-quote, no escape character, not strict.
+   Reads the text linearly in bytes — every character the dialect acts on is
+   ASCII — while the field cap counts codepoints. A record ends at LF, at CRLF,
+   or at a CR at end of input; a CR followed by anything else is the hard error
+   above. An unterminated quote takes the rest of the input as its field — no
+   error — and an empty line is a record of no cells, which the emitters skip.
+   Parsing stops at the first error, keeping every record before it. *)
 
 let read_records text delim =
   let n = String.length text in
@@ -165,8 +140,8 @@ let read_records text delim =
               if c = '\r' then
                 if i + 1 < n && text.[i + 1] = '\n' then begin
                   (* A field ends here even when it is the empty one after a
-                     trailing delimiter: Python's csv yields it, and dropping it
-                     would silently lose the last column of every such line. *)
+                     trailing delimiter: dropping it would silently lose the
+                     last column of every such line. *)
                   save_field ();
                   save_record ();
                   go `Start_record (i + 2)

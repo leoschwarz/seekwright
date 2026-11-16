@@ -46,9 +46,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 (* Never sent to anything real: the string a leak would carry. *)
 let test_key = "test-key"
 
-(* {1 The fixture}
-
-   The documented payload: the [result] list under the [results] container,
+(* The documented payload: the [result] list under the [results] container,
    the second record without the optional [page_age], beside the [took] /
    [error_code] / [search_id] envelope the parse never touches. *)
 let sample =
@@ -80,8 +78,6 @@ let sample_json =
   match Yojson.Safe.from_string sample with
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
-
-(* {1 The seam} *)
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
   let sent = ref None in
@@ -122,8 +118,6 @@ let body_has request name = Provider.Json.field name (body request) <> `Null
 
 let body_path request path =
   List.fold_left (fun json key -> Provider.Json.field key json) (body request) path
-
-(* {1 Parsing} *)
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Querit.parse ~snippet_chars data ~limit
 
@@ -210,9 +204,7 @@ let a_non_object_results_container_is_empty_not_an_error () =
   check_int "result is null" 0
     (List.length (parse (with_results (`Assoc [ ("result", `Null) ]))))
 
-(* {1 The upstream field guards}
-
-   A non-string [snippet] or [page_age] is dropped, not handed to the shared
+(* A non-string [snippet] or [page_age] is dropped, not handed to the shared
    truncate helper: the schema marks every result field optional but nothing
    enforces the type, and shape drift must read as a missing field, not raise
    out of the engine's provider-error handling. *)
@@ -254,9 +246,7 @@ let a_string_snippet_still_reaches_the_model () =
     (Some "Hybrid search combines a vector index with BM25 for recall and precision.")
     (List.hd outcome.results).result.snippet
 
-(* {1 The request}
-
-   Domains, dates and the mappable halves of country and language ride native
+(* Domains, dates and the mappable halves of country and language ride native
    filter fields ([filters.sites], [filters.timeRange.date],
    [filters.geo.countries.include] and [filters.languages.include]). A country
    or language the backend's strict enums cannot express is dropped and named
@@ -420,9 +410,7 @@ let never_a_content_or_vertical_field () =
       check_bool (Printf.sprintf "no %s in the body" field) false (body_has request field))
     [ "needContent"; "highlights"; "chunksPerDoc"; "vertical" ]
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota statuses,
    its own message wording, and the leak regression that proves the redaction
    rule for the place its key actually rides. *)
@@ -451,8 +439,6 @@ let a_network_error_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "the key is nowhere in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-(* {1 Cost and endpoint} *)
 
 let cost_does_not_scale_with_result_count () =
   let provider, _ = dial () in

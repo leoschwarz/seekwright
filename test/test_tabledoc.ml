@@ -34,7 +34,6 @@ let assert_in needle ls =
   if not (List.mem needle ls) then
     A.failf "no line %S among %d lines" needle (List.length ls) ()
 
-(* [TestRecognising] *)
 let test_the_types_that_name_a_table_by_themselves () =
   A.check A.bool "text/csv" true (T.is_table_media "text/csv");
   A.check A.bool "application/csv" true (T.is_table_media "application/csv");
@@ -46,7 +45,6 @@ let test_a_spreadsheet_type_is_not_claimed () =
      is not a read. *)
   A.check A.bool "vnd.ms-excel" false (T.is_table_media "application/vnd.ms-excel")
 
-(* [TestRendering] *)
 let test_the_whole_small_table_renders () =
   let ls = lines (table ()) in
   A.check (A.list A.string) "head"
@@ -78,7 +76,6 @@ let test_a_column_name_that_cannot_be_written_bare_is_quoted_and_reads_back () =
   assert_in (path ^ "  \"1\"") (lines rendered);
   J.parse_path path |> ignore
 
-(* [TestHeaderRules] *)
 let test_an_empty_header_cell_gets_a_positional_name () =
   assert_in "$.rows[0].column2  \"2\""
     (lines (render "id,,note\n1,2,3\n"))
@@ -113,7 +110,6 @@ let test_two_columns_with_one_name_print_twice_and_both_are_addressable () =
     [ "$.rows[0].id  \"1\"\n$.rows[0].id  \"2\"" ]
     (List.map snd spans)
 
-(* [TestSharedGrammar] *)
 let test_every_line_is_a_path_the_grammar_reads () =
   List.iter
     (fun line ->
@@ -190,7 +186,6 @@ let test_a_column_name_holding_a_colon_stays_a_name_through_the_grammar () =
     [ "$.rows[0][\"Price: USD\"]  \"12.50\"" ]
     (List.map snd spans)
 
-(* [TestDelimiters] *)
 let test_a_tab_type_declares_its_delimiter_whatever_the_body_looks_like () =
   (* The type states the delimiter, so a body full of commas does not out-vote
      it. *)
@@ -223,7 +218,6 @@ let test_prose_with_no_delimiter_stays_on_commas_and_renders_one_column () =
     "$.rows[0][\"some prose here\"]  \"and more of it\""
     (List.nth (lines (render text)) 3)
 
-(* [TestCuts] *)
 let test_a_table_wider_than_its_budget_ends_with_the_line_naming_the_cut () =
   let body =
     "id,price,city,qty,note\n"
@@ -269,7 +263,6 @@ let test_a_parse_stop_before_any_row_leaves_the_body_as_the_answer () =
   A.check (A.option A.string) "no rendering" None
     (T.render_table ("a\n" ^ String.make 200_000 'x' ^ "\n") ~delimiter:",")
 
-(* [TestNothingToRender] *)
 let test_an_empty_body_renders_as_nothing () =
   A.check (A.option A.string) "empty" None (T.render_table "" ~delimiter:",");
   A.check (A.option A.string) "blank lines" None (T.render_table "\n\n" ~delimiter:",")

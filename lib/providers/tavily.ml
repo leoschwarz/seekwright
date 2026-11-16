@@ -1,5 +1,3 @@
-(* Tavily, ported from src/seekwright/providers/tavily.py. *)
-
 module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
@@ -8,18 +6,9 @@ let name = "tavily"
 
 let endpoint = Uri.of_string "https://api.tavily.com/search"
 
-(* The endpoint the grant must allow, in the policy's own words: derived from the
-   URI this adapter dials rather than written beside it, so what is asked for and
-   what is allowed cannot disagree. *)
 let policy_endpoint = Provider.policy_of_uri endpoint
 
-(* Tavily's [country] is a closed enum of lowercase English country names, valid
-   only on the [general] topic this adapter uses, so the two-letter code a caller
-   sends has to be translated onto it. The map is the vendor enum read from the
-   inside: the two entries that are not ISO codes ([uk], [usa]) are the aliases
-   callers actually write and Tavily's enum does not list, and the two Congo codes
-   share one entry because which of them a regional boost resolves to is upstream's
-   semantics, not ours. *)
+(* Closed enum of lowercase English country names for general search. *)
 let country_by_code =
   [
     ("af", "afghanistan");
@@ -193,24 +182,13 @@ let country_by_code =
     ("usa", "united states");
   ]
 
-(* The enum's own words, so a caller who sends [france] rather than [fr] goes
-   through unchanged instead of being looked up as a code and dropped. [List.mem]
-   over 166 names is the cost of not carrying a set module here; a country filter
-   is one lookup per search. *)
 let country_names = List.map snd country_by_code
 
-(* A country outside the enum is not guessed at: {!country_param} answers [None]
-   and the caller drops the parameter and files the notice, because sending a name
-   Tavily does not recognise would either be rejected outright or silently ignored
-   with no word back. *)
 let country_param value =
   let lowered = String.lowercase_ascii (String.trim value) in
   if List.mem lowered country_names then Some lowered else List.assoc_opt lowered country_by_code
 
-(* [search_depth] stays pinned at [basic]: [advanced] is a different price per
-   search, and a rung that multiplies the bill belongs to the operator's config the
-   way Linkup's [depth] does, not to a model's tool call. [include_usage] asks for
-   the vendor's own credit count — see the note on {!search}. *)
+(* search_depth pinned to basic to avoid higher pricing tier. *)
 let request_body ~(country : string option) (q : Provider.search_query) =
   let fields =
     [
@@ -224,8 +202,6 @@ let request_body ~(country : string option) (q : Provider.search_query) =
   let fields = fields @ [ ("include_usage", `Bool true) ] in
   let fields =
     match q.Model.recency with
-    (* The vendor's own four words are the four rungs of [recency], so the mapping
-       is the identity and no clock is needed: [time_range] is a window, not a date. *)
     | Some period ->
         let word =
           match period with
@@ -325,27 +301,17 @@ let parse ~text_chars data ~limit =
       | _ -> None)
     (take limit records [])
 
-(* Tavily's answer is prose the vendor writes over the same material, requested
-   with [include_answer]. It rides [Provider.outcome.answer] and reaches the
-   caller as the [search] tool's [answer] field. *)
 let answer data = Provider.Json.string_field "answer" data
 
 let check_status status =
   if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
   else if status = 429 || status = 432 then
-    (* 432 is Tavily's own monthly-credits-exhausted code and 429 is short-term
-       rate limiting: different limits, the same consequence for this deployment,
-       and the quota class is what moves the fallback walk off this name. *)
+    (* 432 is monthly credit exhaustion; 429 is rate limit. *)
     Error (Provider.quota_exhausted ~provider:name ~message:"rate limited or out of credits" ())
   else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
   else Ok ()
 
-(* Per-query cost in USD, flat: a basic Tavily search is one credit whatever the
-   result count, so [max_results] does not scale it. The oracle also reads the
-   vendor's [usage.credits] back as a check on that figure, for the
-   [--check --live] cost-drift diff. [Provider.outcome] has no private channel to
-   carry an actual-usage figure, so the ask stays on the wire for request parity
-   and the reported number is the one field this port leaves uncarried. *)
+(* Flat rate per request. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let search ~cost_per_1k ~text_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
@@ -357,8 +323,6 @@ let search ~cost_per_1k ~text_chars ~key (net : Provider.Net.t) (q : Provider.se
     {
       Caps.Authority.Net.meth = `POST;
       uri = endpoint;
-      (* The key is a bearer token in a header, never a query parameter, so no URL
-         that reaches a log or an error can carry it. *)
       headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
       body = Some (request_body ~country q);
     }
@@ -374,10 +338,6 @@ let search ~cost_per_1k ~text_chars ~key (net : Provider.Net.t) (q : Provider.se
           results = parse ~text_chars data ~limit:q.Model.max_results;
           answer = answer data;
           cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          (* Domain lists, [time_range], [language] and [safe_search] are all
-             native. [country] is native {i only when the code maps}, so [geo] is
-             answered per call rather than per adapter: an unmappable code drops
-             the parameter and the notice names it. *)
           notice =
             Provider.ignored_constraints q ~domains:true ~dates:true ~geo:(country <> None)
               ~language:(Some true) ~safety:true;
@@ -390,7 +350,6 @@ let make ?(cost_per_1k = 8.00) ?(text_chars = 2000) ~key ~net () : Provider.t =
     let cost_for = cost_for ~cost_per_1k
     let search = search ~cost_per_1k ~text_chars ~key net
 
-    (* The grant is the server's, not the adapter's: closing it would break the
-       sibling providers that share the same confinement. *)
+    (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()
   end : Provider.S)

@@ -1,10 +1,4 @@
-(* The live harness's front door: the gate, the one-selector rule, and the
-   process's exit status. Everything a run decides lives in [Live_harness];
-   this file owns the streams and the two refusals that must happen before any
-   network construction exists.
-
-   [--list] and [--help] are hermetic: they print the inventory and dial
-   nothing, so they do not need the gate. A run does. *)
+(* The live harness entry point: gate check, single selector dispatch, and exit status. *)
 
 module Cases = Live_harness.Cases
 module Runner = Live_harness.Runner

@@ -1,25 +1,3 @@
-(* The MCP server: three tools, both transports, and the HTTP custom routes.
-   Port of [src/seekwright/server.py]. See [server.mli] for the shape; the
-   notes below are the port-specific decisions.
-
-   The tools are declared through the capability layer and registered with the
-   app as their grant: the app carries the engines, and the engines hold the
-   endpoint-scoped [Net] grants the factory gave each provider adapter, so the
-   registration line is where "which tool may reach what" is read. Providers
-   themselves are never registered as tools.
-
-   Per-parameter [description] prose from the Python tool signatures is not
-   reproduced: prose is not part of the frozen surface (AGENTS.md), and the
-   tool-level descriptions — the model-facing copy that matters — are carried
-   verbatim from [Prompts]. The parameter names, order, types and constraints
-   are the contract and are built from the same tables {!tools_surface}
-   exposes, so [ocaml-tools/surface.ml] prints what the wire carries.
-
-   Over MCP, failures travel through [Mcp_caps.Error] and arrive as a tool
-   result with [isError] and the kind-prefixed sentence; over REST the same
-   sentence goes back bare in [{error: message}] with the 400/502/404/421
-   split the projection owns. *)
-
 module Caps = Mcp_caps
 module Error = Caps.Error
 module Registry = Caps.Registry
@@ -27,8 +5,6 @@ module Server = Caps.Server
 module Tool = Caps.Tool
 
 let ( let* ) = Result.bind
-
-(* {1 Schemas} *)
 
 let obj ?(additional = true) properties required =
   `Assoc
@@ -210,8 +186,6 @@ let answer_response_schema =
     ]
     [ "query"; "answer"; "sources"; "model"; "depth"; "searches"; "fetched" ]
 
-(* {1 The tools} *)
-
 type health = {
   board : Health.t;
   built : Config.name list;
@@ -347,8 +321,6 @@ let mcp_server app =
   in
   Server.of_registry ~name:"seekwright" ~version:Version.mcp_server registry
 
-(* {1 The Host guard} *)
-
 let loopback = [ "localhost"; "127.0.0.1"; "::1" ]
 
 let host_allowlist extra =
@@ -381,17 +353,13 @@ let origin_allowlist extra =
     (fun host -> [ "http://" ^ host; "https://" ^ host ])
     (loopback @ extra)
 
-(* The one Host decision both layers use. [/healthz] is outside the allowlist —
-   a kubelet probes with the pod IP in [Host] — and a missing [Host] is refused
-   like an unlisted one. *)
+(* [/healthz] is outside the allowlist; missing Host is refused like unlisted. *)
 let host_gate app ~path ~host =
   path = "/healthz"
   ||
   match host with
   | Some h -> is_host_allowed (host_allowlist app.allowed_hosts) h
   | None -> false
-
-(* {1 The custom routes} *)
 
 type response = {
   status : int;
@@ -419,9 +387,6 @@ let parse_json_body body =
   | `Assoc _ as json -> Ok json
   | _ -> Error "Body must be a JSON object."
 
-(* The oracle's stopping sentences: [{"status": "stopping"}] for the three
-   operational GETs, and the REST surface's error shape for a projection call
-   that arrived while the listener was draining. Both are content-free. *)
 let stopping_message = "The server is stopping; retry shortly."
 
 let stopping_response () =
@@ -597,8 +562,6 @@ let route_custom ?(stopping = fun () -> false) app ~meth ~path ~host ~origin
 let handle_custom ?stopping app ~meth ~path ~host ~origin ~body =
   bounded_response (route_custom ?stopping app ~meth ~path ~host ~origin ~body)
 
-(* {1 Serving} *)
-
 (* The replay source: the exact head bytes already consumed from the socket,
    then [rest] — a reader that still holds whatever the head parser read ahead
    plus the socket itself. The head is replayed because the transport's
@@ -766,7 +729,7 @@ let refuse ~clock flow status sentence =
    {!handle_custom} for everything else. Each driver loops keep-alive itself, so
    the first request decides the connection. The Host allowlist is applied here,
    in the surrounding route, because the mcp-kit adapter owns Origin but not
-   Host (plans/capability-gated-mcp-server.md §7); [/healthz] is exempt.
+   Host; [/healthz] is exempt.
 
    Every refusal carries [connection: close] and the connection ends with this
    function, so a peer's next request arrives on a fresh connection — which is
@@ -1040,8 +1003,6 @@ let serve_http ~env ~sw ~log app server ~host ~port ~stop
           in
           outcome)
 
-(* {1 The frozen surface data} *)
-
 let params properties = List.map fst properties
 
 let tools_surface =
@@ -1076,8 +1037,6 @@ let operational_routes =
   ]
 
 let cli_verbs = [ "answer"; "fetch"; "search" ]
-
-(** {1 The server flags} *)
 
 type flag_arity =
   | Boolean

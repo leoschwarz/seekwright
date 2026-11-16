@@ -1,30 +1,8 @@
-(* The CLI surface, thin by construction (F3.2): this file owns three things
-   and nothing else — which verb or flag set this invocation is, the
-   [Eio_main] loop and [Eio.Stdenv.t] the network grants are opened on, and
-   the process's streams and exit status. Every decision (flag parsing,
-   request bodies, rendering, the two reports, the startup refusals) lives in
-   [lib/cli/] as a documented function over injected inputs; the Python
-   original calls [parser.error] and [sys.exit] from the middle of its
-   argument code, and this file is where those effects correctly happen
-   instead.
-
-   Dispatch is on the first token, not subparsers, exactly as Python's: a
-   client flag is a field of the request body, a server flag is this
-   invocation's, and [--json] is the one name both namespaces have.
-
-   The [--check]/[--metrics] paths never call [Server.registry], a transport
-   or [Factory.build_app]: they read config, build providers for probing and
-   fold the journal, which is the OCaml shape of Python's "never imports
-   [server]" rule. Logs go to stderr either way; stdout is the protocol
-   channel under stdio and the report channel for the two diagnoses. *)
+(* The CLI entry point: dispatching verbs or flag sets, running the Eio main
+   event loop with network grants, and exiting with status. *)
 
 module Caps = Mcp_caps
 module Config = Seekwright.Config
-
-(* The CLI library, seekwright.cli, is [(wrapped false)]: its modules are
-   top-level, so [Cli_flags.parse] below names the library function with no
-   prefix and no alias. *)
-
 module Factory = Seekwright_factory.Factory
 module Log = Seekwright.Log
 module Model = Seekwright.Model
@@ -32,17 +10,11 @@ module Provider = Seekwright.Provider
 module Server = Seekwright.Server
 module Usage = Seekwright.Usage
 
-(* {1 Effects the library modules deliberately lack} *)
-
 let print_line line = print_endline line
 
 let usage_error message =
   prerr_endline ("seekwright: " ^ message);
   exit 2
-
-(* The real transport behind the client's injected [post] seam: plain HTTP to
-   the loopback default, HTTPS through the system trust store. The refusal
-   sentences here are the socket's, not the request's. *)
 
 let tls_client_config =
   lazy
@@ -89,11 +61,7 @@ let make_post ~env ~sw ~path body =
           in
           Ok (status, text))
 
-(* {1 The three command paths} *)
-
 let run_client ~env verb argv =
-  (* Every path that can build a network grant needs a generator installed:
-     the TLS stack reads one at grant-construction time. *)
   Mirage_crypto_rng_unix.use_default ();
   match Cli_client.verb_of_string verb with
   | None -> usage_error ("unknown verb " ^ verb)
@@ -148,16 +116,9 @@ let run_check ~env ~sw live =
       1
   | Ok config -> Cli_check.run ~env ~sw ~config ~emit:print_line ~live
 
-(* {1 The server} *)
-
 let startup_log log config (built : Factory.providers) =
   log Config.Log_info "startup"
     [
-      (* The built set — the same set and order [/healthz] reports — not the
-         enabled set: an explicit enabled-without-adapter config never reaches
-         this line ([Seekwright_factory.startup_verdict] refuses startup), and
-         the [startup.providers_unsupported] warning below names exactly the
-         keyless names the implicit default skipped. *)
       ("providers", `String (String.concat "," (List.map fst built.Factory.built)));
       ( "unsupported",
         (match built.Factory.unsupported with
@@ -177,12 +138,6 @@ let startup_log log config (built : Factory.providers) =
         | None -> `Null) );
     ]
 
-(* Every provider this build constructed, closed exactly once. The list is
-   [build_app]'s second value — the same adapter values the search engine
-   dispatches through — so closing it here closes what was served, not a second
-   copy. A provider whose [aclose] is a documented no-op still goes through the
-   same path, which is what keeps an MCP-backed adapter's session from being the
-   one close a future change forgets. *)
 let close_providers (built : Factory.providers) () =
   List.iter (fun (_, provider) -> Provider.aclose provider) built.Factory.built
 
@@ -193,8 +148,6 @@ let run_server ~env ~sw opts =
       prerr_endline ("seekwright: " ^ message);
       exit 1
   | Ok config ->
-      (* The refusals are the library's sentence ({!Cli_flags.startup_refusal});
-         printing them and exiting is this file's job. *)
       (match Cli_flags.startup_refusal config opts with
       | Ok () -> ()
       | Error sentence ->
@@ -212,11 +165,6 @@ let run_server ~env ~sw opts =
           exit 1
       | Ok (app, built) ->
           startup_log log config built;
-          (* Reachable only under the implicit keyless default: an explicit
-             enabled name with no adapter was refused by [startup_refusal] and
-             [build_app], so anything listed here is a skipped keyless
-             default, disclosed by name exactly as [startup_verdict] skipped
-             it. *)
           if built.Factory.unsupported <> [] then
             log Config.Log_warning "startup.providers_unsupported"
               [ ( "unsupported", `String (String.concat "," built.Factory.unsupported) ) ];
@@ -235,12 +183,6 @@ let run_server ~env ~sw opts =
                 let port = Option.value ~default:8000 opts.port in
                 log Config.Log_info "http.listening"
                   [ ("host", `String host); ("port", `Int port) ];
-                (* The signal-to-promise path, the bounded drain and the
-                   close order are [Cli_serve]'s; this file supplies the
-                   network seam, the built providers to close and the process
-                   exit status. A requested stop is a successful exit even when
-                   the grace forced the last connections out — [serve_http]
-                   already logged the forced drain at WARNING. *)
                 (match
                    Cli_serve.run_http ~env ~sw ~log ~app ~server ~host ~port
                      ~close:(close_providers built) ()
@@ -257,12 +199,7 @@ let run_server ~env ~sw opts =
               end
               else Mcp_kit_stdio.run_channels server stdin stdout)
 
-(* {1 Main} *)
-
 let () =
-  (* The RNG install for grant-building paths lives in each command below:
-     the check path builds grants for its probes without ever building the
-     MCP server, and the client needs it only when the scheme is https. *)
   let argv = List.tl (Array.to_list Sys.argv) in
   match argv with
   | verb :: rest when List.mem verb Server.cli_verbs ->

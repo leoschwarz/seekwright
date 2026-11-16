@@ -1,6 +1,6 @@
 (* The operation budget is the one ceiling in this layer whose scope is the
    caller's rather than the grant's, and that distinction is the whole design
-   (plans/capability-gated-mcp-server.md §6 refuses a counter inside a grant
+   refuses a counter inside a grant
    because a server-lifetime grant cannot hold a per-request limit). So the
    cases here are about the counter's arithmetic, its atomicity, and — most of
    all — whose ceiling it is.
@@ -27,10 +27,6 @@ module Authority = Caps.Authority
 module Budget = Caps.Budget
 module Error = Caps.Error
 module Policy = Caps.Policy
-
-(* ------------------------------------------------------------------ *)
-(* the counter's own arithmetic                                         *)
-(* ------------------------------------------------------------------ *)
 
 let test_a_budget_spends_its_limit_and_no_more () =
   let budget = Budget.make 3 in
@@ -87,10 +83,6 @@ let test_remaining_is_a_snapshot_not_a_reservation () =
   let second = snapshot_then_take () in
   A.(check (A.list A.(pair int bool)) "the snapshot can be stale, the reservation cannot"
        [ (1, true); (0, false) ] [ first; second ])
-
-(* ------------------------------------------------------------------ *)
-(* the counter is one step                                              *)
-(* ------------------------------------------------------------------ *)
 
 (* Domains, not fibers: [take] is stdlib [Atomic], so the race worth pinning is
    a real parallel one — N threads at the boundary, each racing to reserve the
@@ -207,10 +199,6 @@ let test_fibers_sharing_a_grant_are_granted_exactly_the_limit () =
           A.(check int "the rest were refused" (fibers - limit) refusals);
           A.(check int "and the fixture saw exactly the granted count" limit !arrived);
           A.(check int "the counter is spent" 0 (Budget.remaining budget)))
-
-(* ------------------------------------------------------------------ *)
-(* whose ceiling it is                                                  *)
-(* ------------------------------------------------------------------ *)
 
 (* One budget, two grants: the caller's plan is what is bounded, whichever power
    the operations use. This is the shape an [answer] plan uses — its queries and
@@ -407,8 +395,6 @@ let test_a_budget_counts_operations_not_bytes () =
                (Budget.remaining budget));
           A.(check bool "the third is refused whatever its size would have been" false
                (Budget.take budget))
-
-(* ------------------------------------------------------------------ *)
 
 let () =
   A.run "caps-budget"

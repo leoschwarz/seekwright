@@ -1,6 +1,3 @@
-(* The grant and the decoder are closed here, so an entry's handler is
-   monomorphic in JSON: no existential packaging is needed to keep one tool's
-   input type from meeting another's. *)
 type entry = {
   name : string;
   title : string option;

@@ -67,8 +67,6 @@ let answer ?(answer = "It is a forge.") ?(sources = []) ?(depth = Model.Brief)
 
 let source = { Model.source_title = "Gitea"; source_url = "https://gitea.io/"; source_provider = "freeserp" }
 
-(* {1 The vocabulary} *)
-
 let test_every_case_has_one_selector () =
   let all = Cases.all in
   A.(check int "17 providers + 6 fetch cases + 2 agent depths" 25 (List.length all));
@@ -162,9 +160,6 @@ let test_build_status_follows_the_registry () =
   expect (Cases.Fetch Cases.Tavily) "runnable";
   expect (Cases.Fetch Cases.Linkup) "runnable";
   expect (Cases.Agent Model.Brief) "runnable";
-  (* F6.1 landed the five fallbacks, so nothing in the fetch namespace is deferred
-     against this build: a case the harness cannot yet assert on has to fail, not
-     skip with a wave that already passed. *)
   List.iter
     (fun case ->
       match Cases.build_status (Cases.Fetch case) with
@@ -237,8 +232,6 @@ let test_live_status_agrees_with_the_records () =
   A.(check (list string) "the harness and the records name the same cases"
        (names with_record) (names with_status))
 
-(* {1 The per-adapter assertions} *)
-
 let failures checks = Checks.failed_count checks
 
 let test_freeserp_is_a_serp_backend () =
@@ -308,8 +301,6 @@ let test_a_step_with_no_ported_assertion_fails () =
        (failures (Checks.provider_step ~name:"serper" ~step:7 response) > 0));
   A.(check bool "an unported name never passes vacuously" true
        (failures (Checks.provider_step ~name:"unknown" ~step:0 response) > 0))
-
-(* {1 Fetch and agent} *)
 
 let test_the_local_reader_shape () =
   A.(check int "a real page passes" 0 (failures (Checks.verify_fetch Cases.Local (page ()))));
@@ -418,8 +409,6 @@ let test_the_agent_contract () =
   A.(check bool "a different model fails" true
        (failures (Checks.verify_agent ~depth:Model.Brief ~model:"other-model"
                    (answer ~sources:[ source ] ())) > 0))
-
-(* {1 Classification and the summary} *)
 
 let test_a_rate_limited_run_is_inconclusive () =
   A.(check bool "the engine's quota advice is recognised" true

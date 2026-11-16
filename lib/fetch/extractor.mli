@@ -1,57 +1,22 @@
 (** The extraction-backend contract and the plumbing every backend shares.
 
-    Port of [src/seekwright/extractors/base.py]. [fetch] pulls bytes off the
-    network; turning them into text a model can read is the part most likely to
-    be replaced. So it sits behind a named backend, picked by
-    [fetch.extractor] and looked up in {!known_extractors} — swapping the
-    engine is a config change, not a code change.
-
     A backend implements {!S}: a [name], the media types it can read, and an
-    [extract] returning an {!extract_result}. {!Fetch.backend} is the
+    [extract] returning an {!extract_result}. {!backend} is the
     first-class form the fetcher holds; {!of_module} packs a {!S} module into
-    one. The JSON and table halves live in [Jsondoc] and [Tabledoc] for the
-    same reason the Python original keeps them beside the package: a backend
-    decides *that* a body is one of those and hands it over; the module owns
-    what the document looks like to a caller.
-
-    [trafilatura] and [pypdf] do not ride on this port: {!known_extractors}
-    carries [stdlib] alone, and a PDF is refused through the type set rather
-    than parsed — a backend lists only what its [extract] can read. *)
+    one. *)
 
 type extract_result = {
   text : string;
   title : string option;
   total_chars : int;
-      (** Length of the full normalised extraction, in codepoints — the same
-          coordinate system Python's [len] counts. *)
-
   path_addressable : bool;
-      (** Whether [text] is a structure rendering whose lines [fetch]'s [path]
-          selects. Only the extraction can say it, so it says it: the engine
-          must not infer it from a character of page text — a Makefile whose
-          first line is [$ make all] starts with the root character of a path
-          and is not one. Set by the backend that walked the structure — a
-          JSON document or a CSV table; every other page leaves it [false]. *)
-
 }
 
 exception Extraction_failed of string
-(** The bytes could not be turned into text at all. The fetcher turns it into
-the "cannot extract text: …" refusal; an empty extraction is a reportable
-outcome, not an error. *)
 
 module type S = sig
-  (** What the fetcher checks a response's media type against *before*
-      using the body, so it must be honest: an unreadable type listed here
-      spends a download on a page that can never be read. *)
-
   val name : string
   val supported_types : string list
-  (** [extract body content_type] extracts readable text from a fetched
-      body, uncut. Sizing it for a caller is the fetcher's job
-      ([Fetcher.window_text]): where to cut depends on who is asking.
-      Raises [Extraction_failed] when the body cannot be read. *)
-
   val extract : string -> string option -> extract_result
 end
 
@@ -60,19 +25,14 @@ type backend = {
   supported_types : string list;
   extract : string -> string option -> extract_result;
 }
-(** The first-class form the fetcher holds, one field per {!S} member. *)
 
 val of_module : (module S) -> backend
-(** [of_module (module E)] is the [backend] view of an [E] that implements
-{!S}. *)
 
 val known_extractors : string list
 (** Every fetch extraction backend this build knows how to construct, by name.
 Config validation rejects a [fetch.extractor] outside this set, exactly as
 it rejects a provider name outside the router's registry — a name that
 parses and does nothing is the failure mode both exist to remove. *)
-
-(* {1 Media types} *)
 
 val html_types : string list
 (** The HTML media types a backend may claim. *)

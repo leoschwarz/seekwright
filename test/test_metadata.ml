@@ -1,4 +1,4 @@
-(* F9.1: packaging metadata has to agree across four surfaces no compiler
+(* Packaging metadata has to agree across four surfaces no compiler
    relates. [dune-project] is the version and licence owner, the two generated
    opam files are what opam reads, [lib/version.ml] is what code reads, and the
    MCP [serverInfo] is a separate protocol identity pinned by a transcript.
@@ -7,9 +7,7 @@
 
    The installed artifact has no resource directory to lose: the prompts and the
    dashboard are embedded, so "installed resource availability" is the check
-   that those values are present and the dashboard is the page the route serves.
-   The installed-binary stdio smoke is recorded in
-   plans/seekwright-ocaml-port.md's F9.1 entry. *)
+   that those values are present and the dashboard is the page the route serves. *)
 
 module Fetcher = Seekwright_fetch.Fetcher
 module Version = Seekwright.Version

@@ -1,12 +1,3 @@
-(* The case inventory. Pure by construction: it reads the environment and the
-   provider registry (both values, no sockets), which is what lets a hermetic
-   suite pin the whole table and the selection rules with no network at all.
-
-   The provider half is the Python live suite's per-adapter tests as data — one
-   entry per frozen name, with the queries and filters those tests use — so the
-   runner has one place to look and a deferred name is skipped by the registry
-   row's own [build] field instead of by a second hand-maintained list. *)
-
 module Config = Seekwright.Config
 module Model = Seekwright.Model
 module Registry = Seekwright_factory.Registry
@@ -40,8 +31,7 @@ let fetch_case_name = function
 
 let fetch_cases = [ Local; Metadata; Jina; Scrappa; Tavily; Linkup ]
 
-(* Provider selectors first, in the frozen order: an [exa:free] token has a
-   colon and so does [fetch:local], and the provider test has to win. *)
+(* Provider selectors first: provider tests take precedence over fetch cases. *)
 let all =
   List.map (fun name -> Provider name) Config.known_providers
   @ List.map (fun case -> Fetch case) fetch_cases
@@ -52,8 +42,6 @@ let name = function
   | Fetch case -> "fetch:" ^ fetch_case_name case
   | Agent Model.Brief -> "agent:brief"
   | Agent Model.Report -> "agent:report"
-
-(* {1 The searches} *)
 
 let mk ?(max_results = 3) ?(include_domains = []) ?country ?recency query =
   {
@@ -67,11 +55,6 @@ let mk ?(max_results = 3) ?(include_domains = []) ?country ?recency query =
 
 let step label spec = { label; spec }
 
-(* One entry per frozen name, in the order the Python suite presents them. The
-   two searches an adapter gets are separate steps because they are separate
-   wire shapes: a plain query and the same backend's domain constraint. The
-   queries are the Python tests' own, so a live run here is comparable with a
-   live run there. *)
 let provider_steps name =
   match name with
   | "serper" ->
@@ -118,14 +101,6 @@ let call_count = function
   | Fetch _ -> 1
   | Agent _ -> 1
 
-(* {1 What a case needs}
-
-   Two values only: the provider-config keys the Python live fixture supplies
-   from the environment ([searxng]'s instance; [algolia]'s app id and index),
-   and nothing else. A key is checked by the runner through
-   [Registry.missing_prerequisite], which already owns "did this deployment
-   supply what this name requires". *)
-
 let non_empty_env variable =
   match Sys.getenv_opt variable with
   | Some value when String.length value > 0 -> Some value
@@ -147,13 +122,6 @@ let provider_config name =
           Error "SEEKWRIGHT_ALGOLIA_APP_ID and SEEKWRIGHT_ALGOLIA_INDEX are not set")
   | _ -> Ok base
 
-(* A provider's build status comes from its registry row: [Adapter] and
-   [Adapter_session] are runnable, [Deferred wave] names the phase that lands
-   it. Every fetch case is runnable: F6.1 landed the five fallbacks, so the four
-   third-party names build and dial through the same stack as the local reader.
-   Runnable says what this build carries, nothing about what the harness asserts —
-   [Runner] fails a runnable case whose assertion is missing rather than reporting
-   a check it never made, and that failure is where the harness's own gap belongs. *)
 let build_status = function
   | Provider name -> (
       match Registry.row name with
@@ -164,8 +132,6 @@ let build_status = function
       | None -> Deferred "unlisted")
   | Fetch _ -> Runnable
   | Agent _ -> Runnable
-
-(* {1 Spend} *)
 
 let keyless row = not (List.mem Registry.Api_key row.Registry.requires)
 
@@ -225,8 +191,6 @@ let cost_prose selector =
         "billed — one model call at the operator's endpoint, retrieval keyless; %s"
         (calls_note selector)
 
-(* {1 The environment a case needs} *)
-
 let fetch_api_key name = Config.api_key_env_var name
 
 let needs = function
@@ -251,8 +215,6 @@ let needs = function
         "SEEKWRIGHT_AGENT_MODEL";
         "SEEKWRIGHT_AGENT_API_KEY";
       ]
-
-(* {1 Where it dials} *)
 
 let uri_route uri =
   let scheme = Option.value ~default:"https" (Uri.scheme uri) in
@@ -298,12 +260,6 @@ let credential = function
   | Fetch (Local | Metadata | Jina) -> "none"
   | Agent _ -> "SEEKWRIGHT_AGENT_API_KEY (the model endpoint; retrieval is keyless)"
 
-(* {1 Live status} *)
-
-(* Fetch and agent cases have no registry row, so their recorded OCaml live runs
-   are spelled here. Both rows are F9.3's keyless runs of 2026-11-14, recorded in
-   [plans/seekwright-ocaml-port.md] beside the provider runs of the same batch;
-   an agent case has never run from this port, so it stays out. *)
 let recorded_non_provider_runs = [ "fetch:local"; "fetch:metadata" ]
 
 let live_status selector =
@@ -311,8 +267,6 @@ let live_status selector =
   | Provider name -> (
       match Registry.row name with Some row when row.Registry.ocaml_live_tested -> `Tested | _ -> `Untested)
   | Fetch _ | Agent _ -> if List.mem (name selector) recorded_non_provider_runs then `Tested else `Untested
-
-(* {1 Parsing} *)
 
 let fetch_of_name = function
   | "local" -> Some Local

@@ -44,9 +44,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 (* Never sent to anything real: the string a leak would carry. *)
 let test_key = "test-key"
 
-(* {1 The fixture}
-
-   The [organic[]] payload: the fields the mapping reads, and the [credits]
+(* The [organic[]] payload: the fields the mapping reads, and the [credits]
    counter it never touches. *)
 let sample =
   {|{
@@ -71,9 +69,7 @@ let sample_json =
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
 
-(* {1 The seam}
-
-   A {!Seekwright.Provider.Net.t} that records what was dialed and answers with
+(* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with
    a canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
@@ -128,8 +124,6 @@ let has_body_field name request =
   | Some fields -> List.mem_assoc name fields
   | None -> false
 
-(* {1 Parsing} *)
-
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Serper.parse ~snippet_chars data ~limit
 
 let record fields =
@@ -174,9 +168,7 @@ let missing_organic_is_empty_not_an_error () =
   check_int "organic is null" 0 (List.length (parse (`Assoc [ ("organic", `Null) ])));
   check_int "organic is absent" 0 (List.length (parse (`Assoc [])))
 
-(* {1 The upstream field guards}
-
-   A non-string [date] or [snippet] is dropped, not handed to the wire model or
+(* A non-string [date] or [snippet] is dropped, not handed to the wire model or
    to the truncate helper. The payload is untrusted: the fields are documented
    as strings, and a shape drift must not turn into an internal error that
    escapes the engine's provider-error handling. The call has to succeed with
@@ -216,8 +208,6 @@ let a_string_snippet_still_reaches_the_model () =
     (Some
        "The default method by which SQLite implements atomic commit is a rollback journal.")
     (List.hd outcome.results).result.snippet
-
-(* {1 The request} *)
 
 let post_to_the_search_endpoint_with_the_key_header () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:3 ()) () in
@@ -285,8 +275,6 @@ let no_safe_search_parameter_is_ever_sent () =
       check_bool "no safe_search" false (has_body_field "safe_search" request))
     [ true; false ]
 
-(* {1 The constraint report} *)
-
 let a_safe_search_is_noticed_for_both_values () =
   List.iter
     (fun value ->
@@ -313,9 +301,7 @@ let the_honoured_buckets_draw_no_notice () =
   in
   check_opt_string "no notice at all when safe-search is unasked" None outcome.notice
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota row.
 
    Serper bills by credit pack ("50k credits ($1.00/1k)"), so a spent balance
@@ -358,8 +344,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-(* {1 Cost and endpoint} *)
 
 let the_cost_doubles_past_ten_results () =
   (* "2 credits for more than 10 results" is the published rule, and the flat

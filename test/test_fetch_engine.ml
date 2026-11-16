@@ -39,9 +39,7 @@ let zwsp = Sanitize.zwsp
 let clock () = 1768478400.
 let now () = 1768478400.
 
-(* {1 Reads}
-
-   [Usage.snapshot] is a [Yojson.Safe.t] and the log capture is a field list;
+(* [Usage.snapshot] is a [Yojson.Safe.t] and the log capture is a field list;
    these are the loose reads the Python suite gets from dicts. *)
 let get key = function
   | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
@@ -65,9 +63,7 @@ let money label expected = function
 
 let say = function Some s -> s | None -> ""
 
-(* {1 The page and the fetcher stub}
-
-   Python's [StubFetcher] is a duck-typed object, and [Engine.Fetch.fetcher] is a
+(* Python's [StubFetcher] is a duck-typed object, and [Engine.Fetch.fetcher] is a
    record of the same four fields, so the stub is a mutable record plus the
    [make_fetcher] that turns one into what the engine holds.  [calls] and
    [kwargs] are the two reads the Python suite uses to see the route: how many
@@ -159,9 +155,7 @@ let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
     aclose = (fun () -> ());
   }
 
-(* {1 The document readers, as a test stub}
-
-   [jsondoc] and [tabledoc] are P6, and their grammar has its own suite where it
+(* [jsondoc] and [tabledoc] are P6, and their grammar has its own suite where it
    lives.  What this suite owns is the engine's half of a selection: that the
    budget bounds the response and not the read, that a caller's offsets index the
    whole rendering, and which sentence a request that cannot be honoured comes
@@ -332,9 +326,7 @@ let doc_readers : Engine.Fetch.Readers.t =
           max_chars);
   }
 
-(* {1 The log capture, and the engine fixture}
-
-   The injected sink replaces loguru's [log_records]: an event is a name and its
+(* The injected sink replaces loguru's [log_records]: an event is a name and its
    bound fields, which pins the field set exactly because an unexpected field is
    a list entry rather than an attribute on an object. *)
 
@@ -441,8 +433,6 @@ let failed board ?offset ?query ?path ?provider ?auto_fallback ?run ?step target
   | Error (Engine.Fetch.Failed sentence) -> sentence
   | Error (Engine.Fetch.Refused sentence) -> A.failf "expected a failure, got a refusal: %s" sentence
 
-(* {1 TestSuccess} *)
-
 let one_kwargs board name =
   let found =
     List.filter (fun (s : fetcher_stub) -> s.name = name) (board.local :: board.fallbacks)
@@ -494,8 +484,6 @@ let every_call_fetches () =
   ignore (served board url);
   check_int "calls" 2 !(local.calls)
 
-(* {1 TestFailure} *)
-
 let failure_raises () =
   let local = stub ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "503")) () in
   let message = failed (make_engine ~local ()) url in
@@ -525,8 +513,6 @@ let blocked_url_does_not_advise_a_retry () =
       excludes "no ladder offered" "Other configured fetch providers" message)
     [ []; [ stub ~name:"scrappa" () ] ]
 
-(* {1 TestEmptyExtraction} *)
-
 let empty_text_is_reported_not_raised () =
   let r = served (make_engine ~local:(stub ~text:"" ()) ()) url in
   check_string "text" "" (say r.Model.text);
@@ -535,15 +521,13 @@ let empty_text_is_reported_not_raised () =
 let unicode_whitespace_does_not_clear_the_emptiness_gate () =
   (* [min_text_chars] counts what is left after Python's [str.strip()]. A page
      padded with ideographic spaces is blank, so the gate has to see one
-     character, not three hundred (F1.5). *)
+     character, not three hundred. *)
   let padded =
     "a" ^ String.concat "" (List.init 300 (fun _ -> "\xe3\x80\x80"))
   in
   let fetch = { Config.default_fetch_config with min_text_chars = 200 } in
   let r = served (make_engine ~fetch ~local:(stub ~text:padded ()) ()) url in
   includes "the blank page is a shell" "JavaScript-rendered" (say r.Model.notice)
-
-(* {1 TestQueryTargeting} *)
 
 let walrus_first = "The walrus lives in the arctic. " ^ String.make 1600 'x'
 let walrus_second = "The walrus eats clams. " ^ String.make 1600 'y'
@@ -605,9 +589,7 @@ let query_on_an_unreadable_page_keeps_the_shell_diagnosis () =
   includes "the shell diagnosis" "JavaScript-rendered" (say r.Model.notice);
   excludes "and not a no-hit sentence" "none of the query terms" (say r.Model.notice)
 
-(* {1 TestJsonPathTargeting}
-
-   [path] reads one part of a JSON document instead of the document.  The grammar
+(* [path] reads one part of a JSON document instead of the document.  The grammar
    and the selection arithmetic are pinned in the document-reader suite; what is
    pinned here is the engine's half: that a selection is uncapped at the fetcher
    and bounded in the response, that the offsets a caller gets index the whole
@@ -747,9 +729,7 @@ let an_unreadable_path_is_refused_before_anything_is_fetched () =
     (refused board ~path:"$.items[?(@.id)]" url);
   check_int "nothing was fetched" 0 !(local.calls)
 
-(* {1 TestStructureReads}
-
-   The engine's half of [tests/fetch/test_engine_structure.py]: that a shape
+(* The engine's half of [tests/fetch/test_engine_structure.py]: that a shape
    read replaces the page's text with the schema before the escape pass, that it
    reads the whole document, that it never escalates to the fallback ladder over
    emptiness, and that it refuses to share an axis with a drill. The shape
@@ -825,8 +805,6 @@ let a_structure_read_with_an_offset_is_refused_before_anything_is_fetched () =
     (refused board ~structure:true ~offset:8 url);
   check_int "nothing was fetched" 0 !(local.calls)
 
-(* {1 TestOffsetPaging} *)
-
 let offset_is_forwarded_to_the_fallback () =
   let local = stub () in
   let board = make_engine ~local () in
@@ -868,9 +846,7 @@ let a_short_tail_window_gets_no_empty_diagnosis () =
   check_opt_string "no notice" None r.Model.notice;
   check_int "one fetch" 1 !(local.calls)
 
-(* {1 TestSpecialTokenEscaping}
-
-   The page leaves escaped, counted on [fetch.ok].  The escape lands where every
+(* The page leaves escaped, counted on [fetch.ok].  The escape lands where every
    fallback's output converges — after the ladder, in the engine — so no fallback
    has to remember it, and the coordinates downstream (empty check, passage
    selection, past-end, the journal's chars) all read the same escaped text. *)
@@ -941,8 +917,6 @@ let query_matches_are_escaped_in_escaped_space () =
       [ one; two ]
   | many -> A.failf "expected two matches, got %d" (List.length many)
 
-(* {1 TestObservability} *)
-
 let a_url_is_logged_when_queries_are_opted_in () =
   let board = make_engine ~logging:{ Config.default_logging_config with Config.log_queries = true } () in
   ignore (served board url);
@@ -981,9 +955,7 @@ let matches_replace_the_page_in_the_content_log () =
   check_string "the matches, not the page"
     ("'" ^ walrus_first ^ "\\n\\n" ^ walrus_second ^ "'")
     (str (field fields "text"))
-(* {1 TestUsageRecording}
-
-   The dashboard's fetch half: chars and the fallback that served them. *)
+(* The dashboard's fetch half: chars and the fallback that served them. *)
 
 let a_success_records_chars_and_no_fallback () =
   let board = make_engine ~usage:(recorder ()) () in
@@ -1024,9 +996,7 @@ let a_past_end_offset_records_the_call_it_billed () =
   check_bool "fallback is None" true (is_null (get "fallback" entry));
   check_bool "error is None" true (is_null (get "error" entry))
 
-(* {1 TestImagePages}
-
-   The engine's half of an image fetch: carried, journaled, left alone.  The bytes
+(* The engine's half of an image fetch: carried, journaled, left alone.  The bytes
    themselves are the fetcher's business; what is pinned here is the shape of the
    decision around them: the base64 and the size reach the caller, no text field
    is filled, the ladder is never asked, and the operator's line says how many
@@ -1095,9 +1065,7 @@ let a_text_page_binds_no_image_field_at_all () =
   ignore (served board url);
   check_bool "no bytes field" true (not (List.mem_assoc "bytes" (ok board)))
 
-(* {1 TestImagesInAgentMode}
-
-   An [answer] walk reads text, so an image it meets is named, not carried. *)
+(* An [answer] walk reads text, so an image it meets is named, not carried. *)
 
 let the_bytes_are_left_out_and_the_notice_says_why () =
   let r = served (make_engine ~local:(image_stub ()) ()) ~run:"run-1" ~step:1 image_url in
@@ -1114,9 +1082,7 @@ let the_fetch_is_still_journaled () =
   check_string "tool" "fetch" (str (get "tool" entry));
   check_int "chars" 0 (int (get "chars" entry))
 
-(* {1 TestTheRouteAsksForTheWalk}
-
-   [fetch.auto_fallback] is off, so an interactive read stops and reports.  The
+(* [fetch.auto_fallback] is off, so an interactive read stops and reports.  The
    [answer] plan has no caller between its steps to act on a list of names, so it
    asks for the walk on the call it makes: flipping the default must not quietly
    make [answer] read less on JavaScript-heavy sites.  The ask is an argument on
@@ -1159,9 +1125,7 @@ let the_key_still_walks_everything_that_does_not_override () =
   check_string "the walked page" rendered_by_fallback (say response.Model.text);
   check_ints "one dispatch each" [ 1; 1 ] [ !(local.calls); !(fallback.calls) ]
 
-(* {1 TestNamedProvider}
-
-   [fetch(provider=...)]: one named route, and one refusal sentence.  A name may
+(* [fetch(provider=...)]: one named route, and one refusal sentence.  A name may
    come from anywhere, the three ways a name cannot serve collapse into a single
    refusal raised before anything is dispatched, and the sentence names what *is*
    available. *)
@@ -1242,9 +1206,7 @@ let the_three_ways_a_name_cannot_serve_refuse_alike () =
     (String.concat "scrappa" (split_on_string "scraper" unknown))
     unbuilt
 
-(* {1 TestPrimaryRoute}
-
-   [fetch.primary]: the operator choosing which route an unnamed fetch leads
+(* [fetch.primary]: the operator choosing which route an unnamed fetch leads
    with.  The key exists because the local read leaves this server's own IP and a
    plain HTTP client, which more bot walls recognise than a provider's network.
    With a fallback as primary, the local read is not a last resort hiding behind
@@ -1397,9 +1359,7 @@ let a_primary_this_engine_was_not_handed_refuses_construction () =
   | Ok _ -> A.failf "a primary nobody built cannot be a route"
   | Error sentence -> includes "the refusal says what is missing" "which this deployment did not build" sentence
 
-(* {1 The ladder walk bills the answering fallback}
-
-   A walk that spends two attempts prices the page at the fallback that answered.
+(* A walk that spends two attempts prices the page at the fallback that answered.
    The figure on the line is read off the fallback object that served the page,
    never off the ladder's first fallback or off the single [fetch.cost_per_1k]:
    that is what keeps the price honest once the ladder holds more than one priced
@@ -1457,8 +1417,6 @@ let a_walk_answered_by_a_free_fallback_bills_nothing () =
   let totals = get "totals" json in
   check_bool "fetch_cost_usd is None" true (is_null (get "fetch_cost_usd" totals));
   check_int "priced_fetches" 0 (int (get "priced_fetches" totals))
-
-(* {1 The suite} *)
 
 let () =
   A.run

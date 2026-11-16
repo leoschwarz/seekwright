@@ -1,18 +1,8 @@
-(** Wire models: the shapes that cross into a caller's context window.
+(** Wire models: data shapes for tool requests, responses, and serialisation.
 
-    Port of [src/seekwright/models.py]. Two rules hold at this boundary, on
-    every encoder:
-
-    - an unset field is omitted rather than serialised as [null]; and
-    - the fields in {!Sanitize.text_fields} are escaped on serialisation.
-
-    Decoders mirror pydantic's validation for the shapes the REST bodies carry:
-    required fields are required, [null] means absent only where the Python
-    field is optional, an unknown key is refused on a wire model and ignored on
-    the two plain models, and the request constraints are checked.
-    [search_query] and [provider_result] are plain pydantic models in Python:
-    their encoders keep nulls and defaults, and they exist for round-trip tests
-    and diagnostics rather than for a caller. *)
+    Encoders drop unset optional fields and escape special-token literals
+    in text fields. Decoders validate constraints and reject unknown keys
+    on wire models. *)
 
 type recency = Day | Week | Month | Year
 type depth = Brief | Report
@@ -166,9 +156,7 @@ val answer_request_to_yojson : answer_request -> Yojson.Safe.t
 val answer_response_to_yojson : answer_response -> Yojson.Safe.t
 val search_query_to_yojson : search_query -> Yojson.Safe.t
 val provider_result_to_yojson : provider_result -> Yojson.Safe.t
-(** Encoders. The wire-model encoders drop unset fields and escape text; the
-    two plain-model encoders keep nulls and defaults, as pydantic's
-    [model_dump] does. *)
+(** Encoders. Wire-model encoders omit unset fields and escape text fields. *)
 
 val result_of_yojson : Yojson.Safe.t -> (result, string) Stdlib.result
 val search_response_of_yojson : Yojson.Safe.t -> (search_response, string) Stdlib.result

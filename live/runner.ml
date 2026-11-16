@@ -46,13 +46,10 @@ let env_value variable =
   | Some value when String.length value > 0 -> Some value
   | _ -> None
 
-(* {1 The header} *)
-
 let live_status_prose selector =
   match Cases.live_status selector with
-  | `Tested -> "recorded — a live run of this case is in plans/seekwright-ocaml-port.md"
-  | `Untested ->
-      "OCaml-untested — no recorded live run on this port (a rate-limited run would not change that)"
+  | `Tested -> "recorded live run"
+  | `Untested -> "untested live run"
 
 let emit_header emit selector =
   emit (Printf.sprintf "seekwright live: %s" (Cases.name selector));
@@ -61,8 +58,6 @@ let emit_header emit selector =
   emit ("credential " ^ Cases.credential selector);
   emit ("cost       " ^ Cases.cost_prose selector);
   emit ("status     " ^ live_status_prose selector)
-
-(* {1 Printing the checks} *)
 
 let print_checks emit checks =
   List.iter
@@ -88,8 +83,6 @@ let failed emit reason =
 let inconclusive emit reason =
   emit ("result     inconclusive: " ^ reason);
   Inconclusive reason
-
-(* {1 A search case} *)
 
 let to_query (spec : Cases.query_spec) : Model.search_query =
   {
@@ -199,8 +192,6 @@ let run_provider ~env ~sw ~name ~emit =
                          but an MCP-backed one owns a session. *)
                       List.iter (fun (_, provider) -> Provider.aclose provider) built.Factory.built;
                       status))))
-
-(* {1 A fetch case} *)
 
 let close_stack (local : Engine.Fetch.fetcher) (fallbacks : Engine.Fetch.fetcher list) =
   local.aclose ();
@@ -376,8 +367,6 @@ let run_fetch ~env ~sw ~case ~emit =
                       in
                       close_stack local fallbacks;
                       status))))
-
-(* {1 An agent case} *)
 
 let agent_question = function
   | Model.Brief -> "What is the Gitea project, and what licence is it released under?"

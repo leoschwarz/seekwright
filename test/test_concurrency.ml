@@ -1,4 +1,4 @@
-(* F2.4: shared state under concurrent serving.
+(* Shared state under concurrent serving.
 
    The port serves every MCP and REST call on its own Eio fiber, so the two
    pieces of mutable state the dashboard is built from — [Usage]'s aggregates
@@ -41,9 +41,7 @@ open Test_support
 let clock () = 1768478400.
 let now () = 1768478400.
 
-(* {1 Reads}
-
-   [Usage.snapshot] and the REST bodies are [Yojson.Safe.t]; these are the loose
+(* [Usage.snapshot] and the REST bodies are [Yojson.Safe.t]; these are the loose
    reads the Python suite gets from dicts. *)
 let get key = function
   | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
@@ -62,9 +60,7 @@ let money = function
   | `Float f -> f
   | v -> A.failf "not a money figure: %s" (Yojson.Safe.to_string v)
 
-(* {1 The storm's width}
-
-   Each kind gets its own count, so a mixed response has a neighbour to be
+(* Each kind gets its own count, so a mixed response has a neighbour to be
    confused with. Six is enough to interleave without making the dashboard's
    hundred-entry recent deque the binding constraint — the consistency case
    below reads [recent] length, so staying under the cap is deliberate. *)
@@ -80,9 +76,7 @@ let search_query i = marker "search" i
 let fetch_url i = Printf.sprintf "https://example.test/%s" (marker "fetch" i)
 let answer_query i = marker "answer" i
 
-(* {1 The fake provider endpoint}
-
-   One Cohttp-Eio listener answers every outbound call the fixture makes, so the
+(* One Cohttp-Eio listener answers every outbound call the fixture makes, so the
    provider, fetcher, model and health probe all travel a real loopback socket
    through their audited grants. The bodies are shaped like the contracts the
    stubs read, not like a vendor's: the stubs are the fake adapters, and this is
@@ -174,9 +168,7 @@ let stop_fixture fixture =
   Eio.Promise.resolve fixture.stop ();
   Eio.Promise.await fixture.stopped
 
-(* {1 The fake adapters}
-
-   The stub provider is the adapter stand-in, and the one thing it must do for
+(* The stub provider is the adapter stand-in, and the one thing it must do for
    this suite is reach the network: each call asks its audited grant for one
    request, so "one audit event per low-level operation" is a real property of
    the run rather than a log line this file invented. *)
@@ -293,9 +285,7 @@ let fetcher_of_stub (s : fetch_stub) : Engine.Fetch.fetcher =
     aclose = (fun () -> ());
   }
 
-(* {1 The app}
-
-   Built by hand rather than through [Factory.build_app] because every dependency
+(* Built by hand rather than through [Factory.build_app] because every dependency
    this suite wants to observe — the provider, the fetcher, the model endpoint —
    is a fake, and the audit trail is the fixture's own sink. *)
 
@@ -435,9 +425,7 @@ let build_rig ~env ~sw ~provider_port ~journal =
     events;
   }
 
-(* {1 The served listener}
-
-   [serve_http] binds its own port, and the suite needs the number, so this is
+(* [serve_http] binds its own port, and the suite needs the number, so this is
    its accept loop: one accepted socket enters the same [serve_connection] the
    production listener hands to [run_server], which is where the custom routes,
    the Host allowlist and the REST projection live. *)
@@ -480,9 +468,7 @@ let stop_served served =
   Eio.Promise.resolve served.stop ();
   Eio.Promise.await served.stopped
 
-(* {1 Clients}
-
-   Each request runs in its own switch with its own connection, which is what
+(* Each request runs in its own switch with its own connection, which is what
    makes them simultaneous: a shared client would serialise them on one socket's
    keep-alive stream. *)
 
@@ -507,9 +493,7 @@ let request ~env ~port ~meth ~path ~body =
 
 let query_json key value = Yojson.Safe.to_string (`Assoc [ (key, `String value) ])
 
-(* {1 Consistency of a dashboard read}
-
-   The snapshot is one read of many counters. These identities hold for every
+(* The snapshot is one read of many counters. These identities hold for every
    complete snapshot and fail for a read that saw half a fold: the lifetime
    search count is the provider rows' sum and the window's sum, and the recent
    deque holds one entry per terminal line. *)
@@ -540,8 +524,6 @@ let consistent_snapshot json =
   A.(check int)
     "the recent deque holds one entry per terminal line" recent
     (lifetime + fetches + answer_calls)
-
-(* {1 The case} *)
 
 let concurrent_operations_share_one_record () =
   Mirage_crypto_rng_unix.use_default ();
@@ -616,9 +598,7 @@ let concurrent_operations_share_one_record () =
   stop_fixture fixture;
   A.(check int) "no connection outlives the switch" 0 (Atomic.get served.active);
 
-  (* {2 Every response is its own}
-
-     A status and the JSON's own echo of the request are checked per call, so a
+  (* A status and the JSON's own echo of the request are checked per call, so a
      body handed to the wrong caller fails here even though the aggregate counts
      below would still add up. *)
   List.iteri
@@ -667,9 +647,7 @@ let concurrent_operations_share_one_record () =
       consistent_snapshot (Yojson.Safe.from_string body))
     dashboard_results;
 
-  (* {2 The aggregates, exactly}
-
-     Each search line adds one search and one provider call; each answer call
+  (* Each search line adds one search and one provider call; each answer call
      adds one [answer] line and one retrieval search; each fetch adds one. *)
   let expected_searches = searches + answers in
   let expected_lines = searches + fetches + (2 * answers) in
@@ -701,9 +679,7 @@ let concurrent_operations_share_one_record () =
     (Health.is_open rig.board "serper");
   consistent_snapshot snapshot;
 
-  (* {2 The journal, one complete object per line}
-
-     The file is read back after the listener drained, so every append has
+  (* The file is read back after the listener drained, so every append has
      finished. A line is complete when it parses as an object of one of the
      three declared shapes; an interleaved pair fails to parse or arrives with
      the wrong tool count. *)
@@ -735,9 +711,7 @@ let concurrent_operations_share_one_record () =
          match get "provider" (line_of line) with `String _ -> n + 1 | _ -> n)
        0 lines);
 
-  (* {2 One audit event per low-level operation}
-
-     [Factory.audit_sink] is the production sink, so every request the audited
+  (* [Factory.audit_sink] is the production sink, so every request the audited
      grants carried is one [caps.operation] line: the searches (the answers'
      retrieval steps included), the fetches, the model calls and the probe
      ticks. *)

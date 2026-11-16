@@ -141,7 +141,7 @@ let whitespace_is_normalised_before_the_cap () =
 
 let unicode_whitespace_is_normalised_before_the_cap () =
   (* Python's [str.split()] splits on the Unicode spaces, not ASCII only, so an
-     ideographic or no-break space is a word boundary here too (F1.5). *)
+     ideographic or no-break space is a word boundary here too. *)
   let snippet, uncapped =
     Provider.truncate_snippet (Some "\xe3\x80\x80a\xc2\xa0b\xe3\x80\x80") 500
   in

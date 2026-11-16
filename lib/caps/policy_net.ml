@@ -1,12 +1,3 @@
-(* The network confinement: an endpoint policy, the DNS-to-connect binding that
-   makes it mean something, and the bounds around one operation. policy_net.mli
-   states the guarantees; this file is where each one is implemented, and
-   test/test_authority_net.ml is the evidence.
-
-   The order of the code is the order of a request: decide the destination from
-   the policy, resolve it, vet every answer, bind the connection to one vetted
-   address, speak HTTP over that socket, and bound what comes back. *)
-
 type method_ = [ `GET | `POST | `PUT | `PATCH | `DELETE ]
 
 type request = {
@@ -28,12 +19,6 @@ type endpoint = {
   port : int option;
 }
 
-(* A normalised endpoint: the scheme, host and {b effective} port a request has
-   to match exactly. [peer_name] is what TLS puts in SNI and checks in the
-   certificate — the {b endpoint's} hostname, never the address we happened to
-   connect to — which is what keeps certificate verification meaningful while
-   the connection itself is made by IP. [peer_ip] is the same idea for a host
-   that is an IP literal. *)
 type destination = {
   scheme : [ `Http | `Https ];
   host : string;
@@ -44,55 +29,27 @@ type destination = {
 
 type port_policy =
   | Default_ports
-      (** The scheme's own port only: the safe default. *)
   | Any_port
-      (** Any port in 1..65535, once the address policy has vetted the
-          destination. *)
 
 type policy =
   | Endpoints of destination list
   | Public_web of port_policy
   | Private_web of port_policy
-      (** The same destination shape as [Public_web], and a wider address rule:
-          see [with_private_web] and [satisfies_address]. *)
 
-(* [Eio.Net.t] is parameterised by the backend's resource tag ([ `Posix ],
-   [ `Linux ], …), and a record type cannot carry an existential tag — [_] is not
-   allowed in a type declaration. So the record is parameterised and [t] hides
-   the tag: the application's own network value keeps its real type, and nothing
-   in this module or its interface needs to name it. *)
 type 'tag confinement = {
   net : 'tag Eio.Net.t;
   max_response_bytes : int;
   policy : policy;
-  (* [None] only when no entry of the policy can be reached over https: the
-     trust anchor store is read at construction, so a grant that {b can} speak
-     https either has a working configuration or was never built (§5 — an
-     http-only path must not be able to pass as a finished M3). *)
   tls : Tls.Config.client option;
 }
 
 type t = T : 'tag confinement -> t
 
-(* A page or a provider JSON body lives well inside this, and an uncapped body
-   lets the calling model decide how large our own response is — the same reason
-   [Policy_fs.default_max_read_bytes] is modest. *)
 let default_max_response_bytes = 262_144
-
-(* The operator's ceiling has to be finite for a second, arithmetic reason: the
-   streaming ceiling is [limit + 1] bytes, and [max_int + 1] wraps. *)
 let max_configurable_response_bytes = 16_777_216
-
-(* Covers DNS, connect, TLS, headers and body: one bound around the whole
-   operation, because a bound per phase would let a peer that is merely slow in
-   each phase add up to an unbounded call (§5). *)
 let default_operation_timeout_seconds = 15.
 
-(* Provider request bodies are query JSON. Bounding the request is the same
-   shape as bounding the response, and it keeps a tool's own bug from turning
-   into an outbound flood. *)
 let max_request_bytes = 65_536
-
 let max_request_headers = 64
 let max_request_header_bytes = 8_192
 
@@ -101,21 +58,13 @@ let https_port = 443
 
 let ( let* ) = Result.bind
 
-(* Raised inside the connector, whose type is a flow rather than a result, and
-   turned back into an [Error.t] by the one [try] in [send]. It never escapes
-   this module. *)
 exception Refusal of Error.t
 
 let refuse error = raise (Refusal error)
 
-(** {1 Endpoint normalisation and the destination decision} *)
-
 let scheme_port = function `Http -> http_port | `Https -> https_port
 let scheme_name = function `Http -> "http" | `Https -> "https"
 
-(* Which web mode a refusal came from. A refusal sentence that says "public-web"
-   about a grant the operator built for their intranet sends them looking at the
-   wrong key, so the mode is named rather than assumed. *)
 let web_mode_name = function
   | Public_web _ -> "public-web"
   | Private_web _ -> "private-web"
@@ -283,22 +232,7 @@ let decide_destination (t : 'tag confinement) uri =
                     (scheme_name scheme) (Error.sanitize host) port (web_mode_name web)
                     (scheme_port scheme) (scheme_name scheme)))
       | Default_ports | Any_port ->
-          (* [port_of_uri] has already bounded an explicit port to 1..65535, so
-             [Any_port] accepts every port that reaches this point. *)
           Ok candidate)
-
-(** {1 Address classification for the two web policies}
-
-    ipaddr's [is_global] covers the classic scopes: loopback, RFC1918,
-    link-local, multicast, unspecified, broadcast, and the IPv4-mapped IPv6
-    forms (whose scope ipaddr computes from the embedded v4 address, which is
-    the IPv4-mapped case §5 names). What it still calls global, and this table
-    refuses, is the IANA special-purpose space and the transition mechanisms
-    that smuggle an address in from another family.
-
-    The [Private_web] policy needs none of that table — its whole point is that
-    the operator's own network is reachable — and instead refuses the three
-    addresses that are not hosts at all. *)
 
 let special_use : (string * int) list =
   [
@@ -413,14 +347,9 @@ let address_policy_note = function
       "the private-web policy reaches the operator's own network, but not a multicast \
        group, a broadcast address or the unspecified address"
 
-(** {1 Resolution, and the binding to one vetted address} *)
-
-(* One classification for every failure at this boundary (§3). No message names
-   the peer's bytes: an exception string from a HTTP client can carry what the
-   server sent, and that text has no business in a tool result. *)
 let classify exn =
   match exn with
-  (* Cancellation is Eio's control flow, not a provider failure (§4). *)
+  (* Cancellation is Eio's control flow, not a provider failure: it propagates. *)
   | Eio.Cancel.Cancelled _ | Eio.Exn.Multiple _ -> raise exn
   | Eio.Io (Eio.Net.E (Eio.Net.Address_lookup_failed code), _) ->
       Error
@@ -581,13 +510,7 @@ let vet_public_host ~net ~host =
                        link-local addresses is disabled"
                       (Error.sanitize host) (Error.sanitize first)))
 
-(** {1 Request validation} *)
-
-(* Header names the authority owns. A caller-set [host] would send one virtual
-   host while the policy, TLS and the socket all say another; [content-length]
-   and [transfer-encoding] decide where one request ends, which is the request
-   smuggling primitive; [connection], [upgrade] and [keep-alive] ask for
-   behaviour outside this grant's model of one connection per request. *)
+(* Reserved headers: authority owns host/framing; caller cannot override. *)
 let authority_owned_headers =
   ["host"; "content-length"; "transfer-encoding"; "connection"; "upgrade"; "keep-alive"]
 
@@ -672,31 +595,9 @@ let canonical_uri uri destination =
   let uri = Uri.with_port uri (Some destination.port) in
   Uri.with_fragment uri None
 
-(** {1 The socket, and the operation on it} *)
-
-(* Every path to a socket: connect to the address [resolve] vetted — never the
-   hostname, so there is no second lookup to race with — then wrap in TLS with
-   the endpoint's own name. The connector cohttp is handed ignores the URI it is
-   given, so the client cannot reach an address other than the one that passed
-   the policy check. *)
-(* What one checked connection is, for both schemes: a bidirectional flow the
-   operation's switch can close. This is cohttp-eio's own [connection] shape, and
-   both [Eio.Net]'s stream socket and [Tls_eio]'s wrapped flow coerce to it —
-   the [Tls] tag a TLS flow adds is not part of what the HTTP client needs, so it
-   is dropped here rather than leaking into [send]'s types.
-
-   The row is closed rather than open, and written over [Eio.Resource.t] rather
-   than as [Eio.Flow.two_way]: in a type {e declaration} eio's [two_way] alias
-   cannot be applied to a row (its own row is bound by an [as] pattern), and a
-   resource is contravariant in its tag row, so an open row there is rejected.
-   Cohttp-eio spells the same type the same way. *)
 type connection = [ Eio.Flow.two_way_ty | Eio.Resource.close_ty ] Eio.Resource.t
 
-(* Every path to a socket: connect to the address [resolve] vetted — never the
-   hostname, so there is no second lookup to race with — then wrap in TLS with
-   the endpoint's own name. The connector cohttp is handed ignores the URI it is
-   given, so the client cannot reach an address other than the one that passed
-   the policy check. *)
+(* Connects to vetted IP address (never re-resolving hostname) and wraps in TLS if https. *)
 let open_connection (t : 'tag confinement) ~destination ~vetted sw : connection =
   let socket = Eio.Net.connect ~sw t.net (`Tcp (vetted, destination.port)) in
   match destination.scheme with
@@ -803,13 +704,6 @@ let request ~controls ?max_response_bytes (T t) request =
       try send t ~destination ?max_response_bytes request vetted
       with Refusal error -> Error error | ex -> classify ex)
 
-(** {1 Construction} *)
-
-(* TLS needs a process-global RNG (tls-eio's own interface says so). This does
-   not install one: an application that has configured an entropy source keeps
-   it, and one that has not is told what to call rather than being handed a
-   grant whose https path throws in production (§5, "fail construction
-   loudly"). *)
 let ensure_rng () =
   try (ignore (Mirage_crypto_rng.default_generator ()); Ok ()) with
   | Mirage_crypto_rng.No_default_generator ->

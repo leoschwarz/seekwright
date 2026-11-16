@@ -1,6 +1,3 @@
-(* The HTTP heads at the listener's two trust boundaries. See [http_head.mli]
-   for why the ceilings are these numbers and why failure is a value. *)
-
 let request_head_limit = 16 * 1024
 let response_head_limit = 8 * 1024
 
@@ -21,22 +18,13 @@ let reason_phrase status =
   if phrase <> string_of_int status then phrase
   else match status with 421 -> "Misdirected Request" | _ -> phrase
 
-(* A line with its terminator removed, either CRLF or the bare LF a
-   non-conforming client may send. *)
 let line_of_raw raw =
   let n = String.length raw in
   if n >= 2 && raw.[n - 2] = '\r' && raw.[n - 1] = '\n' then String.sub raw 0 (n - 2)
   else if n >= 1 && raw.[n - 1] = '\n' then String.sub raw 0 (n - 1)
   else raw
 
-(* One line, read a byte at a time.
-
-   [consumed] is the head's byte count before this line. [limit] is the head
-   ceiling, so the check is on the head's total and not on this line alone: a
-   thousand short lines are as refused as one long one. Reading one byte at a
-   time is what makes that count exact — [Buf_read.line] would tell us the size
-   of a line only after it had already buffered all of it, and the ceiling has
-   to be enforced before the allocation, not after. *)
+(* Byte-by-byte read enforcing cumulative head limit before allocating unbounded line. *)
 let read_line ~limit ~consumed ic =
   let line = Buffer.create 64 in
   let rec loop bytes =
@@ -86,7 +74,6 @@ let content_length_line body_length =
 
 let connection_line = "connection: close\r\n"
 
-(* [name ": " value CRLF]. *)
 let header_bytes (name, value) = String.length name + String.length value + 4
 
 let response_head_is_bounded ~limit ~status ~headers ~body_length =

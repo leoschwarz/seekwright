@@ -16,8 +16,6 @@ module Agent = Seekwright.Agent
 module A = Alcotest
 open Test_support
 
-(* {1 Fixtures} *)
-
 let clock () = 1.0
 let now () = 1_700_000_000.0
 let no_log _level _event _fields = ()
@@ -151,8 +149,6 @@ let make_app ?(stubs = [ stub () ]) ?(fetch = true) ?(agent = false) ?(dashboard
 
 let default_app () = make_app [ "serper" ]
 
-(* {1 JSON helpers} *)
-
 let field key = function
   | `Assoc fields -> ( match List.assoc_opt key fields with Some v -> v | None -> `Null)
   | _ -> `Null
@@ -175,8 +171,6 @@ let mcp app =
   | Error (CapsServer.Duplicate_tool name) -> A.failf "duplicate tool: %s" name
   | Error (CapsServer.Invalid_declaration message) -> A.failf "invalid declaration: %s" message
   | Ok server -> server
-
-(* {1 The registry and the tools} *)
 
 let registry_lists_the_three_tools _ =
   let app = default_app () in
@@ -314,8 +308,6 @@ let agent_disabled_refuses_cleanly _ =
   check_bool "the sentence is the shared one" true
     (contains ~haystack:(text_of called) ~needle:Server.agent_disabled)
 
-(* {1 The Host allowlist} *)
-
 let the_host_allowlist_matches_python _ =
   let entries = Server.host_allowlist [ "search.internal:9000"; "wild.example:*" ] in
   check_bool "loopback name" true (Server.is_host_allowed entries "localhost");
@@ -327,8 +319,6 @@ let the_host_allowlist_matches_python _ =
   check_bool "a foreign name is refused" false (Server.is_host_allowed entries "evil.example.com");
   check_bool "the wrong port on an exact entry is refused" false
     (Server.is_host_allowed entries "search.internal:9001")
-
-(* {1 The custom routes} *)
 
 let healthz_is_secret_free_and_exempt _ =
   let app = default_app () in
@@ -543,8 +533,6 @@ let dashboard_routes _ =
   in
   check_int "wrong method is 405" 405 wrong_method.Server.status;
   check_int "unknown path is 404" 404 (get enabled "/nope").Server.status
-
-(* {1 The flag table and the wire helpers} *)
 
 let slice_between text start_marker end_marker =
   let at marker =

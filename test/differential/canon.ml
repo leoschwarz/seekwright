@@ -27,8 +27,6 @@ let of_hex text =
   in
   String.init (String.length text / 2) (fun i -> byte (i * 2))
 
-(* {1 The [json.dumps(ensure_ascii=True)] escape} *)
-
 let u_escape buffer code = Buffer.add_string buffer (Printf.sprintf "\\u%04x" code)
 
 (* A codepoint above the BMP reaches JSON as a surrogate pair, which is what

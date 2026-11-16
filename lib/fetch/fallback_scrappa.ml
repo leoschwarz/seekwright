@@ -1,7 +1,3 @@
-(* Scrappa. fallback.mli owns what every remote fallback shares; this file
-   is the scraper's request shape, its three status arms, and the envelope
-   that separates the API call's success from the page's. *)
-
 module Caps = Mcp_caps
 
 let scrappa_scraper_endpoint = "https://scrappa.co/api/web-scraper"

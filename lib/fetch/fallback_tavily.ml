@@ -1,7 +1,3 @@
-(* Tavily extract. fallback.mli owns what every remote fallback shares; this
-   file is the extract endpoint's request shape, its three status arms, and
-   the empty-[results] reading that keeps the walk going. *)
-
 module Caps = Mcp_caps
 
 let tavily_extract_endpoint = "https://api.tavily.com/extract"

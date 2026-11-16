@@ -21,8 +21,6 @@ let run ?(token = None) ?(status = 200) body =
   ( fixture,
     Crawl.fetch (cfg ~token fixture) Fix.public_url ~offset:0 ~max_chars:None )
 
-(* {1 Request shape} *)
-
 let request_shape () =
   let fixture, result = run {|{"results":[{"success":true,"markdown":"body one"}]}|} in
   ignore (Fix.ok_page result "ok");
@@ -65,8 +63,6 @@ let bearer_header () =
           {|{"urls":["https://public.test/page"],"browser_config":{},"crawler_config":{}}|};
     }
 
-(* {1 Status arms} *)
-
 let arms () =
   let one status = Fix.show_error (Result.get_error (snd (run ~status "{}"))) in
   (* The operator's own service refused the token this deployment configured
@@ -87,8 +83,6 @@ let arms () =
           (Crawl.fetch (cfg fixture) "https://internal.test/x" ~offset:0 ~max_chars:None)))
     (Fix.error_case ~kind:"url_blocked" ~message:"internal.test resolves to a non-public address (127.0.0.1); fetching private, loopback and link-local addresses is disabled");
   Fix.check_no_request fixture "the renderer saw nothing"
-
-(* {1 The two-layer envelope} *)
 
 let envelope body = Fix.show_error (Result.get_error (snd (run body)))
 
@@ -148,8 +142,6 @@ let envelope_cases () =
     Fix.ok_page (snd (run {|{"results":[{"success":true,"markdown":"m","url":""}]}|})) "empty url"
   in
   Alcotest.(check string) "empty url falls back to the target" page.url Fix.public_url
-
-(* {1 Transport rows} *)
 
 let timeout_row () =
   let fixture = Fix.make [ Fix.Transport (Caps.Error.make Caps.Error.Timeout ~message:"x") ] in

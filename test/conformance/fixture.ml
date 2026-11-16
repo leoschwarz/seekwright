@@ -13,10 +13,9 @@
    - capability-mediated tools, registered through [Mcp_caps.Registry];
    - the resources, resource template and prompts, registered directly on the
      [Mcp_kit.Server.t] that [Server.of_registry] returns. The layer has no
-     [Registry.add] for those (plans/capability-gated-mcp-server.md §0,
-     non-goals), and adding them to the returned value is the documented seam —
-     see the last section of this file. A scenario that passes on them says
-     something about mcp-kit and about the seam, not about a grant.
+     [Registry.add] for those, and adding them to the returned value is the
+     documented seam. A scenario that passes on them says something about
+     mcp-kit and about the seam, not about a grant.
 
    [test_read_granted_file] is not reached by any official scenario. It is here
    because a fixture that only registers [~grant:()] tools would prove no more
@@ -34,7 +33,7 @@
 
    The first stdout line in HTTP mode is the loopback MCP URL, which is what the
    runner wrapper reads. Over stdio ([--stdio]) stdout carries protocol bytes
-   only, and every note goes to stderr (§7). *)
+   only, and every note goes to stderr. *)
 
 module Authority = Mcp_caps.Authority
 module Error = Mcp_caps.Error
@@ -42,8 +41,6 @@ module Policy = Mcp_caps.Policy
 module Registry = Mcp_caps.Registry
 module Server = Mcp_caps.Server
 module Tool = Mcp_caps.Tool
-
-(* --- the scored tools, through the layer ---------------------------------- *)
 
 (* [tools-call-simple-text] asks for a tool named [test_simple_text] that takes
    no arguments and answers text. An empty input object is the schema mcp-kit
@@ -59,8 +56,7 @@ let test_simple_text =
 
 (* [tools-call-error] expects a tool failure, which in this layer is a [run]
    that answers [Error _]. What reaches the wire is [Mcp_kit.Tool.error_text]
-   built from [Error.render] — an [isError] tool result, never a JSON-RPC error
-   (plans/capability-gated-mcp-server.md §3). *)
+   built from [Error.render] — an [isError] tool result, never a JSON-RPC error. *)
 let test_error_handling =
   Tool.make
     ~description:"Always fail, with a message safe to show a model."
@@ -289,14 +285,10 @@ let build ~sw env root =
   note ("test_read_granted_file is confined to " ^ root);
   Server.of_registry ~name:"mcp-caps-conformance" ~version:"0.1.0" registry
 
-(* --- what the layer does not register ------------------------------------ *)
-
 (* A resource is a static declaration, so there is no operation to gate, and
-   [Registry] has no [add_resource] (plans/capability-gated-mcp-server.md §0).
-   The plan's answer is that the adapter returns an [Mcp_kit.Server.t] precisely
-   so an application can add these itself; this is that seam, and it is what the
-   [resources-*], [caching] and [prompts-*] scenarios of the pinned run reach.
-   Names and URIs are the runner's fixture contract, not a design choice. *)
+   [Registry] has no [add_resource]. The adapter returns an [Mcp_kit.Server.t]
+   precisely so an application can add these itself; this is that seam, and it
+   is what the [resources-*], [caching] and [prompts-*] scenarios reach. *)
 (* One-pixel PNG, used as the binary resource body and as the image message of
    [test_prompt_with_image]. The runner decodes it, so it has to be a real PNG. *)
 let test_png_base64 =
@@ -507,7 +499,7 @@ let serve_http ~sw env server port_request =
     | `Unix _ -> assert false
   in
   (* Origin protection is the adapter's, and the allowlist is browser
-     protection, not authentication (§7). The fixture's own loopback origin is
+     protection, not authentication. The fixture's own loopback origin is
      what upstream's fixture allows too, so a browser request from the page the
      runner serves is ordinary traffic and anything else is 403. *)
   let allowed_origins = [ Printf.sprintf "http://%s:%d" loopback port ] in

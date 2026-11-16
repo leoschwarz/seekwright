@@ -48,9 +48,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 (* Never sent to anything real: the string a leak would carry. *)
 let test_key = "test-key"
 
-(* {1 The fixture}
-
-   The documented payload: the ranked list beside [search_metadata],
+(* The documented payload: the ranked list beside [search_metadata],
    [search_information] and the [answer_box] sibling — the element families the
    parse drops rather than models. *)
 let sample =
@@ -87,8 +85,6 @@ let sample_json =
   match Yojson.Safe.from_string sample with
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
-
-(* {1 The seam} *)
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
   let sent = ref None in
@@ -127,8 +123,6 @@ let param (request : Caps.Authority.Net.request) name =
 
 let has_param request name =
   List.exists (fun (key, _) -> key = name) (params request)
-
-(* {1 Parsing} *)
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Serpapi.parse ~snippet_chars data ~limit
 
@@ -216,9 +210,7 @@ let the_other_element_families_are_dropped () =
         (Yojson.Safe.to_string (Model.result_to_yojson hit.result)))
     hits
 
-(* {1 The upstream field guards}
-
-   A non-string [snippet] or [date] is dropped, not handed to the shared
+(* A non-string [snippet] or [date] is dropped, not handed to the shared
    truncate helper: shape drift must read as a missing field, not raise out of
    the engine's provider-error handling. *)
 
@@ -257,9 +249,7 @@ let a_string_snippet_still_reaches_the_model () =
         of berries of certain flowering plants.")
     (List.hd outcome.results).result.snippet
 
-(* {1 The request}
-
-   Every constraint rides a documented parameter — [site:] operators in [q],
+(* Every constraint rides a documented parameter — [site:] operators in [q],
    [gl], [hl], [tbs] and [safe] — so all five buckets are honoured and the
    notice stays [None] whatever the caller asked for. What the cases below pin
    is what is never sent: fields that would change the billing or the response
@@ -369,9 +359,7 @@ let the_notice_stays_none_for_every_shape_of_ask () =
   in
   check_opt_string "fully constrained" None outcome.notice
 
-(* {1 The key in the query string}
-
-   The provider-contract redaction rule: never interpolate an underlying
+(* The provider-contract redaction rule: never interpolate an underlying
    exception or a raw response body into a message, because transport errors
    can echo the request they were built from — and this request's URL carries
    the API key. Each failure mode below is triggered with a refusal that {i
@@ -419,9 +407,7 @@ let the_failure_messages_stay_constant () =
   | Ok _ -> A.failf "a timed-out grant was accepted"
   | Error failure -> check_string "the timeout row" "request timed out" failure.message
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota statuses
    and the wording the quota carries; its leak regression lives above, because
    this key rides in the request URL. *)
@@ -439,8 +425,6 @@ let payment_and_rate_limit_are_quota () =
           check_bool "the quota kind" true (failure.kind = Provider.Quota);
           check_bool "a spent quota is not transient" false failure.retryable)
     [ 402; 429 ]
-
-(* {1 Cost and endpoint} *)
 
 let cost_does_not_scale_with_result_count () =
   let provider, _ = dial () in

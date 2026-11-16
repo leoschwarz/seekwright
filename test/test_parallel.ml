@@ -63,9 +63,7 @@ let nth label index xs =
   | Some x -> x
   | None -> A.failf "%s has no item %d" label index
 
-(* {1 The fixture: a real REST payload}
-
-   Copied from the oracle's suite, which captured it from the Search API: the
+(* Copied from the oracle's suite, which captured it from the Search API: the
    [search_id] and [session_id] are the vendor's bookkeeping and never reach the
    caller, and the second record arrives with a null [title] and a null date. *)
 let sample =
@@ -94,8 +92,6 @@ let sample =
 
 let sample_json =
   match Yojson.Safe.from_string sample with `Assoc _ as json -> json | _ -> A.failf "the fixture is not an object"
-
-(* {1 The seam} *)
 
 let dial ?(status = 200) ?(body = sample) ?text_chars ?cost_per_1k ?mode () =
   let sent = ref None in
@@ -138,8 +134,6 @@ let strings_of path json =
 
 let has_field name json =
   match Provider.Json.members json with Some fields -> List.mem_assoc name fields | None -> false
-
-(* {1 The parser both halves share} *)
 
 let parse ?(limit = 10) ?(text_chars = 2000) data = Parallel.parse_results data ~limit ~text_chars
 
@@ -215,8 +209,6 @@ let a_document_that_is_not_an_object_is_empty_not_an_error () =
   check_int "an array" 0 (List.length (parse (`List [ `Int 1; `Int 2; `Int 3 ])));
   check_int "a scalar" 0 (List.length (parse (`String "not a result set")))
 
-(* {1 The REST request} *)
-
 let post_with_the_key_header_and_a_body () =
   let _outcome, request = search_of ~query:(query ~text:"python 3.14" ~max_results:3 ()) () in
   check_bool "the method" true (request.Caps.Authority.Net.meth = `POST);
@@ -283,8 +275,6 @@ let an_unasked_filter_leaves_the_policy_out_entirely () =
   check_bool "no source_policy" false (has_field "source_policy" advanced);
   check_bool "no location" false (has_field "location" advanced);
   check_int "only the count" 1 (List.length (Option.get (Provider.Json.members advanced)))
-
-(* {1 The notices, hand-composed} *)
 
 let exclude_is_sent_and_its_ignoring_is_noticed () =
   (* Sent verbatim even though Parallel ignores it while [include_domains] is
@@ -353,9 +343,7 @@ let the_notices_join_in_one_sentence () =
      that constraint was ignored; upstream warnings: thin index; no dates"
     (Option.get outcome.notice)
 
-(* {1 The failures this adapter owns}
-
-   The rows every HTTP adapter owes are pinned once for all of them by
+(* The rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota pair —
    [parallel] answers both the payment status and the rate limit with one
    sentence — and the leak regression for the place its key actually rides. *)
@@ -392,8 +380,6 @@ let malformed_json_is_the_adapters_own_sentence () =
   | Ok _ -> A.failf "a body that is not JSON was accepted"
   | Error failure -> includes "named as a malformed response" "malformed JSON" failure.message
 
-(* {1 Cost and endpoints} *)
-
 let the_price_tracks_the_preset_not_the_count () =
   let adapter, _sent = dial () in
   check_number "one call" 0.001 (Provider.cost_for adapter 1);
@@ -413,8 +399,6 @@ let the_endpoints_are_the_two_halves () =
   check_string "the free half's hosted MCP" "https://search.parallel.ai/mcp"
     (Uri.to_string Parallel.mcp_uri);
   check_string "and its tool" "web_search" Parallel.mcp_tool
-
-(* {1 The free half: the tool surface and its text channel} *)
 
 (* The scripted MCP endpoint: the handshake answered, then one tool reply. Same
    shape as test_exa's fixture; the free half has no credential to tell apart, so

@@ -3,7 +3,7 @@
    What this suite pins is that the HTTP transport adds framing and nothing else
    to the capability surface, and that the bounds a reviewer would expect to
    find implemented here are the mcp-kit adapter's, not ours
-   (plans/capability-gated-mcp-server.md §7):
+  ):
 
    - one transcript of legacy JSON-RPC bodies — [initialize], the initialized
      notification, [tools/list], three [tools/call]s and the no-capability
@@ -130,9 +130,7 @@ let () =
   Unix.symlink "/etc/passwd" (Filename.concat root_a "escape");
   write root_b "answer.md" "from B\n"
 
-(* {2 A server value, and a listener around it}
-
-   Grant, registry, server, listener and client all live under one
+(* Grant, registry, server, listener and client all live under one
    [Eio.Switch.t] — the §7 contract, the same one examples/read_source.ml runs.
    A listener is stopped with the [stop] promise rather than by cancelling its
    fiber: [Eio.Switch.run] waits for every fiber it registered, so a listener
@@ -243,9 +241,7 @@ let with_server ~root ?max_body_size ?allowed_origins ?(rejections = 0) f =
       });
   check_listener ~rejections listener
 
-(* {2 The transcript, and its parity with stdio}
-
-   The same seven bodies, in the same order, through both transports; they are
+(* The same seven bodies, in the same order, through both transports; they are
    the calls in the transcripts recorded in examples/read_source.ml and in the
    M2 commit message. *)
 
@@ -379,8 +375,6 @@ let stdio_enforces_the_legacy_lifecycle_and_http_does_not () =
       Alcotest.(check int) "HTTP answers it" 200 status;
       Alcotest.(check bool) "and lists the registered tools: " true (contains ~haystack:text ~needle:"read_source")))
 
-(* {2 The bounds belong to the adapter} *)
-
 let a_body_over_the_pinned_bound_is_refused_by_the_adapter () =
   (* [max_body_size] is the only thing this file supplies: the 413 with an empty
      body, and that the oversized body is never parsed, is mcp-kit's. *)
@@ -458,8 +452,6 @@ let an_unlisted_origin_and_a_get_are_refused () =
       in
       let status, _ = read_response response body in
       Alcotest.(check int) "the same request is a 405 once that Origin is listed" 405 status))
-
-(* {2 Grants, per listener} *)
 
 let two_listeners_do_not_share_a_grant () =
   (* The spike answer in test form: the grant set is a property of the server

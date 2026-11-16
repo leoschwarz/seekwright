@@ -1,7 +1,3 @@
-(* Jina Reader. fallback.mli owns what every remote fallback shares; this
-   file is only the reader's URL shape, its two status arms, and the header
-   block the service wraps around the markdown. *)
-
 module Caps = Mcp_caps
 
 let jina_reader_endpoint = "https://r.jina.ai/"

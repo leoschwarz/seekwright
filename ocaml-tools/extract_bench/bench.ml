@@ -1,27 +1,6 @@
-(* The OCaml half of the F6.2 extraction benchmark.
-
-   Runs the port's stdlib backend over the corpus in [test/corpus_html/] and
-   prints one metric row per case, as a table for a reader or as JSON lines for
-   [metrics_table.py] to put beside the Python oracle's rows. This is not a gate
-   step: it measures time and memory, which are properties of a machine rather
-   than of a tree. What the gate enforces is the recorded quality bar, in
-   [test/corpus_html/], and the corpus's own integrity, in [gen_fixtures].
-
-   The metric definitions live in [extract_metrics], shared with that gate, so
-   the numbers in this table and the verdicts in that suite are the same
-   measurements. What is here is the timing, the allocation counter, and the
-   printing. An operator runs::
-
-     dune exec ocaml-tools/extract_bench/bench.exe -- --json test/corpus_html
-     .venv/bin/python ocaml-tools/extract_bench/py_bench.py test/corpus_html
-     .venv/bin/python ocaml-tools/extract_bench/metrics_table.py \
-         tmp/bench/ocaml.jsonl tmp/bench/python.jsonl
-
-   and records what comes out in [test/corpus_html/metrics.md]. *)
+(* Extraction benchmark harness for the stdlib backend over test/corpus_html/. *)
 
 module M = Extract_metrics
-
-(* {1 Timing} *)
 
 let monotonic_ms () = Unix.gettimeofday () *. 1000.0
 
@@ -54,8 +33,6 @@ let alloc_words f =
   | exception _ -> ());
   let after = words (Gc.quick_stat ()) in
   after -. before
-
-(* {1 The row} *)
 
 type row = {
   case : M.case;
@@ -108,11 +85,6 @@ let to_json (r : row) : Yojson.Safe.t =
   add "bar_failures" (strs r.bar_failures);
   `Assoc (List.rev !b)
 
-(* {1 Output} *)
-
-(* [bench --case <id>] prints one case's extraction verbatim, title first. It is
-   how a missed phrase in the table gets explained: the row says a phrase is
-   missing, and this says where the extraction actually put it. *)
 let dump_case cases wanted =
   match List.filter (fun (c : M.case) -> c.M.id = wanted) cases with
   | [] ->
@@ -175,14 +147,6 @@ let print_table rows =
        (List.length (List.filter (fun r -> r.m.M.outcome <> "text") rows))
        (sum (fun r -> List.length r.bar_failures)))
 
-(* {1 The gate mode} *)
-
-(* [bench --check <corpus>] is the hermetic half of F6.2: it measures the content
-   metrics and the timing ceiling over the corpus and exits non-zero when a case
-   misses a bar [cases.json] records. It is the same code path as the table mode,
-   so the gate and the recorded table cannot mean different things by construction.
-   It reads nothing but the corpus and the port's own backend, and reaches no
-   network. *)
 let check_dir dir =
   let cases = M.load_cases dir in
   if cases = [] then (
@@ -191,7 +155,7 @@ let check_dir dir =
   if List.length cases < 30 then
     prerr_endline
       (Printf.sprintf
-         "bench: the corpus has %d cases; F6.2's bar needs the ordinary, \
+         "bench: the corpus has %d cases; quality bar needs the ordinary, \
           malformed, encoding, hostile and PDF families, not a toy set"
          (List.length cases));
   let failures, measured =

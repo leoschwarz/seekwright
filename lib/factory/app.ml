@@ -1,14 +1,3 @@
-(* The process build: everything a served process holds, in the order it has to
-   be built. Port of [src/seekwright/factory.py]'s build_app.
-
-   The order is the contract. [startup_verdict] runs before a single engine
-   exists, because an engine over a config this build cannot route is exactly
-   what the verdict refuses; the usage recorder comes first because a bad
-   [dashboard.history_path] is a config problem and reads as one; and every
-   grant the served process runs on carries the audit sink installed here, once,
-   through [Grants.grant_of_decision]. This is the only module in the library
-   that constructs an engine, and the [--check] path never reaches it. *)
-
 module Agent = Seekwright.Agent
 module Config = Seekwright.Config
 module Engine = Seekwright.Engine
@@ -19,9 +8,6 @@ module Usage = Seekwright.Usage
 
 let ( let* ) = Result.bind
 
-(* The builders this pass drives, each named where it lives. None of them can
-   construct a grant: the funnel is [Grants]', and what reaches here is already
-   wrapped. *)
 let audit_sink = Grants.audit_sink
 let grant_of_endpoint = Grants.grant_of_endpoint
 let probe_net = Grants.probe_net
@@ -31,15 +17,10 @@ let build_page_cache = Fetch_stack.build_page_cache
 let readers = Fetch_stack.readers
 let startup_verdict = Verdict.startup_verdict
 
-
 let agent_net ~sw ~net ~mono_clock ?audit config =
   match config.Config.agent.Config.base_url with
   | None -> Error "agent mode is enabled but [agent] base_url is unset"
   | Some url -> (
-      (* The same URI-to-grant-entry derivation the adapters use
-         ([Seekwright.Provider.policy_of_uri]): [agent] is not a provider, but a
-         second spelling of "scheme, host, port" is how two endpoints start to
-         disagree. *)
       let endpoint = Provider.policy_of_uri (Uri.of_string url) in
       grant_of_endpoint ~sw ~net ~mono_clock
         ~timeout_seconds:config.Config.agent.Config.model_timeout_seconds ?audit endpoint)
@@ -60,10 +41,6 @@ let build_app ~sw
   match Usage.create ~now ?history_path ~log () with
   | Error message -> Error message
   | Ok usage -> (
-      (* Every grant the served process runs on is wrapped with this sink, once,
-         through [grant_of_decision]. The health monitor's probes are operations
-         too: they reach the network on the server's switch, so they are audited
-         like a request is. *)
       let audit = audit_sink log in
       let built =
         build_providers ~sw ~net:(env#net) ~mono_clock ~now ~audit ~log config
@@ -72,9 +49,6 @@ let build_app ~sw
       | (name, message) :: _ ->
           Error (Printf.sprintf "provider %s: %s" name message)
       | [] ->
-          (* The config is refused here, before a single engine exists to
-             serve it: an engine over this pair of values is exactly what the
-             verdict says may not run. *)
           let* () = startup_verdict config built in
           let board =
             Health.create ~now:mono_now
@@ -91,11 +65,6 @@ let build_app ~sw
             | None -> Ok None
             | Some (Error message) -> Error message
             | Some (Ok (local, fallbacks)) -> (
-                (* The page cache is wired here rather than inside
-                   [build_fetch_stack] because it is the engine's seam, not one of
-                   the fetch routes: [fetch.cache_dir] unset leaves [cache] absent
-                   and every read dispatching, and a [cache_dir] this process
-                   cannot create or open refuses the start. *)
                 match
                   build_page_cache ~sw ~net:(env#net) ~mono_clock ~now ~audit ~fs:(env#fs) config
                 with

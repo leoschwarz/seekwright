@@ -1,33 +1,11 @@
-(** The provider contract: what an adapter owes, and the machinery that promise names.
+(** Search provider adapter contract and shared adapter utilities.
 
-    Port of [src/seekwright/providers/base.py] plus the rules of
-    [docs/reference/provider-contract.md]. Python states the contract as a
-    [runtime_checkable] Protocol — "a class that has the members *is* a
-    provider" — and this module states it as {!S}, a module type: an adapter
-    that is missing a member is a compile error rather than a runtime
-    [isinstance] surprise, which is the point of porting it.
-
-    What lives here is the contract and the shared helpers a contract needs:
-    the failure type and its status-code mapping, the constraint report an
-    adapter that cannot honour a filter must file, the snippet and text caps,
-    and the one operation an adapter may use to reach its endpoint ({!Net.t}).
-    Dispatch, retries, the health board and the per-name registry stay in the
-    engine (P5), and the six places a *name* gets wired stay in config and the
-    factory (P3, P5) — an adapter never decides whether it is enabled.
-
-    One Python member is deliberately absent from {!S}: [warmup] belongs to the
-    MCP-backed adapters only, and a member of [S] is a member of {i every}
-    adapter — the stateless HTTP ones would have to stub a session they do not
-    own (plans/ocaml-finalisation.md, F5.1). It rides beside the adapter instead,
-    as {!session}, and only the rows that build a session-carrying adapter say
-    it has one. [cost_for] is a `getattr` extra in Python and a required member
-    here: every adapter in the tree defines it, and one more member of {!S}
-    costs an adapter one line. *)
+    Defines the {!S} module signature that provider adapters implement,
+    failure models, request constraints reporting, text truncation caps,
+    and network access seams. *)
 
 type search_query = Model.search_query
-(** The request an adapter is handed. Exactly [query], [max_results],
-    [include_domains], [exclude_domains], [country], [language], [recency] and
-    [safe_search]: adding a field is a change to every adapter. *)
+(** Search request delivered to an adapter. *)
 
 (** {1 The failure an adapter reports} *)
 
@@ -191,58 +169,26 @@ module Net : sig
       the value it was handed refuses every other. *)
 
   val of_grant : Mcp_caps.Authority.Net.t -> t
-  (** [of_grant grant] is the production wiring: the adapter's traffic goes
-      through the endpoint allowlist the grant was built with
-      ([Policy.with_endpoints]), so "what may this provider reach" is answered
-      where the grant is built, not in the adapter (plans/seekwright-ocaml-port.md
-      §1). The operation bound is the grant's too — [Authority.with_operation_timeout]
-      — which is why no adapter takes a timeout of its own the way the Python
-      [httpx] call does. *)
+  (** [of_grant grant] wraps an authority net grant into the network seam. *)
 end
 
-(** {1 Naming an endpoint, and reducing one} *)
-
 val policy_of_uri : Uri.t -> Mcp_caps.Policy.endpoint
-(** [policy_of_uri uri] is the same destination in the grant's words:
-    [Mcp_caps.Policy.with_endpoints] pins scheme, host and an explicit port, and
-    this is the one place a URI is read into that triple. An adapter's endpoint
-    and the entry the factory allows its grant to reach are the {i} same fact
-    because both come from here — two spellings of one destination are what drift
-    the first time either is edited (plans/ocaml-finalisation.md, F4.1).
-
-    A URI with no host gives an endpoint with no host, which every grant policy
-    refuses to connect to: a config-derived destination ([searxng]'s instance, an
-    [exa] override) is checked where it is read, by the registry, and this stays
-    a total derivation. *)
+(** [policy_of_uri uri] extracts the scheme, host, and port endpoint triple
+    matching [uri]. *)
 
 val redact_url : string -> string
-(** [redact_url url] is the URL's host and nothing else — the oracle's
-    [urlsplit(url).hostname or "?"], the same reduction the fetch log's [host]
-    field is built with. Every line that names a URL in a log event or a
-    provider error goes through it, and it is load-bearing for [serpapi], the one
-    documented request shape that puts an API key in the query string: a key
-    cannot survive a reduction to a host. *)
+(** [redact_url url] extracts the host part of [url] (or ["?"] if absent),
+    stripping path, credentials, and query parameters to avoid log leaks. *)
 
 val escape_path_segment : string -> string
-(** [escape_path_segment s] is [s] with every byte outside the URI unreserved set
-    percent-encoded: the oracle's [quote(value, safe="")], which is {i} narrower
-    than [Uri.escape] — that one keeps sub-delims like [?] and [&] literal, and a
-    path segment that keeps them is a segment that changes meaning. A value from
-    config that goes into a path ([algolia]'s [index]) goes through this on its
-    way to the request. *)
-
-(** {1 What an adapter returns} *)
+(** [escape_path_segment s] percent-encodes all characters in [s] outside the
+    unreserved set ([a-zA-Z0-9_.-~]). *)
 
 type hit = {
   result : Model.result;
   uncapped_chars : int option
 }
-(** One search hit, plus the pre-cap length of its snippet or text. Python hangs
-    that number on [Result._uncapped_chars] — private, so it cannot reach the
-    wire. An OCaml record has no private field, and the wire model must not
-    carry one, so the measurement rides {i beside} the result on the provider
-    boundary and the engine logs it as [search.cap]; {!to_provider_result} is
-    where it is dropped. *)
+(** One search hit, plus the pre-cap length of its snippet or text. *)
 
 type outcome = {
   provider : string;
@@ -251,14 +197,9 @@ type outcome = {
   cost_usd : float option;
   notice : string option;
 }
-(** [ProviderResult]: what an adapter returns before the engine adds response
-    metadata. [provider] is this adapter's own name, always set — every response
-    names the provider that served it. *)
+(** Adapter outcome before engine attaches response metadata. *)
 
 val to_provider_result : outcome -> Model.provider_result
-(** The wire-model view, with the {!hit} wrapper dropped. *)
-
-(** {1 The contract, and a provider as a value} *)
 
 module type S = sig
   val name : string
@@ -267,49 +208,22 @@ module type S = sig
   val search : search_query -> (outcome, error) result
   val aclose : unit -> unit
 end
-(** The [SearchProvider] protocol. [name] matches the config key; [cost_per_1k]
-    is reporting only — it corrects the figure [--check --live] prints and
-    nothing routes on it; [cost_for] is the per-query figure a caller reads when
-    a deployment wants one, and flat-priced adapters ignore its argument;
-    [search] is the whole job; [aclose] exists because the MCP-backed adapters
-    own a session, and an HTTP adapter's is a documented no-op — the grant
-    belongs to the server, not to the adapter, so closing it would break its
-    siblings.
-
-    A failure is a returned [Error], not a raised exception: Python's [raise
-    ProviderError] and its [except] arms become this [Error] channel, which is
-    what keeps the engine's fallback walk in one control-flow shape. *)
+(** The search provider module signature. *)
 
 type t = (module S)
-(** A provider as a value: what the engine's registry holds under its name. *)
+(** Provider instance packed as a first-class module. *)
 
 val name : t -> string
 val cost_per_1k : t -> float
 val cost_for : t -> int -> float
 val search : t -> search_query -> (outcome, error) result
 val aclose : t -> unit
-(** The accessors, so a caller holds a {!t} rather than a module it has to open. *)
-
-(** {1 The session lifecycle some adapters own} *)
 
 type session = {
   adapter : t;
   warmup : unit -> bool;
 }
-(** The optional seam member the MCP-backed adapters add: [warmup] opens the
-    adapter's {i own} session — the one its first search will ride — before any
-    request pays for the handshake, and never raises: a cold start at boot is a
-    log line, not a startup failure, exactly as in Python, where [warmup] is
-    [getattr]-ed onto the provider. The close half of that lifecycle is not
-    here: {!S} already carries [aclose], and a session-carrying adapter closes
-    what it owns. A stateless HTTP adapter has no value of this type to hand
-    out, which is the whole reason the pair lives beside {!t} rather than
-    inside {!S}. *)
-
-(** {1 Shared constants} *)
+(** Optional session lifecycle wrapper for MCP-backed adapters. *)
 
 val project_url : string
-(** What a provider is asked to identify us with ([freeserp]'s [website]
-    parameter), and the same constant the fetch path's User-Agent is built from
-    (P6, P8). [seekwright.__init__.PROJECT_URL] in the oracle; one place until
-    the surface printer pins it. *)
+(** Project repository URL. *)

@@ -6,6 +6,12 @@ _build/
 # README.md names the version it was rendered at).
 test/conformance/node_modules/
 
+# The usage journal the suites write: [test/test_usage.ml] and
+# [test/test_p8_surface.ml] name it relative to the working directory, so a run
+# started from the tree root leaves it here.
+usage-journal/
+p8-surface-journal/
+
 __pycache__/
 *.py[cod]
 .venv/

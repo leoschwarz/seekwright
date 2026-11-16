@@ -1,47 +1,18 @@
-(** DeepSeek Search — in-house engine, $0.75 per 1,000 successful requests.
+(** DeepSeek Search — keyed web search backend.
 
-    Port of [src/seekwright/providers/deepseek.py]. Billed {b per successful
-    request}: not by tokens, not by result count, and [count] does not move the
-    price. A request that answers 200 with an empty [results] array is not billed
-    at all, so [search] reports [0.0] for one — the figure tracks what the
-    account paid. There is no free tier, so [cost_per_1k] defaults to the
-    published rate; 402 is this API's own "insufficient balance" answer.
+    Billed per successful request. A 200 response with empty results is not billed
+    and reports cost 0.0.
 
-    Endpoint: [POST https://api.deepseek.com/v1/tools/search] with the key as a
-    bearer token.
+    Endpoint: [POST https://api.deepseek.com/v1/tools/search] with bearer token.
 
-    No filter fields exist on the request body ([query], [count], [ori_question],
-    [localization], [need_content] are the whole set); the documented interface is
-    a set of query operators — [site:], [-site:], [lang:], [after:] — so those
-    fold into [query] here. [localization] takes an {b IP address}, which is why
-    [country] is reported dropped rather than mapped onto something that is not a
-    country.
+    Query operators ([site:], [-site:], [lang:], [after:]) are folded into [query].
+    The upstream backend bounds the total query string to 128 Unicode characters.
+    If the folded query exceeds 128 characters, operators are stripped and the bare
+    query is sent with dropped constraints noted. Queries exceeding 128 characters
+    before folding are refused.
 
-    Two 128s live in this file and they are not the same limit applied twice: the
-    tool surface allows a 400-character query and this backend allows 128 {i code
-    points} ([Utf8.count], the same [len] reading [Seekwright.Provider.truncate_*]
-    uses), {b and every filter rides inside that string}, so the limit bounds the
-    {i folded} query. Past 128 folded, the operators come off rather than the
-    search dying: the bare query goes out and [notice] names each dropped bucket.
-    A query longer than 128 {i before} folding is the adapter's own refusal —
-    not retryable, because no retry changes the length.
-
-    [snippet] (100–200 characters, for display) and [summary] (600–800, for a
-    model) ride [Result.snippet] and [Result.text] under the two policy caps.
-    [content] — the page body, filled only when [need_content] is asked for — is
-    never requested: page text is what [fetch] is for.
-
-    [after:<YYYY-MM-DD>] is the one date computation in this adapter, and the
-    clock is therefore injected like [linkup]'s. The day counts {i differ} from
-    [linkup]'s by design: 31-day months and 366-day years, the {b long} month and
-    year, because a window that closes early loses results and an [after:] that
-    runs a day long loses none.
-
-    408 is this adapter's own row: documented as the request-body read timing
-    out, and the operator says retry — a transient fault, not the quota.
-
-    Untested status: written against the documented API, never called live
-    in-repo, on either side of the port. *)
+    402 indicates insufficient balance; 429 indicates rate limiting. 408 indicates
+    a transient upstream timeout. *)
 
 val name : string
 (** ["deepseek"], the config key and the [provider] every response names. *)
@@ -66,24 +37,14 @@ val recency_days : Seekwright.Model.recency -> int
 
 val after_date : now:(unit -> float) -> Seekwright.Model.recency -> string
 (** [after_date now period] is [<YYYY-MM-DD>] for [today - recency_days period]
-    in UTC: [datetime.now(UTC).date() - timedelta(days=n)] rendered with [isoformat].
-    The [civil_from_days] arithmetic is the one [Seekwright_providers.Linkup]
-    carries, with no timezone library. *)
+    in UTC. *)
 
 val fold_operators : now:(unit -> float) -> Seekwright.Provider.search_query -> string
-(** Compose the query with this API's operators folded in. Order is the operator's
-    own example — term, [site:], [lang:], [after:] — and a multi-site include is
-    the [site:a OR site:b] form its docs spell out. {b Not}
-    {!Seekwright.Provider.site_filtered_query}: that helper parenthesises a
-    multi-site filter, and parentheses are not part of this backend's documented
-    syntax. *)
+(** Compose the query with this API's operators folded in: term, [site:],
+    [lang:], [after:]. *)
 
 val request_body : query:string -> Seekwright.Provider.search_query -> string
-(** The request document. [query] is the {b decided} query — folded or bare —
-   because the 128-codepoint decision is the caller's; taking the value here is
-   what lets a suite pin both sides of the fold. [count] is clamped to
-   {!max_results}. [ori_question] is unknown here, and [need_content] stays at its
-   documented default of false, so no page body is requested. *)
+(** Encodes the request JSON with decided [query] and clamped [count]. *)
 
 val parse :
   snippet_chars:int -> text_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list

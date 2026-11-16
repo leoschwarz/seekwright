@@ -1,13 +1,3 @@
-(* The client verbs' argument scan and request bodies. Port of the [_extract]
-   helper beside [tests/test_cli.py]'s client classes: the flag-to-field rules
-   and the refusal sentences live here so the suites read them as values.
-
-   The scan keeps the Python's behaviour to the letter: [--flag=value] inline,
-   [--flag value] taking the next token unless that token is itself a long
-   flag, and a bare long flag landing in [bools]. A [None] never reaches a
-   body: the request serialisers drop unset fields, which is the OCaml shape
-   of the Python's [exclude_none=True] + [json.loads] round trip. *)
-
 let ( let* ) = Result.bind
 
 module Model = Seekwright.Model
@@ -18,13 +8,6 @@ type scanned = {
   bools : string list;
 }
 
-(* Which flags carry no value: the Python declares them with [store_true] and
-   [BooleanOptionalAction], so they fill the namespace without consuming a
-   following token — [argparse] then leaves a token that follows one as a
-   positional, which is how a stray value becomes "takes exactly one QUERY".
-   [--safe-search] is the odd one: [--safe-search] is [const=True] and
-   [--no-safe-search] [store_false], so neither may eat the next argument, and
-   a boolean action refuses an inline value outright. *)
 let boolean_flags = [ "--json"; "--structure"; "--safe-search"; "--no-safe-search" ]
 
 let is_long_flag token =
@@ -47,8 +30,6 @@ let scan_args argv =
           let name = String.sub flag 0 eq in
           let value = String.sub flag (eq + 1) (String.length flag - eq - 1) in
           if List.mem name boolean_flags then
-            (* [argparse] refuses an explicit value for a boolean action rather
-               than reading it as a string: "ignored explicit argument". *)
             Error (name ^ " takes no value")
           else
             go { scanned with flags = (name, [ value ]) :: scanned.flags } rest
@@ -63,9 +44,6 @@ let scan_args argv =
   let* scanned = go { positional = []; flags = []; bools = [] } argv in
   Ok { scanned with positional = List.rev scanned.positional; flags = List.rev scanned.flags }
 
-(* [scanned.flags] is already in command-line order — [scan_args] revs once at
-   the end — so a repeated flag's values come out in the order the caller wrote
-   them, which is what [argparse]'s [append] action gives. *)
 let flag_values scanned name =
   List.concat_map (fun (flag, values) -> if flag = name then values else []) scanned.flags
 
@@ -73,8 +51,6 @@ let flag_one scanned name = match flag_values scanned name with value :: _ -> So
 let flag_bool scanned name = List.mem name scanned.bools
 
 let usage_error message = Error message
-
-(* {1 Field readers} *)
 
 let recency_of_string = function
   | "day" -> Some Model.Day
@@ -95,22 +71,16 @@ let bool_flag scanned name =
   | "false" :: _ -> Some false
   | _ -> None
 
-(* A repeated flag is a list only where the request says the field is a list;
-   everywhere else [flag_one] already took the first value. *)
 let list_flag scanned name =
   match flag_values scanned name with [] -> None | values -> Some values
 
 let domain_flags scanned =
   (list_flag scanned "--include-domain", list_flag scanned "--exclude-domain")
 
-(* [json.loads] of the serialised body: the request model is the validator,
-   and the refusal is the Python's sentence. *)
 let validate_request decode json =
   match decode json with
   | Ok _ -> Ok json
   | Error message -> usage_error ("Invalid request: " ^ message ^ ".")
-
-(* {1 The three bodies} *)
 
 let search_body scanned =
   let query =
@@ -152,8 +122,6 @@ let fetch_body scanned =
     | [] -> usage_error "fetch needs a URL"
     | _ -> usage_error "fetch takes exactly one URL"
   in
-  (* exclude_defaults, as the Python client spells it: a field the caller did
-     not pass is absent from the body, and [structure] only when true. *)
   let* offset =
     match flag_one scanned "--offset" with
     | Some text -> (

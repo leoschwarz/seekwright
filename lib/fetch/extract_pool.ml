@@ -1,17 +1,3 @@
-(* CPU-bound extraction, isolated on a fixed-size pool of worker domains.
-   See extract_pool.mli for the contract: bounds, abandonment, shutdown.
-
-   The transport between the loop and a worker is an AF_UNIX stream socket,
-   not a shared-memory queue, on purpose. The loop-side half of an exchange is
-   then an ordinary Eio flow: [Eio.Time.Timeout] can cut it, a cancelled
-   caller closes it, and the worker sees EOF exactly when its client is gone —
-   which is the cooperative half of "the worker observes the cancellation". A
-   mutex-and-cond queue would need a second mechanism (a pipe, a promise) to
-   deliver that same wake-up, and promise resolution from another domain is
-   exactly the thread-safety trap the type system does not police. The copies
-   the sockets force are also what makes cross-domain sharing boring: only the
-   immutable backend closure is shared; page bodies and results are bytes. *)
-
 module E = Extractor
 
 type error =
@@ -19,15 +5,6 @@ type error =
   | Pool_closed
   | Backend of string
   | Worker of string
-
-(* {1 The frame grammar}
-
-   Big-endian i64s throughout, no endianness argument to have with a worker
-   in the same process. Length-prefixed rather than EOF-delimited on both
-   sides: a request is one frame the worker can validate against
-   [max_body_bytes] before allocating, and a response is one frame the loop
-   can bound the same way. A frame that declares more than its ceiling gets
-   the connection closed, never the allocation. *)
 
 let i64_to_string (v : int64) : string =
   let b = Bytes.create 8 in
@@ -53,8 +30,6 @@ let status_backend = 1L
 (* The one spelling of "this optional value is absent" on the wire: a length
    of -1, where any real length is >= 0. *)
 let absent = -1L
-
-(* {1 The worker side (plain Unix; no Eio inside a worker domain)} *)
 
 let write_all fd (s : string) =
   let b = Bytes.of_string s in
@@ -226,8 +201,6 @@ let worker_main ~path ~(extractor : E.backend) ~max_body_bytes ~ready =
       (try Unix.close sock with Unix.Unix_error _ -> ());
       (try Unix.unlink path with Unix.Unix_error _ -> ())
 
-(* {1 The pool} *)
-
 (* [Eio.Net.t] and [Eio.Time.Mono.t] are parameterised by the backend's
    resource tag, and a record type cannot carry an existential tag — [_] is
    not allowed in a type declaration. So the record is parameterised and [t]
@@ -372,8 +345,6 @@ let make ~net ~mono_clock ~dir ~(extractor : E.backend) ?(workers = workers_defa
                  closed = Atomic.make false;
                  max_result_bytes;
                })
-
-(* {1 The exchange, loop side (Eio direct style)} *)
 
 let exchange (t : _ pool) flow ~body ~content_type =
   Eio.Buf_write.with_flow flow (fun w ->

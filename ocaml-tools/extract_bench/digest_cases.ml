@@ -1,6 +1,4 @@
-(* The F6.2 identity check: one line per corpus case with a digest of what the
-   port's backend answers, so a change to the shared plumbing can be shown to
-   leave the answer byte-identical rather than merely "still passing". *)
+(* Extraction identity check: digest of backend output for each corpus case. *)
 
 module S = Seekwright_fetch_stdlib.Stdlib
 module E = Seekwright_fetch.Extractor

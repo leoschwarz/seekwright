@@ -13,7 +13,7 @@
 val find_sub : ?start:int -> haystack:string -> needle:string -> unit -> int option
 
 (** [contains ~haystack ~needle] is [true] when {!find_sub} answers [Some _].
-    The empty needle occurs in every haystack, as Python's ["" in s] says. *)
+    The empty needle occurs in every haystack. *)
 val contains : haystack:string -> needle:string -> bool
 
 (** [read_file path] is the whole file, read in binary so no newline is
@@ -39,14 +39,13 @@ val read_file : string -> string
     raises [Sys_error]. *)
 val factory_sources : unit -> (string * string) list
 
-(** [replace_all ~haystack ~needle ~with_] is Python's [str.replace]: every
-    non-overlapping occurrence of [needle], left to right. An empty needle
-    leaves the haystack unchanged, as Python does. *)
+(** [replace_all ~haystack ~needle ~with_] replaces every non-overlapping
+    occurrence of [needle], left to right. An empty needle leaves the haystack
+    unchanged. *)
 val replace_all : haystack:string -> needle:string -> with_:string -> string
 
-(** [count_occurrences ~haystack ~needle] is Python's [str.count]: the number of
-    non-overlapping occurrences of [needle], counted left to right. An empty
-    needle counts zero. *)
+(** [count_occurrences ~haystack ~needle] is the number of non-overlapping
+    occurrences of [needle], counted left to right. An empty needle counts zero. *)
 val count_occurrences : haystack:string -> needle:string -> int
 
 (** [includes label needle haystack] passes when [haystack] contains [needle],

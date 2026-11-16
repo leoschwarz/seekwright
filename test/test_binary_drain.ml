@@ -1,4 +1,4 @@
-(* F2.3: the real binary's SIGTERM drain.
+(* The real binary's SIGTERM drain.
 
    [test_drain.ml] drives the same drain through an injected stop promise; this
    suite proves the process signal path reaches it. It is deliberately a

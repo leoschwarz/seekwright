@@ -1,50 +1,19 @@
 (** Configuration: what a deployment enables, and what it refuses to start on.
 
-    Port of [src/seekwright/config.py]. Two rules decide every failure here:
-
     - Secrets come from the environment only ([SEEKWRIGHT_*]), never from the
       file, because files get committed. The one exception is
       [fetch.crawl4ai_token], which authenticates this server to an internal
       service the same file already names.
-    - Nothing is inferred. An unknown provider name, an unknown key (every one
-      of them in a section, in one sentence, sorted — a typo-fixing pass should
-      not be a restart loop), a ladder name that cannot run, or an enabled
-      provider with no key is a startup failure naming the file and the fault:
-      a setting that parses, loads and does nothing is the failure mode every
-      validator here exists to remove. The two keys this port genuinely cannot
-      honour, [logging.library_level] and [logging.access_log], are refused at a
-      non-default value for the same reason — see {!type:logging_config}.
-
-    What is *not* a failure is a config that enables nothing. That resolves to
-    {!keyless_providers} -- the names that reach their endpoint with no account,
-    key or card -- and {!t.providers_defaulted} records that the set was
-    implicit, so the startup line and [--check] can say it out loud rather than
-    assume it.
-
-    The Python tree validates through pydantic models. This module decodes the
-    TOML table into plain records and then runs the same validators in the same
-    order -- fetch and search section rules first, then the provider block,
-    then the permission set -- so one file yields the same config, or the same
-    refusal sentence, in either tree. pydantic's structured wrapper
-    ([type=extra_forbidden], the input value it echoes back) is not reproduced;
-    the sentence each validator raises is, quoting and sorted name lists
-    included.
-
-    A bad config is an [Error] value carrying the whole operator-facing message,
-    not an exception: the CLI (P8) prints it and exits 1 where Python raises
-    [SystemExit]. Nothing in here logs, so a caller decides what a failure is
-    worth saying. *)
+    - Nothing is inferred. An unknown provider name, an unknown key, a ladder
+      name that cannot run, or an enabled provider with no key is a startup
+      failure naming the file and the fault.
+    - An empty configuration that enables nothing resolves to {!keyless_providers}
+      and {!t.providers_defaulted} is set to true. *)
 
 (** A provider name: [backend] or [backend:flavour] ([exa], [exa:free]). The
-    flavour decides the *route*, the backend decides the account -- and the
-    environment variable holding the key, since [:] cannot appear in one. *)
+    flavour decides the route, the backend decides the account and the
+    environment variable name. *)
 type name = string
-
-(** The frozen vocabularies. These are the names the validators accept, and the
-    sets the routing decisions read; they are facts about the adapters this
-    build ships, not a pricing page. Each is a sorted list, which is both the
-    set semantics Python's [frozenset] gives and the order a refusal sentence
-    prints them in. *)
 
 val known_providers : name list
 val permitted_fetch_names : name list
@@ -61,8 +30,7 @@ val free_providers : name list
     the caller holds. A metered free tier can bill, so it is out. *)
 
 val keyless_providers : name list
-(** What a config that enables nothing resolves to, in that order. Not a set:
-    the order is the install default's walk. *)
+(** What a config that enables nothing resolves to, in that order. *)
 
 val free_provider_order : name list
 (** Walk order for [search(mode="free")] and for an unnamed search on an
@@ -73,16 +41,11 @@ val untested_providers : name list
     a name leaves only once a live run has passed. *)
 
 val known_extractors : string list
-(** One name per extraction backend this port can build; [fetch.extractor] is
-    validated against this, exactly as a provider name is against
-    {!known_providers}. Python's [trafilatura] is absent because its library
-    does not ride on the port, so naming it here would accept a config that
-    construction then refuses. *)
+(** One name per extraction backend this build can build; [fetch.extractor] is
+    validated against this. *)
 
 (** One row of the fetch fallback registry: what [fetch.fallback] may name, and
-    the two facts the ladder and the report need from it. Ported from
-    [fetcher.KNOWN_FALLBACKS]'s data columns; what Python's row carries besides
-    these is its builder, which is the P6 fetch stack's, keyed by this name. *)
+    the two facts the ladder and the report need from it. *)
 type fetch_fallback = {
   name : name;  (** what the ladder and the journal record *)
   billable : bool;  (** the tier: [fetch.fallback] refuses it anywhere but last *)
@@ -95,8 +58,6 @@ val default_user_agent : string
 val default_config_path : string
 (** The install default: [~/.config/seekwright/config.toml], [~] expanded by
     {!config_path}. *)
-
-(** {2 The sections} *)
 
 type output_kind =
   | Sourced_answer  (** Linkup's prose answer *)
@@ -114,8 +75,7 @@ type log_level =
   | Log_critical
 
 val show_log_level : log_level -> string
-(** The spelling loguru names the level by, and the spelling [logging.level]
-    takes in TOML. *)
+(** The spelling [logging.level] takes in TOML. *)
 
 type log_format =
   | Log_text  (** stdio's human reader *)
@@ -125,8 +85,7 @@ val show_log_format : log_format -> string
 
 (** One provider's entry: [[providers.<name>]]. Every key has a working default
     except where a later check makes it required -- [searxng]'s [url] and
-    [algolia]'s [app_id]/[index] -- and those are startup errors, not
-    half-built adapters. *)
+    [algolia]'s [app_id]/[index]. *)
 type provider_config = {
   enabled : bool;
   cost_per_1k : float option;  (** reporting only; nothing routes on it *)
@@ -149,8 +108,7 @@ type policy_config = {
   provider_timeout_seconds : float;
 }
 
-(** The [fetch] tool's settings. A section of its own, not a [[providers]]
-    entry: a fetcher has no key, no cost per 1k, and no name a caller pins. *)
+(** The [fetch] tool's settings. *)
 type fetch_config = {
   enabled : bool;
   extractor : string;
@@ -161,11 +119,8 @@ type fetch_config = {
   max_match_chars : int;
   max_redirects : int;
   allow_private_addresses : bool;
-  (** off: the URL is model-supplied. When on, it is the operator saying this
-      deployment reads its own intranet, and the factory builds the local
-      reader's grant in the capability layer's private-web variant
-      ([Mcp_caps.Policy.with_private_web]) instead of the public-web one. A
-      third-party fetch fallback keeps its public-only rule whatever this says. *)
+  (** Off by default. When on, private intranet addresses may be fetched by the
+      local reader. Third-party fallbacks remain public-only. *)
   allow_images : bool;
   user_agent : string;
   fallback : string list option;  (** the walk's order; [None] is the absent key *)
@@ -192,8 +147,7 @@ type search_config = {
   health_cooldown_seconds : float;
 }
 
-(** Agent mode: the [answer] tool. Off by default, and that default is the
-    decision -- turning it on is what creates a third-party egress point. *)
+(** Agent mode: the [answer] tool. Off by default. *)
 type agent_config = {
   enabled : bool;
   base_url : string option;
@@ -209,15 +163,10 @@ type agent_config = {
 }
 
 (** What this process logs, and at what level. [level], [format], [log_queries]
-    and [log_content] are honoured by the port's own sink.
+    and [log_content] are honoured.
 
-    [library_level] and [access_log] are the two keys that speak about uvicorn,
-    and there is no uvicorn on this port: the transport is mcp-kit over
-    cohttp-eio. Their defaults therefore load and do nothing, and an explicitly
-    {i non-default} value is a load-time refusal rather than a key that is
-    silently inert — see {!validate_logging_on_this_port}. No other field here is
-    inert, and nothing else in this configuration is "parsed, not honoured"
-    except the keys a later phase owns. *)
+    [library_level] and [access_log] defaults load and do nothing; an explicitly
+    non-default value is a load-time refusal. *)
 type logging_config = {
   level : log_level;
   format : log_format;
@@ -232,21 +181,19 @@ type dashboard_config = {
   history_path : string option;  (** opt-in append-only JSONL journal *)
 }
 
-(** A resolved configuration. Build one with {!resolve} (the port of
-    [Config(...)] plus its model validators) or read it from a file with
-    {!load}; {!default} is what a fresh install with no file at all gets. *)
+(** A resolved configuration. Build one with {!resolve} or read it from a file
+    with {!load}; {!default} is what a fresh install with no file gets. *)
 type t = {
   providers : (name * provider_config) list;
   (** The entries this file declares, in the TOML table's key order. When the
       file declared no enabled name this is {!keyless_providers} in its walk
-      order, not the empty list. Nothing dispatches off this order;
-      {!enabled_providers} is the sorted list every sentence prints. *)
+      order, not the empty list. *)
   default_provider : name option;
   (** [None] with several enabled names means callers pass [provider]. With
       exactly one enabled name it resolves to that name. *)
   permitted_providers : name list option;
-  (** [None] is permissive. A declared list is deny-by-default, and [Some [] ]
-      refuses every name -- the absent key and [[]] are different answers. *)
+  (** [None] is permissive. A declared list is deny-by-default, and [Some []]
+      refuses every name. *)
   policy : policy_config;
   fetch : fetch_config;
   search : search_config;
@@ -254,16 +201,11 @@ type t = {
   logging : logging_config;
   dashboard : dashboard_config;
   providers_defaulted : bool;
-  (** Whether {!t.providers} is the implicit keyless set. There is no
-      [providers_defaulted] key in the file: this is a report, never a setting. *)
+  (** Whether {!t.providers} is the implicit keyless set. *)
 }
 
-(** The tables the file may declare, in the order they are decoded. The
-    documentation guard reads this, so a section that no operator page names fails
-    a run instead of arriving undocumented — the reason it is public. *)
 val section_names : string list
 
-(** The sections' defaults, as the file's absent keys leave them. *)
 val default_provider_config : provider_config
 val default_policy_config : policy_config
 val default_fetch_config : fetch_config
@@ -273,55 +215,34 @@ val default_logging_config : logging_config
 val default_dashboard_config : dashboard_config
 val default : t
 
-(** {2 Reading answers off a configuration} *)
-
 val provider : t -> name -> provider_config option
 val enabled_providers : t -> name list
 (** Enabled names, sorted. *)
 
 val effective_providers : t -> name list
 (** The names this deployment may actually dispatch to: enabled [intersection]
-    permitted. This is the one home for "unset is permissive". *)
+    permitted. *)
 
 val is_permitted : t -> name -> bool
-(** Asked *after* the enabled question, never instead of it. *)
 
 val default_route_is_free_only : t -> bool
 (** Whether an unnamed [search] may walk the free set instead of refusing: true
-    only while every name it may dispatch to cannot bill. Read by the engine's
-    resolve and by [--check]'s [default] line, so the route taken and the route
-    reported cannot disagree. *)
+    only while every name it may dispatch to cannot bill. *)
 
 val api_key_env_var : name -> string
-(** The variable holding a provider's key, named for the backend segment. Every
-    site that names a variable goes through here, so the operator-facing
-    messages cannot drift from {!api_key}. *)
+(** The variable holding a provider's key, named for the backend segment. *)
 
 val api_key : name -> string option
-(** Read from the environment; an empty value reads as absent, as Python's [or
-    None] does. Takes no [{!t}]: the variable is named for the provider string
-    alone, so no configuration can change the answer. *)
+(** Read from the environment; an empty value reads as absent. *)
 
 val agent_api_key : unit -> string option
-(** The model endpoint's key. Not [SEEKWRIGHT_<provider>_API_KEY]: the model is
-    not a provider -- not searchable, not pinnable, not one of the
-    interchangeable things [[providers]] lists. *)
+(** The model endpoint's key ([SEEKWRIGHT_AGENT_API_KEY] or [OPENAI_API_KEY]). *)
 
 val missing_api_keys : t -> name list
-(** Enabled providers whose key is absent. Reported, never raised: [server.main]
-    refuses to start on this while [--check] prints the same fact and keeps
-    going. *)
+(** Enabled providers whose key is absent. *)
 
 val missing_agent_settings : t -> string list
-(** What [[agent] enabled = true] needs and does not have, by name. Reported for
-    the same reason as {!missing_api_keys}. *)
-
-(** {2 The validators} *)
-
-(** Each returns the refusal sentence pydantic's [ValueError] carries, or [Ok ()].
-    They are public because the rules are facts a caller re-checks -- the
-    fallback ladder's shape is read by the fetch stack (P6) and by [--check] (P8)
-    against the registry, not only by the loader. *)
+(** What [[agent] enabled = true] needs and does not have, by name. *)
 
 val validate_provider_names : name list -> (unit, string) result
 (** An unknown provider name, naming its replacement when it is a retired
@@ -330,13 +251,9 @@ val validate_provider_names : name list -> (unit, string) result
 val validate_fetch_extractor : string -> (unit, string) result
 val validate_fetch_fallbacks : fetch_fallback list -> name list -> (unit, string) result
 (** At most one attempt each, every name in the registry, and the one name that
-    can bill last -- asked of each row's [billable] flag, never of a name, so a
-    priced vendor this build has never heard of inherits the rule. *)
+    can bill last. *)
 
 val validate_fetch_primary : fetch_fallback list -> name -> (unit, string) result
-(** The primary route's shape: a name, and no tier rule. A billable primary is
-    the operator paying a named price for every unnamed fetch. *)
-
 val validate_search_fallbacks : name list -> (unit, string) result
 val validate_search_free_fallbacks : name list -> (unit, string) result
 (** {!validate_search_fallbacks}'s shape plus the rule that makes the mode
@@ -344,15 +261,10 @@ val validate_search_free_fallbacks : name list -> (unit, string) result
 
 val validate_permitted_providers : name list -> (name list option, string) result
 (** Duplicates and unknown names are errors; a list containing ["*"] normalises
-    to [None], because "*" is not a provider name and "everything" is the same
-    list as no list. An explicitly empty list stays [Some [] ]. *)
+    to [None]. An explicitly empty list stays [Some []]. *)
 
 val validate_logging_on_this_port : logging_config -> (unit, string) result
-(** The two uvicorn-shaped keys, refused when they carry a non-default value:
-    see {!type:logging_config}. Exposed because [--check] and the tests read the
-    same fact, and a key made honest later stops being refused in one place. *)
-
-(** {2 Resolution and loading} *)
+(** The two uvicorn-shaped keys, refused when they carry a non-default value. *)
 
 val resolve
   :  ?providers:(name * provider_config) list
@@ -366,23 +278,16 @@ val resolve
   -> ?dashboard:dashboard_config
   -> unit
   -> (t, string) result
-(** The port of [Config(...)] and its model validators, in pydantic's order:
-    fetch's section rules, search's section rules, the provider block (unknown
-    names, the keyless default, [searxng]'s url, [algolia]'s index, the default
-    provider, the two ladders' enabled names), then the permission set. *)
 
 val config_path : string option -> string
 (** [path], else [$SEEKWRIGHT_CONFIG], else {!default_config_path}; [~] expanded
-    either way. An empty value is unset, as Python's [or] chain treats it.
+    either way. An empty value is treated as unset.
 
-    A path is a {i path}, not a {!name}: the two are different vocabularies, and
-    the [string] alias here would say otherwise, so this takes a plain [string]
-    and the vocabulary stays where the validators can enforce it. *)
+    A path is a {i path}, not a [name]: the two are different vocabularies. *)
 
 val load : string option -> (t, string) result
-(** Read one config file. A missing file is the first run and loads the
-    defaults; a malformed one is an [Error] naming the path and the fault, with
-    the keyless example appended when the file itself named providers. *)
+(** Read one config file. A missing file loads the defaults; a malformed one is
+    an [Error] naming the path and the fault. *)
 
 val example_config : string
 (** Shown to an operator whose file named something this build could not build:

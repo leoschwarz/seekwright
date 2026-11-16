@@ -1,5 +1,3 @@
-(* FreeSerp, ported from src/seekwright/providers/freeserp.py. *)
-
 module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
@@ -8,25 +6,19 @@ let name = "freeserp"
 
 let endpoint = Uri.of_string "https://freeserp.ai/api.php"
 
-(* The endpoint the grant must allow, in the policy's own words: derived from
-   the URI this adapter dials rather than written beside it, so scheme, host and
-   port cannot disagree between what is asked for and what is allowed. *)
 let policy_endpoint = Provider.policy_of_uri endpoint
 
 let agent = "seekwright"
 let max_size = 100
 
-(* Coarse freshness -> how far back [published_from] reaches, with fixed day
-   multipliers like Linkup's [fromDate]: recency is "published within the
-   last ...", not calendar math. *)
+(* Coarse freshness to day count: Day (1), Week (7), Month (30), Year (365). *)
 let age_days = function
   | Model.Day -> 1
   | Model.Week -> 7
   | Model.Month -> 30
   | Model.Year -> 365
 
-(* Days since the epoch, floored: a wall clock reading before 1970 would
-   otherwise truncate toward zero and name the wrong day. *)
+(* Days since epoch, floored to handle pre-1970 dates correctly. *)
 let days_since_epoch (now : float) =
   let seconds = Int64.of_float (floor now) in
   let days = Int64.div seconds 86400L in
@@ -35,8 +27,7 @@ let days_since_epoch (now : float) =
   in
   Int64.to_int days
 
-(* Howard Hinnant's civil_from_days: the calendar date of a day number, with no
-   timezone and no library. [datetime.strftime("%Y-%m-%d")] in the oracle. *)
+(* Howard Hinnant's civil_from_days: calendar date from day count without timezone. *)
 let civil_from_days z0 =
   let z = z0 + 719468 in
   let era = (if z >= 0 then z else z - 146096) / 146097 in
@@ -56,8 +47,6 @@ let published_from (now : unit -> float) period =
   in
   Printf.sprintf "%04d-%02d-%02d" year month day
 
-(* The endpoint's ceiling on [size], clamped from a [max_results] the calling
-   model chose. *)
 let size_of max_results = min (max max_results 1) max_size
 
 let request_uri ~(now : unit -> float) (q : Provider.search_query) =
@@ -72,8 +61,6 @@ let request_uri ~(now : unit -> float) (q : Provider.search_query) =
   in
   let params =
     match q.Model.language with
-    (* Lowercased, not split: [lang] is an ISO 639-1 code, and the region
-       belongs to a [country] parameter this backend does not have. *)
     | Some code -> params @ [ ("lang", [ String.lowercase_ascii code ]) ]
     | None -> params
   in
@@ -84,9 +71,7 @@ let request_uri ~(now : unit -> float) (q : Provider.search_query) =
   in
   Uri.with_query endpoint params
 
-(* The published date, or the crawl date. The declared date is missing for many
-   pages, and the crawl date is the honest stand-in: when the index last saw the
-   page, not when it was written. Neither is invented when both are absent. *)
+(* Uses published_at or falls back to crawled_at. *)
 let published_date item =
   let rec try_keys keys =
     match keys with
@@ -98,10 +83,7 @@ let published_date item =
   in
   try_keys [ "published_at"; "crawled_at" ]
 
-(* The operator's BM25 x trust number, passed through as-is. Nothing downstream
-   compares scores across providers, so there is nothing to rescale. A
-   non-number is dropped rather than coerced: [Result.score] is a float, and a
-   string the model cannot coerce would raise out of the record. *)
+(* BM25 score passed through directly. *)
 let score item = Provider.Json.number_field "score" item
 
 let parse ~snippet_chars data ~limit =
@@ -117,8 +99,7 @@ let parse ~snippet_chars data ~limit =
       | [] -> List.rev acc
       | item :: rest -> take (n - 1) rest (item :: acc)
   in
-  (* The limit slices the upstream list before anything is dropped, so a record
-     that fails to parse still spends one of the slots. *)
+  (* Limit slices upstream results before validation. *)
   List.filter_map
     (fun item ->
       match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
@@ -145,8 +126,6 @@ let parse ~snippet_chars data ~limit =
     (take limit records [])
 
 let check_status status =
-  (* The Failures table, written out as the adapter sees it. Keyless today; the
-     mapping is the contract's table, ready for a future key. *)
   if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
   else if status = 402 || status = 429 then Error (Provider.quota_exhausted ~provider:name ())
   else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
@@ -169,9 +148,7 @@ let search ~cost_per_1k ~snippet_chars ~(now : unit -> float) (net : Provider.Ne
       let* () = check_status response.status in
       let* data = Provider.decode_json_object ~provider:name response.body in
       if Provider.Json.is_true_field "engine_fallback" data then
-        (* Their web engine did not answer and the sites index replied: site
-           profiles are not search results, and the wire shape cannot carry the
-           substitution. Transient, like the 5xx row: the walk may try again. *)
+        (* engine_fallback indicates web engine failure; transient. *)
         Error (Provider.provider_error ~provider:name "upstream index unavailable")
       else
         Ok
@@ -180,17 +157,12 @@ let search ~cost_per_1k ~snippet_chars ~(now : unit -> float) (net : Provider.Ne
             results = parse ~snippet_chars data ~limit:q.Model.max_results;
             answer = None;
             cost_usd = Some (cost_per_1k /. 1000.);
-            (* No domain field, no [site:] operator, no country parameter and no
-               safe-search parameter; [published_from] and [lang] are honoured, so
-               geo splits in the notice. *)
             notice =
               Provider.ignored_constraints q ~domains:false ~dates:true ~geo:false
                 ~language:(Some true) ~safety:false;
           }
 
-(* Per-query cost in USD. Flat zero: there is nothing to bill. The argument is
-   ignored rather than absent because callers treat [cost_for] as a duck-typed
-   method and other adapters do scale with it. *)
+(* Keyless; zero cost. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~(now : unit -> float) ~net ()
@@ -201,7 +173,6 @@ let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~(now : unit -> float) ~net 
     let cost_for = cost_for ~cost_per_1k
     let search = search ~cost_per_1k ~snippet_chars ~now net
 
-    (* The grant is the server's, not the adapter's: closing it would break the
-       sibling providers that share the same confinement. *)
+    (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()
   end : Provider.S)

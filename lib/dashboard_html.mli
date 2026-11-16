@@ -1,4 +1,3 @@
-(** The dashboard page: one self-contained HTML document, embedded verbatim
-    from the Python tree's [resources/dashboard.html]. *)
+(** The usage dashboard HTML page served by [GET /dashboard]. *)
 
 val dashboard_html : string

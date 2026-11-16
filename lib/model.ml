@@ -1,23 +1,3 @@
-(* Wire models: the shapes that cross into a caller's context window.
-
-   The Python oracle is [src/seekwright/models.py]. Two boundary rules travel
-   with the shapes rather than with any one response:
-
-   - an absent field is dropped rather than serialised as [null]; and
-   - the fields in [Sanitize.text_fields] are escaped on serialisation, so no
-     path that builds a response -- an engine, a future tool, a cache layer --
-     can leak a special-token literal to a caller's tokenizer.
-
-   [search_query] and [provider_result] are the two records that are *not* wire
-   shapes in Python (plain pydantic models); their encoders below mirror
-   pydantic's default [model_dump], nulls included, and exist for round-trip
-   tests and diagnostics rather than for a caller.
-
-   The log-only private attributes [Result._uncapped_chars] and
-   [ProviderResult._reported_cost_usd] are deliberately absent: they never
-   reach the wire, and OCaml has no field-level privacy to hide them behind.
-   P5 adds them to whatever record owns the measurement. *)
-
 module Utf8 = Seekwright_text.Utf8
 
 let ( let* ) = Result.bind
@@ -110,9 +90,6 @@ type answer_request = {
 }
 
 type answer_source = { source_title : string; source_url : string; source_provider : string }
-(* The three names are prefixed because OCaml records share one field
-   namespace; [title], [url] and [provider] already belong to the records
-   above. *)
 
 type answer_response = {
   query : string;
@@ -135,8 +112,6 @@ type provider_result = {
   notice : string option;
 }
 
-(* {1 Small JSON helpers} *)
-
 let json_kind (json : Yojson.Safe.t) = match json with
   | `Null -> "null"
   | `Bool _ -> "a boolean"
@@ -155,10 +130,7 @@ let as_assoc (json : Yojson.Safe.t) = match json with
   | json -> Error (type_error "an object" json)
 
 let find name kvs =
-  (* The last value for a duplicate key, which is what Python's [json.loads]
-     keeps: it replaces the value under the key's first position. Yojson does
-     not collapse the pair, so a lookup that took the first member would let a
-     caller show a validator one value and the response another. *)
+  (* Last value wins for duplicate keys. *)
   match List.find_opt (fun (k, _) -> k = name) (List.rev kvs) with
   | Some (_, value) -> Some value
   | None -> None
@@ -185,10 +157,7 @@ let req_int name kvs =
   match find name kvs with
   | Some (`Int i) -> Ok i
   | Some (`Intlit s) -> (
-      (* Yojson spells an integer it cannot hold as [Intlit]. Accepting one that
-         does fit keeps a document whose literal is padded or written in another
-         base from being a type error; a value wider than OCaml's int still
-         cannot be represented, and says so. *)
+      (* Reject integer literals outside native int range. *)
       match int_of_string_opt s with
       | Some i -> Ok i
       | None -> Error (Printf.sprintf "field %S is outside the integer range" name))
@@ -245,8 +214,6 @@ let opt_string_list name kvs =
       let* items = decode_list string_item json in
       Ok (Some items)
 
-(* A field with a non-optional default: absent means the default, and an
-   explicit null is a type error, exactly as pydantic validates it. *)
 let default_int name kvs default =
   match find name kvs with
   | None -> Ok default
@@ -271,8 +238,6 @@ let default_string_list name kvs default =
   | None -> Ok default
   | Some `Null -> Error (Printf.sprintf "field %S is not nullable" name)
   | Some json -> decode_list string_item json
-
-(* pydantic counts codepoints for min_length/max_length, so must this. *)
 
 let check_length ~name ~min ~max value =
   let n = Utf8.count value in
@@ -300,8 +265,6 @@ let check_exact_length ~name ~expected value =
   if Utf8.count value <> expected then
     Error (Printf.sprintf "field %S must be exactly %d characters" name expected)
   else Ok value
-
-(* {1 Variants} *)
 
 let string_of_recency = function
   | Day -> "day"
@@ -350,8 +313,6 @@ let opt_mode name kvs =
       let* value = mode_of_yojson json in
       Ok (Some value)
 
-(* {1 Serialisation: only set fields, escaped text} *)
-
 let escaped text = fst (Sanitize.sanitize_text text)
 
 let result_to_yojson (r : result) : Yojson.Safe.t =
@@ -399,8 +360,7 @@ let fetch_match_to_yojson (m : fetch_match) : Yojson.Safe.t =
     [ ("offset", `Int m.offset); ("text", `String (escaped m.text)) ]
 
 let fetch_image_to_yojson (i : fetch_image) : Yojson.Safe.t =
-  (* base64 is not escaped: the alphabet holds no '<' and no '|', so no
-     delimiter can be spelled, and an escape pass would corrupt the bytes. *)
+  (* Base64 bytes are not escaped. *)
   `Assoc
     [ ("byte_count", `Int i.byte_count); ("base64", `String i.base64) ]
 
@@ -524,7 +484,6 @@ let answer_response_to_yojson (r : answer_response) : Yojson.Safe.t =
     @ match r.notice with None -> [] | Some s -> [ ("notice", `String s) ])
 
 let search_query_to_yojson (q : search_query) : Yojson.Safe.t =
-  (* Not a wire shape: pydantic's default dump, nulls and defaults included. *)
   let opt_string = function None -> `Null | Some s -> `String s in
   `Assoc
     [
@@ -542,8 +501,6 @@ let search_query_to_yojson (q : search_query) : Yojson.Safe.t =
     ]
 
 let provider_result_to_yojson (r : provider_result) : Yojson.Safe.t =
-  (* Not a wire shape either. Results are WireModels and escape through their
-     own encoder; [answer] stays as the adapter reported it, as in Python. *)
   `Assoc
     [
       ("provider", `String r.provider);
@@ -552,8 +509,6 @@ let provider_result_to_yojson (r : provider_result) : Yojson.Safe.t =
       ("cost_usd", match r.cost_usd with None -> `Null | Some f -> `Float f);
       ("notice", match r.notice with None -> `Null | Some s -> `String s);
     ]
-
-(* {1 Deserialisation} *)
 
 let result_allowed =
   [
@@ -675,7 +630,6 @@ let fetch_response_of_yojson (json : Yojson.Safe.t) =
     }
 
 let search_query_of_yojson (json : Yojson.Safe.t) =
-  (* Plain pydantic model: extra keys are ignored, not refused. *)
   let* kvs = as_assoc json in
   let* query = req_string "query" kvs in
   let* max_results = default_int "max_results" kvs 5 in
@@ -940,8 +894,6 @@ let provider_result_of_yojson (json : Yojson.Safe.t) =
   let* cost_usd = opt_float "cost_usd" kvs in
   let* notice = opt_string "notice" kvs in
   Ok { provider; results; answer; cost_usd; notice }
-
-(* {1 The engine's pass: escape in place, count, log the count} *)
 
 let sanitize_option value =
   match value with

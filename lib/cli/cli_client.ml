@@ -1,9 +1,3 @@
-(* The client verbs: argument scan (in {!Seekwright.Cli_extract}), request
-   bodies, the injected [post] seam, status handling and the human
-   rendering. All moved out of [bin/main.ml] so the rendering and the status
-   sentences are testable without a socket; [bin/main.ml] keeps the real
-   poster and the streams. *)
-
 module Model = Seekwright.Model
 
 type post = path:string -> string -> (int * string, string) result
@@ -24,8 +18,6 @@ let verb_of_string = function
   | "answer" -> Some Answer
   | _ -> None
 
-(* The Python joins the server URL to the route after dropping one trailing
-   "/": [http://host:8000/] and [http://host:8000] post to the same path. *)
 let strip_trailing_slash url =
   let n = String.length url in
   if n > 0 && url.[n - 1] = '/' then String.sub url 0 (n - 1) else url
@@ -44,8 +36,6 @@ let error_message status text =
       | _ ->
           Printf.sprintf "HTTP %d%s" status
             (if String.trim text = "" then "" else ": " ^ String.trim text))
-
-(* {1 Human rendering} *)
 
 let human_lines response =
   match response with
@@ -137,8 +127,6 @@ let human_lines response =
         | Some notice -> [ ""; Printf.sprintf "notice: %s" notice ]
         | None -> [])
 
-(* {1 The verb run} *)
-
 let decode verb text =
   let open Yojson.Safe in
   match verb with
@@ -162,15 +150,11 @@ let model_name = function
 
 let route_of_verb = function Search -> "search" | Fetch -> "fetch" | Answer -> "answer"
 
-(* [json] is the verb's own [--json] flag, read from the scan rather than passed
-   in: the binary dispatches a verb and never spells one of its flags. *)
 let run : post:post -> verb:verb -> argv:string list -> (string option, string * int) result =
  fun ~post ~verb ~argv ->
   match Cli_extract.scan_args argv with
   | Error sentence -> Error (sentence, 2)
   | Ok scanned -> (
-      (* The request models are the validators: a body that fails validation
-         is the Python's usage error, exit 2. *)
       let body_result : (Yojson.Safe.t, string) result =
         match verb with
         | Search -> Cli_extract.search_body scanned

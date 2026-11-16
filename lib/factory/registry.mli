@@ -1,49 +1,5 @@
-(** One declarative row per provider name: what building [exa] costs, needs, and
-    is allowed to reach, written down once instead of spread over a builder, a
-    probe table, and a price somewhere inside the adapter.
-
-    Port of [src/seekwright/factory.py]'s [_PROVIDERS] plus
-    [src/seekwright/health.py]'s [_PROBES], merged: the oracle keeps a row per
-    name in two files and a builder function per name in the first, and this
-    module keeps one row that answers every question construction asks about a
-    name — the endpoint and how it is derived, the price and the pricing model,
-    the least time the backend needs, which policy cap bounds its results, where
-    its credential rides, what its readiness probe asks, which of its own config
-    keys it reads, and whether this port has a dispatch to it at all.
-
-    {1 Why a row rather than a builder}
-
-    A Python builder is a function, so the facts it uses are visible only by
-    reading it; a row is data, so one suite can ask all seventeen names the same
-    questions and a missing answer fails a diff rather than a review. Three
-    properties the two-row factory could only assert in prose become checkable:
-
-    - {b One destination.} {!uri} is the only place a name's destination is
-      computed, and {!grant_endpoint} derives the [Policy] entry from it through
-      {!Seekwright.Provider.policy_of_uri}. The adapter dials {!uri}; the grant
-      allows {!grant_endpoint}; there is no third spelling of the host to keep in
-      step. A config-derived destination — [searxng]'s instance, an [exa] or
-      [parallel:free] [url] override, [algolia]'s [app_id]-derived host — is read
-      from that one config value here and nowhere else.
-    - {b One price.} {!price} merges the row's default with the config's
-      correction, and a [default_cost] of [None] marks the one name whose price is
-      fixed at zero rather than merely defaulted to it.
-    - {b No credential crossing.} {!key_for} answers a key only for a row that
-      declares [Api_key] among its prerequisites, so a keyless name cannot be
-      handed one even when its environment variable is set:
-      [SEEKWRIGHT_EXA_API_KEY] serves [exa], never [exa:free]. That key then
-      reaches exactly one place — the {!args} of that one row's builder, whose
-      adapter attaches it on its own fixed-endpoint grant.
-
-    {1 Rows for names this port cannot dispatch yet}
-
-    A row exists for all seventeen names; the row's [build] says whether this
-    build holds the adapter. [Deferred wave] names the wave that will carry it
-    (plans/ocaml-finalisation.md, F5), and such a name is still reported "not
-    built on this port" by {!Seekwright_factory.Factory} — the row is the
-    inventory, never a promise of dispatch. That is what lets a price, a floor, a
-    cap, an endpoint derivation and a probe be pinned before the adapter lands,
-    and what the adapter's own suite then checks its module against. *)
+(** One declarative row per provider name: what building an adapter costs,
+    needs, and is allowed to reach. *)
 
 (** Which policy cap bounds this name's results. The oracle fills [snippet] from a
     SERP adapter and [text] from a content adapter, never both (AGENTS.md, "A
@@ -133,64 +89,33 @@ type args = {
   log : Seekwright.Log.log option;
 }
 
-(** Whether this build holds the adapter. [Deferred wave] is a name the port has
-    inventoried but not written: nothing builds it, so it reports as unsupported,
-    and the wave says where it is planned. The constructor a built row names is
-    the only producer of a provider value in this tree. [Adapter_session] is the
-    {i lifecycle-carrying} shape: the row builds a {!Seekwright.Provider.session}
-    pair — the adapter plus its [warmup] — because a session belongs to the
-    MCP-backed adapters and cannot be a member of {e every} adapter's {!
-    Seekwright.Provider.S}. *)
+(** Whether this build holds the adapter. [Adapter_session] builds a
+    {!Seekwright.Provider.session} pair (adapter plus warmup) for MCP-backed
+    adapters. *)
 type build =
   | Adapter of (args -> Seekwright.Provider.t)
   | Adapter_session of (args -> Seekwright.Provider.session)
   | Deferred of string
 
-(** What the readiness probe asks, or [No_probe] for the MCP-backed names
-    ([exa], [exa:free], [parallel:free]) that the oracle proves with a session
-    handshake instead — and the probe vocabulary is a bodyless GET, so on this
-    port they answer {!Seekwright.Health.outcome} [Unsupported], like a name
-    with no probe at all, while their {!Seekwright.Provider.session.warmup}
-    carries the handshake that does prove them. The headers are {b not} part of
-    this value: they come from the row's [credential], so a probe cannot
-    authenticate in a shape its adapter does not. *)
 type probe_source =
   | No_probe
   | Probe of (Seekwright.Config.t -> string option -> string option)
 
-(** One name, as construction needs to know it. *)
 type row = {
   name : Seekwright.Config.name;
   build : build;
   endpoint : endpoint_source;
   credential : credential;
   requires : prerequisite list;
-  (** What must be present for this name to be built at all. *)
   default_cost : float option;
-  (** [None] fixes the price at zero, config included — [exa:free] alone. A
-      [Some] figure is the default a [[providers]] entry may correct. *)
   cost_model : cost_model;
   timeout_floor : float;
-  (** The least time this name gets, whatever [policy.provider_timeout_seconds]
-      says: a scrape, a metasearch fan-out, or an MCP handshake needs more than a
-      cached SERP API. *)
   context : context_cap;
   probe : probe_source;
   settings : string list;
-  (** The [[providers.<name>]] keys this name's adapter reads, besides [enabled]
-      and [cost_per_1k], which the factory reads for every name. A key no row
-      names and no module reads is a key that parses and does nothing — the
-      failure mode plans/ocaml-finalisation.md F1.4 refuses — and a suite checks
-      this field's union against the config's field list. *)
   ocaml_live_tested : bool;
-  (** Whether this port has a recorded live run of this adapter. Never inherited
-      from Python's live history, and no name is [true] on this branch yet: the
-      live runner (F4.3) retires one in the change that records its run. *)
 }
 
-(** The seventeen rows, sorted by name — the same seventeen names
-    {!Seekwright.Config.known_providers} freezes, and a suite pins the two sets
-    against each other. *)
 val rows : row list
 
 (** The row for a name, if the inventory carries one. A name outside the frozen
@@ -225,10 +150,9 @@ val price : row -> Seekwright.Config.provider_config -> float
 
 val cost_of : row -> cost_per_1k:float -> int -> float
 (** The per-query figure for a search that asks for [n] results: the row's
-    [cost_model] applied to the price. This is the figure [--check --live] prints
-    and the live runner (F4.3) reports; an adapter mirrors it in its own
-    [cost_for], and the registry suite pins the two together for every adapter
-    this build carries. *)
+    [cost_model] applied to the price. This is the figure [--check --live] prints;
+    an adapter mirrors it in its own [cost_for], and the registry suite pins the
+    two together for every adapter this build carries. *)
 
 val key_for : row -> string option
 (** The name's credential, environment-only, and only for a row that declares

@@ -47,9 +47,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
    pins the path join against a URL an operator would actually write. *)
 let instance = Uri.of_string "http://searx.internal:8080"
 
-(* {1 The fixture}
-
-   The JSON-API payload: [results[]] with the fields the mapping reads, and the
+(* The JSON-API payload: [results[]] with the fields the mapping reads, and the
    [infoboxes] and [unresponsive_engines] blocks it never touches. *)
 let sample =
   {|{
@@ -95,9 +93,7 @@ let n_results n =
                  ])) );
     ]
 
-(* {1 The seam}
-
-   A {!Seekwright.Provider.Net.t} that records every request it was handed —
+(* A {!Seekwright.Provider.Net.t} that records every request it was handed —
    paging is observable through the [pageno] the adapter sent — and answers
    with what the case's handler decides. *)
 let dial_pages ?(snippet_chars = 500) ?cost_per_1k ?(instance = instance) ~handler () =
@@ -150,8 +146,6 @@ let param (request : Caps.Authority.Net.request) name =
 
 let has_param request name =
   List.exists (fun (key, _) -> key = name) (params request)
-
-(* {1 Parsing} *)
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Searxng.parse ~snippet_chars data ~limit
 
@@ -217,9 +211,7 @@ let missing_results_is_empty_not_an_error () =
   check_int "results is null" 0 (List.length (parse (`Assoc [ ("results", `Null) ])));
   check_int "results is absent" 0 (List.length (parse (`Assoc [])))
 
-(* {1 The upstream field guard}
-
-   A non-string [content] is dropped, not handed to the shared truncate helper,
+(* A non-string [content] is dropped, not handed to the shared truncate helper,
    which called [text.split()] on whatever upstream sent in the oracle. A
    nested object, list or number there raised inside the parse rather than as a
    provider error, so it escaped the engine's handling and surfaced as an
@@ -249,8 +241,6 @@ let a_string_content_still_reaches_the_model () =
     (Some
        "The default method by which SQLite implements atomic commit is a rollback journal.")
     (List.hd outcome.results).result.snippet
-
-(* {1 The request} *)
 
 let get_with_the_json_format_and_no_auth () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:2 ()) () in
@@ -313,8 +303,6 @@ let the_domain_filters_ride_in_the_query () =
   includes "the include rides a site: operator" "site:sqlite.org" q;
   includes "the exclude is negated" "-site:spam.example" q
 
-(* {1 Paging} *)
-
 let a_small_ask_stays_a_single_request () =
   (* [max_results] within what page one delivered never pages: the common ask
      costs the instance one fan-out, not three. *)
@@ -376,8 +364,6 @@ let the_first_page_fails_the_call () =
   | Ok outcome -> A.failf "a failed first page yielded %d results" (List.length outcome.results)
   | Error failure -> check_string "the status row" "HTTP 500" failure.message
 
-(* {1 The constraint report} *)
-
 let the_notice_names_the_country_it_cannot_honour () =
   let outcome, _ = search_of ~query:(query ~max_results:2 ~country:"de" ()) () in
   check_string "the country sentence" "cannot filter by country; that constraint was ignored"
@@ -437,9 +423,7 @@ let the_result_reports_a_flat_zero_cost () =
   check_string "named by the adapter that served it" "searxng" outcome.provider;
   check_opt_number "a self-hosted instance bills no one" (Some 0.) outcome.cost_usd
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml — including the auth row's own wording, which this
    adapter spells out because a locked-down instance can refuse the JSON format
    specifically and the operator is the one who can enable it. What stays here
@@ -475,8 +459,6 @@ let a_network_error_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "the instance is not named in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:"searx.internal")
-
-(* {1 Cost and the instance} *)
 
 let the_cost_is_flat_zero () =
   let provider, _ = dial () in

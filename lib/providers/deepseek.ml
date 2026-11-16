@@ -1,5 +1,3 @@
-(* DeepSeek Search, ported from src/seekwright/providers/deepseek.py. *)
-
 module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
@@ -11,25 +9,20 @@ let endpoint = Uri.of_string "https://api.deepseek.com/v1/tools/search"
 
 let policy_endpoint = Provider.policy_of_uri endpoint
 
-(* The documented [count] range is 1..50 (not a plan limit), so a hand-built
-   [SearchQuery] stays inside it. *)
+(* Documented count range is 1..50. *)
 let max_results = 50
 
-(* [query] is 1 to 128 Unicode characters, and every filter rides inside that
-   string, so the limit bounds the folded query, not the typed one. *)
+(* Upstream accepts 1 to 128 Unicode characters for the entire folded query. *)
 let max_query_chars = 128
 
-(* [after:<YYYY-MM-DD>] is the documented date form; 31/366 are the long month and
-   year, so a window never misses a day — the deliberate difference from [linkup]'s
-   30/365: an [after:] that runs long loses nothing, one that closes early does. *)
+(* 31/366 use the long month/year so a recency window does not miss days. *)
 let recency_days = function
   | Model.Day -> 1
   | Model.Week -> 7
   | Model.Month -> 31
   | Model.Year -> 366
 
-(* Days since the epoch, floored: a wall clock reading before 1970 would otherwise
-   truncate toward zero and name the wrong day. *)
+(* Days since the epoch, floored to handle pre-1970 dates correctly. *)
 let days_since_epoch (now : float) =
   let seconds = Int64.of_float (floor now) in
   let days = Int64.div seconds 86400L in
@@ -38,12 +31,7 @@ let days_since_epoch (now : float) =
   in
   Int64.to_int days
 
-(* Howard Hinnant's civil_from_days: the calendar date of a day number, with no
-   timezone and no library — [datetime.date().isoformat()] in the oracle, whose
-   date is UTC by construction here. The same walk [Seekwright_providers.Linkup]
-   and [Seekwright_providers.Freeserp] carry: each adapter owns its copy rather
-   than a shared date module, so a change to one backend's window cannot reach
-   another's by import. *)
+(* Howard Hinnant's civil_from_days: calendar date from day count without timezone. *)
 let civil_from_days z0 =
   let z = z0 + 719468 in
   let era = (if z >= 0 then z else z - 146096) / 146097 in
@@ -57,20 +45,13 @@ let civil_from_days z0 =
   let year = if month <= 2 then y + 1 else y in
   (year, month, day)
 
-(* [today - timedelta(days=n)] as [YYYY-MM-DD]. The clock is injected rather than
-   read here because the [after:] value moves with every call: a test that wants to
-   pin the whole folded query pins the clock, and the server passes the one its
-   grant was built with. *)
+(* Injected clock allows deterministic testing of date calculations. *)
 let after_date ~(now : unit -> float) period =
   let days = days_since_epoch (now () -. float_of_int (recency_days period * 86400)) in
   let (year, month, day) = civil_from_days days in
   Printf.sprintf "%04d-%02d-%02d" year month day
 
-(* Compose the query with this API's operators folded in. Order is the operator's
-   own example — term, [site:], [lang:], [after:] — and a multi-site include is the
-   [site:a OR site:b] form its docs spell out. Not [Provider.site_filtered_query]:
-   that helper parenthesises a multi-site filter, and parentheses are not part of
-   this backend's documented syntax. *)
+(* Fold query operators: site, lang, after. Parentheses are not supported upstream. *)
 let fold_operators ~(now : unit -> float) (q : Provider.search_query) =
   let parts = [ q.Model.query ] in
   let parts =
@@ -87,8 +68,6 @@ let fold_operators ~(now : unit -> float) (q : Provider.search_query) =
   in
   let parts =
     match q.Model.language with
-    (* Lowercased, not split: the schema guarantees two letters, the shape [lang:]
-       takes. *)
     | Some code -> parts @ [ "lang:" ^ String.lowercase_ascii code ]
     | None -> parts
   in
@@ -99,11 +78,6 @@ let fold_operators ~(now : unit -> float) (q : Provider.search_query) =
   in
   String.concat " " parts
 
-(* The request document. [query] is already decided — folded or bare — because the
-   128-codepoint check that chose between them needs the clock and the fold;
-   [count] is clamped to the documented range. [ori_question] is unknown here, and
-   [need_content] stays at its documented default of false, so no page body is
-   requested. *)
 let request_body ~(query : string) (q : Provider.search_query) =
   Yojson.Safe.to_string
     (`Assoc
@@ -114,12 +88,7 @@ let request_body ~(query : string) (q : Provider.search_query) =
 
 let score item = Provider.Json.number_field "rerank_score" item
 
-(* [results[]]: title, url, snippet, summary, date, rerank_score. [snippet] (for
-   display) and [summary] (for a model) ride the two policy caps, and this is the
-   one name in the inventory that fills [snippet] {i and} [text]. The
-   [uncapped_chars] measurement rides [text]: the snippet cap at 500 rarely bites
-   a 100–200-character snippet, and the figure worth measuring is the 600–800
-   character summary against its 2,000-character ceiling. *)
+(* Snippet capped at snippet_chars; summary capped at text_chars. *)
 let parse ~snippet_chars ~text_chars data ~limit =
   let records =
     match Provider.Json.list (Provider.Json.field "results" data) with
@@ -136,7 +105,6 @@ let parse ~snippet_chars ~text_chars data ~limit =
   List.filter_map
     (fun item ->
       match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
-      (* Present but empty is the same drop as absent. *)
       | Some url, Some title when url <> "" && title <> "" ->
           let snippet, _snippet_uncapped =
             Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
@@ -152,9 +120,7 @@ let parse ~snippet_chars ~text_chars data ~limit =
                   url;
                   snippet;
                   text;
-                  (* A clipped extract must be tellable from a short page. *)
                   text_truncated = (if truncated then Some true else None);
-                  (* RFC 3339 UTC as the operator formats it, or absent. *)
                   published_date = Provider.Json.string_field "date" item;
                   score = score item;
                 };
@@ -166,44 +132,34 @@ let parse ~snippet_chars ~text_chars data ~limit =
 let check_status status =
   if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
   else if status = 402 || status = 429 then
-    (* 402 is its "insufficient balance", 429 its account-level QPS breach; both
-       are terminal for one call. *)
+    (* 402 is insufficient balance; 429 is QPS breach. *)
     Error
       (Provider.quota_exhausted ~provider:name ~message:"rate limited or out of account balance" ())
   else if status = 408 then
-    (* Documented as the request-body read timing out, and the operator says
-       retry: a transient fault on the request path, not the account. *)
+    (* Upstream request-body timeout is transient and retryable. *)
     Error (Provider.provider_error ~provider:name "upstream timed out reading the request")
   else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
   else Ok ()
 
-(* Per-query cost in USD: one successful request, flat. [count] does not affect the
-   price; [search] zeroes it for an empty [results], which is documented as not
-   billable. *)
+(* Flat rate per successful request. Zero cost if results list is empty. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let search ~cost_per_1k ~snippet_chars ~text_chars ~key ~(now : unit -> float)
     (net : Provider.Net.t) (q : Provider.search_query) =
   let ( let* ) = Result.bind in
   if Utf8.count q.Model.query > max_query_chars then
-    (* The tool surface allows 400 characters and this backend 128, so the mismatch
-       is the adapter's to name. Not retryable: no retry changes the length. *)
+    (* Upstream limit is 128 characters; fail immediately if bare query exceeds it. *)
     Error
       (Provider.provider_error ~retryable:false ~provider:name
          (Printf.sprintf "query exceeds the backend's %d-character limit" max_query_chars))
   else
     let folded = fold_operators ~now q in
-    (* Past 128 the backend refuses outright: filters come off, the bare query goes
-       out, and [notice] names each bucket dropped. The count is in codepoints —
-       Python's [len] — because the limit is the backend's Unicode count, not a
-       byte budget. *)
+    (* If folded query exceeds 128 codepoints, drop operators and send bare query. *)
     let folded_fits = Utf8.count folded <= max_query_chars in
     let request =
       {
         Caps.Authority.Net.meth = `POST;
         uri = endpoint;
-        (* A bearer token in a header, never a query parameter: the one URL this
-           adapter builds stays free of the credential it sends. *)
         headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
         body = Some (request_body ~query:(if folded_fits then folded else q.Model.query) q);
       }
@@ -219,14 +175,9 @@ let search ~cost_per_1k ~snippet_chars ~text_chars ~key ~(now : unit -> float)
             Provider.provider = name;
             results;
             answer = None;
-            (* A 200 with an empty [results] array is documented as not billable:
-               the figure tracks what the account paid, not what the call cost to
-               attempt. *)
+            (* 200 with empty results is not billed upstream. *)
             cost_usd =
               (if results <> [] then Some (cost_for ~cost_per_1k q.Model.max_results) else Some 0.0);
-            (* Domain, date and language ride the query operators while the folded
-               query fits; [country] and safe-search have no wire form at all, and
-               the language bucket only fires when a language was actually asked. *)
             notice =
               Provider.ignored_constraints q ~domains:folded_fits ~dates:folded_fits ~geo:false
                 ~language:(Some (folded_fits || q.Model.language = None)) ~safety:false;
@@ -240,7 +191,6 @@ let make ?(cost_per_1k = 0.75) ?(snippet_chars = 500) ?(text_chars = 2000) ~key 
     let cost_for = cost_for ~cost_per_1k
     let search = search ~cost_per_1k ~snippet_chars ~text_chars ~key ~now net
 
-    (* The grant is the server's, not the adapter's: closing it would break the
-       sibling providers that share the same confinement. *)
+    (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()
   end : Provider.S)

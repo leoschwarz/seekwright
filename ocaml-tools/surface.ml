@@ -21,31 +21,7 @@ module Server = Seekwright.Server
 
 let ( // ) = Filename.concat
 
-(* {1 The config.mli record scan}
-
-   The keys are read from [config.mli] as text, the same way the Python tool
-   reads [config.py] with [ast] rather than importing it. That works because
-   [config.mli] follows one layout, and the scanner reads exactly that layout:
-
-   - a record header is one line starting at column 0, spelled [type <name> =
-     {] with nothing after the opening brace — a type alias whose right-hand
-     side is not a record ({!Config.name}) never matches;
-   - the block ends at the first line whose first character is [}];
-   - one field per line, recognised by its first [:] — everything before it,
-     trimmed, is the key name, and a name not starting lowercase is not a
-     field;
-   - inside a block, blank lines and doc-comment lines (those whose first two
-     characters after trimming open an OCaml comment) are skipped, not
-     mistaken for keys.
-
-   If [config.mli] ever moves away from that layout the scan reads short, and
-   a missing key is a missing manifest line: the [surface.expected] golden and
-   the [docs/reference/surface.md] body diff both fail [dune runtest] on the
-   spot, so the assumptions are pinned rather than trusted. *)
-
-(* The section table -> the Python model name the manifest prints, and the
-   record type in [config.mli] the keys are read from. The mapping is the
-   manifest's own vocabulary; the keys themselves come from the source. *)
+(* Scan record definitions in config.mli to extract field names. *)
 let sections =
   [
     ("agent", "AgentConfig", "agent_config");
@@ -119,8 +95,6 @@ let strip_trailing_blanks lines =
     | _ -> lines
   in
   go lines
-
-(* {1 Rendering} *)
 
 let entry label = "- `" ^ label ^ "`"
 

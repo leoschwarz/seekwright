@@ -27,8 +27,6 @@ let crawl_envelope =
   {|{"results":[{"success":true,"status_code":200,"markdown":"|} ^ marker
   ^ {|","metadata":{"title":"Fix"}}]}|}
 
-(* {1 Config fixtures} *)
-
 (* The keyed fallbacks read the environment, and a developer's or CI's real
    keys would decide these cases. Every run clears the three, then sets only
    what the case asks for — an empty value is absent on this compiler. *)
@@ -70,8 +68,6 @@ let built config env sw =
 
 let names config env sw = fst (built config env sw)
 
-(* {1 The permission set} *)
-
 let unpermitted_is_not_built () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
@@ -110,8 +106,6 @@ let keyless_permission_set () =
   A.(check (list string)) "an unset permission set still builds it"
     (names (stack_config ~providers:(provider [ "serper" ]) (ladder [ "jina" ])) env sw)
     [ "jina" ]
-
-(* {1 The prerequisite and credential gates} *)
 
 let gates () =
   Eio_main.run @@ fun env ->
@@ -161,8 +155,6 @@ let unknown_name_is_a_build_error () =
   | Some (Ok _) -> A.fail "a ladder naming an unknown fallback built anyway"
   | None -> A.fail "fetch is enabled by default; the stack must build"
 
-(* {1 Prices} *)
-
 let prices () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
@@ -190,8 +182,6 @@ let prices () =
   let names, costs = built (stack_config ~providers:(provider [ "serper" ]) free) env sw in
   A.(check (list string)) "both free rows build" names [ "crawl4ai"; "jina" ];
   A.(check (list (option (float 1e-9)))) "and neither carries a price" costs [ None; None ]
-
-(* {1 The round trip: a built ladder entry dials the endpoint its key named } *)
 
 let fixture _conn _request _body =
   Cohttp_eio.Server.respond_string ~headers:(Http.Header.of_list [ ("content-type", "application/json") ])

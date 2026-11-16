@@ -1,4 +1,4 @@
-(* F2.1: the request-head and response-head ceilings.
+(* The request-head and response-head ceilings.
 
    Two layers are exercised. The pure cases drive [Http_head] directly, so the
    boundary is asserted in bytes rather than in elapsed time: a head of exactly
@@ -20,9 +20,7 @@ module Usage = Seekwright.Usage
 module A = Alcotest
 open Test_support
 
-(* {1 Fixtures}
-
-   The app shape is [test_p8_server.ml]'s: a stub [Provider.S], a search engine
+(* The app shape is [test_p8_server.ml]'s: a stub [Provider.S], a search engine
    built from it, and the MCP server over the registry. Nothing is dialled and
    no config file is read. *)
 
@@ -111,8 +109,6 @@ let mcp app =
   | Ok server -> server
   | Error _ -> A.fail "the fixture registry was refused"
 
-(* {1 Head construction} *)
-
 let base_head = "GET /healthz HTTP/1.1\r\nHost: localhost\r\n"
 let head_term = "\r\n"
 
@@ -136,8 +132,6 @@ let many_headers count =
 
 let healthz_request = "GET /healthz HTTP/1.1\r\nHost: localhost\r\n\r\n"
 
-(* {1 Reading a head from a string} *)
-
 let read_head ?(limit = Http_head.request_head_limit) text =
   let source = Eio.Flow.string_source text in
   let reader = Http_head.request_reader ~limit source in
@@ -150,8 +144,6 @@ let expect_too_large = function
   | Error Http_head.Client_closed -> A.fail "a complete head was reported as a closed connection"
   | Ok (_head, raw) ->
       A.failf "a head of %d bytes was accepted" (String.length raw)
-
-(* {1 The request ceiling} *)
 
 let a_request_line_at_the_cap_is_accepted () =
   let text = head_of_size Http_head.request_head_limit in
@@ -206,8 +198,6 @@ let the_raw_bytes_survive_parsing () =
         [ "Host: localhost" ] head.Http_head.header_lines
   | Error _ -> A.fail "a bare-LF head was refused"
 
-(* {1 The response ceiling} *)
-
 let response_head_at_and_over_the_cap () =
   let headers = [ ("content-type", "text/plain") ] in
   let rendered =
@@ -237,8 +227,6 @@ let an_ordinary_response_head_is_under_the_default_cap () =
       A.(check bool) "under the named cap" true
         (String.length head <= Http_head.response_head_limit)
   | Error _ -> A.fail "an ordinary head was refused by the default cap"
-
-(* {1 The wire} *)
 
 (* The fake monotonic clock: [sleep_until] advances the reading and returns, so
    the timeout decides the 408 case with no wall-clock wait. It is the same

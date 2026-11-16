@@ -1,22 +1,3 @@
-(** JSON documents on the fetch path: what counts as one, how one is rendered,
-    and how part of one is addressed.
-
-    Port of [src/seekwright/jsondoc.py]. A JSON page is extracted as one line
-    per node, each labelled with the path that addresses it, so the document
-    arrives as its own map: [total_chars], [offset] and the [[...]] marker keep
-    their meaning, [query] still selects by terms, and [path] selects by
-    structure. A line's path is the exact string a caller passes back as
-    [path], which is why it is absolute and printed on every line rather than
-    implied by indentation, and why {!parse_path} reads the same syntax
-    {!render_json} writes.
-
-    Nothing here reaches the network: {!render_json} and {!render_schema} are
-    bounded by {!max_render_ratio} against the body they were handed, and both
-    cuts print the line naming where they fell.
-
-    Every length here is a codepoint count — Python's [len] — so the work runs
-    over {!Utf8}, never [String.length]. *)
-
 module Repr = Seekwright_text.Repr
 
 type key =
@@ -82,8 +63,7 @@ let sniffs_json body =
   (* Only the two shapes a JSON *document* starts with count. A body beginning
      with a digit or a quote is a bare JSON value, and guessing that from
      unlabelled bytes is how a CSV of numbers becomes a document. The window is
-     the first 512 bytes, and whitespace that runs past it answers no, the way
-     Python's [body[:512].lstrip()] does. *)
+     the first 512 bytes, and whitespace that runs past it answers no. *)
 
   let limit = min (String.length body) 512 in
   let rec skip i =
@@ -96,10 +76,8 @@ let sniffs_json body =
   in
   skip 0
 
-(* Compact JSON for a scalar leaf, the spelling Python's
-   [json.dumps(..., ensure_ascii=False, separators=(",", ":"))] writes: control
-   characters escaped, everything else — Unicode included — raw, so a rendered
-   line stays one line. *)
+(* Compact JSON for a scalar leaf: control characters escaped, everything else —
+   Unicode included — raw, so a rendered line stays one line. *)
 
 let json_string s =
   let out = Buffer.create (String.length s + 2) in

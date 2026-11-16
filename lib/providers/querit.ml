@@ -1,5 +1,3 @@
-(* Querit, ported from src/seekwright/providers/querit.py. *)
-
 module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
@@ -10,23 +8,15 @@ let endpoint = Uri.of_string "https://api.querit.ai/v1/search"
 
 let policy_endpoint = Provider.policy_of_uri endpoint
 
-(* The free plan's documented result cap: a [count] above it is asked of a plan
-   that cannot give it, so the adapter clamps and the answer is simply a shorter
-   one — fewer hits than asked is not a dropped constraint. *)
+(* Documented maximum result count (10). *)
 let max_results = 10
 
-(* [filters.timeRange.date] takes d[n]/w[n]/m[n]/y[n]; each coarse rung of
-   [recency] maps onto its own unit's one-step form. A window word, not a date:
-   no clock here. *)
 let time_range = function
   | Model.Day -> "d1"
   | Model.Week -> "w1"
   | Model.Month -> "m1"
   | Model.Year -> "y1"
 
-(* [filters.languages.include] is a strict eight-name enum while [language] is an
-   ISO 639-1 code: the map is the bridge, and a code with no entry is dropped,
-   never sent. *)
 let language_names =
   [
     ("de", "german");
@@ -39,8 +29,6 @@ let language_names =
     ("ru", "russian");
   ]
 
-(* [filters.geo.countries.include] is a strict seventeen-name enum: the same
-   bridge. *)
 let country_names =
   [
     ("ar", "argentina");
@@ -62,18 +50,9 @@ let country_names =
     ("us", "united states");
   ]
 
-(* A code outside the enum is not guessed at: the filter is dropped and the notice
-   names the bucket, because sending a value the backend does not recognise would
-   be rejected outright or silently ignored with no word back. Language is
-   lowercased for the lookup, as the oracle does; country is taken verbatim, so a
-   code the map does not carry answers [None] the same way the Python [dict.get]
-   does. *)
 let language_param code = List.assoc_opt (String.lowercase_ascii code) language_names
 let country_param code = List.assoc_opt code country_names
 
-(* The request document. [filters] is built up bucket by bucket and omitted whole
-   when empty; the country and language filters ride only when their code crossed
-   the enum, which is why the caller resolved them before arriving here. *)
 let request_body ~(country : string option) ~(language : string option) (q : Provider.search_query) =
   let filters =
     let sites =
@@ -106,9 +85,7 @@ let request_body ~(country : string option) ~(language : string option) (q : Pro
   let fields = if filters <> [] then fields @ [ ("filters", `Assoc filters) ] else fields in
   Yojson.Safe.to_string (`Assoc fields)
 
-(* [results.result[]]: the [results] container is an object and the hits live
-   under its [result] key — the wire's shape, not a slip. A missing or non-object
-   [results] is drift and answers empty. *)
+(* Hits live under results.result[]. *)
 let parse ~snippet_chars data ~limit =
   let records =
     match Provider.Json.list (Provider.Json.field "result" (Provider.Json.field "results" data)) with
@@ -125,7 +102,6 @@ let parse ~snippet_chars data ~limit =
   List.filter_map
     (fun item ->
       match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
-      (* Present but empty is the same drop as absent. *)
       | Some url, Some title when url <> "" && title <> "" ->
           let snippet, uncapped_chars =
             Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
@@ -150,23 +126,17 @@ let parse ~snippet_chars data ~limit =
 let check_status status =
   if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
   else if status = 402 || status = 429 then
-    (* 429 is the documented 1 QPS free limit, and an exhausted monthly allowance
-       answers the same code for a keyed client; 402 for this vendor says the same
-       about the account. *)
+    (* 429 indicates rate limit; 402 indicates quota exhaustion. *)
     Error
       (Provider.quota_exhausted ~provider:name ~message:"rate limited or out of monthly calls" ())
   else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
   else Ok ()
 
-(* Per-query cost in USD: one call per search, flat — [count] does not move it. *)
+(* Flat rate per request. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
   let ( let* ) = Result.bind in
-  (* The enum crossings happen once, and their results answer three questions at
-     once: whether the filter is sent, whether the geo bucket is honoured, and
-     whether the language bucket is. [None] in — the filter was never asked — is
-     honoured by construction. *)
   let country =
     match q.Model.country with Some code -> country_param code | None -> None
   in
@@ -179,8 +149,6 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
     {
       Caps.Authority.Net.meth = `POST;
       uri = endpoint;
-      (* A bearer token in a header, never a query parameter: the one URL this
-         adapter builds stays free of the credential it sends. *)
       headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
       body = Some (request_body ~country ~language q);
     }
@@ -196,9 +164,6 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
           results = parse ~snippet_chars data ~limit:q.Model.max_results;
           answer = None;
           cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          (* Domains, dates and the mappable halves of country and language ride
-             native fields; an enum value the backend cannot express is noticed,
-             not sent. No safe-search. *)
           notice =
             Provider.ignored_constraints q ~domains:true ~dates:true ~geo:geo_honoured
               ~language:(Some language_honoured) ~safety:false;
@@ -211,7 +176,6 @@ let make ?(cost_per_1k = 0.0) ?(snippet_chars = 500) ~key ~net () : Provider.t =
     let cost_for = cost_for ~cost_per_1k
     let search = search ~cost_per_1k ~snippet_chars ~key net
 
-    (* The grant is the server's, not the adapter's: closing it would break the
-       sibling providers that share the same confinement. *)
+    (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()
   end : Provider.S)

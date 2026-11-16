@@ -1,85 +1,16 @@
 (** CPU-bound extraction, isolated on a fixed-size pool of worker domains.
 
-    The download cap bounds the {b input}; it does not bound the {b time} the
-    backend then spends on it. A page under the cap can still send a parser
-    into a long loop — the Python oracle's shape is a small PDF whose content
-    stream is shared by every page, where parse work scales with the page
-    count rather than with the bytes — and an extraction that runs inline on
-    the Eio loop holds {i everyone else's} request: OCaml code that never
-    yields on the loop's domain cannot be preempted by a timeout. So the fetch
-    path runs extraction here instead: a pool of {!workers_default} (by
-    default) ordinary {!Domain}t owned by the application, one job at a time
-    per worker, fed over an AF_UNIX socket so the loop-side half stays a fully
-    normal cancellable Eio exchange (see plans/ocaml-finalisation.md, F2.2).
+    A pool of {!workers_default} (by default) worker domains owned by the
+    application, one job at a time per worker, fed over an AF_UNIX socket.
 
-    {1 Bounds, by construction}
-
-    - The number of worker domains (and therefore OS threads) is fixed at
-      {!make} time and never grows: a call {b cannot} create more, however
-      many fetches arrive. {!workers_default} caps at four and leaves the
-      machine's last core to the loop.
-    - At most [workers + queue_limit] jobs may be in flight or queued at once;
-      every further {!extract} fiber waits on that semaphore rather than
-      opening another socket or domain.
+    - The number of worker domains is fixed at {!make} time and never grows.
+    - At most [workers + queue_limit] jobs may be in flight or queued at once.
     - Request and response bodies cross the socket under byte ceilings
-      ([~max_body_bytes], [~max_result_bytes]); a frame whose declared length
-      exceeds them closes the connection instead of allocating.
-
-    {1 Cancellation, late results, and abandonment}
-
-    A running OCaml domain cannot be cancelled safely, so the pool abandons
-    rather than kills, and the abandonment is bounded:
-
+      ([~max_body_bytes], [~max_result_bytes]).
     - {!extract} with [~timeout_seconds] answers {!Timed_out} when the budget
-      expires, having closed the connection. The worker keeps running the
-      extraction it was given, and when it finishes its {!extract_result}
-      arrives on a closed socket and is {b discarded} — that write failure is
-      how the worker observes the cancellation, cooperatively, at the next
-      point its own code reaches. The abandoned job occupies one of the pool's
-      fixed workers, never a new one.
-    - An {!extract} whose {b caller's} fiber is cancelled (the chain budget
-      firing around a whole fetch, a client going away) propagates
-      [Eio.Cancel.Cancelled] — cancellation is control flow, not a failure —
-      and the same socket-close-and-discard sequence applies.
-    - A caller that abandons a job before the request was fully written leaves
-      the worker reading EOF; it discards the half-arrived job and returns to
-      the accept loop.
-
-    {1 Shutdown}
-
-    {!close} refuses all later {!extract} calls with {!Pool_closed}, tells
-    each worker to stop, and {b waits for the running jobs to finish} before
-    returning — the same "waited on, not stopped" rule the Python fetcher
-    states about its worker threads, bounded here because the workers are
-    finite and each takes one job at a time. A backend that never returns
-    pins its worker (and {!close}) forever; that is the oracle's accepted
-    divergence taken literally, and the pool's bound is what keeps it to
-    [workers] pinned threads. After {!close} the socket paths are unlinked and
-    every worker domain has been joined, so nothing outlives the call except
-    an unreturnable backend.
-
-    OCaml also terminates the process when its main domain exits, so a pool
-    that is never closed cannot keep a dying process alive — {!close} is for
-    orderly drain (F2.3), not for exit.
-
-    {1 The backend, and what sharing it means}
-
-    The backend passed to {!make} is captured by the worker domains at
-    spawn time: its closure and any immutable data it captures are shared
-    across domains, so a backend must be {b domain-safe} — pure over its
-    arguments, or holding any mutable state behind its own synchronisation.
-    Page bodies and results never cross as shared values: they are copied
-    through the socket, which is also what keeps this whole module sound
-    without a formal immutable-sharing argument about strings.
-
-    {1 The socket}
-
-    Workers bind [AF_UNIX] stream sockets under [~dir], named for the process
-    and a pool sequence, created [0600] and unlinked on {!close}. A local
-    process other than the server cannot connect to them; the paths carry no
-    secrets and no page content. [~dir] must keep the full path within the
-    kernel's 107-byte socket-name limit ({!make} refuses a longer one rather
-    than failing at bind). *)
+      expires, closing the connection.
+    - {!close} refuses all later {!extract} calls with {!Pool_closed}, tells
+      each worker to stop, and waits for running jobs to finish. *)
 
 (** Why a job could not be answered. None of these is an exception, and the
     fetcher turns each into a caller-facing sentence at its own boundary. *)

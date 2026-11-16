@@ -364,9 +364,8 @@ let test_a_too_short_query_is_refused () =
   | Error _ -> ()
 
 let test_a_duplicate_key_keeps_the_last_value () =
-  (* Python's [json.loads] replaces the value under the key's first position, so
-     pydantic validates the last spelling. A first-member lookup would let a
-     caller show the validator one value and the response another. *)
+  (* Validates the last spelling for duplicate keys. A first-member lookup would
+     let a caller show the validator one value and the response another. *)
   let decode fields =
     match M.search_query_of_yojson (`Assoc fields) with
     | Ok value -> value

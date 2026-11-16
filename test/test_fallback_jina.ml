@@ -18,8 +18,6 @@ let cfg fixture =
 let reader_body =
   "Title: Example Domain\nURL Source: https://public.test/landed\nMarkdown Content:\n# Header\nbody text"
 
-(* {1 The header block} *)
-
 let split_cases () =
   let show (headers, text) =
     (String.concat "," (List.map (fun (k, v) -> k ^ "=" ^ v) headers), text)
@@ -41,8 +39,6 @@ let split_cases () =
   (* A blank remainder contributes no line. *)
   Alcotest.check pair_testable "marker with no tail"
     (show (Jina.split_reader_body "Foo: bar\nMarkdown Content:")) ("foo=bar", "")
-
-(* {1 Request shape and arms} *)
 
 let request_shape () =
   let fixture = Fix.make [ Fix.Response (200, reader_body) ] in
@@ -93,15 +89,11 @@ let arms () =
   Alcotest.(check string) "500 is a plain HTTP failure" (arm 500)
     (Fix.error_case ~kind:"failed" ~message:"HTTP 500")
 
-(* {1 The placeholder bodies mean *found nothing*, with the title kept} *)
-
 let placeholder body expected_text () =
   let fixture = Fix.make [ Fix.Response (200, body) ] in
   let page = Fix.ok_page (Jina.fetch (cfg fixture) Fix.public_url ~offset:0 ~max_chars:None) "ok" in
   Alcotest.(check string) "text" page.text expected_text;
   Alcotest.(check (option string)) "the title survives" page.title (Some "Reader")
-
-(* {1 Transport rows} *)
 
 let windowing () =
   (* The shared page tail: the caller's [max_chars] windows the extraction,

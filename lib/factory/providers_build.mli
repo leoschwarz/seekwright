@@ -1,12 +1,5 @@
-(** The provider build pass: the loop over the registry's rows that turns an
-    enabled name into a dispatchable adapter, and the report of what that pass
-    produced.
-
-    Private to [Seekwright_factory]: [Factory] re-exports only {!build_providers}.
-    The two helpers here exist to keep the loop honest — {!adapter} pairs the
-    endpoint and the bound a row resolved so every grant construction site names
-    one of each from one source, and {!adapter_of_row} is the single place that
-    pair is read. *)
+(** The provider build pass: loops over registry rows to instantiate
+    enabled adapters. *)
 
 (** A row and this deployment's config answer the two questions the builder asks
     before it can build a grant: which endpoint the name's grant may reach, and

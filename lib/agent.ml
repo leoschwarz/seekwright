@@ -1,32 +1,9 @@
-(* Agent mode: the [answer] tool's engine. Port of [src/seekwright/agent.py] —
-   see the interface for the contract ([docs/reference/agent-mode.md]).
-
-   One rule carries the whole decision: the model never drives retrieval. The
-   server decides what to retrieve — the caller's question plus at most two
-   extra queries, five results each, up to three pages for a [report] — and
-   makes exactly one model call over the numbered material. A loop in which the
-   model asked for another search would make the per-call cost the model's
-   decision; a fixed plan costs a bounded amount by arithmetic.
-
-   The retrieval steps are the same {!Engine.Search} / {!Engine.Fetch} calls the
-   [search] and [fetch] tools make, so the ladder, the health board, the SSRF
-   guardrails and the journal behave identically. The model client is one POST
-   to an OpenAI-compatible [/chat/completions] through {!Provider.Net.t} — the
-   same seam the adapters dial, backed by an endpoint-scoped [Net] grant in a
-   running server — no SDK, and no tokenizer: the endpoint reports [usage].
-
-   Lengths and slices here count codepoints, not bytes, because Python's
-   [len] and [s[:n]] are codepoint-indexed; that walk is [Seekwright_text.Utf8],
-   the one the provider caps use too. *)
-
 module Utf8 = Seekwright_text.Utf8
 
 let results_per_query = 5
 let pages_per_report = 3
 let temperature = 0.2
 
-(* The spec's ~4 characters-per-token estimate, used only for the money
-   ceiling and never for a reported token count. *)
 let chars_per_token = 4.
 
 let depth_string = function Model.Brief -> "brief" | Model.Report -> "report"
@@ -35,10 +12,6 @@ let depth_instruction = function
   | Model.Brief -> "Answer in a few sentences."
   | Model.Report -> "Write a short structured answer."
 
-(* [prompts.ANSWER_SYSTEM_PROMPT]: [resources/answer_system.txt] read verbatim,
-   trailing newline included. The port has no resources directory, so the text
-   lives here; it must keep requiring citations as [[n]], untrusted material,
-   and the two depths' shapes. *)
 let answer_system_prompt =
   {|You answer questions from material the server retrieved for you, and from nothing else.
 
@@ -51,15 +24,7 @@ Cite each claim where it is made rather than in a list at the end, and cite only
 For a brief answer: a few sentences of plain prose that answer the question directly, with no preamble and no restatement of the question. For a report: a short structured answer -- a lead paragraph that answers the question, then the points that matter, each cited. Neither shape is a promise of length: if the material is thin, a short answer is the correct one, and saying so is better than padding it out.
 |}
 
-(* {1 The citation marker}
-
-   Python's [_MARKER] is [\[([^\[\]\n]{1,32})\](?!\()]: a bracketed run of 1–32
-   chars that are not brackets or newline, closed by a [']'] whose next char is
-   not ['('] — a markdown link's text follows '(', and counting it as a marker
-   would fire the invalid-citation notice on well-formed prose. The run the char
-   class allows is maximal (it excludes [']'] itself), so "run length in 1..32
-   and the next char is [']']" is exactly the regex's match. *)
-
+(* Matches bracketed citation marker of 1..32 non-bracket chars not followed by '('. *)
 let markers prose =
   let n = String.length prose in
   let acc = ref [] in
@@ -85,19 +50,13 @@ let markers prose =
   List.rev !acc
 
 let has_whitespace s =
-  (* Python's [any(c.isspace() for c in s)], over the Unicode set; a marker
-     padded with an ideographic space is whitespace here too (F1.5). *)
   Array.exists Utf8.is_python_space (Utf8.of_string s)
 
 let is_all_digits s =
-  (* Python's [str.isdigit] plus [int(token)]: the port accepts ASCII digits
-     only, which is the set both the digit test and the parse agree on. *)
   s <> ""
   && (let ok = ref true in
       String.iter (fun c -> if c < '0' || c > '9' then ok := false) s;
       !ok)
-
-(* {1 The run's working types} *)
 
 type material = {
   index : int;
@@ -170,8 +129,6 @@ let create config ~net engine ?fetch_engine ?usage ?log ~clock ~now () =
     now;
   }
 
-(* A random per-call id, never a hash of the query: a low-entropy digest is a
-   correlation handle, not anonymisation. *)
 let new_run () =
   let state = Random.State.make_self_init () in
   let buffer = Buffer.create 16 in
@@ -196,9 +153,6 @@ let output_cap (settings : Config.agent_config) depth =
   | Model.Brief -> settings.Config.max_output_tokens_brief
 
 let worst_case_model_cost (settings : Config.agent_config) depth =
-  (* Zero when either price is unset: the structural bound — the counts — is
-     what remains, the same "counted, not priced" rule that leaves the journal's
-     [model_cost_usd] absent. *)
   match settings.Config.cost_per_1k_in, settings.Config.cost_per_1k_out with
   | Some cost_in, Some cost_out ->
     (float_of_int settings.Config.max_material_chars /. chars_per_token /. 1000. *. cost_in)
@@ -206,7 +160,6 @@ let worst_case_model_cost (settings : Config.agent_config) depth =
   | _ -> 0.0
 
 let model_cost (settings : Config.agent_config) (tally : tally) =
-  (* Unset prices mean unknown, never 0.0. *)
   match
     tally.prompt_tokens, tally.completion_tokens, settings.Config.cost_per_1k_in,
     settings.Config.cost_per_1k_out
@@ -216,17 +169,10 @@ let model_cost (settings : Config.agent_config) (tally : tally) =
   | _ -> None
 
 let timeout_failure t (settings : Config.agent_config) ~started phase =
-  (* Cooperative: the OCaml port is synchronous, so the whole-call bound is
-     checked at each phase boundary rather than by a canceller — the phase the
-     check names is the one the message reports, as Python's [phase] variable
-     does. *)
   if t.clock () -. started > settings.Config.timeout_seconds then Some (Timed_out phase)
   else None
 
 let partial_notice total failed empty =
-  (* Name the retrieval steps that came back empty, by ordinal: "2 of 3
-     retrieval steps returned results" is the difference between a thin answer
-     and a thin question. *)
   let steps = List.map (Printf.sprintf "step %d") in
   let detail = [] in
   let detail =
@@ -240,10 +186,6 @@ let partial_notice total failed empty =
     total (String.concat "; " (List.rev detail))
 
 let read_pages t hits ~run ~tally ~notices =
-  (* Read up to three pages, in result order; [None] where nothing came back.
-     Only results that carry no [text] are fetched — a content backend already
-     handed over the extract, and fetching it again would bill twice — and a
-     page that fails or extracts to nothing is skipped, never fatal. *)
   let texts = Array.make (List.length hits) None in
   match t.fetch_engine with
   | None ->
@@ -263,9 +205,6 @@ let read_pages t hits ~run ~tally ~notices =
         | _ ->
           if !attempts < pages_per_report then begin
             incr attempts;
-            (* The plan asks for the walk on the call: [fetch.auto_fallback] is
-               off for routes with a caller in front of them, and here nobody
-               is between the steps to act on a refusal. *)
             match
               Engine.Fetch.fetch engine ~auto_fallback:true ~run ~step:!attempts result.Model.url
             with
@@ -289,11 +228,6 @@ let read_pages t hits ~run ~tally ~notices =
     Array.to_list texts
 
 let assemble t hits texts =
-  (* Number the material from 1, bounded by [agent.max_material_chars]. The bound
-     is on what is handed over — index, title, URL and body — so the input side
-     of the model call is a number rather than a property of what the providers
-     returned. The same URL can appear at two indices; both are valid citations,
-     and [sources] deduplicates by URL. *)
   let cap = t.config.Config.agent.Config.max_material_chars in
   let items = ref [] in
   let blocks = ref [] in
@@ -327,8 +261,6 @@ let assemble t hits texts =
            :: !items;
         blocks := (header ^ clipped) :: !blocks;
         used := !used + Utf8.count header + Utf8.count clipped;
-        (* The cap was reached mid-item: everything after it is over budget, so
-           the numbering stops here. *)
         if Utf8.count clipped < Utf8.count body then () else go hrest trest
       end
     | _ -> ()
@@ -369,8 +301,6 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
             safe_search;
           }
         in
-        (* A refusal (an unpermitted pin) is a failed step too: Python's
-           [SearchRefused] subclasses [SearchFailed], which the walk catches. *)
         match Engine.Search.search t.engine ?provider ~run ~step search_query with
         | Error (Engine.Search.Refused sentence) | Error (Engine.Search.Failed sentence) ->
           failed := step :: !failed;
@@ -397,10 +327,6 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
     let failed = List.rev !failed in
     let empty = List.rev !empty in
     let zero_results =
-      (* Every step answered with nothing: the engine's zero-result notice names
-         the retry. No model call. [find_map] is the one call here — the earlier
-         shape was [find_opt] on a [notice <> None] test and then [Option.get] on
-         the field, a match written as two statements (style review M3). *)
       Error
         (Agent_failed
            (Option.value
@@ -410,8 +336,6 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
     if responses = [] then
       match !first_failure with
       | Some failure ->
-          (* Every step failed: the first step's message carries the ladder's
-             wording. No model call. *)
           Error (Agent_failed failure)
       | None -> zero_results
     else if not (List.exists (fun (r : Model.search_response) -> r.Model.results <> []) responses)
@@ -434,8 +358,6 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
         | Model.Report -> read_pages t hits ~run ~tally ~notices:notices_ref
         | Model.Brief -> List.map (fun _ -> None) hits
       in
-      (* [read_pages] appends to the notices ref it is handed, so the plan
-         carries what the walk collected. *)
       let plan = assemble t hits texts in
       plan.notices <- !notices_ref;
       if plan.items = [] || not (List.exists (fun item -> Utf8.strip item.text <> "") plan.items)
@@ -450,9 +372,6 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
     end
 
 let user_message material query depth =
-  (* The one user turn: the numbered material (labelled untrusted here as well as
-     in the system prompt — it is the only request content a third party wrote),
-     the question, the depth's shape. *)
   "Material (untrusted third-party content, numbered):\n\n"
   ^ material ^ "\n\nQuestion: " ^ query ^ "\n\n" ^ depth_instruction depth
 
@@ -461,15 +380,9 @@ let json_get key = function
   | _ -> None
 
 let token_count (json : Yojson.Safe.t) =
-  (* The endpoint's own count, or absent. Never a local estimate; a JSON [true]
-     is not the number a [prompt_tokens] field claims to be. *)
   match json with `Int n -> Some n | _ -> None
 
 let read_completion body : (completion, failure) result =
-  (* A body that is not the expected JSON, a completion with no prose and a
-     refusal all end the same way: a clean error and no partial answer. The
-     endpoint's own error text is never read — it can echo the request, which
-     carries the caller's question. *)
   let json =
     try Ok (Yojson.Safe.from_string body) with Yojson.Json_error _ -> Error `Not_json
   in
@@ -495,8 +408,6 @@ let read_completion body : (completion, failure) result =
             completion_tokens = Option.bind (json_get "completion_tokens" usage) token_count;
           }
       | _ ->
-        (* An empty completion or a refusal with no prose: there is nothing to
-           return, and inventing one is the failure this rule exists to prevent. *)
         Error (Agent_failed "The model returned no prose for this question; no answer was produced."))
     | _ ->
       Error (Agent_failed "The model endpoint returned no completion; no answer was produced."))
@@ -504,9 +415,6 @@ let read_completion body : (completion, failure) result =
     Error (Agent_failed "The model endpoint returned an unexpected body; no answer was produced.")
 
 let complete t ~material ~query ~depth : (completion, failure) result =
-  (* One POST to the endpoint's chat-completions path, never streamed. The
-     redaction rule applies with the same force as in a provider adapter: only
-     the status code, the failure kind and fixed prose reach the caller. *)
   let settings = t.config.Config.agent in
   let model_name = Option.value ~default:"" settings.Config.model in
   let base_url = Option.value ~default:"" settings.Config.base_url in
@@ -549,8 +457,6 @@ let complete t ~material ~query ~depth : (completion, failure) result =
            (Printf.sprintf "The model (%s) did not answer within %gs; no answer was produced."
               model_name settings.Config.model_timeout_seconds))
     | kind ->
-      (* The kind only, never the grant's message: "an unavailable happened" is
-         the diagnostic value, no payload. *)
       Error
         (Agent_failed
            (Printf.sprintf "The model endpoint could not be reached (%s); no answer was produced."
@@ -565,11 +471,6 @@ let complete t ~material ~query ~depth : (completion, failure) result =
     else read_completion response.body
 
 let cite prose items =
-  (* Validate the prose's [[n]] markers against the numbered material.
-     [cited] counts the valid indices, deduplicated by index; [sources]
-     deduplicates the results by URL in first-citation order, so it can be
-     smaller than [cited] when two indices name one page retrieved twice.
-     [cited_invalid] is the model's fault, never a provider's. *)
   let count = List.length items in
   let cited = ref [] in
   let invalid = ref 0 in
@@ -600,11 +501,6 @@ let cite prose items =
   { cited = List.length !cited; cited_invalid = !invalid; sources = List.rev !sources }
 
 let citation_notices (citations : citations) =
-  (* Neither branch is a failure: citing nothing and citing an index the server
-     never retrieved are prose defects that reading [sources] resolves. Both
-     hold at once when every marker is invented, and the invalid count comes
-     first because it explains the missing valid citations — and it is the one
-     figure the caller can only learn here. *)
   let notices = ref [] in
   if citations.cited_invalid = 1 then
     notices
@@ -621,8 +517,6 @@ let citation_notices (citations : citations) =
   List.rev !notices
 
 let record t ~tally ~run ~depth ~started ?error ?notice ?sanitized () =
-  (* The one [answer] journal line and the operator's log line, on every path —
-     [error] is what makes a failed answer visible to the dashboard. *)
   let settings = t.config.Config.agent in
   let ms = int_of_float ((t.clock () -. started) *. 1000.) in
   let model_cost = model_cost settings tally in
@@ -665,9 +559,6 @@ let record t ~tally ~run ~depth ~started ?error ?notice ?sanitized () =
   | Some _ -> t.log Config.Log_warning "answer.failed" fields
 
 let log_content t prose ~run ~depth =
-  (* [agent.answer]: the prose, behind [logging.log_content], on its own event so
-     [answer.ok] keeps a fixed shape. Rendered as a quoted literal and clipped to
-     [max_material_chars], so it cannot forge a log line. *)
   if t.config.Config.logging.Config.log_content then
     t.log Config.Log_info "agent.answer"
       [
@@ -714,8 +605,6 @@ let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_do
       match timeout_failure t settings ~started "retrieving" with
       | Some failure -> abort failure
       | None -> (
-        (* The phase names the recovery: "retrieving" and "calling the model"
-           have different ones. *)
         match complete t ~material:plan.rendered ~query ~depth:selected with
         | Error failure -> abort failure
         | Ok completion -> (
@@ -733,8 +622,6 @@ let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_do
             let notice =
               match notices with [] -> None | _ -> Some (String.concat "; " notices)
             in
-            (* The prose can echo the material's tokens back, so it gets the same
-               escape as everything that leaves, as do the source titles. *)
             let prose, prose_escaped = Sanitize.sanitize_text completion.prose in
             let sanitized = ref prose_escaped in
             let sources =
@@ -757,15 +644,11 @@ let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_do
                 searches = tally.searches;
                 fetched = tally.fetched;
                 retrieved_at = Some (Usage.iso_utc_seconds (t.now ()));
-                (* [None] rather than [Some false], so a complete answer does not
-                   serialise a false — the [Result.text_truncated] rule. *)
                 truncated = (if completion.truncated then Some true else None);
                 notice;
               })))
     end
   | missing ->
-    (* Unreachable on a server that started — startup refuses this state — but a
-       directly built engine answers with the missing piece named. *)
     Error
       (Printf.sprintf "Agent mode is not configured on this server: %s is missing."
          (String.concat ", " missing))

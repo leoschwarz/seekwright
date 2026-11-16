@@ -280,9 +280,7 @@ let a_written_root_creates_and_reopens_its_directory () =
     check_list (`Names []) grant "");
   with_written_grant made (fun grant -> check_list (`Names []) grant "")
 
-(* {1 The writes}
-
-   Each case is one function, and the backend is its argument, so the same table
+(* Each case is one function, and the backend is its argument, so the same table
    can be asked of both loop runners. *)
 
 let a_write_lands_and_reads_back backend =
@@ -407,8 +405,6 @@ let stat_and_the_reads_work_through_a_read_only_root backend =
     match Authority.Fs.stat grant "small.txt" with
     | Ok info -> Alcotest.(check int) "size" 11 info.Authority.Fs.size_bytes
     | Error error -> Alcotest.failf "stat failed: %s" (Error.render error))
-
-(* {1 The ranges} *)
 
 (* The window is the reason [read_range] exists: the grant answers with the bytes
    it was asked for, from an offset, and says whether more follows. *)

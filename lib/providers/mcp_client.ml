@@ -1,15 +1,5 @@
-(* The narrow MCP client Exa and Parallel need, ported from the session half of
-   src/seekwright/providers/exa_mcp.py. It is deliberately not a generic MCP
-   stack: one endpoint, one session, the three messages those adapters send
-   (initialize, notifications/initialized, tools/call) and close.
-
-   Streamable HTTP carries each JSON-RPC message in its own POST, so the
-   "session" this client owns is the server's `Mcp-Session-Id` value, not a held
-   socket. That is the shape the existing endpoint-scoped [Provider.Net.t] grant
-   already offers — one bounded request/response exchange per operation — and it
-   is why this module adds no socket, no duplex stream and no second trust
-   boundary. See [plans/seekwright-ocaml-port.md]'s F4.2 section for the live
-   evidence behind that decision. *)
+(* Streamable HTTP MCP client for Exa and Parallel: handles initialize,
+   notifications/initialized, tools/call, and session close over discrete POSTs. *)
 
 module Caps = Mcp_caps
 module Provider = Seekwright.Provider
@@ -17,18 +7,11 @@ module Provider = Seekwright.Provider
 let accept = "application/json, text/event-stream"
 let jsonrpc_version = "2.0"
 
-(* Bounds of this module's own, over the grant's [max_response_bytes]: one SSE
-   event (or one JSON body) and the number of events a single POST may carry
-   before it is refused rather than scanned. The default frame ceiling is the
-   grant's own default body ceiling, so it never refuses a response the grant
-   would have delivered whole. *)
 let default_max_frame_bytes = 262_144
 let default_max_events = 64
 
 let default_protocol_version = "2025-06-18"
 let default_client_name = "seekwright"
-(* The protocol-visible client identity, not the package version: F9.1 owns the
-   one version value that the image label and User-Agent share. *)
 let default_client_version = "0.1.0"
 
 (* The fixed vocabulary a failure may carry. Nothing from an upstream body, a
@@ -154,8 +137,6 @@ let post t ~headers ~json =
     }
   in
   t.net.Provider.Net.request request
-
-(* {2 Framing} *)
 
 type parse_failure = Malformed | Oversized
 
@@ -284,10 +265,8 @@ let text_of_result result =
       |> String.concat "\n"
   | _ -> ""
 
-(* [isError] is a result, not a transport failure — Exa's real endpoint answers an
-   invalid key that way — so it is classified here, where the third-party text is
-   read once and never echoed: the oracle's rule is the same three words plus
-   [429] for the quota row and one fixed sentence for everything else. *)
+(* Upstream isError in result indicates application error; classified without
+   echoing external message. *)
 let tool_result t result =
   if Provider.Json.is_true_field "isError" result then begin
     let text = String.lowercase_ascii (text_of_result result) in
@@ -308,9 +287,7 @@ let status_error t status =
 
 let is_success status = status >= 200 && status < 300
 
-(* The handshake has its own sentence for a timeout, exactly as the oracle does:
-   "MCP handshake timed out" is the one fact a caller can act on, and the grant's
-   own message (which may name the peer) never rides along. *)
+(* Fixed error string for timeout. *)
 let handshake_error t ~timed_out =
   if timed_out then Provider.provider_error ~provider:t.provider handshake_timed_out
   else Provider.provider_error ~provider:t.provider handshake_failed
@@ -421,9 +398,7 @@ let call_tool t ~name ~arguments =
     | Ok result -> Ok result
     | Error (Failed error) -> Error error
     | Error Dead_session ->
-        (* One reconnect, once per call: the oracle retries a dead long-lived
-           session exactly once and reports "MCP session unavailable" if the
-           second attempt is dead too. *)
+        (* Retries dead long-lived session exactly once before failing. *)
         t.session <- None;
         (match connect t with
         | Error error -> Error error
@@ -437,10 +412,7 @@ let call_tool t ~name ~arguments =
 let aclose t =
   if not t.closed then begin
     t.closed <- true;
-    (* The specification lets a client terminate its session with DELETE, and a
-       server that does not support that answers 405. Best effort by design: a
-       close that reported the endpoint's answer would put a network failure on
-       a path whose caller is already shutting down. *)
+    (* Best-effort session close via DELETE; ignore 405 or network errors during shutdown. *)
     (match t.session with
     | Some ({ id = Some _; _ } as session) -> (
         let request : Caps.Authority.Net.request =

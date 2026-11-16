@@ -41,8 +41,6 @@ let check ~salt ?(count = 200) name gen prop =
     ~rand:(Random.State.make [| seed; salt |])
     (QCheck2.Test.make ~count ~name gen prop)
 
-(* {1 Generators} *)
-
 (* Arbitrary bytes: what a scraped page, a truncated download or a caller's
    hand-encoded token can actually hand the walk. *)
 let bytes = QCheck2.Gen.string_size ~gen:QCheck2.Gen.char QCheck2.Gen.(int_range 0 24)
@@ -152,8 +150,6 @@ let table =
           (QCheck2.Gen.list_size (QCheck2.Gen.int_range 0 3)
              (QCheck2.Gen.list_size (QCheck2.Gen.int_range 0 3) word))))
 
-(* {1 Reading a rendered line} *)
-
 (* A rendering line is ["<path>  <value>"] with the two spaces as the separator;
    no path this module generates carries two spaces in a row, so the first pair
    is the separator. *)
@@ -189,8 +185,6 @@ let remove_zwsp text =
     end
   done;
   Buffer.contents buffer
-
-(* {1 Properties} *)
 
 let sanitize_properties =
   let idempotent =

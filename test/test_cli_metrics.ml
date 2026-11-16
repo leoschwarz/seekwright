@@ -38,8 +38,6 @@ let report ~now endpoints journal =
    of the test rather than of the machine's clock. *)
 let now = 1794571200.0
 
-(* {1 The default report} *)
-
 let test_header_and_window () =
   let out = report ~now (endpoints []) (`Assoc [ ("path", `Null) ]) in
   Alcotest.(check string) "title" "seekwright metrics" (List.nth out 0);
@@ -59,8 +57,6 @@ let test_journal_states () =
     (Cli_metrics.journal_state ( `Assoc [ ("path", `String "/var/log/seekwright.jsonl"); ("failed", `Bool false) ]));
   Alcotest.(check string) "failed" "/var/log/seekwright.jsonl  failed"
     (Cli_metrics.journal_state ( `Assoc [ ("path", `String "/var/log/seekwright.jsonl"); ("failed", `Bool true) ]))
-
-(* {1 The table} *)
 
 let test_row_cells () =
   let row =

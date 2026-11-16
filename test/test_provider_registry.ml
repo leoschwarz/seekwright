@@ -1,4 +1,4 @@
-(* F4.1: the provider registry. The factory used to hold one builder function
+(* The provider registry. The factory used to hold one builder function
    per name, and every other fact about a name — its price, its timeout floor,
    its endpoint, its probe, where its key rides — sat somewhere else, so the
    only way to check those facts was to read a builder. Now they are one row per
@@ -85,8 +85,6 @@ let show_endpoint (endpoint : Caps.Policy.endpoint) =
     endpoint.Caps.Policy.host
     (match endpoint.Caps.Policy.port with Some port -> ":" ^ string_of_int port | None -> "")
 
-(* {1 The table is the inventory} *)
-
 let the_rows_are_the_frozen_seventeen () =
   A.(check (list string) "row names == known_providers"
        (List.sort String.compare Config.known_providers) Registry.names);
@@ -105,8 +103,7 @@ let the_rows_are_the_frozen_seventeen () =
       (not (List.mem "googgle" Config.known_providers)))
 
 (* A row exists for every name whether or not this build can dispatch it: the
-   row is the inventory, [build] is the promise, and a wave name says where the
-   dispatch lands (plans/ocaml-finalisation.md, F5). *)
+   row is the inventory, and [build] is the promise. *)
 let every_name_has_a_row_built_or_deferred () =
   let built =
     List.filter_map (fun r -> if Registry.is_built r then Some r.Registry.name else None) Registry.rows
@@ -128,12 +125,11 @@ let every_name_has_a_row_built_or_deferred () =
     check (list string) "no row defers any more — the F5.1 wave landed" []
        (List.sort String.compare deferred);
     check int "the two halves are the seventeen" 17 (List.length built + List.length deferred));
-  (* live-tested is a property of this port: the runner (F4.3) retires a name in
-     the change that records its successful run in
-     [plans/seekwright-ocaml-port.md], and it never inherits Python's live
-     history. F4.3's first acceptance check ran the two keyless built names, and
-     F9.3's final verification added the two anonymous halves of the Exa and
-     Parallel pair — still no keyed name, which would need an operator key. *)
+  (* live-tested is a property of this port: the runner retires a name in
+     the change that records its successful run in documentation, and it never
+     inherits Python's live history. The acceptance check ran the two keyless
+     built names, and final verification added the two anonymous halves of the
+     Exa and Parallel pair — still no keyed name, which would need an operator key. *)
   let live_tested =
     List.filter_map
       (fun r -> if r.Registry.ocaml_live_tested then Some r.Registry.name else None)
@@ -142,8 +138,6 @@ let every_name_has_a_row_built_or_deferred () =
   A.(check (list string) "only the recorded keyless runs are live-tested"
        [ "anysearch"; "exa:free"; "freeserp"; "parallel:free" ]
        (List.sort String.compare live_tested))
-
-(* {1 Price: one figure per name, and one name with none to spend} *)
 
 (* [factory.py]'s [_BuildSpec] table: [default_cost] per name, [None] meaning
    fixed at zero. Written down here rather than read from the oracle, so a
@@ -226,8 +220,6 @@ let the_cost_models_are_the_published_shapes () =
   A.(check (list string) "four names bill differently per query, and they are the two Exa names and the two MCP halves that inherit its rung"
          [ "exa"; "exa:free"; "parallel:free"; "serper" ] (List.sort String.compare rung))
 
-(* {1 Timeout floor: config lengthens, never shortens} *)
-
 let floors =
   [ ("exa", 30.0); ("exa:free", 30.0); ("linkup", 20.0); ("parallel:free", 30.0)
   ; ("scrappa", 15.0); ("searxng", 15.0) ]
@@ -256,8 +248,6 @@ let a_floor_is_a_floor_not_a_ceiling () =
          check (float 1e-9) (r.Registry.name ^ " takes a longer config timeout") 45.0
            (Registry.timeout_seconds r ~policy_seconds:45.0)))
     Registry.rows
-
-(* {1 Endpoint: one URI per name, derived where config decides it} *)
 
 (* The single-destination pin: the grant entry is the row's URI read through the
    seam's one derivation, so there is no third spelling of a host to keep in
@@ -414,8 +404,6 @@ let algolias_endpoint_is_the_deployment () =
       | Error _ -> ())
     [ entry ~app_id:"ABCD1234" (); entry ~index:"docs" () ]
 
-(* {1 Probe: the same destination, the same credential shape} *)
-
 let the_probe_asks_the_endpoint_the_grant_allows () =
   let mcp_backed = [ "exa"; "exa:free"; "parallel:free" ] in
   List.iter
@@ -513,8 +501,6 @@ let the_probe_authenticates_the_way_the_adapter_does () =
           includes (name ^ " puts the key in the query") (param ^ "=") asked))
     Config.known_providers;
   clear_keys ()
-
-(* {1 Credentials: what a row permits, and where it puts the key} *)
 
 let the_header_spellings_are_the_vendors () =
   List.iter
@@ -634,12 +620,9 @@ let a_missing_prerequisite_is_named () =
   | None -> A.fail "a half registration looked complete");
   clear_keys ()
 
-(* {1 Settings: every knob a name reads is on its row} *)
-
 (* [Config.provider_config]'s fields, spelled out: the union of the rows'
    [settings] plus the two the factory reads for every name has to be that set,
-   or a key exists that parses, validates, and belongs to no row — the failure
-   mode plans/ocaml-finalisation.md F1.4 refuses. *)
+   or a key exists that parses, validates, and belongs to no row. *)
 let every_provider_key_belongs_to_a_row () =
   let fields =
     [ "enabled"; "cost_per_1k"; "depth"; "output_type"; "mode"; "url"; "free_cooldown_seconds";
@@ -670,8 +653,6 @@ let every_provider_key_belongs_to_a_row () =
   in
   A.(check (list string) "url is the override and instance names'"
        [ "exa"; "exa:free"; "parallel:free"; "searxng" ] (List.sort String.compare url_rows))
-
-(* {1 Construction: the decision a row drives} *)
 
 let build_all () =
   set_keys ();

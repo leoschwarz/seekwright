@@ -16,8 +16,6 @@ module U = Seekwright_text.Utf8
 module R = Seekwright_text.Repr
 module A = Alcotest
 
-(* {2 The step} *)
-
 let test_a_truncated_trailing_sequence_is_cut_not_raised () =
   (* The H1 repro: a two-byte prefix of a three-byte sequence, asked for more
      codepoints than it holds. Before the fix this raised [Invalid_argument]. *)
@@ -100,8 +98,6 @@ let test_slices_and_codepoints_agree_with_the_walk () =
   A.(check (list int)) "a truncated last width is clamped" [ 1; 2 ]
     (List.map (fun cp -> cp.U.width) (U.codepoints "a\xe2\x80"))
 
-(* {2 Codepoint arrays} *)
-
 let test_the_array_round_trips () =
   List.iter
     (fun s ->
@@ -129,12 +125,10 @@ let test_encode_writes_the_sequence () =
        (fun cp -> U.of_string (U.encode cp) = [| cp |])
        [ 0x41; 0xa0; 0x2028; 0x1f600 ])
 
-(* {2 Whitespace} *)
-
 let test_the_whitespace_set_is_pythons () =
   (* [is_python_space] is [str.isspace()], which is what [strip], [split] and
      [splitlines] all agree on. One set, one rule: the old ASCII-only set was a
-     behavioural fork (F1.5). *)
+     behavioural fork. *)
   List.iter
     (fun cp ->
       A.(check bool) (Printf.sprintf "python space U+%04X" cp) true (U.is_python_space cp))
@@ -178,8 +172,6 @@ let test_ascii_lower_folds_only_ascii () =
   let cps = U.ascii_lower (U.of_string "AbZ9 \xc3\x89") in
   A.(check string) "ascii folds" "abz9 \xc3\x89" (U.to_string cps)
 
-(* {2 The [repr]} *)
-
 let test_the_log_repr_is_the_one_a_refusal_quotes_with () =
   A.(check string) "plain" "'plain'" (R.py_repr "plain");
   A.(check string) "empty" "''" (R.py_repr "");
@@ -214,11 +206,9 @@ let test_the_log_repr_is_the_one_a_refusal_quotes_with () =
   let once = R.py_repr "a\nb" in
   A.(check bool) "no raw newline survives" true (not (String.contains once '\n'));
   (* The path grammar's refusals use this same pass, so a non-ASCII token comes
-     back readable rather than as its bytes (F1.5). *)
+     back readable rather than as its bytes. *)
   A.(check string) "a refusal quotes a non-ascii token the same way" "'caf\xc3\xa9'"
     (R.py_repr "caf\xc3\xa9")
-
-(* {2 The library boundary} *)
 
 let test_the_fetch_path_walk_is_this_walk () =
   (* [lib/fetch/utf8.ml] is a re-export, so a fetch-path call site and an engine

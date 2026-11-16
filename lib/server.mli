@@ -1,67 +1,30 @@
 (** The MCP server: three tools, both transports, and the HTTP custom routes.
 
-    Port of [src/seekwright/server.py]. The three tools — [search], [fetch] and
-    [answer] — are declared here through the capability layer's
-    {!Mcp_caps.Registry} and served by mcp-kit over stdio
+    The three tools — [search], [fetch] and [answer] — are declared here through
+    the capability layer's {!Mcp_caps.Registry} and served by mcp-kit over stdio
     ([Mcp_kit_stdio.run_channels]) or Streamable HTTP
     ([Mcp_kit_cohttp_eio.handler], mounted at [/mcp] by {!serve_http}).
-    Providers never become MCP tools: each adapter receives its own
-    endpoint-scoped [Net] grant when the factory builds it, and the tool's
-    grant is the {!app} value that carries the engines holding those grants —
-    so the one [Registry.add] line per tool names the power it runs with.
 
     {1 The HTTP custom routes}
 
     One listener serves [/mcp] plus the custom routes, routed by path in
-    {!serve_http}: [GET /healthz] (outside the Host allowlist, secret-free:
-    the providers this build can dispatch and uptime only — a configured name
-    with no adapter either refused startup
-    ([Seekwright_factory.startup_verdict]) or was skipped by name at startup
-    under the implicit keyless default, and is never listed here), the
-    dashboard routes ([GET /dashboard],
-    [GET /dashboard/data], [GET /dashboard/metrics], registered only when
-    [[dashboard] enabled = true]) and the REST projection
-    ([POST /api/v1/search], [POST /api/v1/fetch], [POST /api/v1/answer]) —
-    the last two answered 404 while [[fetch] enabled = false] and
-    [[agent] enabled = false] respectively. Everything but [/healthz] sits
-    behind the same Host allowlist as [/mcp] ({!is_host_allowed}); the
-    allowlist is applied in the surrounding route because mcp-kit 0.2.0's
-    adapter owns Origin but not Host
-    (plans/capability-gated-mcp-server.md §7). {!handle_custom} is the
-    testable core of those routes: a pure function from method, path, headers
-    and body to {!response}, which {!serve_http} adapts onto cohttp.
+    {!serve_http}: [GET /healthz], dashboard routes ([GET /dashboard],
+    [GET /dashboard/data], [GET /dashboard/metrics]) and the REST projection
+    ([POST /api/v1/search], [POST /api/v1/fetch], [POST /api/v1/answer]).
+    Everything but [/healthz] sits behind the same Host allowlist as [/mcp]
+    ({!is_host_allowed}).
 
     {1 Concurrent sessions}
 
-    Every request is served on its own Eio fiber, and the two transports answer
-    concurrency differently by design rather than by accident:
-
-    - {b Streamable HTTP} is stateless per POST. The adapter takes one JSON-RPC
-      body, dispatches it against the immutable [Mcp_kit.Server.t], and writes
-      the answer to that same request; there is no session value to share and no
-      request-id table to race, so concurrent bodies cannot mix answers and a
-      duplicate id on two connections is two independent calls. That is
-      "concurrent request ids supported correctly", not a lock.
-    - {b stdio} is one session and one line stream, so the transport serialises
-      it by construction ([Mcp_kit_stdio.run_channels] reads a line, answers it,
-      reads the next). It is "serialised by design", and no server-level lock is
-      needed to make it so.
-
-    The shared state the two transports do share is the app's {!Usage.t} and
-    {!Health.t}; their interfaces own the serialisation contract (the usage
-    journal and its snapshot take one guard, the health board's transitions are
-    yield-free), so {!serve_connection} itself carries no lock and must not gain
-    one — a mutex over dispatch would turn every dashboard read into a queue
-    behind every provider call.
+    Every request is served on its own Eio fiber:
+    - {b Streamable HTTP} is stateless per POST.
+    - {b stdio} is one session and one line stream, serialised by construction.
 
     {1 Error prose}
 
-    The REST routes answer the exact sentences the Python tree carries:
-    [{error: message}] with 400 for a refusal (nothing billed), 502 for an
+    The REST routes answer [{error: message}] with 400 for a refusal, 502 for an
     upstream failure, 404 for an operation this deployment does not serve,
-    421 for a refused Host. Over MCP the same sentences travel through
-    {!Mcp_caps.Error}, whose [render] prefixes the stable kind — the layer's
-    error channel, not Python's bare [ToolError] text. *)
+    421 for a refused Host. Over MCP errors travel through {!Mcp_caps.Error}. *)
 
 (** {1 The health monitor} *)
 
@@ -73,24 +36,14 @@ type health = {
 }
 (** What one monitor tick reads: the board the engines record on, the names this
     build can dispatch, their probe rows, and the network seam the probes dial
-    through. Built by the factory beside the app so the monitor and the search
-    engine share one board. *)
+    through. *)
 
 val run_health_monitor :
   health -> config:Config.t -> sleep:(unit -> unit) -> unit
-(** Probe forever: [sleep], one {!Health.run_probes} tick, repeat. The sleep is
-    the caller's because the interval comes from config and the clock belongs
-    to the transport; [serve_http] hands in the listener's monotonic clock.
-    Python sleeps first, so a start does not spend a probe before the first
-    interval. {!serve_http} forks it as a child of the listener's switch and
-    gives it its own cancellation context, so a stop aborts a probe already in
-    flight rather than waiting for its timeout; cancelling the switch remains
-    the fallback for a caller that never stops the listener. *)
+(** Probe forever: [sleep], one {!Health.run_probes} tick, repeat. *)
 
-(** The process-wide context: one per server, built once by the factory (P8's
-    [seekwright.factory]) and shared by every tool call and custom route.
-    Grants are server-lifetime values, so the [Eio.Switch.t] that built them
-    encloses the transport loop. *)
+(** The process-wide context: one per server, shared by every tool call and custom
+    route. *)
 type app = {
   config : Config.t;
   search : Engine.Search.t;
@@ -106,16 +59,14 @@ type app = {
   allowed_hosts : string list;
   (** The operator's [--allowed-host] entries; loopback is always allowed. *)
   health : health option;
-  (** [None] when the app was assembled without a board to tick — the route and
-      tool suites build their own engines — and [Some] from
-      {!Seekwright_factory.Factory.build_app}, which shares the engine's board. *)
+  (** [None] when the app was assembled without a board to tick. *)
 }
 
 val fetch_disabled : string
-(** The one sentence both encodings give when [[fetch] enabled = false]. *)
+(** The sentence returned when [[fetch] enabled = false]. *)
 
 val agent_disabled : string
-(** The one sentence both encodings give when [[agent] enabled = false]. *)
+(** The sentence returned when [[agent] enabled = false]. *)
 
 (** {1 The three tools} *)
 
@@ -139,14 +90,11 @@ type response = {
 (** One HTTP answer from a custom route, before it is written to the socket. *)
 
 val host_allowlist : string list -> string list
-(** The Host entries the listener accepts: the loopback seed (bare names and
-    [:*] patterns) widened with the operator's [--allowed-host] entries —
-    widening, never narrowing, because the seed is the DNS-rebinding
-    protection. *)
+(** The Host entries the listener accepts: loopback seed widened with the
+    operator's [--allowed-host] entries. *)
 
 val is_host_allowed : string list -> string -> bool
-(** Whether a [Host] header value (port included) is in the allowlist: an
-    exact entry, or a [name:*] entry matching any port. *)
+(** Whether a [Host] header value (port included) is in the allowlist. *)
 
 val origin_allowlist : string list -> string list
 (** The Origin values the custom routes accept: [http(s)://host] for every
@@ -162,30 +110,16 @@ val handle_custom :
   body:string ->
   response
 (** Route one custom-route request. [/healthz] is exempt from the Host
-    allowlist (a kubelet probes with the pod IP in [Host]); every other path
-    is guarded, and an [Origin] header that is present but not allowed is
-    refused. Unknown paths answer 404; a known path with the wrong method
-    answers 405.
-
-    [stopping] defaults to "not stopping". When it answers [true], the
-    oracle's shutdown surface takes over: [/healthz], [/dashboard/data] and
-    [/dashboard/metrics] answer 503 [{"status": "stopping"}], and the three
-    [POST /api/v1/…] routes answer 503
-    [{"error": "The server is stopping; retry shortly."}]. No route reads a
-    secret to say so, and [/dashboard] itself stays a static 200 — it accepts
-    no work. *)
+    allowlist. Unknown paths answer 404; a known path with the wrong method
+    answers 405. When [stopping] is true, returns 503 on service endpoints. *)
 
 (** {1 Serving} *)
 
 val max_body_size : int
-(** The request-body bound, pinned so an upstream default change is a visible
-    diff (the mcp-kit adapter's own default is 1 MiB). *)
+(** The request-body bound. *)
 
 val request_head_timeout_seconds : float
-(** How long a connection may take to deliver a complete request head. A peer
-    that trickles bytes, or says nothing at all, is refused with 408 when this
-    passes; the clock that decides is the caller's, so the refusal is the
-    timeout's and not a measurement of elapsed wall time. *)
+(** How long a connection may take to deliver a complete request head. *)
 
 val serve_connection :
   ?stopping:(unit -> bool) ->
@@ -197,57 +131,24 @@ val serve_connection :
   peer:Eio.Net.Sockaddr.stream ->
   unit ->
   unit
-(** Drive one accepted connection: read the request head under
-    {!Http_head.request_head_limit} and {!request_head_timeout_seconds}, answer
-    a bounded refusal for a head that cannot be read, and otherwise hand the
-    replayed connection to the mcp-kit handler for [/mcp] or {!handle_custom}
-    for everything else.
-
-    The head is read here, before either driver sees the connection, because
-    both drivers would otherwise read it from an unbounded buffer. The bytes
-    are counted as they arrive and the same bytes are replayed (the internal
-    [Replay] source), so the transport parses what the peer sent rather than a
-    reconstruction of it.
-
-    Refusals are [431] for a head over the ceiling, [400] for a malformed one,
-    [408] for the timeout and [421] for a Host outside the allowlist; each
-    carries [connection: close], so the peer's next request arrives on a fresh
-    connection and one bad head costs one connection, not the listener. A
-    later request that overruns the ceiling on a keep-alive connection gets
-    the same bounded [431]. Each refusal logs [http.head_rejected] with a
-    constant [kind] ([too_large], [malformed], [timeout]); a connect-and-close
-    probe answers nothing. [peer] is only passed through to the transports,
-    which use it for logging. [stopping] reaches {!handle_custom}; the MCP
-    route ignores it, because a body already being dispatched is in-flight work
-    and the listener has stopped accepting new connections. *)
+(** Drive one accepted connection: read the request head, answer bounded refusals
+    for malformed/over-limit heads, and otherwise dispatch to mcp-kit for [/mcp]
+    or {!handle_custom} for custom routes. *)
 
 type serve_error =
   | Bind_address_unresolved
   (** The bind address could not be parsed or resolved. *)
   | Listener_unavailable
   (** The socket could not be opened, or the listener stopped with an error. *)
-(** The listener's startup failures as values with a constant classification:
-    {!serve_http}'s [Error] channel. The type deliberately carries no payload —
-    a host, a path or an exception message can name operator infrastructure or a
-    credential, and a classification is the redaction boundary. *)
 
 val drain_grace_seconds : float
-(** How long a stopped listener lets accepted connections finish before it
-    cancels them: {!serve_http}'s default [grace_seconds]. The frozen ten server
-    flags have no place for it and the oracle's config has no key, so it is a
-    constant that {!serve_http}'s caller may override for a test. *)
+(** How long a stopped listener lets accepted connections finish before cancelling. *)
 
 type lifecycle =
   | Drained
-  (** The stop was observed and every accepted connection finished inside the
-      grace; the listener returned cleanly. *)
+  (** The stop was observed and accepted connections finished cleanly. *)
   | Grace_expired
-  (** The grace expired with work still in flight. The connection switch was
-      failed, the remaining connections were cancelled and joined, and the
-      caller may now close providers and leave the app switch. *)
-(** What {!serve_http} did with a requested stop. A cancellation that arrives
-    from an enclosing switch is not one of these: it keeps unwinding as
-    [Eio.Cancel.Cancelled] rather than being reported as a listener fault. *)
+  (** The grace expired with work in flight; connections were cancelled. *)
 
 val serve_http :
   env:< net : _ Eio.Net.t; fs : _ Eio.Path.t; mono_clock : _ Eio.Time.Mono.t; .. > ->
@@ -261,54 +162,15 @@ val serve_http :
   ?grace_seconds:float ->
   unit ->
   (lifecycle, serve_error) result
-(** Serve Streamable HTTP on [host]:[port]: [/mcp] is delegated to the mcp-kit
-    adapter's handler (which owns body bound, routing headers and Origin), and
-    every other path goes through {!handle_custom} under the same Host
-    allowlist. [app.health] runs as a fiber on the same switch when
-    [[search] health_interval_seconds] is positive.
+(** Serve Streamable HTTP on [host]:[port]. *)
 
-    [stop] is the caller's stop input — the one promise a signal handler path
-    fills. Filling it stops accepting connections, marks the custom routes
-    stopping ({!handle_custom}), aborts the health fiber (a probe in flight is
-    cancelled, not awaited), and then waits up to [grace_seconds] (default
-    {!drain_grace_seconds}) for the accepted connections to finish. Past that
-    ceiling the connection switch is failed and every remaining connection is
-    cancelled and joined, so the function returns [Grace_expired] instead of
-    hanging on a stuck handler.
-
-    The listener and the health fiber are registered on [sw], which owns the
-    grants; their work is joined before this returns. Startup and listener
-    failures are returned, not raised: [Error error] after logging
-    [http.listen_failed] with the error's constant [kind]. Per-connection
-    failures are logged as [http.connection_error] with a bounded
-    {!Log.classify_exn} [kind]; a rejected Origin is the expected
-    [http.origin_rejected] refusal at INFO, not a fault. A cancellation from an
-    enclosing switch is re-raised as cancellation, never rendered as a
-    provider or listener failure. *)
-
-(** {1 The frozen surface, as data}
-
-    Read by [ocaml-tools/surface.ml], which prints the manifest
-    [tools/surface.py] prints from the Python tree; the two must diff clean.
-    Each list is the single source the corresponding declaration is built
-    from, so a drift here is a drift in the wire. *)
+(** {1 Surface data} *)
 
 val tools_surface : (string * string list) list
-(** [(tool name, parameter names in declaration order)], sorted by name. *)
-
 val rest_routes : (string * string * string * string list) list
-(** [(method, path, request model, sorted body keys)] for the three
-    [/api/v1/…] routes, sorted by (method, path). *)
-
 val operational_routes : (string * string) list
-(** [(method, path)] for the four routes outside the projection, sorted. *)
-
 val cli_verbs : string list
-(** The three client verbs, sorted: ["answer"; "fetch"; "search"]. *)
-
 val server_flags : string list
-(** The ten server flags, in the order the CLI declares them, derived from
-    {!server_flag_table}. *)
 
 type flag_arity =
   | Boolean
@@ -316,40 +178,15 @@ type flag_arity =
 
 type server_flag = {
   name : string;
-  (** The spelling the CLI accepts and the manifest prints. *)
   arity : flag_arity;
-  (** [Boolean] takes no argument; [Value] takes exactly one. *)
   repeats : bool;
-  (** Whether the flag may appear more than once ([--allowed-host]). *)
   key : string;
-  (** The parser's field name, so [bin/main.ml] never spells a flag itself: a
-      rename here moves the accepted name, the error sentences and the
-      manifest together. *)
 }
 
 val server_flag_table : server_flag list
-(** The one source {!server_flags} and the CLI scanner both read. *)
-
 val flag_spec : string -> server_flag option
-(** The table row for a spelling, or [None]: what makes an unknown flag
-    unknown. *)
-
-(** {1 The HTTP wire helpers} *)
 
 val headers_of_lines : string list -> Http.Header.t
-(** Fold a replayed request head's lines into the [http] header type — the
-    transport reads [Host] from this, not from a hand-rolled prefix test. A
-    line with no colon is not a header and is dropped. *)
-
 val http_text_response : int -> string -> string
-(** The exact bytes of a plain-text refusal, with [content-length] computed
-    from the body and the head rendered by {!Http_head.response_head}, so the
-    outbound ceiling and the arithmetic live in one module. The transport
-    below {!serve_http}'s routing writes its own framing, so this is where the
-    long refusal sentences are spelled once. *)
 
 val journal_fields : (string * string list) list
-(** The usage-journal field sets per line kind ([search], [fetch], [answer]),
-    sorted, as [Usage] writes them. Printed by [ocaml-tools/surface.ml] and
-    pinned against a real journal by [test/test_p8_surface.ml], so a field
-    renamed in [usage.ml] fails a test. *)

@@ -18,8 +18,6 @@ open Test_support
 let paged ?(paragraph = "paragraph of body text") count =
   String.concat "\n\n" (List.init count (fun i -> Printf.sprintf "%s %d" paragraph i))
 
-(* {1 Windowing — TestWindowText} *)
-
 let test_a_short_text_is_returned_whole () =
   let text = paged 3 in
   A.check (A.pair A.string A.bool) "whole" (text, false)
@@ -67,8 +65,6 @@ let test_an_uncapped_window_is_the_whole_text () =
   let text = paged 40 in
   A.check (A.pair A.string A.bool) "whole" (text, false)
     (F.window_text text ~offset:0 ~max_chars:F.uncapped)
-
-(* {1 URL validation — TestSchemeAndShape} *)
 
 let blocked_schemes =
   [
@@ -136,12 +132,12 @@ let test_the_scheme_is_lowercased_and_an_empty_path_becomes_root () =
 
 let test_url_trim_is_unicode_whitespace () =
   (* Python's [validate_url] strips the raw URL before [urlsplit], so an
-     ideographic or no-break space around it is blank (F1.5). *)
+     ideographic or no-break space around it is blank. *)
   A.check A.string "ideographic spaces" "https://example.com/"
     (expect_url "\xe3\x80\x80https://example.com/\xe3\x80\x80")
 
 (* The bracketed forms CPython's [urlsplit] refuses before [Uri] sees them, with
-   the oracle's exact sentences (F1.5). [Uri.of_string] accepts every one of
+   the oracle's exact sentences. [Uri.of_string] accepts every one of
    these and reparses it, which is why the check runs on the raw netloc. *)
 let test_bracketed_ipv6_forms_the_oracle_refuses () =
   let expect_refusal url =
@@ -194,8 +190,6 @@ let test_bracketed_ipv6_forms_the_oracle_accepts () =
     (Error "invalid port: 65536 is not a port in 1-65535")
     (F.validate_url "http://[::1]:65536/")
 
-(* {1 Image sniffing} *)
-
 let test_the_signature_table_names_exactly_the_admitted_types () =
   A.check (A.list A.string) "the four admitted types" F.image_types
     [ "image/png"; "image/jpeg"; "image/gif"; "image/webp" ]
@@ -213,8 +207,6 @@ let test_each_signature_sniffs_as_its_type () =
 let test_resolved_cap () =
   A.check A.int "default" 40 (F.resolved_cap 40 None);
   A.check A.int "override" 7 (F.resolved_cap 40 (Some 7))
-
-(* {1 Media-type plumbing} *)
 
 let test_media_type_strips_parameters () =
   A.check A.string "params stripped" "text/html" (E.media_type (Some "TEXT/HTML; charset=utf-8"));
@@ -246,8 +238,6 @@ let test_sniffs_html () =
   A.check A.bool "html tag" true (E.sniffs_html "<html><body>");
   A.check A.bool "not html" false (E.sniffs_html "just text")
 
-(* {1 Decoding} *)
-
 let test_declared_charset_is_preferred () =
   let body = "caf\xe9" (* latin-1 *) in
   A.check A.string "latin-1 decoded" "café" (E.decode body (Some "text/html; charset=iso-8859-1"))
@@ -264,15 +254,11 @@ let test_a_declared_charset_no_codec_names_falls_back () =
 let test_windows_1252_specials_decode () =
   A.check A.string "euro" "€" (E.decode "\x80" (Some "text/plain; charset=windows-1252"))
 
-(* {1 Normalise} *)
-
 let test_normalise_collapses_and_measures_in_codepoints () =
   let r = E.normalise "  a \t b\n\n\n\nc  " (Some "") in
   A.check A.string "collapsed" "a b\n\nc" r.E.text;
   A.check (A.option A.string) "empty title is None" None r.E.title;
   A.check A.int "codepoints" 6 r.E.total_chars
-
-(* {1 Passage selection — TestSelectPassages} *)
 
 let chunked_para head = head ^ " " ^ String.concat "" (List.init 200 (fun _ -> "filler "))
 
@@ -319,8 +305,6 @@ let test_short_query_tokens_are_ignored () =
   let spans, dropped = E.select_passages ~text:text ~query:"a of" ~max_chars:6000 in
   A.check A.int "no spans" 0 (List.length spans);
   A.check A.int "no drops" 0 dropped
-
-(* {1 The stdlib backend} *)
 
 let article ?(body = String.concat "" (List.init 10 (fun _ -> "This is the real content of the page. "))) () =
   "<!DOCTYPE html>\n<html><head><title>The Title</title></head>\n<body>\n  <nav>Home About Contact Login</nav>\n  <script>var tracking = 1;</script>\n  <style>body { color: red }</style>\n  <article>\n    <h1>A Heading</h1>\n    <p>"

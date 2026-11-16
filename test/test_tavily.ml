@@ -51,9 +51,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 (* Never sent to anything real: the string a leak would carry. *)
 let test_key = "test-key"
 
-(* {1 The fixture}
-
-   The documented payload: [answer] prose, [results[]] with an inline extract,
+(* The documented payload: [answer] prose, [results[]] with an inline extract,
    the vendor's [response_time] envelope, and the [usage] block whose credits this
    port does not carry. *)
 let sample =
@@ -82,9 +80,7 @@ let sample_json =
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
 
-(* {1 The seam}
-
-   A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
+(* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response — the position [httpx.MockTransport] holds in Python. *)
 let dial ?(status = 200) ?(body = sample) ?(text_chars = 2000) ?cost_per_1k () =
   let sent = ref None in
@@ -144,8 +140,6 @@ let body_list name request =
   | `List items ->
       List.filter_map (fun item -> Provider.Json.string item) items
   | _ -> []
-
-(* {1 Parsing} *)
 
 let parse ?(text_chars = 2000) ?(limit = 10) data = Tavily.parse ~text_chars data ~limit
 
@@ -213,9 +207,7 @@ let missing_results_is_empty_not_an_error () =
   check_int "results is null" 0 (List.length (parse (`Assoc [ ("results", `Null) ])));
   check_int "results is absent" 0 (List.length (parse (`Assoc [])))
 
-(* {1 The upstream field guards}
-
-   A non-string [content] is dropped, not handed to the shared truncate helper,
+(* A non-string [content] is dropped, not handed to the shared truncate helper,
    which split on whitespace in whatever upstream sent: an [AttributeError] there
    escaped the engine's provider-error handling as an internal error rather than
    being dropped the way every sibling drops a non-string. [answer] has the same
@@ -268,8 +260,6 @@ let the_answer_reaches_the_caller () =
   check_opt_string "the vendor's prose, which the [search] tool returns as [answer]"
     (Some "WAL lets readers proceed while one writer commits.")
     outcome.answer
-
-(* {1 The request} *)
 
 let post_to_the_search_endpoint_with_a_bearer_token () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:3 ()) () in
@@ -357,8 +347,6 @@ let safe_search_is_omitted_when_unasked () =
   let _, request = search_of () in
   check_bool "no safe_search" false (has_body_field "safe_search" request)
 
-(* {1 The closed country enum} *)
-
 let a_country_name_passes_through () =
   let _, request = search_of ~query:(query ~country:"Switzerland" ()) () in
   check_opt_string "the enum's own word, lowercased" (Some "switzerland")
@@ -401,8 +389,6 @@ let the_enum_covers_the_codes_the_surface_sends () =
   check_bool "the two Congo codes are both present" true
     (List.mem_assoc "cg" Tavily.country_by_code && List.mem_assoc "cd" Tavily.country_by_code)
 
-(* {1 The constraint report} *)
-
 let an_unmappable_country_is_noticed_alone () =
   (* Only the country was dropped; [language] carries its half of the geo bucket
      on the very same request, so the joined [country/language] token would be
@@ -434,9 +420,7 @@ let the_honoured_buckets_draw_no_notice () =
   in
   check_opt_string "no notice at all" None outcome.notice
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota pair: 432 is
    Tavily's own monthly-credits-exhausted code and 429 its short-term rate limit,
    and both are the same month's quota question, so both are non-retryable. *)
@@ -485,8 +469,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-(* {1 Cost and endpoint} *)
 
 let the_cost_does_not_scale_with_result_count () =
   (* A basic search is one credit whatever the result count, so the flat figure is

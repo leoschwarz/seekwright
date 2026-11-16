@@ -69,9 +69,7 @@ let nth label index xs =
   | Some x -> x
   | None -> A.failf "%s has no item %d" label index
 
-(* {1 The fixtures the live endpoint taught the oracle}
-
-   Copied from the oracle's suite, which captured them from
+(* Copied from the oracle's suite, which captured them from
    [https://mcp.exa.ai/mcp]: plain formatted text, an empty [structuredContent],
    [Title: N/A] for a page it could not name, and [...] elisions between highlight
    sentences. *)
@@ -98,8 +96,6 @@ URL: https://example.com/no-title
 Highlights:
 # What is the Model Context Protocol?
 |}
-
-(* {1 The parser} *)
 
 let parse ?(text_chars = 2000) ?(limit = 10) text = Exa.parse ~text_chars text ~limit
 
@@ -172,8 +168,6 @@ let a_record_without_a_url_is_not_a_result () =
   check_int "empty input" 0 (List.length (parse ""));
   check_int "garbage input does not raise" 0 (List.length (parse "total nonsense\nwith no fields"))
 
-(* {1 The price} *)
-
 let the_published_price_is_a_subscription_plus_a_rung () =
   check_number "up to ten results" 0.007 (Exa.cost_for ~cost_per_1k:7.00 10);
   check_number "one result" 0.007 (Exa.cost_for ~cost_per_1k:7.00 1);
@@ -190,9 +184,7 @@ let the_endpoint_and_the_tool () =
   check_string "one documented endpoint" "https://mcp.exa.ai/mcp" (Uri.to_string Exa.default_uri);
   check_string "one advertised tool" "web_search_exa" Exa.tool_name
 
-(* {1 The scripted endpoint}
-
-   Where [httpx.MockTransport] and the oracle's stub session both sit: the request
+(* Where [httpx.MockTransport] and the oracle's stub session both sit: the request
    is recorded and the reply canned, so nothing is dialed while the session
    lifecycle the client owns still runs for real. [initialize] is answered, the
    acknowledgement accepted, and each [tools/call] takes the next reply the case
@@ -321,8 +313,6 @@ let header (request : Caps.Authority.Net.request) name =
     (fun (key, value) -> if String.lowercase_ascii key = name then Some value else None)
     request.Caps.Authority.Net.headers
 
-(* {1 One session on one credential} *)
-
 let mcp_session ?cost_per_1k ?(name = "exa") ?auth ep =
   Exa.make_mcp ?cost_per_1k ~name ?auth ~uri:fixture_uri ~net:ep.net ()
 
@@ -433,8 +423,6 @@ let close_terminates_the_session_and_refuses_after () =
   match Provider.search session.Provider.adapter (query ()) with
   | Ok _ -> A.failf "a closed session answered"
   | Error failure -> check_string "the closed row" "MCP client is closed" failure.message
-
-(* {1 The ladder} *)
 
 let tiered ?(cooldown = 60.0) ?(now = fun () -> 1_000.0) ?log ?(cost_per_1k = 7.00) ep =
   Exa.make_tiered ~cost_per_1k ~cooldown_seconds:cooldown ~now ?log ~key:test_key ~uri:fixture_uri
@@ -583,9 +571,7 @@ let close_closes_both_fallbacks () =
   check_int "the free session closed" 1 (count ~meth:"DELETE" ~keyed:false ep);
   check_int "and the keyed one too" 1 (count ~meth:"DELETE" ~keyed:true ep)
 
-(* {1 What the ladder tells the operator}
-
-   The notice goes to the caller, who is not the party billed, so the same fact has
+(* The notice goes to the caller, who is not the party billed, so the same fact has
    to reach the log. These capture the sink rather than assert a rendering. *)
 
 let sink events =

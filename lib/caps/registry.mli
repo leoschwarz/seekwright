@@ -1,11 +1,6 @@
-(** The one place a grant meets a tool.
-
-    [add] is the only operation in the layer that pairs a tool with the power it
-    will run under, which is what makes "which tool may do what I/O" greppable
-    (§1). The stored entry is neither a cast nor a universal authority value:
-    closing the grant and the decoder over [run] leaves a handler whose type
-    mentions no application type at all, so differently typed tools coexist in
-    one list. *)
+(** Tool registry pairing tools with capability grants.
+    Tools with heterogeneous grants and input types are stored as uniform entries
+    by closing over the grant and input decoder. *)
 
 type t
 

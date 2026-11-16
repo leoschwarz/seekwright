@@ -44,9 +44,8 @@ let factory_sources () =
   if names = [] then Alcotest.failf "no modules found under %s" dir;
   List.map (fun name -> ("lib/factory/" ^ name, read_file (dir ^ "/" ^ name))) names
 
-(* Python's [str.replace]: every non-overlapping occurrence, left to right, and
-   an empty needle leaves the haystack alone. Two suites had written it for
-   themselves, one over a [Buffer] and one recursively. *)
+(* Replaces every non-overlapping occurrence, left to right. An empty needle
+   leaves the haystack alone. *)
 let replace_all ~haystack ~needle ~with_ =
   if needle = "" then haystack
   else begin
@@ -75,9 +74,7 @@ let excludes label needle haystack =
   if contains ~haystack ~needle then
     Alcotest.failf "%s: the text contained %S, and must not\n     it was: %S" label needle haystack
 
-(* Python's [str.count]: non-overlapping, left to right, and an empty needle
-   counts zero. The two local counters this replaces had disagreed about
-   overlap, so the rule is stated here rather than left to each caller. *)
+(* Non-overlapping, left to right; an empty needle counts zero. *)
 let count_occurrences ~haystack ~needle =
   if needle = "" then 0
   else begin

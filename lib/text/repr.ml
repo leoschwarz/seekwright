@@ -1,17 +1,5 @@
-(* One escape pass; see repr.mli for the quoting rule and why the fetch path's
-   ASCII-only JSON escape is not a second policy of this module. *)
-
-(* The codepoints Python's [repr] escapes because [str.isprintable()] is false:
-   the [C*] categories (control, format, surrogate, private use, unassigned) and
-   the separators [Zl], [Zp] and the non-space [Zs]. The table is the union of
-   [Cc Cf Cs Co Zl Zp Zs] over Unicode 16.0 — the oracle's own [unicodedata] —
-   minus U+0020, which is printable. It is data, not a dependency: the stdlib has
-   no Unicode database, and this library may not grow one.
-
-   Unassigned ([Cn]) codepoints are the one residual. The oracle escapes them
-   ([repr("\\u0378")] is ["'\\u0378'"]); this table has no way to tell them from
-   an assigned printable without carrying the whole assignment map, so they pass
-   through. The corpus has no [Cn] input and the plan records the gap. *)
+(* Sorted disjoint non-printable ranges: Unicode 16.0 categories
+   [Cc Cf Cs Co Zl Zp Zs] minus U+0020 for binary search. *)
 let non_printable =
   [|
     (0x0000, 0x001f);
@@ -57,14 +45,6 @@ let is_non_printable cp =
   !found
 
 let py_repr (value : string) : string =
-  (* Python's [repr] of a str, over the same decode the rest of the walk uses:
-     well-formed text keeps its bytes, an ill-formed subpart becomes U+FFFD. The
-     quote is single unless the text holds a single quote and no double quote,
-     and the chosen quote plus the backslash are escaped. [\n], [\r] and [\t]
-     are named; every other non-printable codepoint is [\xNN], [\uNNNN] or
-     [\UNNNNNNNN] by its own width, and printable non-ASCII is left as the bytes
-     it is, because a log line is read by a machine that keeps UTF-8 and
-     rewriting it would hide what the page said. *)
   let cps = Utf8.of_string value in
   let has_single = Array.exists (fun cp -> cp = 0x27) cps in
   let has_double = Array.exists (fun cp -> cp = 0x22) cps in

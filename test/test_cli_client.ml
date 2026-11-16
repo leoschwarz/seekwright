@@ -34,8 +34,6 @@ let run ?(answer = Ok (200, "{}")) ~json ~argv verb =
   let result = Client.run ~post:(post_of tape) ~verb ~argv in
   (result, List.rev tape.calls)
 
-(* {1 The request goes to the right route} *)
-
 let body_for route =
   match route with
   | "search" -> {j|{"query":"q","provider":"p","results":[]}|j}
@@ -86,8 +84,6 @@ let test_server_flag_sets_origin () =
       ("http://box:9000//", "http://box:9000/");
     ]
 
-(* {1 Status handling — TestClientExitCodes} *)
-
 let test_http_error_becomes_sentence_exit_1 () =
   let answer = Ok (400, {j|{"error":"provider exa is not enabled on this deployment"}|j}) in
   let result, _ = run ~answer ~json:false ~argv:[ "qq"; "--provider"; "exa" ] Client.Search in
@@ -116,8 +112,6 @@ let test_usage_error_exits_2 () =
   let result, calls = run ~json:false ~argv:[ "q"; "extra" ] Client.Search in
   Alcotest.(check result_t) "usage error" (Error ("search takes exactly one QUERY", 2)) result;
   Alcotest.(check int) "no request was sent" 0 (List.length calls)
-
-(* {1 Rendering — TestClientSearch/Fetch/Answer's human output} *)
 
 let search_json =
   {|{"query":"open data","provider":"exa:free","results":[{"title":"First","url":"http://a.example","snippet":"line one\nline two"},{"title":"Second","url":"http://b.example","text":"body text"}],"notice":"exa fell back to its free tier"}|}
@@ -200,8 +194,6 @@ let test_human_answer_sources () =
            true
          with Not_found -> false)
   | _ -> Alcotest.fail "expected a rendered answer"
-
-(* {1 No config, no provider, no key — TestClientHoldsNoSecrets} *)
 
 let test_client_names_no_config_or_keys () =
   (* the client library's own source: it dials a URL and nothing else. It

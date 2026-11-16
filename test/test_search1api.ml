@@ -49,9 +49,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 (* Never sent to anything real: the string a leak would carry. *)
 let test_key = "test-key"
 
-(* {1 The fixture}
-
-   The documented payload: [results[]] with the four fields the mapping reads
+(* The documented payload: [results[]] with the four fields the mapping reads
    — the second record without the optional [published_date], as the schema
    omits it when the source exposes none — beside the [searchParameters] echo
    the parse never touches. *)
@@ -84,8 +82,6 @@ let sample_json =
   match Yojson.Safe.from_string sample with
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
-
-(* {1 The seam} *)
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
   let sent = ref None in
@@ -132,8 +128,6 @@ let body_string request name =
 let body_rendered request name = Option.map Yojson.Safe.to_string (body_field request name)
 
 let has_body_field request name = body_field request name <> None
-
-(* {1 Parsing} *)
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data =
   Search1api.parse ~snippet_chars data ~limit
@@ -211,9 +205,7 @@ let missing_results_is_empty_not_an_error () =
     (List.length (parse (`Assoc [ ("results", `Null) ])));
   check_int "results is absent" 0 (List.length (parse (`Assoc [])))
 
-(* {1 The upstream field guards}
-
-   A non-string [snippet] or [published_date] is dropped, not handed to the
+(* A non-string [snippet] or [published_date] is dropped, not handed to the
    shared truncate helper: a nested object, list or number there must read as a
    missing field, not raise out of the engine's provider-error handling. *)
 
@@ -252,9 +244,7 @@ let a_string_snippet_still_reaches_the_model () =
         journal.")
     (List.hd outcome.results).result.snippet
 
-(* {1 The request}
-
-   Domains, dates and language ride native parameters, so three buckets are
+(* Domains, dates and language ride native parameters, so three buckets are
    honoured. There is no country parameter and no safe-search parameter in the
    documented schema, so those halves drop — and the notice is the only thing
    between a caller that asked for them and the belief that it got them. *)
@@ -369,9 +359,7 @@ let the_result_reports_its_flat_cost () =
   check_string "named by the adapter that served it" "search1api" outcome.provider;
   check_opt_number "one credit at the entry plan's rate" (Some 0.00076) outcome.cost_usd
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota statuses,
    its own message wording, and the leak regression that proves the redaction
    rule for the place its key actually rides. *)
@@ -401,8 +389,6 @@ let a_network_error_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "the key is nowhere in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-(* {1 Cost and endpoint} *)
 
 let cost_does_not_scale_with_result_count () =
   let provider, _ = dial () in

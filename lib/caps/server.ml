@@ -4,10 +4,6 @@ type build_error =
 
 let ( let* ) = Result.bind
 
-(* An MCP tool name is what a caller types, so it has to survive being echoed
-   into a prompt and matched byte for byte. The character set is the conservative
-   one: the names the frozen surface carries (search, fetch, answer) plus the
-   `backend:flavour` spelling provider names use. *)
 let max_name_bytes = 128
 
 let name_is_usable name =
@@ -24,21 +20,13 @@ let schema_error ~name errors =
   Invalid_declaration
     (name ^ ": " ^ Mcp_kit.Schema.validation_errors_to_string ~root:name errors)
 
-(* Verified against mcp-kit 0.2.0: [check_input_schema] only rejects a schema
-   document that is not a JSON object, so {"type":"string"} passes it.
-   [require_input_object] is the entry point that insists the root describes an
-   object — and it raises, which is why declaration checking turns it back into
-   a value. *)
+(* [require_input_object] raises on non-object root schema; caught and returned as Error. *)
 let input_schema entry =
   try Ok (Mcp_kit.Schema.require_input_object (Registry.entry_input_schema entry))
   with Invalid_argument message ->
     Error (Invalid_declaration (Registry.entry_name entry ^ ": " ^ message))
 
-(* Tool-originated failures are MCP results with isError set; the left channel
-   of a handler result belongs to mcp-kit and is only for contract failures, so
-   an Error.t from run never becomes a JSON-RPC error (§3). Only the sanitized
-   message crosses: Error.render is the whole rendering, with no exception,
-   backtrace, header or body behind it. *)
+(* Tool errors return Ok error_text with isError: true; never JSON-RPC Error. *)
 let mcp_tool entry input_schema output_schema =
   let handler json =
     match Registry.entry_call entry json with
@@ -59,8 +47,6 @@ let mcp_tool entry input_schema output_schema =
     (Registry.entry_name entry)
     handler
 
-(* Every declaration problem is reported here, at construction, so a startup bug
-   is never paid per request and no entry can be dropped on the way in. *)
 let checked_tool entry =
   let name = Registry.entry_name entry in
   if not (name_is_usable name) then

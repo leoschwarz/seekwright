@@ -39,8 +39,6 @@ let log_format =
     (fun ppf format -> Format.pp_print_string ppf (Config.show_log_format format))
     ( = )
 
-(* {1 Fixtures} *)
-
 (* One config file per case, the way the Python suite writes one into tmp_path. *)
 let write_config text =
   let directory = Filename.temp_dir "seekwright-config" "" in
@@ -109,8 +107,6 @@ let fenced_block path heading language =
   | Some at -> String.sub after_fence 0 at
   | None -> A.failf "%s leaves the %s block under %S unterminated" path language heading
 
-(* {1 The assertions} *)
-
 (* The value, or a failure that names the refusal: an unexpected refusal is a
    bug in the port, so the message has to show it. *)
 let expect outcome =
@@ -141,8 +137,6 @@ let refuses_naming needles outcome =
           if not (contains ~haystack:fault ~needle) then
             A.failf "fault %S does not name %S" fault needle)
         needles
-
-(* {1 The suites} *)
 
 let known_providers_sentence =
   "algolia, anysearch, deepseek, exa, exa:free, freeserp, linkup, parallel, \
@@ -661,8 +655,6 @@ let test_the_removed_knowledge_section_is_rejected () =
   let path = write_config "[providers.serper]\nenabled = true\n\n[knowledge]\nenabled = true\n" in
   refuses_with "knowledge" (Config.load (Some path))
 
-(* {1 Documents} *)
-
 let configuration_doc = "../docs/reference/configuration.md"
 let deploying_doc = "../docs/reference/deploying.md"
 
@@ -778,8 +770,6 @@ let test_the_fetch_role_cannot_dispatch_a_provider () =
     check (option strings) "the empty set is not the unset one" (Some [])
       cfg.Config.permitted_providers;
     check strings "nothing missing" [] (Config.missing_api_keys cfg))
-
-(* {1 The fetch fallbacks} *)
 
 let fallback_names rows = List.map (fun (row : Config.fetch_fallback) -> row.name) rows
 
@@ -923,8 +913,6 @@ let fetch_primary_cases =
            scrappa, tavily"
           (Config.validate_fetch_primary Config.known_fetch_fallbacks "kagi") )
   ]
-
-(* {1 The search ladders} *)
 
 (* [search.fallback] is the default route's ladder, and its shape is startup
    policy rather than a serving-path surprise: unlike fetch's fallbacks, one
@@ -1336,8 +1324,6 @@ let agent_cases =
         unsetenv "SEEKWRIGHT_AGENT_API_KEY")
   ]
 
-(* {1 Lax scalars} *)
-
 (* pydantic's lax scalar reading, ported because a quoted number is the commonest
    typo in a config file and the Python deployment has always taken it. The
    accepted and refused spellings were read off pydantic 2.14 and are pinned
@@ -1503,8 +1489,6 @@ let test_literal_lookalikes_are_left_alone () =
   | Ok cfg ->
       A.(check int) "the value after the comment" 3 cfg.Config.policy.max_snippet_chars
   | Error message -> A.fail message
-
-(* {1 The vocabularies} *)
 
 (* The frozen names, written out rather than recomputed: these are the rows of
    tools/value_sets.json the port has to agree with, and a name that moves in the

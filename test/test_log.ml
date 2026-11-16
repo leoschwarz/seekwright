@@ -30,8 +30,6 @@ open Test_support
    not reach a log line. *)
 exception Opaque of string
 
-(* {2 The compile-time pin} *)
-
 let configured_sink : Log.log = Log.sink (Log.make Config.default_logging_config)
 
 (* One function value, four annotations. Each line is the fact P8 relies on: the
@@ -56,8 +54,6 @@ let test_the_sink_type_pin_compiles () =
   ignore engine_sink_serves_the_board;
   ignore board_sink_serves_the_recorder;
   ignore recorder_sink_serves_log
-
-(* {2 The source pin} *)
 
 let read path =
   if not (Sys.file_exists path) then
@@ -97,8 +93,6 @@ let test_the_owner_declares_no_siblings () =
       A.(check int) ("log.mli mentions " ^ name ^ " nowhere") 0
         (count_occurrences ~haystack:source ~needle:(name ^ ".")))
     [ "Engine"; "Health"; "Usage"; "Provider" ]
-
-(* {2 What the alias has to preserve } *)
 
 let test_the_board_hands_its_levels_and_fields_to_the_sink () =
   (* The behaviour the alias carries unchanged: a module calling a sink passes a

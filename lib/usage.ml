@@ -1,52 +1,16 @@
-(** See usage.mli — port of [src/seekwright/usage.py].
-
-    Two things about the port are worth stating here rather than in the
-    interface, because they are properties of the {i implementation}:
-
-    The journal line is a [Yojson.Safe.t] [`Assoc] value, and its key order is
-    the on-disk order — Python declares each line kind as a dataclass whose
-    fields {i are} the journal's keys, and the append-only format keeps that
-    order for readers that print a line rather than parse one. Every line kind is
-    therefore built in one place, in the declared order, and the two keys that
-    may be absent ([cost_usd] on an unpriced fetch, and the [run]/[step] pair)
-    are left out rather than written as [null].
-
-    Reading a line back is tolerant in exactly Python's way: every figure is read
-    by name with a type test, so a key a newer writer added is ignored, a key an
-    older writer never sent contributes nothing, and a value of the wrong type
-    contributes nothing rather than folding as zero. {!truthy}, {!counted} and
-    {!money} are those three tests, and the [ms] guard in {!apply} is the one
-    place Python's [isinstance(ms, int)] lets a JSON [true] through.
-
-    The aggregates are association lists, not [Map]s, in the two places Python's
-    dict order is load-bearing: {!remember_run} evicts the {i oldest} run, which
-    a keyed map would get wrong. Elsewhere the order is decided by a total sort
-    key, so the insertion order never reaches a figure. *)
-
 type log =
   Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
 
-(* The window the dashboard charts: two weeks, long enough to show a weekly
-   rhythm. *)
 let window_days = 14
 
-(* The quantiles the metrics contract reports, as (field, quantile) pairs so the
-   read-time pass and the null-when-empty rule stay in one place. *)
 let percentiles : (string * float) list = [ ("p50_ms", 0.50); ("p95_ms", 0.95) ]
 
-(* The cap on runs held waiting for their [answer] line, so a journal from a
-   process that died mid-call cannot grow the map without bound on backfill. *)
 let runs_max = 256
 
 let keep_days_default = 370
 let recent_default = 100
 
-(* {1 The clock} *)
-
-(* Days since 1970-01-01 and back: Howard Hinnant's civil-date arithmetic. The
-   stdlib's date functions are not in scope without [unix], and walking ~20 000
-   days is not what a serving path should do; these are closed-form, and
-   [test_usage.ml] pins the two ends the buckets need. *)
+(* Days since 1970-01-01 and back: Howard Hinnant's civil-date arithmetic. *)
 let days_from_civil (y : int) (m : int) (d : int) : int =
   let y = if m <= 2 then y - 1 else y in
   let era = (if y >= 0 then y else y - 399) / 400 in
@@ -100,9 +64,7 @@ let civil_of (secs : float) : int * int * int * int * int * int * float =
   let whole = Float.to_int sod in
   (y, m, d, whole / 3600, (whole / 60) mod 60, whole mod 60, sod -. Float.of_int whole)
 
-(* Python's [isoformat()] omits the microsecond field when it is zero, and the
-   [ts] strings a reader compares against [since] are those exact strings, so the
-   omission is part of the format rather than a detail. *)
+(* Microsecond field is omitted when zero. *)
 let iso_utc_full (secs : float) : string =
   let (y, m, d, hh, mm, ss, frac) = civil_of secs in
   let micros = Float.to_int (Float.floor (frac *. 1_000_000.)) in
@@ -113,8 +75,6 @@ let iso_utc_seconds (secs : float) : string =
   let (y, m, d, hh, mm, ss, _) = civil_of secs in
   Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d+00:00" y m d hh mm ss
 
-(* {1 Parsing a journal timestamp} *)
-
 let digits (s : string) (i : int) (n : int) : int option =
   if i < 0 || n <= 0 || i + n > String.length s then None
   else
@@ -122,11 +82,7 @@ let digits (s : string) (i : int) (n : int) : int option =
     if String.for_all (fun c -> c >= '0' && c <= '9') sub then Some (int_of_string sub)
     else None
 
-(* [datetime.fromisoformat(ts).astimezone(UTC)] for the shapes a journal line
-   carries: the date, optionally a time, optionally an offset. A timestamp with
-   no offset is read as UTC — Python reads it as {i local} time, which in this
-   deployment's container is UTC; the divergence is only reachable by an operator
-   who hand-writes an offset-free line and runs the server elsewhere. *)
+(* Parse timezone offset. Timestamps without offset are read as UTC. *)
 let parse_offset (s : string) (i : int) : (int * float) option =
   let l = String.length s in
   if i >= l then None
@@ -139,7 +95,6 @@ let parse_offset (s : string) (i : int) : (int * float) option =
       | Some h, Some mi, _ when s.[i + 3] = ':' ->
         Some (i + 6, float_of_int (sign * ((h * 60) + mi) * 60))
       | _, _, Some hi ->
-        (* ±HHMM, the form [isoformat] never writes but [fromisoformat] accepts. *)
         Some (i + 5, float_of_int (sign * (((hi / 100) * 60) + (hi mod 100)) * 60))
       | _ -> None
 
@@ -194,17 +149,11 @@ let parse_utc (ts : string) : float option =
     end
   | _ -> None
 
-(* {1 Reading a line} *)
-
-(* A journal line's field, and [Null] for a key that is not there: Python's
-   [entry.get(key)], which is how a line written before a key existed folds. *)
 let get (key : string) (entry : Yojson.Safe.t) : Yojson.Safe.t =
   match entry with
   | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
   | _ -> `Null
 
-(* Python truthiness, which is what the two boolean-ish reads below ask for. The
-   distinction matters once: a line that wrote ["fell_back": "no"] is true. *)
 let truthy (value : Yojson.Safe.t) : bool =
   match value with
   | `Null -> false
@@ -216,25 +165,15 @@ let truthy (value : Yojson.Safe.t) : bool =
   | `List xs -> xs <> []
   | `Assoc fields -> fields <> []
 
-(* An integer figure read off a journal line, or [None] when it is not one.
-   [Bool] is excluded even though Python counts it an [int]: a line that wrote
-   [true] where a count belongs is not a count of one. *)
 let counted (value : Yojson.Safe.t) : int option =
   match value with `Int n -> Some n | _ -> None
 
-(* A dollar figure read off a journal line, or [None] when it is not one. [None]
-   means {b unknown}, never zero: folding an unpriced line as [0.0] would invent a
-   price the journal never carried. *)
 let money (value : Yojson.Safe.t) : float option =
   match value with
   | `Int n -> Some (float_of_int n)
   | `Float f -> Some f
   | _ -> None
 
-(* The one read {!apply_search} makes that {!money} does not: Python tests
-   [isinstance(cost, (int, float))] without excluding [bool], so a line that wrote
-   [true] where a price belongs folds as one dollar. Kept apart so the [bool]
-   exclusion above stays honest about which reads make it. *)
 let cost_field (value : Yojson.Safe.t) : float =
   match value with
   | `Int n -> float_of_int n
@@ -242,24 +181,15 @@ let cost_field (value : Yojson.Safe.t) : float =
   | `Bool b -> if b then 1. else 0.
   | _ -> 0.
 
-(* The [ms] guard's type test: Python's [isinstance(ms, int)] accepts a JSON
-   [true] and rejects a JSON [12.0], and the arithmetic below then adds one
-   millisecond for that [true]. Reproduced, not tidied away. *)
 let elapsed_field (value : Yojson.Safe.t) : int option =
   match value with
   | `Int n -> Some n
   | `Bool b -> Some (if b then 1 else 0)
   | _ -> None
 
-(* Python's [round(x, 6)]: correct rounding of the binary value, ties to even,
-   which is what [%.6f] does. Scaling and adding a half would add a second
-   rounding error of its own. *)
 let round6 (x : float) : Yojson.Safe.t = `Float (float_of_string (Printf.sprintf "%.6f" x))
 
-(* Python's [int(x)] on a non-negative quotient: truncate, do not round. *)
 let trunc_int (x : float) : int = Float.to_int x
-
-(* {1 Aggregates} *)
 
 type day_totals = {
   mutable searches : int;
@@ -337,9 +267,9 @@ type answer_totals = {
 }
 
 (* run id -> [(provider, results)], held only until that run's [answer] line
-   folds. An association list rather than a [Map] because Python's dict is
-   insertion-ordered and eviction is oldest-first — {!remember_run} pops the first
-   key, which a keyed map would get wrong. *)
+   folds. An association list rather than a [Map] because eviction is
+   oldest-first — {!remember_run} pops the first key, which a keyed map would
+   get wrong. *)
 type t = {
   now : unit -> float;
   log : log option;
@@ -452,10 +382,8 @@ let take_first (n : int) (xs : 'a list) : 'a list =
   in
   go n [] xs
 
-(* Python's ``d[key] = value``: replaces in place, and appends when the key is new,
-   so the first write of a fresh key is not silently dropped. The association list
-   keeps insertion order, which is what makes {!remember_run}'s oldest-first eviction
-   and the snapshot's row order come out as Python's do. *)
+(* Replaces in place, and appends when the key is new. The association list
+   keeps insertion order for oldest-first eviction. *)
 let set (key : string) (value : 'a) (fields : (string * 'a) list) : (string * 'a) list =
   if List.mem_assoc key fields then
     List.map (fun (k, v) -> (k, if k = key then value else v)) fields
@@ -503,16 +431,6 @@ let fold_days (buckets : (string * provider_day) list) : provider_day =
     buckets;
   merged
 
-(* {1 The line schema} *)
-
-(* The journal's line schema: the one place its keys are declared, so a misnamed
-   key is a compile error, not a line that changes shape. The tuple order {b is}
-   the on-disk key order.
-
-   Two keys stay out of the file rather than being written as null: a fetch line's
-   [cost_usd] when nothing was billed, and the [run]/[step] pair on a line that
-   belongs to no [answer] call, which would otherwise change the shape the
-   journal's readers already parse. *)
 let run_fields (run : string option) (step : int option) =
   match run with
   | None -> []
@@ -582,8 +500,6 @@ let answer_line (ts : string) (run : string) (model : string option) (depth : st
       ("ms", `Int ms);
       ("error", (match error with Some e -> `String e | None -> `Null));
     ]
-
-(* {1 The folding} *)
 
 let remember_run (t : t) (run : string) (provider : string) (results : int) : unit =
   (* The [run] id is the whole join: retrieval lines are written before the
@@ -814,17 +730,7 @@ let fold_entry (t : t) (entry : Yojson.Safe.t) : bool =
 let apply (t : t) (entry : Yojson.Safe.t) : bool =
   match entry with `Assoc _ -> fold_entry t entry | _ -> false
 
-(* {1 The journal} *)
-
-(* The journal's own path is operator configuration, not content: the snapshot
-   may report it (the operator needs to find the file), but a log line does not.
-   A failure is therefore a constant [stage] and a bounded [reason]
-   classification — [Log.classify_exn] never carries the exception payload. *)
-
-(* Fold an existing journal into the aggregates. A missing file is fine —
-   construction created it. A line that will not parse is skipped and counted
-   rather than fatal: a torn write from a previous crash must not take down a
-   server. The count is logged once so a growing number is visible. *)
+(* Fold an existing journal into the aggregates. Missing file is fine. *)
 let backfill (t : t) (path : Eio.Fs.dir_ty Eio.Path.t) : unit =
   if not (Eio.Path.is_file path) then ()
   else begin
@@ -932,15 +838,6 @@ let create ~now ?log ?history_path ?(recent = recent_default) ?(keep_days = keep
             (Printf.sprintf "not writable: %s (%s)" shown
                (Log.classify_exn exn)))
 
-(* {1 Recording} *)
-
-(* The fold and the line are one critical section: [apply] touches every
-   aggregate with no suspension point, and [append] then suspends on the file.
-   Holding the lock across both is what makes the aggregate order, the journal
-   order and the snapshot all read the same order, and it is what keeps two
-   fibers' bytes from sharing a line. [Yojson.Safe.to_string] runs inside
-   [append], under the lock, so the bytes of one record are formed and written
-   before another record may start. *)
 let record_search (t : t) ~(provider : string) ~(ms : int) ~(cost_usd : float)
     ~(results : int) ~(fell_back : bool) ?error ?run ?step () : unit =
   let entry =
@@ -973,19 +870,14 @@ let record_answer (t : t) ~(run : string) ~(model : string option) ~(depth : str
 
 let search_cost_usd (t : t) : float = t.search_cost_usd
 
-(* {1 The snapshot} *)
-
-(* The last [window_days] UTC day names, oldest first — the axis both the chart and
-   the endpoint series draw. *)
+(* The last [window_days] UTC day names, oldest first. *)
 let window_dates (today : string) : string list =
   match date_of_string today with
   | None -> []
   | Some days ->
     List.init window_days (fun i -> date_of_days (days - (window_days - 1 - i)))
 
-(* The two orderings the snapshot and the endpoint series share: spend descending,
-   name ascending to break a tie. Python's [sorted] is stable, but this key is
-   total over unique names, so stability never decides a row. *)
+(* Spend descending, with name ascending to break a tie. *)
 let by_spend (cost : 'a -> float) (pa, ta) (pb, tb) =
   let c = Float.compare (cost tb) (cost ta) in
   if c <> 0 then c else String.compare pa pb

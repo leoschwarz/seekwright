@@ -1,7 +1,3 @@
-(* Linkup fetch. fallback.mli owns what every remote fallback shares; this
-   file is the fetch endpoint's request shape, its status arms, and the one
-   [markdown] field the page is made of. *)
-
 module Caps = Mcp_caps
 
 let linkup_fetch_endpoint = "https://api.linkup.so/v1/fetch"

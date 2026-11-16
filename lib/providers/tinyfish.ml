@@ -1,5 +1,3 @@
-(* TinyFish, ported from src/seekwright/providers/tinyfish.py. *)
-
 module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
@@ -10,18 +8,13 @@ let endpoint = Uri.of_string "https://api.search.tinyfish.ai"
 
 let policy_endpoint = Provider.policy_of_uri endpoint
 
-(* Coarse freshness -> [recency_minutes], a window the endpoint measures in
-   minutes up to 5256000. Fixed 30-day months and 365-day years, like Linkup's
-   [fromDate] and FreeSerp's [published_from]: this is "published within the last
-   {i n} days", not calendar arithmetic, so no clock is needed to compute it. *)
+(* recency_minutes: day (1440), week (10080), month (43200), year (525600). *)
 let recency_minutes = function
   | Model.Day -> 1440
   | Model.Week -> 10080
   | Model.Month -> 43200
   | Model.Year -> 525600
 
-(* The documented parameter values are comma-separated lists in one query
-   parameter, not a repeated parameter. *)
 let join_domains domains = String.concat "," domains
 
 let request_uri (q : Provider.search_query) =
@@ -43,15 +36,11 @@ let request_uri (q : Provider.search_query) =
   in
   let params =
     match q.Model.country with
-    (* The documented examples are uppercase codes ([US], [DE]), so the two-letter
-       code the request surface carries goes up, not down. *)
     | Some code -> params @ [ ("location", [ String.uppercase_ascii code ]) ]
     | None -> params
   in
   let params =
     match q.Model.language with
-    (* Lowercased rather than split: the schema already guarantees the two-letter
-       form, and the region half is [location]'s. *)
     | Some code -> params @ [ ("language", [ String.lowercase_ascii code ]) ]
     | None -> params
   in
@@ -72,9 +61,7 @@ let parse ~snippet_chars data ~limit =
       | [] -> List.rev acc
       | item :: rest -> take (n - 1) rest (item :: acc)
   in
-  (* There is no result-count parameter upstream, so this slice is the {i only}
-     place [max_results] takes effect — and, as elsewhere, a record that fails to
-     parse still spends one of the slots. *)
+  (* Upstream lacks result-count parameter; slicing happens here. *)
   List.filter_map
     (fun item ->
       match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
@@ -92,9 +79,6 @@ let parse ~snippet_chars data ~limit =
                   text = None;
                   text_truncated = None;
                   published_date = published_date item;
-                  (* [position] and [site_name] are in the payload; neither is a
-                     relevance number, and nothing else in the surface carries a
-                     rank, so both are dropped with the rest of the envelope. *)
                   score = None;
                 };
               uncapped_chars;
@@ -105,20 +89,14 @@ let parse ~snippet_chars data ~limit =
 let check_status status =
   if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
   else if status = 402 || status = 429 then
-    (* 402 here reads "Search API access is required for your account" — an
-       account question rather than a malformed request, so it rides the quota row
-       alongside the rate limit. Not the x402 payment lane [scrappa] answers with:
-       this name's request is always keyed. *)
+    (* 402/429 indicates Search API access not enabled or rate limit. *)
     Error
       (Provider.quota_exhausted ~provider:name
          ~message:"rate limited or no Search API access on this account" ())
   else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
   else Ok ()
 
-(* Per-query cost in USD. Flat zero: TinyFish bills its agent and browser work,
-   and a Search API request draws nothing from the wallet whatever the balance.
-   The argument is ignored rather than absent because callers treat [cost_for] as
-   the same duck-typed extra on every adapter. *)
+(* Search API requests are free; flat zero cost. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
@@ -127,9 +105,6 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
     {
       Caps.Authority.Net.meth = `GET;
       uri = request_uri q;
-      (* The vendor's own header spelling — [X-API-Key], hyphenated differently
-         from [scrappa]'s [x-api-key] — and the key is a header rather than a query
-         parameter, so the one URL this adapter builds can never carry it. *)
       headers = [ ("X-API-Key", key) ];
       body = None;
     }
@@ -145,10 +120,6 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
           results = parse ~snippet_chars data ~limit:q.Model.max_results;
           answer = None;
           cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          (* Domain lists, [recency_minutes], [location] and [language] are all
-             native parameters, so the missing safe-search parameter is the whole of
-             the notice — and [Some false] is a request here too, dropped as
-             completely as [Some true] would be. *)
           notice =
             Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true
               ~language:None ~safety:false;
@@ -161,7 +132,6 @@ let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~key ~net () : Provider.t =
     let cost_for = cost_for ~cost_per_1k
     let search = search ~cost_per_1k ~snippet_chars ~key net
 
-    (* The grant is the server's, not the adapter's: closing it would break the
-       sibling providers that share the same confinement. *)
+    (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()
   end : Provider.S)

@@ -1,9 +1,3 @@
-(* The public policy surface: the confinement records are Policy_fs's and
-   Policy_net's, and this module is the vocabulary an application reaches for
-   instead. Splitting the records out of this file is what keeps
-   [Authority.Fs.of_confinement] and [Authority.Net.of_confinement] able to name
-   their witness types without a module cycle; see policy_fs.mli. *)
-
 let with_root = Policy_fs.with_root
 let with_written_root = Policy_fs.with_written_root
 

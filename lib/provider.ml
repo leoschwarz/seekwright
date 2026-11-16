@@ -1,10 +1,3 @@
-(* The provider contract, ported from src/seekwright/providers/base.py.
-
-   Two of the helpers here — the caps and the constraint report — exist because
-   the proxy is a proxy: it forwards bodies it did not write, and a caller
-   cannot tell a filter that was dropped from one that was honoured, or a
-   clipped snippet from a short one, unless the adapter says so. *)
-
 module Caps = Mcp_caps
 module Utf8 = Seekwright_text.Utf8
 
@@ -19,11 +12,6 @@ type error = {
   message : string;
   retryable : bool;
 }
-
-(* The seven rows of provider-contract.md's Failures table as named values, so
-   an adapter writes its own mapping — Python does, and the per-vendor quirks
-   (which statuses mean "out of credits", and what that failure is called) stay
-   visible at the call site — while the wording itself has one home. *)
 
 let provider_error ?(retryable = true) ~provider message =
   { provider; kind = Failure; message; retryable }
@@ -44,44 +32,23 @@ let timeout_error ~provider = provider_error ~provider "request timed out"
 let network_error ~provider = provider_error ~provider "network error"
 
 let transport_error ~provider (failure : Caps.Error.t) =
-  (* The grant's message is never copied: it may name the peer address it
-     dialled, and httpx's equivalent echoed the request that carried the key. *)
   match Caps.Error.kind failure with
   | Caps.Error.Timeout -> timeout_error ~provider
   | (Caps.Error.Denied | Invalid | Unavailable | Failed) -> network_error ~provider
 
 let decode_json_object ~provider body =
-  (* An undecodable body and an unshaped one are the same wire failure, which is
-     why both arms carry one message. Nothing about the body is reported: the
-     redaction rule is that an adapter says what failed, not what it saw. *)
   let malformed = provider_error ~provider "malformed JSON response" in
   match (try Ok (Yojson.Safe.from_string body) with Yojson.Json_error _ -> Error malformed) with
   | Error e -> Error e
   | Ok json -> (
       match json with `Assoc _ -> Ok json | _ -> Error malformed)
 
-(* The caps count {b characters}, as Python's [len] and slicing do, so a cap of
-   500 does not cut a multibyte token in half and a length figure means the same
-   thing on both sides of the port. The walk itself is [Seekwright_text.Utf8]'s;
-   [clip] is the one place here that needs the string cut into characters rather
-   than merely counted, because it looks for a sentence boundary between two of
-   them. *)
-
-(* Python's [" ".join(text.split())]: runs of whitespace collapse to one space
-   and the ends are trimmed. Python splits on Unicode whitespace, so this is the
-   shared [Utf8.split_whitespace] — the old ASCII-only walk left an ideographic
-   space inside a snippet uncollapsed (F1.5). *)
 let normalise text = String.concat " " (Utf8.split_whitespace text)
 
 let rstrip text = Utf8.rstrip text
 
 let clip text limit =
-  (* Prefer a sentence boundary to mid-word, but only one far enough in to be
-     worth more than the plain cut — otherwise a two-word snippet ends at its
-     first period. The guard counts {b characters}, as Python's [len] does: a
-     byte-wise comparison would ellipsise a snippet whose bytes pass the cap but
-     whose codepoints do not, and would report [text_truncated] for a page that
-     was never cut. *)
+  (* Prefer sentence boundary if it covers more than half of limit; otherwise ellipsis. *)
   if Utf8.count text <= limit then text
   else begin
     let chars = Utf8.slices text in
@@ -151,13 +118,6 @@ let site_filtered_query (q : search_query) =
     (q.Model.query :: parts @ List.map (fun d -> "-site:" ^ d) q.exclude_domains)
 
 module Json = struct
-  (* The upstream payload is untrusted: a field documented as a string and sent
-     as an object is dropped, not raised, exactly as Python's [isinstance]
-     guards do — an [AttributeError] there would escape the engine's
-     provider-error handling as an internal error. Every reader here answers
-     [None] for "absent or not that shape", which is the same rule the adapters
-     state in their docstrings. *)
-
   let members json = match json with `Assoc fields -> Some fields | _ -> None
   let list json = match json with `List items -> Some items | _ -> None
   let string json = match json with `String text -> Some text | _ -> None
@@ -169,8 +129,6 @@ module Json = struct
     | `Float f -> Some f
     | _ -> None
 
-  (* [field] hands back [Null] for a missing key, so a reader chains without an
-     option in between, the way [item.get(key)] does. *)
   let field key json =
     match members json with
     | Some fields ->
@@ -180,8 +138,6 @@ module Json = struct
   let string_field key json = string (field key json)
   let number_field key json = number (field key json)
 
-  (* [engine_fallback] is only a refusal in its present-and-[true] form; [1] is
-     not [true], as in Python's [is True]. *)
   let is_true json = match json with `Bool true -> true | _ -> false
   let is_true_field key json = is_true (field key json)
 end
@@ -192,18 +148,9 @@ module Net = struct
       Caps.Authority.Net.request -> (Caps.Authority.Net.response, Caps.Error.t) result
   }
 
-  (* The grant's own per-call byte ceiling is left out on purpose: an adapter
-     has no business widening or narrowing what the operator set, and Python's
-     adapters pass no timeout either — httpx's is the client's, and here the
-     bound is the grant's, set once by [Authority.with_operation_timeout]. *)
   let of_grant grant = { request = (fun req -> Caps.Authority.Net.request grant req) }
 end
 
-(* One URI, one grant entry. The adapters used to spell the same destination
-   twice — a [Uri.t] they dial and a [Policy.endpoint] the factory allows — and
-   the second spelling is the one that goes stale, because nothing but a review
-   notices a host that changed in only one of them. Deriving the grant entry from
-   the URI here is what makes the pair one fact (F4.1). *)
 let policy_of_uri (uri : Uri.t) : Caps.Policy.endpoint =
   {
     Caps.Policy.scheme = (if Uri.scheme uri = Some "https" then `Https else `Http);
@@ -211,20 +158,12 @@ let policy_of_uri (uri : Uri.t) : Caps.Policy.endpoint =
     port = Uri.port uri;
   }
 
-(* The oracle's [urlsplit(url).hostname or "?"], and never raises: the malformed
-   URL that [urlsplit] refuses is the same input that would otherwise put a raw
-   request line into a log. [serpapi]'s documented request carries its key in the
-   query string, so for that name this reduction is the difference between
-   "which endpoint failed" and "here is a credential". *)
+(* Host extraction for redaction in logs and errors; query parameters may carry credentials. *)
 let redact_url (url : string) : string =
   match Uri.host (Uri.of_string url) with
   | Some host when host <> "" -> host
   | _ -> "?"
 
-(* [urllib.parse.quote(value, safe="")], the rule the oracle uses wherever a value
-   from config becomes a path segment. [Uri.escape] keeps the sub-delims
-   ([? & = + , ; $]) literal, which is a different contract: an index name
-   containing [&] would split a segment in two. *)
 let escape_path_segment (value : string) : string =
   let unreserved = function
     | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '.' | '-' | '~' -> true
@@ -276,10 +215,6 @@ let cost_for (module P : S) n = P.cost_for n
 let search (module P : S) q = P.search q
 let aclose (module P : S) = P.aclose ()
 
-(* The pair, not a wider [S]: [warmup] is a fact about the adapters that own a
-   session, and a member of [S] is a member every adapter must define. The
-   registry rows for the session-backed names build this pair, and everything
-   else keeps holding the bare module. *)
 type session = { adapter : t; warmup : unit -> bool }
 
 let project_url = "https://github.com/leoschwarz/seekwright"

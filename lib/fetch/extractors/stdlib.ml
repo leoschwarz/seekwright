@@ -1,23 +1,3 @@
-(* The extraction backend every install can build: the standard library,
-   nothing else.
-
-   Port of [src/seekwright/extractors/stdlib.py]. [fetch.enabled] is on by
-   default, and a missing extraction backend costs the process, not a tool —
-   without a backend whose dependencies this tree already carries, a default
-   install would lose the server at startup. This is that backend: HTML through
-   a hand-written [html.parser] port, JSON through [Jsondoc], tables through
-   [Tabledoc], plain text passed through.
-
-   No parity with a content-extraction library is claimed here either: it drops
-   the elements {!skip_tags} names and keeps the rest, so the chrome that
-   survives is the chrome outside those elements, and a page whose answer sits
-   inside a [<form>] loses it with the element. A JS-rendered shell returns its
-   chrome, so [fetch.min_text_chars] turns such a page into a refusal.
-
-   PDF is absent from the type set by rule, not by gap: there is no PDF reader
-   in this port, and the contract requires a backend to claim only what it can
-   read. The fetcher therefore refuses a PDF by name before spending the body. *)
-
 module E = Seekwright_fetch.Extractor
 module J = Seekwright_fetch.Jsondoc
 module T = Seekwright_fetch.Tabledoc
@@ -56,8 +36,6 @@ let block_tags =
    [tr] is already in the block set and a row break reads as a new line. *)
 
 let cell_tags = [ "td"; "th"; "dt"; "dd" ]
-
-(* {1 Character references} *)
 
 (* The subset of [html.entities.html5] this backend carries, with the bare
    no-semicolon forms the standard still accepts — the legacy set — marked
@@ -289,8 +267,6 @@ let convert (s : string) : string =
     Buffer.contents buf
   else s
 
-(* {1 The tokenizer} *)
-
 (* A hand-written port of the [html.parser] events this backend consumes:
    start/end/start-end tags and data runs. Tag names are lowercased, attribute
    values are skipped (quoted, so a [>] inside one does not end the tag), and
@@ -449,10 +425,7 @@ let tokenize (s : string) : event list =
   go 0;
   List.rev !out
 
-(* {1 The visible-text parser} *)
-
-(* Port of [_VisibleTextParser]: the visible text of a document in document
-   order, plus its title. *)
+(* The visible text of a document in document order, plus its title. *)
 
 type parser = {
   mutable chunks : string list;
@@ -574,8 +547,6 @@ let from_html (html : string) : string * string option =
       lines
   in
   (String.concat "\n" lines, p.title)
-
-(* {1 The backend} *)
 
 let name = "stdlib"
 

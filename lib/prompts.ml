@@ -1,14 +1,3 @@
-(** Every model-facing string in one place: nothing here but prose.
-
-    Port of [src/seekwright/prompts.py]. The Python tree keeps the texts as
-    plain files under [resources/] so a prompt diff is a text diff; this port
-    has no package-data directory, so the same bytes are embedded verbatim in
-    quoted literals here (generated from the resource files, byte for byte,
-    trailing newline included where the file has one). The tool descriptions
-    carry no trailing newline, exactly as the files they replace. The answer
-    system prompt's single home is {!Agent.answer_system_prompt} (P7), so this
-    module re-exports it rather than carrying a second copy that could drift. *)
-
 let server_instructions =
   {|Web search through a proxy in front of search providers.
 

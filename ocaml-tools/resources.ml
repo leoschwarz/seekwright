@@ -1,12 +1,4 @@
-(* The six embedded oracle strings, printed byte for byte.
-
-   The port has no package-data directory, so [lib/prompts.ml],
-   [lib/agent.ml] and [lib/dashboard_html.ml] carry the Python tree's
-   [resources/] files as quoted literals. That is a copy, and an unpinned copy
-   is a fork with a comment claiming otherwise: the tool descriptions are
-   model-facing contract, so the two deployments must not drift silently.
-   [dune] diffs this printer's output against the read-only originals for each
-   name below, and the alias makes the diff part of [dune runtest]. *)
+(* Embedded resource string printer for verification against oracle files. *)
 
 let source name =
   match name with

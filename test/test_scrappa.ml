@@ -45,9 +45,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 (* Never sent to anything real: the string a leak would carry. *)
 let test_key = "test-key"
 
-(* {1 The fixture}
-
-   The search-light payload: [organic_results[]] with the four fields the
+(* The search-light payload: [organic_results[]] with the four fields the
    mapping reads, and the [search_information] and [pagination] blocks it never
    touches. *)
 let sample =
@@ -74,8 +72,6 @@ let sample_json =
   match Yojson.Safe.from_string sample with
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
-
-(* {1 The seam} *)
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
   let sent = ref None in
@@ -115,8 +111,6 @@ let param (request : Caps.Authority.Net.request) name =
 
 let has_param request name =
   List.exists (fun (key, _) -> key = name) (params request)
-
-(* {1 Parsing} *)
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Scrappa.parse ~snippet_chars data ~limit
 
@@ -188,9 +182,7 @@ let missing_organic_results_is_empty_not_an_error () =
     (List.length (parse (`Assoc [ ("organic_results", `Null) ])));
   check_int "organic_results is absent" 0 (List.length (parse (`Assoc [])))
 
-(* {1 The upstream field guard}
-
-   A non-string [snippet] is dropped, not handed to the shared truncate helper,
+(* A non-string [snippet] is dropped, not handed to the shared truncate helper,
    which called [text.split()] on whatever upstream sent in the oracle. A
    nested object, list or number there raised inside the parse rather than as a
    provider error, so it escaped the engine's handling and surfaced as an
@@ -221,8 +213,6 @@ let a_string_snippet_still_reaches_the_model () =
        "The default method by which SQLite implements atomic commit is a rollback \
         journal. Beginning with version 3.7.0 the WAL option is available.")
     (List.hd outcome.results).result.snippet
-
-(* {1 The request} *)
 
 let get_with_the_key_header_and_params () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:3 ()) () in
@@ -311,9 +301,7 @@ let no_constraint_notice_because_it_honours_them_all () =
   in
   check_opt_string "nothing dropped" None outcome.notice
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota statuses
    and the leak regression that proves the redaction rule for the place its key
    actually rides. *)
@@ -343,8 +331,6 @@ let a_network_error_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "the key is nowhere in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-(* {1 Cost and endpoint} *)
 
 let cost_does_not_scale_with_result_count () =
   let provider, _ = dial () in

@@ -1,17 +1,11 @@
-(** One line of what a grant did, with no content in it.
-
-    The audit surface of the layer (plans/capability-gated-mcp-server.md §6):
-    the application supplies the sink, an event names the operation and its
-    outcome, and the only payload it can carry is a byte count and a few
-    operator-chosen notes. That is what lets a deployment log every authority
-    operation without a page, a response body, or a header reaching the log. *)
+(** Content-free audit events for authority operations.
+    Records operation name, outcome, byte counts, and bounded notes without
+    logging sensitive request or response bodies. *)
 
 type outcome =
   | Ok
   | Failed of Error.kind
 
-(** Abstract on purpose: a record literal would let a caller bypass
-    [make]/[add_note] and the sanitising and bounding they apply. *)
 type t
 
 val make : operation:string -> outcome -> t

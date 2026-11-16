@@ -35,8 +35,6 @@ let negotiated_version = "2099-01-01"
 let slow_seconds = 1.0
 let tight_budget_seconds = 0.2
 
-(* {1 The fixture's record} *)
-
 type recorded = {
   http_method : string;
   path : string;
@@ -81,8 +79,6 @@ let int_member key json =
 
 let json_of_body body =
   try Some (Yojson.Safe.from_string body) with Yojson.Json_error _ -> None
-
-(* {1 The fixture's answers} *)
 
 let respond ?(headers = []) ~status ~content_type body =
   Cohttp_eio.Server.respond_string
@@ -264,8 +260,6 @@ let fixture ~state ~clock _env request body =
   else state.requests <- recorded :: state.requests;
   handle ~state ~clock ~path ~http_method ~headers ~body_json
 
-(* {1 Reading back what the client sent} *)
-
 let rpc_requests state meth =
   List.filter (fun recorded -> recorded.rpc_method = Some meth) state.requests
   |> List.rev
@@ -276,8 +270,6 @@ let only_rpc label state meth =
   match rpc_requests state meth with
   | [ one ] -> one
   | many -> A.failf "%s: expected one %s request, saw %d" label meth (List.length many)
-
-(* {1 The harness} *)
 
 let with_client ?auth ?max_frame_bytes ?max_events ?timeout ?(provider = "exa") ~path f =
   Eio_main.run @@ fun env ->
@@ -329,8 +321,6 @@ let with_client ?auth ?max_frame_bytes ?max_events ?timeout ?(provider = "exa") 
           in
           Fun.protect ~finally:(fun () -> Mcp.aclose client) (fun () -> f client state))
 
-(* {1 Expectations} *)
-
 let kind_testable =
   let show = function Provider.Failure -> "failure" | Provider.Quota -> "quota" in
   A.testable (fun fmt kind -> Format.pp_print_string fmt (show kind)) ( = )
@@ -357,8 +347,6 @@ let expect_failure ?(kind = Provider.Failure) ?message ?(retryable = true) ?(for
             A.failf "%s: the failure leaked %S: %S" label needle rendered)
         forbidden;
       ignore error
-
-(* {1 Framing: a JSON body, an SSE body, and the frames a call may skip} *)
 
 let test_a_json_answer_is_read () =
   with_client ~path:"/json" (fun client state ->
@@ -409,8 +397,6 @@ let test_a_stateless_endpoint_is_accepted () =
       A.check (A.option A.string) "no session header" None
         (header_value call.headers "mcp-session-id"))
 
-(* {1 The handshake} *)
-
 let test_a_refused_handshake_is_reported_and_not_stored () =
   with_client ~path:"/handshake-500" (fun client state ->
       expect_failure ~message:"MCP handshake failed" "refused" (Mcp.connect client);
@@ -432,8 +418,6 @@ let test_a_handshake_answer_with_an_rpc_error_is_a_handshake_failure () =
 let test_a_handshake_timeout_names_its_own_sentence () =
   with_client ~path:"/stall-init" ~timeout:tight_budget_seconds (fun client _state ->
       expect_failure ~message:"MCP handshake timed out" "handshake timeout" (Mcp.connect client))
-
-(* {1 Tool results} *)
 
 let test_a_quota_shaped_tool_error_is_the_quota_row () =
   with_client ~path:"/iserror-quota" (fun client state ->
@@ -462,8 +446,6 @@ let test_an_authentication_status_is_the_auth_row () =
         (Mcp.call_tool client ~name:"web_search_exa" ~arguments:(`Assoc []));
       A.check A.int "a status failure is not retried" 1 (count_rpc state "tools/call"))
 
-(* {1 Bounds} *)
-
 let test_a_body_that_is_not_json_is_malformed () =
   with_client ~path:"/malformed" (fun client _state ->
       expect_failure ~message:"malformed MCP response" "malformed"
@@ -478,8 +460,6 @@ let test_a_json_body_over_the_bound_is_refused () =
   with_client ~path:"/oversized-json" ~max_frame_bytes:1024 (fun client _state ->
       expect_failure ~message:"MCP response exceeded its frame bound" "oversized json"
         (Mcp.call_tool client ~name:"web_search" ~arguments:(`Assoc [])))
-
-(* {1 Session lifecycle} *)
 
 let test_concurrent_calls_get_distinct_ids () =
   with_client ~path:"/concurrent" (fun client state ->

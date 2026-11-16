@@ -1,8 +1,3 @@
-(* The shared half of a remote fetch fallback. fallback.mli states the shape;
-   this file is only what the five vendors cannot each own for themselves: the
-   transport rows, the envelope guards, and the windowing every [_to_page]
-   ends with. *)
-
 module Caps = Mcp_caps
 
 type error =
@@ -19,10 +14,6 @@ type net = {
     Caps.Authority.Net.request ->
     (Caps.Authority.Net.response, Caps.Error.t) result
 }
-(** A record field cannot carry an optional argument, so the seam takes
-    [max_response_bytes] explicitly; production passes it through to the
-    grant, and a fallback passes [None] unless it has a reason to lower the
-    grant's byte ceiling. *)
 
 let of_grant grant =
   {
@@ -31,11 +22,7 @@ let of_grant grant =
         Caps.Authority.Net.request ?max_response_bytes grant request);
   }
 
-(* The two httpx rows. [Timeout] is the grant's whole-operation bound firing;
-   anything else the grant answers with — a refused connection, a name that
-   did not resolve, a TLS handshake that failed — is the [HTTPError] row,
-   because the contract has no finer wording and the grant's message may name
-   the peer. *)
+(* Timeout maps to "request timed out", all other grant errors to "network error". *)
 let transport_error error =
   match Mcp_caps.Error.kind error with
   | Mcp_caps.Error.Timeout -> Failed "request timed out"
@@ -44,10 +31,6 @@ let transport_error error =
 let malformed () = Failed "malformed JSON response"
 
 module Json = struct
-  (* [Yojson.Safe.from_string] raises [Json_error] on a non-JSON body and
-     happily accepts a bare scalar; both are the same wire failure, and the
-     [Json_error] value is dropped rather than quoted — it can echo a slice
-     of the body. *)
   let decode_object body =
     match Yojson.Safe.from_string body with
     | exception Yojson.Json_error _ -> Error (malformed ())
@@ -62,8 +45,6 @@ module Json = struct
     match field key value with `String s -> Some s | _ -> None
 
   let int_field key value =
-    (* Python's [isinstance(status, int)]: a JSON float in a status field is
-       not a status, it is drift, and drift drops the field. *)
     match field key value with `Int n -> Some n | _ -> None
 
   let list_field key value =
@@ -72,16 +53,10 @@ module Json = struct
   let is_false = (( = ) (`Bool false))
 end
 
-(* Python's [a or b] over two optional string fields, as [fallback.mli] states:
-   the empty string is not a value, so the next source is the one the page
-   mapping falls back to. *)
 let or_string a b =
   match a with
   | Some s when s <> "" -> Some s
   | _ -> (match b with Some s when s <> "" -> Some s | _ -> None)
-
-(* The field names [field]/[string_field]/… shadow the record labels only
-   inside this module; callers spell [Json.field]. *)
 
 let windowed text ~url ~max_text_chars ~offset ~max_chars ~title ~status_code =
   let window, truncated =
@@ -91,19 +66,10 @@ let windowed text ~url ~max_text_chars ~offset ~max_chars ~title ~status_code =
     url;
     title;
     text = window;
-    (* A vendor returns markdown or prose, never a media type for the page;
-       claiming [text/html] would be a guess, and the field is surfaced, never
-       dispatched on. *)
     content_type = None;
     status_code;
     truncated;
-    (* Python's [len(text)] — a codepoint count, like every offset this path
-       carries. [String.length] would make [total_chars] disagree with the
-       offsets [window_text] reports as soon as the page is not ASCII. *)
     total_chars = Utf8.count text;
-    (* The envelope is parsed here and never leaves, so a [path] handed to
-       this route could only select inside the vendor's response, not inside
-       the page the caller named. *)
     path_addressable = false;
     image = None;
   }

@@ -7,7 +7,7 @@
    the fetcher exactly as the factory wires it ([~workers] beside
    [~parse_timeout_seconds], chain budget twice the per-request timeout).
 
-   Deferred with PDF support (F6.2): the oracle's shared-content-stream PDF,
+   Deferred with PDF support: the oracle's shared-content-stream PDF,
    the real-input case where parse work scales with the page count rather
    than the bytes. This port ships no PDF backend, so the grind stands in,
    and the type the fixture serves ([application/pdf]) keeps the oracle's

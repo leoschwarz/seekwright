@@ -1,4 +1,4 @@
-(* F1.3: the two decision lines an operator aggregates on must keep a fixed
+(* The two decision lines an operator aggregates on must keep a fixed
    shape whatever the content setting is.
 
    [search.ok] and [fetch.ok] are the counts-and-flags events. Content rides
@@ -82,8 +82,6 @@ let check_present label text sentinel =
     (Printf.sprintf "%s carries %s" label sentinel)
     true
     (contains ~haystack:text ~needle:sentinel)
-
-(* {1 The search fixture} *)
 
 let search_config ~log_content =
   let providers =
@@ -212,8 +210,6 @@ let test_search_ok_field_set_with_content_on () =
   check_present "search.result" content snippet_sentinel;
   check_present "search.result" content body_sentinel;
   check_present "search.answer" content answer_sentinel
-
-(* {1 The fetch fixture} *)
 
 let fetch_config ~log_content =
   match

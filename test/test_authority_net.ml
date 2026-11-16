@@ -1,5 +1,5 @@
 (* M3: the network grant — what it lets through, what it refuses, and where each
-   guarantee is actually enforced (plans/capability-gated-mcp-server.md §5; the
+   guarantee is actually enforced the
    claims themselves are in policy_net.mli).
 
    Two fixtures, and which facts each can prove matters:
@@ -56,9 +56,7 @@ let show_address address = Format.asprintf "%a" Eio.Net.Sockaddr.pp (address :> 
 let address_testable =
   Alcotest.testable (fun ppf address -> Format.pp_print_string ppf (show_address address)) ( = )
 
-(* {1 The loopback fixture server}
-
-   One path per fact, and every request is recorded so a case can insist that a
+(* One path per fact, and every request is recorded so a case can insist that a
    refusal sent {e no} request. *)
 
 type served = { method_ : string; path : string; host : string; body_bytes : int }
@@ -226,8 +224,6 @@ let with_fixture f =
     failf "the fixture reported faults no case asked for: %s"
       (String.concat "; " (List.map Printexc.to_string exns))
 
-(* {1 The scripted network} *)
-
 (* Raised instead of connecting, carrying the address the grant asked for. *)
 exception Simulated of Eio.Net.Sockaddr.stream
 
@@ -281,8 +277,6 @@ let scripted_net ?(answers = []) () =
    [connect]. *)
 let eio_address address = Eio.Net.Ipaddr.of_raw (Ipaddr.to_octets (Ipaddr.of_string_exn address))
 
-(* {1 Grants, and one way to make a request} *)
-
 let endpoint ?(scheme = `Http) ?port host = { Policy.scheme; host; port }
 
 (* No [~controls]: the bounds record's module is private, so a grant's bounds are
@@ -313,9 +307,7 @@ let check_one_line error =
   Alcotest.(check bool) ("the message is one line: " ^ Error.render error) true
     (String.for_all (fun char -> Char.code char <> 10 && Char.code char <> 13) (Error.render error))
 
-(* {1 The endpoint allowlist}
-
-   Scheme, host and {e effective} port are pinned (§5), and the "allowed" rows
+(* Scheme, host and {e effective} port are pinned (§5), and the "allowed" rows
    are completed round trips against the live fixture, so the table also proves
    the request path works. *)
 
@@ -425,8 +417,6 @@ let scheme_is_pinned () =
      | exception Simulated address ->
          failf "an http request reached an https endpoint at %s" (show_address address)))
 
-(* {1 No resolver traffic for a name the grant does not allow} *)
-
 let unlisted_name_asks_nothing () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
@@ -442,8 +432,6 @@ let unlisted_name_asks_nothing () =
         Alcotest.(check (list address_testable)) "no connection" [] (Atomic.get state.connects)
     | Ok _ -> failf "an unlisted name was served"
     | exception Simulated address -> failf "an unlisted name reached %s" (show_address address))
-
-(* {1 The address binding, and the public-web address policy} *)
 
 type address_case = { answer : string; may_connect : bool }
 
@@ -688,8 +676,6 @@ let every_answer_of_a_listed_name_is_connectable () =
     [ `Tcp (eio_address "169.254.169.254", 80) ]
     (Atomic.get state.connects)
 
-(* {1 The fetch fallback target vet} *)
-
 (* [vet_public_host] is the oracle's [resolve_public]: the sentences are the
    oracle's because the caller wrote the URL and has to tell a typo from an
    attack, and no socket is ever opened — the scripted network's [connects]
@@ -747,8 +733,6 @@ let vet_public_host_cases () =
     [ ("93.184.216.34", ""); ("127.0.0.1", "refused"); ("169.254.169.254", "refused");
       ("100.64.0.1", "refused") ]
 
-(* {1 The response ceiling} *)
-
 let response_ceiling () =
   with_fixture (fun env sw port ->
     let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
@@ -781,8 +765,6 @@ let response_ceiling () =
             Alcotest.(check int) "the whole chunked stream" 65_536 (String.length response.body)
         | Error error -> failf "a fitting ceiling refused: %s" (Error.render error))))
 
-(* {1 Redirects: never followed, and an off-list target is a refusal} *)
-
 let redirects () =
   with_fixture (fun env sw port ->
     let uri path = Printf.sprintf "http://127.0.0.1:%d%s" port path in
@@ -814,8 +796,6 @@ let redirects () =
       | Ok response -> Alcotest.(check int) "a relative Location stays a 302" 302 response.status
       | Error error -> failf "a relative Location was refused: %s" (Error.render error)
       | exception Simulated _ -> failf "a relative Location was connected to"))
-
-(* {1 Request validation} *)
 
 let request_headers () =
   with_fixture (fun env sw port ->
@@ -883,8 +863,6 @@ let request_body_bound () =
           check_kind Error.Invalid error;
           (* Refused before the socket, so the fixture saw nothing. *)
           Alcotest.(check int) "the fixture was not called" 0 (List.length (Atomic.get seen))))
-
-(* {1 Time bounds and operation budgets} *)
 
 let timeout_trip () =
   with_fixture (fun env sw port ->
@@ -957,9 +935,7 @@ let budget_is_atomic () =
     Alcotest.(check int) "eight calls, three operations' worth of budget" 3 (Atomic.get taken);
     ignore state)
 
-(* {1 The audit event}
-
-   §6's claim is that a deployment can log {e every} authority operation without
+(* §6's claim is that a deployment can log {e every} authority operation without
    a page, a body or a header reaching the log, so the assertions worth making are
    about what the line does not contain. *)
 
@@ -1047,8 +1023,6 @@ let https_grants_are_built_with_tls () =
           [ endpoint ~scheme:`Https "api.test" ] with
   | Ok _ -> ()
   | Error error -> failf "an https grant failed to build: %s" (Error.render error)
-
-(* {1 The suite} *)
 
 let () =
   Alcotest.run "mcp-caps-authority-net"

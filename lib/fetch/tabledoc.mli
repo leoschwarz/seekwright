@@ -1,13 +1,5 @@
-(** Record tables on the fetch path: what counts as one, and how one is
-    rendered.
-
-    Port of [src/seekwright/tabledoc.py]. A CSV body is the other half of the
-    problem [Jsondoc] solved for JSON: the bytes are content, but read as text
-    they are a wall of commas that passage selection cannot search and [path]
-    cannot address. A table is therefore rendered into [Jsondoc]'s line grammar
-    — one line per node, each labelled with the path that addresses it — so
-    [fetch]'s [path], [structure] and [offset] need no new machinery and a
-    column of every row is one [[*]] step: [$.rows[*].price]. *)
+(** Record tables on the fetch path: media types, delimiters,
+    and rendering. *)
 
 val table_types : string list
 (** The types that name a delimited table by themselves.

@@ -55,9 +55,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 (* Never sent to anything real: the string a leak would carry. *)
 let test_key = "test-key"
 
-(* {1 The fixture}
-
-   The documented payload: [results[]] with the preview pair, the rerank score
+(* The documented payload: [results[]] with the preview pair, the rerank score
    and the RFC 3339 date, the second record answering [null] to the optional
    fields, [content] empty because [need_content] was never asked. *)
 let sample =
@@ -94,8 +92,6 @@ let sample_json =
   match Yojson.Safe.from_string sample with
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
-
-(* {1 The seam} *)
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(text_chars = 2000)
     ?cost_per_1k () =
@@ -138,8 +134,6 @@ let body (request : Caps.Authority.Net.request) =
 let body_field request name = Provider.Json.string_field name (body request)
 
 let body_has request name = Provider.Json.field name (body request) <> `Null
-
-(* {1 Parsing} *)
 
 let parse ?(snippet_chars = 500) ?(text_chars = 2000) ?(limit = 10) data =
   Deepseek.parse ~snippet_chars ~text_chars data ~limit
@@ -231,9 +225,7 @@ let a_non_list_results_container_is_empty_not_an_error () =
   check_int "results drifted to an object" 0
     (List.length (parse ~limit:5 (`Assoc [ ("results", `Assoc [ ("nope", `Int 1) ]) ])))
 
-(* {1 The upstream field guards}
-
-   Shape drift in an untrusted payload drops the field, never the call: [date],
+(* Shape drift in an untrusted payload drops the field, never the call: [date],
    [summary], [snippet] and [rerank_score] are documented as a string, a string,
    a string and a number, and nothing on the wire enforces it — an exception out
    of the parse would escape the engine's provider-error handling instead of
@@ -259,9 +251,7 @@ let a_field_of_the_wrong_shape_is_dropped_and_the_call_succeeds () =
       ("rerank_score", `String "2.4", `score);
     ]
 
-(* {1 The fold and the 128-codepoint budget}
-
-   This backend has no filter fields on the request body at all: what it
+(* This backend has no filter fields on the request body at all: what it
    documents is a set of query operators, so domains, dates and language ride
    inside [query] — in the order and the shape its own example uses. The whole
    request is bounded by a 128-codepoint query, which the fold can push past,
@@ -445,9 +435,7 @@ let the_fold_stays_when_it_fits () =
   includes "the fold survived" (sixty ^ " site:example.com after:") sent;
   check_opt_string "no notice" None outcome.notice
 
-(* {1 The failures this adapter owns}
-
-   The rows every HTTP adapter owes are pinned once for all of them by
+(* The rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota statuses,
    its retryable upstream timeout, and the leak regression that proves the
    no-echo rule for the place its key actually rides. *)
@@ -489,9 +477,7 @@ let a_network_error_does_not_echo_the_request () =
       check_bool "the key is nowhere in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
-(* {1 Cost}
-
-   Search bills per successful request, whatever [count] says. *)
+(* Search bills per successful request, whatever [count] says. *)
 
 let cost_does_not_scale_with_result_count () =
   let provider, _ = dial ~cost_per_1k:0.75 () in

@@ -1,4 +1,4 @@
-(* F2.3: stop, drain and close in one owner.
+(* Stop, drain and close in one owner.
 
    [Server.serve_http] now takes the stop input it used to discard and answers
    with a lifecycle value; [Cli_serve.run_http] turns SIGINT/SIGTERM into that
@@ -32,8 +32,6 @@ module Server = Seekwright.Server
 module Usage = Seekwright.Usage
 module A = Alcotest
 open Test_support
-
-(* {1 Fixtures} *)
 
 let clock () = 1_700_000_000.
 let now () = clock ()
@@ -131,8 +129,6 @@ let server app =
   | Error (Mcp_caps.Server.Invalid_declaration message) ->
       A.failf "invalid declaration: %s" message
 
-(* {1 The wire helpers} *)
-
 (* [serve_http] owns its port, so the suite picks one first: bind port 0,
    read the number the kernel chose, close. Nothing ever listened on it, so
    there is no TIME_WAIT for the server's own bind to trip over. *)
@@ -170,8 +166,6 @@ let serve ~env ~sw ~app ~close ~stop ?grace_seconds port =
   let server = server app in
   Cli_serve.run_http ~env ~sw ~log:no_log ~app ~server ~host:"127.0.0.1" ~port
     ~close ?grace_seconds ~stop ()
-
-(* {1 A graceful stop drains the call in flight} *)
 
 let a_graceful_stop_drains_the_in_flight_call () =
   Eio_main.run @@ fun env ->
@@ -218,8 +212,6 @@ let a_graceful_stop_drains_the_in_flight_call () =
     (lifecycle = Ok Server.Drained);
   A.(check int) "close ran once, after the drain" 1 !closes
 
-(* {1 The grace ceiling ends a drain that cannot finish} *)
-
 let the_grace_ceiling_forces_a_hung_call () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
@@ -262,8 +254,6 @@ let the_grace_ceiling_forces_a_hung_call () =
         Eio.Promise.await answered)
   with
   | Ok _ | Error _ -> ()
-
-(* {1 The stopping state on the custom routes} *)
 
 let call ?stopping app ~meth ~path ~body =
   Server.handle_custom ?stopping app ~meth ~path ~host:(Some "localhost")

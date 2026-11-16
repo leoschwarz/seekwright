@@ -1,40 +1,6 @@
-(* The F6.2 extraction corpus: every fixture file and the manifest that describes
-   what each one is for.
-
-   One program writes the corpus, so the fixtures are reviewable as source and a
-   fixture cannot drift into a hand-tuned answer to a bad benchmark result:
-   [gen_fixtures --check <dir>] is a [runtest] step, and it fails when a
-   checked-in fixture no longer matches the program that generates it.
-
-   Licensing is the first reason for generating rather than collecting. A corpus
-   of saved real-world pages would put somebody else's copyright inside the test
-   suite, and the port's quality claim would rest on evidence it cannot ship or
-   re-run elsewhere. Every page here is written for this repository, over the
-   same Apache-2.0 licence as the code, and every case is a *shape* the oracle
-   names — an ordinary article, a navigation-heavy page, malformed markup, an
-   encoding, a shared or huge body, adversarial nesting, non-ASCII text — rather
-   than a snapshot of a particular site.
-
-   The manifest fields are the quality bar, case by case:
-
-   - [essential] — phrases the page's answer contains, so recall is measurable
-     without agreeing on a byte-exact rendering;
-   - [boilerplate] — furniture the page really shows (menus, banners, link
-     blocks, counts), so leakage is a count rather than an opinion;
-   - [title], [title_rule] — what "the name of this page" means for the case;
-   - [unicode] — non-ASCII runs that have to come back byte-identical;
-   - [expect] — text, empty, or refusal: which of the three honest outcomes the
-     backend owes for these bytes;
-   - [bar_*] — the recorded bar the hermetic gate test asserts, and the numbers
-     [plans/seekwright-ocaml-port.md] quotes.
-
-   Bar values are ceilings and floors *with slack where the machine matters*:
-   [bar_max_ms] is a loose ceiling that catches a quadratic or stalling parser,
-   not a performance target. *)
+(* Extraction test corpus: fixture files and manifest. *)
 
 module Json = Yojson.Safe
-
-(* {1 Fixtures: ordinary pages} *)
 
 let article_plain = {|<!DOCTYPE html>
 <html lang="en">
@@ -164,8 +130,6 @@ let nav_heavy_portal =
    <a href=\"/contact\">Contact</a> <a href=\"/ads\">Advertising</a></div>\n\
    <footer>Copyright 2026 Harbour Bulletin. All rights reserved.</footer>\n</body>\n</html>\n"
 
-(* {1 Fixtures: malformed markup} *)
-
 let malformed_unclosed =
   "<!DOCTYPE html>\n<html>\n<head><title>Unclosed markup — Harbour Bulletin</title>\n\
    <body>\n<div id=shell>\n<article>\n<h1>The pier that was never closed\n</h1>\n\
@@ -249,8 +213,6 @@ let malformed_deep_nesting n =
      <p>The paragraph under " ^ string_of_int n
      ^ " nested divs has to come back, and the divs around it have to stay \
      invisible.</p></article>" ^ closes ^ "</body></html>\n"
-
-(* {1 Fixtures: encodings and entities} *)
 
 let encoding_utf8_bom =
   "\xef\xbb\xbf" ^ {|<!DOCTYPE html>
@@ -353,8 +315,6 @@ let unicode_multiscript =
 </body>
 </html>
 |}
-
-(* {1 Fixtures: the shapes that cost something} *)
 
 let js_shell =
   {|<!DOCTYPE html>
@@ -486,13 +446,6 @@ let shared_blocks copies =
      <p>The answer this page has is one sentence long: the west pier ramp will \
      be repaved in March, and the tenders keep the 07:30 window while it \
      happens.</p></article>\n</body></html>\n"
-
-(* {1 Fixtures: PDF} *)
-
-(* A PDF written out by hand, the way the oracle's own fixture is: objects go
-   down in order, their byte offsets are recorded as they are written, and the
-   xref table is those offsets. A fixture for a reader cannot come from the
-   library under test. *)
 
 let pdf_build objects =
   let out = Buffer.create 8192 in
@@ -679,8 +632,6 @@ let pdf_xref_stream =
        (String.length stream_data) stream_data);
   Buffer.add_string out (Printf.sprintf "startxref\n%d\n%%%%EOF" xref_offset);
   Buffer.contents out
-
-(* {1 The manifest} *)
 
 type case = {
   id : string;
@@ -1614,8 +1565,6 @@ let bodies =
   ]
 
 let cases = List.map (fun c -> with_bodies c bodies) cases
-
-(* {1 Output} *)
 
 let manifest_json () =
   Json.pretty_to_string

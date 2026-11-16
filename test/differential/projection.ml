@@ -31,8 +31,6 @@ module Sanitize = Seekwright.Sanitize
 module Tabledoc = Seekwright_fetch.Tabledoc
 module Utf8 = Seekwright_text.Utf8
 
-(* {1 Reading a corpus spec} *)
-
 let read_json text = Yojson.Safe.from_string text
 
 let member key value =
@@ -126,8 +124,6 @@ let maybe_objects key value =
 let flag = function true -> "true" | false -> "false"
 
 let opt_value = function None -> "-" | Some s -> Canon.escape_text s
-
-(* {1 config} *)
 
 (* The projection of one loaded configuration. Field order is fixed by the
    corpus format, and the provider block is sorted by name because the two trees
@@ -295,8 +291,6 @@ let config path =
   | Ok config -> config_lines config
   | Error message -> config_refusal message
 
-(* {1 sanitize} *)
-
 let remove_zwsp text =
   let zwsp = Sanitize.zwsp in
   let buffer = Buffer.create (String.length text) in
@@ -320,8 +314,6 @@ let sanitize text =
     "idempotent=" ^ flag (again = escaped && extra = 0);
     "reversible=" ^ flag (remove_zwsp escaped = text);
   ]
-
-(* {1 fetch: URL shape, windowing, image sniffing} *)
 
 let url_case url =
   match Fetcher.validate_url url with
@@ -364,8 +356,6 @@ let op_lines table area spec =
   | None -> failwith (Printf.sprintf "the %s corpus has no op %S" area name)
 
 let fetch spec_text = op_lines fetch_ops "fetch" (read_json spec_text)
-
-(* {1 jsondoc and tabledoc} *)
 
 let reprint_steps steps =
   String.concat ""
@@ -458,15 +448,10 @@ let tabledoc_ops =
 
 let tabledoc spec_text = op_lines tabledoc_ops "tabledoc" (read_json spec_text)
 
-(* {1 text: the codepoint walk and the repr pass}
-
-   The corpus carries these inputs as hex, not as the file's own bytes, for one
+(* The corpus carries these inputs as hex, not as the file's own bytes, for one
    reason: this area is where malformed UTF-8 is the subject rather than an
-   accident. The oracle's projection decodes the same bytes with Python's
-   [errors="replace"], which is the semantics [Utf8] claims, so a case that
-   disagrees is a statement about the walk and not about how the file was read.
-   Every value that leaves here is hex or an escaped [repr], so a golden stays
-   one ASCII line per fact. *)
+   accident. Every value that leaves here is hex or an escaped [repr], so a golden
+   stays one ASCII line per fact. *)
 
 let text_bytes spec = Canon.of_hex (want_string "hex" spec)
 
@@ -502,8 +487,6 @@ let text_ops =
   ]
 
 let text spec_text = op_lines text_ops "text" (read_json spec_text)
-
-(* {1 router} *)
 
 let search_table spec =
   let table = "table" $ spec in
@@ -608,8 +591,6 @@ let router spec_text =
     let table = fetch_table spec in
     List.concat_map (fun call -> fetch_router_call table call) calls
 
-(* {1 model} *)
-
 (* Decode a body into the port's record and re-encode it, in one step per model,
    because that round trip is the whole claim [lib/model.mli] makes: a body the
    oracle accepts becomes the same wire object here, and the encoder's rules —
@@ -659,14 +640,7 @@ let model spec_text =
       | Error _ -> [ "verdict= reject" ])
     (want_objects "cases" spec)
 
-(* {1 engine: the search walk over scripted providers}
-
-   The scripted provider is the position [StubProvider] holds in
-   [tests/test_engine.py] and [httpx.MockTransport] holds in the adapter suites:
-   the case names the provider's behaviour, the projection reads what the engine
-   did with it. [attempts] is the seam's own record — which names the engine
-   dispatched, in order — and it is the projection's most informative line: a
-   ladder that walks the wrong rung shows up here before anywhere else. *)
+(* [attempts] records which provider names the engine dispatched, in order. *)
 
 type state = {
   name : string;
@@ -842,21 +816,8 @@ let engine spec_text =
   in
   lines
 
-(* {1 provider: the adapters over a scripted transport
-
-   The adapter suites pin each name's own behaviour in detail; this area pins the
-   narrower claim that the two trees put the {i same} request on the wire and
-   read the {i same} answer out of the same body. [Provider.Net.t] is the seam
-   [httpx.MockTransport] is in the Python half, and the case says what the peer
-   answers — a status line and body, a per-[pageno] table for the paging name, or
-   a transport refusal.
-
-   The request is rendered canonically rather than as a URL string, because the
-   two URL writers percent-encode differently: the query pairs are {i decoded}
-   and sorted, the path is taken as written, and the body is re-emitted through
-   the canonical JSON rendering. That leaves the facts under test — method,
-   destination, which parameter carries which constraint, where the credential
-   rides — and drops the ones no reader cares about. *)
+(* Scripted provider peer: pins that the two implementations issue the same
+   wire requests and extract the same results from responses. *)
 
 (* Never a real credential, and never echoed: the request line names the
    {i location} of the credential, and the refusal cases embed this string in
@@ -1157,9 +1118,7 @@ let provider_case spec_text =
   let outcome = Provider.search adapter (provider_query ("query" $ spec)) in
   dials (List.rev !sent) @ verdict_lines outcome
 
-(* {2 The area table}
-
-   One entry per corpus directory, and the golden runner walks this list rather
+(* One entry per corpus directory, and the golden runner walks this list rather
    than a list of its own: an area nobody runs is an area nobody tests. *)
 let areas =
   [

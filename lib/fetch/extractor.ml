@@ -1,61 +1,16 @@
-(* The extraction-backend contract and the plumbing every backend shares.
-
-   Port of [src/seekwright/extractors/base.py]. [fetch] pulls bytes off the
-   network; turning them into text a model can read is the part most likely to
-   be replaced. So it sits behind a named backend, picked by [fetch.extractor]
-   and looked up in {!known_extractors} — swapping the engine is a config
-   change, not a code change.
-
-   A backend implements {!S}: a [name], the media types it can read, and an
-   [extract] returning an {!extract_result}. Python states the contract as a
-   [runtime_checkable] Protocol and OCaml states it as a module type, so a
-   backend missing a member is a compile error rather than a runtime surprise;
-   {!backend} is the first-class form the fetcher holds.
-
-   Two backends are deliberate absences on this port. [trafilatura] and [pypdf]
-   stay behind: no PDF reader ships in the OCaml tree, so a PDF is refused by
-   the type set rather than parsed, which is the same honesty the Python
-   contract demands of a bare install — a backend lists only what its [extract]
-   can read. *)
-
 type extract_result = {
   text : string;
   title : string option;
   total_chars : int;
-      (** Length of the full normalised extraction, in codepoints — the same
-          coordinate system Python's [len] counts, so [offset] and the
-          [[...]] marker keep their meaning across the port. *)
-
   path_addressable : bool;
-      (** Whether [text] is a structure rendering whose lines [fetch]'s [path]
-          selects. Only the extraction can say it, so it says it: the engine
-          must not infer "this is a structure this server read" from a
-          character of page text. A Makefile whose first line is [$ make all]
-          starts with the root character of a path and is not one, and a body
-          that reached the caller as text because the renderer declined it is
-          not one either. Set by the backend that walked the structure — a
-          JSON document or a CSV table; every other page leaves it [false]. *)
-
 }
 
 exception Extraction_failed of string
-(** The bytes could not be turned into text at all. The fetcher turns it into
-    the "cannot extract text: …" refusal; an empty extraction is a reportable
-    outcome, not an error. *)
 
 module type S = sig
   val name : string
   val supported_types : string list
-      (** What the fetcher checks a response's media type against *before*
-          using the body, so it must be honest: an unreadable type listed here
-          spends a download on a page that can never be read. *)
-
   val extract : string -> string option -> extract_result
-      (** [extract body content_type] extracts readable text from a fetched
-          body, uncut. Sizing it for a caller is the fetcher's job
-          ([Fetcher.window_text]): where to cut depends on who is asking.
-          Raises [Extraction_failed] when the body cannot be read. *)
-
 end
 
 (** The first-class form the fetcher holds, one field per {!S} member. *)
@@ -69,33 +24,16 @@ type backend = {
 let of_module (module E : S) : backend =
   { name = E.name; supported_types = E.supported_types; extract = E.extract }
 
-(* {1 Media-type plumbing} *)
-
 let ascii_lower (s : string) : string =
   String.map (fun c -> if c >= 'A' && c <= 'Z' then Char.chr (Char.code c + 32) else c) s
 
 let html_types = [ "text/html"; "application/xhtml+xml" ]
-
 let pdf_types = [ "application/pdf"; "application/x-pdf" ]
-
 let text_types = [ "text/plain"; "text/markdown"; "text/xml"; "application/xml" ]
-
 let json_types = Jsondoc.json_document_types @ Jsondoc.jsonl_types
-
 let table_types = Tabledoc.table_types
-
 let supported_types = html_types @ pdf_types @ text_types @ json_types @ table_types
-(** The union every Python backend with its extra installed claimed — kept for
-    the derived-phrase tests, not for dispatch: the gate reads a backend's own
-    [supported_types]. *)
-
 let known_extractors = [ "stdlib" ]
-(** Every fetch extraction backend this build knows how to construct, by name.
-    Config validation rejects a [fetch.extractor] outside this set, exactly as
-    it rejects a provider name outside [Router]'s registry — a name that parses
-    and does nothing is the failure mode both exist to remove. [trafilatura]
-    stays a Python-only member: its absence here is a port decision recorded in
-    the test suite, not a gap. *)
 
 let member kind types = List.mem kind types
 
@@ -159,8 +97,6 @@ let charset_of content_type =
       in
       go params
     | [] -> None
-
-(* {1 Decoding} *)
 
 (* The declared charset is honoured for the encodings this port implements;
    anything else is a header problem, not a lost page, and falls through to
@@ -386,11 +322,8 @@ let sniffs_html (body : string) : bool =
   (** Treat a missing Content-Type as HTML only if the bytes look like it. The
       rule belongs to the absent header, not to any one engine. *)
 
-(* {1 The one place the wire shape of an extraction is decided} *)
-
-(* [ \t]+ → " " on the codepoint array, then "\n{3,}" → "\n\n", then a Python
-   [str.strip]. [normalise] runs on text any backend produced, so the two
-   collapsing passes and the strip live here and nowhere else. *)
+(* Collapses [ \t]+ to " ", "\n{3,}" to "\n\n", and strips leading/trailing
+   whitespace. Runs on text produced by any backend. *)
 
 let normalise (text : string) (title : string option) : extract_result =
   let t = Utf8.of_string text in
@@ -489,8 +422,6 @@ let table_extraction ~(text : string) ~(kind : string) : extract_result =
         path_addressable = true;
       }
 
-(* {1 The phrase the refusal is built from} *)
-
 (* Families render in a fixed order and an unclaimed type is appended verbatim
    and sorted, so a given set always reads the same way. The phrase is
    model-facing, so it follows the backend's own claim rather than a hardcoded
@@ -533,8 +464,6 @@ let describe_types (types : string list) : string =
     | head :: rest -> head ^ ", " ^ phrase rest
   in
   phrase labels
-
-(* {1 Passage selection} *)
 
 let chunk_chars = 1500
 (** Granularity of passage selection: roughly one to three paragraphs. *)

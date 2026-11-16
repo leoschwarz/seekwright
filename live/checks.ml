@@ -19,8 +19,6 @@ let contains haystack needle =
 let starts_with_http url =
   String.starts_with ~prefix:"http://" url || String.starts_with ~prefix:"https://" url
 
-(* {1 Vocabulary shared by the arms} *)
-
 let named ~name (response : Model.search_response) =
   expect "the response names the provider that was asked for"
     (String.equal response.Model.provider name)
@@ -104,8 +102,6 @@ let notice_lacks needle (response : Model.search_response) =
     (match response.Model.notice with Some notice -> not (contains notice needle) | None -> true)
     "the response carried that notice"
 
-(* {1 Per-adapter arms} *)
-
 let provider_step ~name ~step (response : Model.search_response) =
   let base = [ named ~name response ] in
   match (name, step) with
@@ -143,13 +139,6 @@ let provider_step ~name ~step (response : Model.search_response) =
              name step);
       ]
 
-(* {1 Fetch} *)
-
-(* The page every fetch case reads, and the one the oracle's live suite reads:
-   a page whose own word is [example], small enough that a slow vendor cannot
-   time the case out, and public on purpose — a fetch case exercises the
-   public-web grant. [Runner.run_fetch] dispatches exactly this URL, so an arm
-   below may name it in an assertion. *)
 let fetch_url = "https://example.com/"
 
 let text_of (page : Model.fetch_response) = Option.value ~default:"" page.Model.text
@@ -255,8 +244,6 @@ let verify_fetch case (page : Model.fetch_response) =
           "a page came back for the metadata URL: the public-web grant let the request out";
       ]
 
-(* {1 Agent} *)
-
 let verify_agent ~depth ~model (response : Model.answer_response) =
   let depth_ok =
     match (depth, response.Model.depth) with
@@ -283,8 +270,6 @@ let verify_agent ~depth ~model (response : Model.answer_response) =
       | None -> false)
       "the answer carried neither a validated source nor an uncited notice";
   ]
-
-(* {1 Classification} *)
 
 let quota_limited message = contains message "Do not retry immediately."
 

@@ -1,38 +1,16 @@
 (** Provider, extractor and fetcher construction from config and environment.
 
-    Port of [src/seekwright/factory.py]. Kept out of the server module so the
-    CLI diagnostic path ([--check], [--metrics]) can build providers — and
-    report the extraction backend — without constructing the MCP server: the
-    check path in [bin/main.ml] never calls [Server.registry] or a transport,
-    and nothing here names mcp-kit at all, only the capability layer's grants.
-
     Each adapter is built with its own endpoint-scoped [Net] grant
     ([Policy.with_endpoints] over the adapter's single
     {!Mcp_caps.Policy.endpoint}), so a provider can dial only the vendor it
     was built for; [fetch]'s local reader gets a web grant — [Policy.with_public_web],
     or [Policy.with_private_web] when [fetch.allow_private_addresses] says the
-    operator approved intranet reads. The grant sets are derived from enabled
-    provider names — there is no second egress config key.
+    operator approved intranet reads.
 
-    What each name is — its endpoint, price, timeout floor, credential
-    placement, probe and live-test status — is one data row in
-    [Seekwright_factory.Registry], so [build_providers] is a loop over rows
-    rather than a table of builder closures, and a row is the single place a
-    name's wire facts are written.
-
-    {1 The audit trail}
-
-    Every grant this module builds for the served process goes through one
-    funnel, which sets the config's per-operation bound and wraps the grant in
-    {!audit_sink} exactly once. One line per low-level operation therefore
-    reaches the application's log: {!audit_sink} renders an {!Mcp_caps.Event.t}
-    as the [caps.operation] event, and an [Event.t] cannot carry a URL, a query,
-    a header, a body or a secret. A grant built without a sink is a diagnostic
-    grant ([--check] probing a deployment), never a serving one.
-
-    [Authority.with_operation_budget] is deliberately absent from this module.
-    A budget is a caller's counter, and server construction has no caller scope
-    to attach one to; see {!Mcp_caps.Budget}. *)
+    Every grant built for the served process goes through one funnel, which sets
+    the config's per-operation bound and wraps the grant in {!audit_sink} exactly
+    once. A grant built without a sink is a diagnostic grant ([--check] probing a
+    deployment), never a serving one. *)
 
 (** The audit sink: one [caps.operation] line per authority operation.
 
@@ -54,8 +32,7 @@ type providers = Provider_set.providers = {
       registry row defers its adapter to a later wave is absent — and is listed
       in [unsupported] rather than silently dropped. A name whose row can build
       but whose key or instance the config never supplied is absent and not
-      reported here: [Config.missing_api_keys] is the path that names it, as in
-      Python, where the builder returns [None]. *)
+      reported here: [Config.missing_api_keys] is the path that names it. *)
   probe_table : (Seekwright.Config.name * Seekwright.Health.probe_spec) list;
   (** The [--check] probe rows for the built names, taken from each name's
       registry row — the same row that said which endpoint its grant got. *)
@@ -74,21 +51,10 @@ type providers = Provider_set.providers = {
   warmups : (Seekwright.Config.name * (unit -> bool)) list;
   (** The session-carrying built names — the MCP-backed ones — with the
       operation that opens each adapter's own session before its first search
-      pays for the handshake ([true] when it opened). The oracle calls
-      [warmup] at startup and in its health monitor; a name with no entry here
+      pays for the handshake ([true] when it opened). A name with no entry here
       owns no session, so the startup path skips it. Built in config order,
       like [built]. *)
 }
-
-(** {1 One routable set, and the configs that may serve it}
-
-    Runtime routing — the engine's registry, its effective set, its default,
-    its free walk and its fallback rungs — describes exactly the names this
-    build constructed and the permission set permits. These two functions
-    state which configurations may hold such a set: {!build_app} runs
-    {!startup_verdict} before it builds an engine, and [--check] reads
-    {!classify} for its provider section, so both paths report the same fact
-    from one classification. *)
 
 type set_report = Provider_set.set_report = {
   enabled : Seekwright.Config.name list;
@@ -106,10 +72,8 @@ type set_report = Provider_set.set_report = {
   (** The implicit keyless defaults this build has no adapter for: skipped,
       logged by name at startup, and out of every routing set. *)
   untested : Seekwright.Config.name list;
-  (** Enabled names with no live verification on {i this port}: the four
-      Python itself calls untested, plus every name this build dispatches —
-      an OCaml live run of the shipped provider set is what retires one. This is a disclosure, never a readiness verdict: a built, probed,
-      reachable name is still untested until its own live run is recorded. *)
+  (** Enabled names with no live verification on this build: a disclosure, never
+      a readiness verdict. *)
 }
 
 val classify : Seekwright.Config.t -> providers -> set_report
@@ -211,12 +175,11 @@ val build_fetch_stack :
     because the key licenses this process, not a third party's view of the
     intranet.
 
-    Extraction runs on an {!Seekwright_fetch.Extract_pool:}t — one pool per
+    Extraction runs on an {!Seekwright_fetch.Extract_pool.t} — one pool per
     built stack, its workers fed through the system temp dir,
     [fetch.timeout_seconds] applied to the parse and twice that to the whole
-    request, and the reader's [aclose] draining the pool
-    (plans/ocaml-finalisation.md, F2.2). A pool that cannot be built refuses
-    the stack rather than quietly extracting inline. *)
+    request, and the reader's [aclose] draining the pool. A pool that cannot be
+    built refuses the stack rather than quietly extracting inline. *)
 
 val readers : Seekwright.Engine.Fetch.Readers.t
 (** The document readers the fetch engine selects with: [jsondoc]'s path

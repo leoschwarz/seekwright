@@ -47,9 +47,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
    UTC, which is what the Python suite would have seen at that instant. *)
 let now () = 1_700_000_000.
 
-(* {1 The fixture}
-
-   The live payload, trimmed to two results: the fields the mapping reads, the
+(* The live payload, trimmed to two results: the fields the mapping reads, the
    ones it must ignore ([total], [related_apis]), and the [site]/[source]
    sub-objects it never touches. *)
 let sample =
@@ -109,9 +107,7 @@ let sample_json =
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
 
-(* {1 The seam}
-
-   A {!Seekwright.Provider.Net.t} that records what was dialed and answers with
+(* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with
    a canned response — the analogue of the Python suite's
    [httpx.MockTransport]. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
@@ -148,8 +144,6 @@ let param (request : Caps.Authority.Net.request) name = Uri.get_query_param requ
 let has_param request name =
   List.exists (fun (key, _) -> key = name) (params request)
 
-(* {1 The mapping's inputs} *)
-
 let record fields =
   `Assoc (("title", `String "t") :: ("url", `String "https://example.com/a") :: fields)
 
@@ -178,8 +172,6 @@ let engine_fallback_refusal body query =
       A.failf "the substituted index was accepted: %d results"
         (List.length outcome.results)
   | Error failure -> failure
-
-(* {1 Parsing} *)
 
 let the_fixture_yields_both_records () =
   let hits = parse sample_json in
@@ -304,9 +296,7 @@ let the_cross_promotion_block_is_ignored () =
   in
   check_string "identical parses" (hits_json (parse sample_json)) (hits_json (parse without))
 
-(* {1 The substituted index}
-
-   [engine_fallback: true] is a refusal, not a caveat: when their web engine
+(* [engine_fallback: true] is a refusal, not a caveat: when their web engine
    does not answer, [index=web] is served site profiles rather than search
    results, and the wire shape has no field that could carry the substitution. *)
 
@@ -359,8 +349,6 @@ let a_false_or_absent_key_maps_normally () =
       let outcome, _ = search_of ~body () in
       check_int "two results" 2 (List.length outcome.results))
     [ with_false; sample ]
-
-(* {1 The request} *)
 
 let get_to_the_web_index_self_identifying () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:3 ()) () in
@@ -467,9 +455,7 @@ let the_result_reports_its_flat_zero_cost () =
   check_opt_number "flat zero" (Some 0.) outcome.cost_usd;
   check_opt_string "no answer from a SERP adapter" None outcome.answer
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota statuses,
    its own wording, and the leak regression that proves the redaction rule for
    the place its credentials would ride. *)
@@ -537,8 +523,6 @@ let a_body_that_is_not_json_is_malformed () =
       | Ok _ -> A.failf "%s was accepted as a response" what
       | Error failure -> check_string what "malformed JSON response" failure.message)
     [ ("an HTML page", "<html>nope</html>"); ("an empty body", ""); ("an array", "[]") ]
-
-(* {1 Cost} *)
 
 let it_cannot_bill () =
   let provider, _ = dial () in

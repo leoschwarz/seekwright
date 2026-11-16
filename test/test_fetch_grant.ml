@@ -1,8 +1,8 @@
-(* fetch.allow_private_addresses, end to end: the capability grant the local
+(* Fetch.allow_private_addresses, end to end: the capability grant the local
    reader is built with, and therefore what a fetch may connect to.
 
    The switch is the operator's authorisation for the local reader to reach
-   private space (plans/ocaml-finalisation.md F1.4), and it selects one of the
+   private space, and it selects one of the
    two construction-time web variants of the policy — there is no route that
    widens a grant afterwards. So this suite pins both halves:
 
@@ -101,8 +101,6 @@ let refusal_message fetcher url =
   | Ok _ -> None
   | Error error -> Some (error_message error)
 
-(* {1 The two web variants, through the fetcher} *)
-
 let public_web_refuses_loopback () =
   with_web_fetcher ~private_web:false (fun fetcher port ->
     match F.fetch fetcher (Printf.sprintf "http://127.0.0.1:%d/" port) ~offset:0 ~max_chars:None with
@@ -179,8 +177,6 @@ let private_web_keeps_the_port_axis () =
           Test_support.includes "the port rule refused first" "uses port 80 for http"
             (error_message error))
 
-(* {1 The stack builder selects the variant from the switch} *)
-
 let config_with_switch (switch : bool) : Config.t =
   {
     Config.default with
@@ -249,8 +245,6 @@ let stack_on_serves_loopback () =
       | Ok page ->
           Test_support.includes "the switch-on served reader read the loopback page" marker
             page.F.text)
-
-(* {1 Source pins — the widening is constructed once, where the key is read } *)
 
 (* The factory's implementations, read as a set: the widening has to be
    constructed once across the library, not once per file, and each needle is

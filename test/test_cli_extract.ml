@@ -45,8 +45,6 @@ let int_field key body =
   | `Assoc f -> ( match List.assoc_opt key f with Some (`Int n) -> Some n | _ -> None)
   | _ -> None
 
-(* {1 Valid commands} *)
-
 let test_search_query_only () =
   body_equals ~label:"query only" (search "open data")
     [ ("query", `String "open data"); ("max_results", `Int 5) ]
@@ -172,8 +170,6 @@ let test_answer_extra_queries_repeat () =
         | Some (`List items) -> List.map (fun x -> match x with `String s -> s | _ -> "") items
         | _ -> [])
     | _ -> [])
-
-(* {1 Invalid commands — the usage sentences} *)
 
 let test_needs_a_query () =
   match Extract.scan_args [] with

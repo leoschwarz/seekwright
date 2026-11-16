@@ -1,13 +1,3 @@
-(* One declarative row per provider name; [registry.mli] carries the shape and the
-   reason a row replaces a builder-per-name.
-
-   The two facts this module is arranged to make impossible are the two the
-   two-row factory could only promise in prose: a name's destination being spelled
-   twice (once by the adapter, once by the grant that allows it), and a credential
-   reaching a name that was never supposed to hold one. Both are answered by
-   construction here — {!grant_endpoint} is derived from {!uri}, and {!key_for}
-   consults the row before it consults the environment. *)
-
 module Config = Seekwright.Config
 module Health = Seekwright.Health
 module Log = Seekwright.Log
@@ -94,13 +84,6 @@ type row = {
   ocaml_live_tested : bool;
 }
 
-(* {1 The row table} *)
-
-(* Every field a row does not state is the field most of the inventory shares: a
-   SERP-shaped result, a flat per-request price, no timeout floor beyond the
-   policy, no key requirement beyond [Api_key]. Naming the exceptions on the row
-   is what makes [scrappa]'s fifteen seconds and [linkup]'s twenty readable
-   against the table rather than buried in a builder. *)
 let make_row ~name ~endpoint ~build
     ?(credential = No_credential)
     ?(requires = [ Api_key ])
@@ -124,11 +107,6 @@ let make_row ~name ~endpoint ~build
     context;
     probe;
     settings;
-    (* False is the only safe default: a name retires from [untested] in the
-       change that records its successful OCaml live run in
-       [plans/seekwright-ocaml-port.md], and it never inherits Python's live
-       history. A row that passes [true] without that record is a disclosure
-       bug, so the argument is named and set only at that row. *)
     ocaml_live_tested;
   }
 
@@ -437,8 +415,6 @@ let row name = List.find_opt (fun r -> r.name = name) rows
 let names = List.map (fun r -> r.name) rows
 let is_built r =
   match r.build with Adapter _ | Adapter_session _ -> true | Deferred _ -> false
-
-(* {1 Reading a row} *)
 
 (* The one gate a destination passes before it becomes a grant entry. A config
    value is operator text, and an operator can write anything in it — including a

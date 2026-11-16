@@ -44,10 +44,6 @@ module Health = Seekwright.Health
 module Log = Seekwright.Log
 module Policy = Caps.Policy
 
-(* ------------------------------------------------------------------ *)
-(* the loopback fixture                                                 *)
-(* ------------------------------------------------------------------ *)
-
 let response_body = "four score and seven years ago"
 
 (* The answer varies by route, so one listener serves the success case and the
@@ -124,10 +120,6 @@ let factory_grant_without_a_sink env sw port =
   with
   | Error message -> A.failf "the fixture grant was refused: %s" message
   | Ok grant -> grant
-
-(* ------------------------------------------------------------------ *)
-(* one event per operation                                              *)
-(* ------------------------------------------------------------------ *)
 
 let test_a_granted_operation_records_one_event () =
   let audit, events = capture () in
@@ -291,10 +283,6 @@ let test_a_filesystem_operation_records_its_own_name () =
            [ ("entries", "1") ] (Event.notes (List.nth recorded 2)));
       A.(check bool "the rendered line carries no path" false
            (contains ~haystack:(Event.render (List.nth recorded 2)) ~needle:root))
-
-(* ------------------------------------------------------------------ *)
-(* what the line carries                                                *)
-(* ------------------------------------------------------------------ *)
 
 (* [audit_sink] through a capturing [Engine.log]: the field dictionary is pinned
    here without driving a socket, so a renamed or widened field set fails on the
@@ -499,10 +487,6 @@ let test_nothing_reaches_stdout () =
   let captured = read_file path in
   A.(check string "descriptor 1 stayed empty" "" captured)
 
-(* ------------------------------------------------------------------ *)
-(* the wiring is single                                                 *)
-(* ------------------------------------------------------------------ *)
-
 let server_source = read_file "../lib/server.ml"
 let main_source = read_file "../bin/main.ml"
 let caps_dune = read_file "../lib/caps/dune"
@@ -648,10 +632,6 @@ let test_nothing_outside_caps_names_the_sealed_layer () =
     (factory_all
     @ [ ("lib/server.ml", server_source); ("bin/main.ml", main_source) ])
 
-(* ------------------------------------------------------------------ *)
-(* the sealing is real                                                  *)
-(* ------------------------------------------------------------------ *)
-
 (* Which modules a consumer can name is a property of this one configuration
    line, and only a change to it could widen the surface: reading the file is
    how the rule is checked without shipping an OCaml parser. The negative
@@ -694,8 +674,6 @@ let test_the_negative_fixture_mirror_matches_the_package () =
     (private_modules ());
   includes "the mirror keeps the grant layer" "module Authority" mirror_source;
   includes "the mirror keeps the policy producers" "module Policy" mirror_source
-
-(* ------------------------------------------------------------------ *)
 
 let () =
   Mirage_crypto_rng_unix.use_default ();

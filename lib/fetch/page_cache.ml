@@ -1,19 +1,9 @@
-(* page_cache.mli states the contract; this file is the entry format, the two
-   read paths, and the three bounds. Port of [src/seekwright/pagecache.py]'s
-   [DiskPageCache].
-
-   Every byte goes through an [Authority.Fs] grant: this module never opens a
-   path of its own, so the confinement the cache lives under is the confinement
-   the capability layer decided at startup, and the negative-compilation pin
-   keeps it that way. *)
-
 module Caps = Mcp_caps
 module Fs = Caps.Authority.Fs
 
 let ( let* ) = Result.bind
 
-(* [window_text] looks at [[offset, offset + max_chars + 1]] for its cut, and one
-   codepoint past that answers "more remains" without a second read. *)
+(* Window cut lookahead: 1 char for cut plus 1 char to detect remaining content. *)
 let window_lookahead = 2
 
 let body_suffix = ".body"
@@ -149,8 +139,6 @@ let walk (text : string) (limit : int) :
 let is_valid_utf8 text =
   match walk text max_int with `Complete _ -> true | _ -> false
 
-(* {1 The sidecar} *)
-
 (* The sidecar is this module's own record, written by [put] and read back by the
    two read paths; the only foreign file it has to survive is a half write from an
    older build, which reads as a miss. *)
@@ -216,8 +204,6 @@ let touch t name fields =
   in
   let fields = set "accessed" (`Float (t.now ())) fields in
   ignore (Fs.atomic_write t.fs ~path:(meta_name name) ~contents:(Yojson.Safe.to_string (`Assoc fields)))
-
-(* {1 The reads} *)
 
 let page_of_fields fields ~url ~text ~truncated =
   {
@@ -304,8 +290,6 @@ let get_window t ~rung ~url ~offset ~max_chars =
           touch t name fields;
           Some (page_of_fields fields ~url ~text:window ~truncated))
 
-(* {1 The bounds} *)
-
 (* The directory's entry stems — the name without [.body], which is what
    [body_name] and [meta_name] build a path from. The cap is measured over bodies,
    so a body whose sidecar vanished still counts here and is a miss on the read
@@ -365,8 +349,6 @@ let evict_to_cap t =
         end)
       sorted
 
-(* {1 The write} *)
-
 let put t ~rung ~url ~(page : cached_page) =
   let body = page.text in
   if String.length body > t.max_entry_bytes
@@ -394,8 +376,6 @@ let put t ~rung ~url ~(page : cached_page) =
            reader never sees a half entry whatever this lock does. *)
         Eio.Mutex.use_rw ~protect:true t.evictions (fun () -> evict_to_cap t);
         true
-
-(* {1 Diagnosis} *)
 
 let stats t =
   let bodies = list_bodies t in

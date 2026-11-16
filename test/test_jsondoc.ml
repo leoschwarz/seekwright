@@ -86,7 +86,6 @@ let json_dumps_items n =
   ^ String.concat ", " (List.init n (fun _ -> "{\"n\": 1}"))
   ^ "]}"
 
-(* [TestRecognising] *)
 let test_the_bare_types_are_json () =
   A.check A.bool "application/json is json" true (J.is_json_media "application/json");
   A.check A.bool "text/json is json" true (J.is_json_media "text/json");
@@ -107,7 +106,6 @@ let test_only_a_document_shape_sniffs_as_json () =
   A.check A.bool "csv of numbers" false (J.sniffs_json "1,2,3");
   A.check A.bool "html" false (J.sniffs_json "<html><body>")
 
-(* [TestRendering] *)
 let test_a_container_names_itself_before_its_members () =
   let ls = lines (rendered ()) in
   A.check A.string "root header" "$  object(3)" (List.nth ls 0);
@@ -271,7 +269,6 @@ let test_every_rendered_path_reads_back_through_the_grammar () =
       J.parse_path path |> ignore)
     (lines (rendered ()))
 
-(* [TestGrammar] *)
 let test_the_shapes_the_grammar_reads () =
   check_steps [ J.Key "a"; J.Key "b" ] (J.parse_path "$.a.b");
   check_steps [ J.Key "a b"; J.Position 0 ] (J.parse_path "$[\"a b\"][0]");
@@ -344,7 +341,6 @@ let test_a_filter_says_so_rather_than_matching_nothing () =
 let test_negative_indices_are_refused_with_the_alternative () =
   assert_path_syntax ~match_:(Some "[0:5]") (fun () -> J.parse_path "$.items[-1]")
 
-(* [TestSelecting] *)
 let test_a_leaf_is_one_span () =
   let text = rendered () in
   let needle = "$.items[0].name  \"first\"" in
@@ -439,7 +435,6 @@ let test_a_document_media_type_is_told_from_a_stream () =
     (J.is_json_document_media "application/x-ndjson");
   A.check A.bool "x-ndjson is json" true (J.is_json_media "application/x-ndjson")
 
-(* [TestShaping] *)
 let test_the_shape_round_trips_through_the_grammar () =
   match J.render_schema (rendered ()) with
   | None -> A.fail "schema refused a rendering"

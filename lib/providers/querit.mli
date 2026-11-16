@@ -1,31 +1,12 @@
-(** Querit — real-time SERP, 1,000 free calls/month, then $4/1k PAYG.
+(** Querit — SERP backend with strict enum mapping for geo/language.
 
-    Port of [src/seekwright/providers/querit.py]. The free plan is {b 1,000 calls
-    a month with no payment method required}, so [cost_per_1k] defaults to [0.0] —
-    the plan an install most often runs on. The PAYG tier bills $4/1,000 requests
-    and an operator on it corrects the figure in config; nothing routes on it.
-    The [/v1/contents] endpoint (+$1/1,000 pages) is deliberately not part of this
-    adapter: a SERP backend fills [snippet], never [text], and [fetch] has its own
-    extraction backends.
+    Endpoint: [POST https://api.querit.ai/v1/search] with bearer token.
 
-    Endpoint: [POST https://api.querit.ai/v1/search] with the key as a bearer
-    token.
+    [count] is clamped to maximum 10 results. Supported countries (17 names) and
+    languages (8 names) are strictly mapped from ISO codes; unmapped codes are
+    dropped and reported in the notice.
 
-    The free plan answers at most {b 10} results, so [count] is clamped whatever
-    [max_results] asks; fewer hits than asked is a shorter answer, not a dropped
-    constraint — the reading [serpapi] gives its result count.
-
-    Constraints: domains and dates ride native filter fields. [country] and
-    [language] cross a {b strict enum}: the backend takes seventeen country names
-    and eight language names, so each code is looked up, and one with no entry is
-    {b dropped and noticed}, never sent as a value the endpoint would reject or
-    silently ignore. There is no safe-search parameter.
-
-    The 402/429 pair is one sentence: 429 is the documented 1 QPS free limit, and
-    an exhausted monthly allowance answers the same code for a keyed client.
-
-    Untested status: no live verification against the real endpoint has happened
-    in-repo, on either side of the port — the [untested] disclosure says so. *)
+    429 indicates rate limiting or quota exhaustion; 402 indicates account issue. *)
 
 val name : string
 (** ["querit"], the config key and the [provider] every response names. *)

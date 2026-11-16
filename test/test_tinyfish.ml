@@ -40,9 +40,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
 (* Never sent to anything real: the string a leak would carry. *)
 let test_key = "test-key"
 
-(* {1 The fixture}
-
-   The documented shape: [results[]] with [position], [site_name], [title],
+(* The documented shape: [results[]] with [position], [site_name], [title],
    [snippet], [url] and [date]. The first two are the envelope the adapter drops:
    nothing in the surface carries a rank, and the site name is a fact the url
    already states. *)
@@ -71,8 +69,6 @@ let sample_json =
   match Yojson.Safe.from_string sample with
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
-
-(* {1 The seam} *)
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
   let sent = ref None in
@@ -103,8 +99,6 @@ let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_
   match Provider.search provider query with
   | Ok outcome -> (outcome, sent ())
   | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
-
-(* {1 Parsing} *)
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data =
   Tinyfish.parse ~snippet_chars data ~limit
@@ -202,8 +196,6 @@ let a_string_snippet_still_reaches_the_model () =
     (Some
        "The default method by which SQLite implements atomic commit is a rollback journal.")
     (List.hd outcome.results).result.snippet
-
-(* {1 The request} *)
 
 let query_param name request =
   Uri.get_query_param request.Caps.Authority.Net.uri name
@@ -303,8 +295,6 @@ let no_safe_search_parameter_is_ever_sent () =
       check_opt_string "no safe_search" None (query_param "safe_search" request))
     [ true; false ]
 
-(* {1 The constraint report} *)
-
 let safe_search_is_the_one_drop_it_notices () =
   List.iter
     (fun value ->
@@ -331,9 +321,7 @@ let every_other_constraint_is_honoured () =
   in
   check_opt_string "no notice" None outcome.notice
 
-(* {1 The failures this adapter owns}
-
-   The six rows every HTTP adapter owes are pinned once for all of them by
+(* The six rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota pair, and
    the fact that its 402 means something different from [linkup]'s. *)
 
@@ -374,8 +362,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-(* {1 Cost and endpoint} *)
 
 let the_cost_is_flat_zero () =
   (* A Search API request draws nothing from the wallet whatever the balance: the

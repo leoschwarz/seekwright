@@ -1,35 +1,10 @@
-(** The routing decisions: which provider answers, in what order, and what is said.
+(** Provider routing decisions: candidate ordering, fallbacks, and refusal messages.
 
-    This module decides; the engine executes (P5). A caller hands it a routing
-    [table] — the deployment's routing facts as plain strings and lists — plus
-    the request, and it answers with a name, an ordered plan of rungs, or the
-    sentence that refuses. Same inputs, same outputs: no I/O, no clock, no
-    state, and it names **no** other module, which is the seam the Python
-    [src/seekwright/router.py] documents and the reason a rewrite in another
-    language implements it 1:1 with the engines as its clients. The table
-    fields are that future wire contract; serialising one is deliberately not
-    defined yet.
+    Pure routing logic operating over immutable routing tables with no I/O,
+    state, or dependency on other modules. *)
 
-    The guard is machine-checked twice: the library stanza in [lib/dune]
-    declares no [libraries], so this module could not reach [Mcp_caps] even by
-    accident — the compile refuses it — and the [ocamldep] diff in [test/dune]
-    pins what it depends on inside the library, so it cannot lean on a later
-    seekwright module either (the port of [tests/test_router.py]'s stdlib-only
-    case).
-
-    What belongs here is *which*, *in what order*, and the routing-facing
-    sentences that explain an outcome: refusals, substitution notices,
-    exhaustion notes, retry menus. Dispatch, the health board, usage and
-    logging stay in the engine, and so does any notice that is about a result
-    rather than a route — the zero-results diagnostic in the search engine is
-    the example. The free-name constants stay in the config module (P3), the
-    frozen vocabulary the validators read; they arrive here as table fields
-    rather than as an import. *)
-
-(** A provider name: [backend] or [backend:flavour] ([exa], [exa:free]). Plain
-    [string] on purpose — the routing core is what a compiled rewrite
-    reproduces, and a name is what its table is made of. *)
 type name = string
+(** A provider name ([backend] or [backend:flavour]). *)
 
 (** A routing refusal decided before any dispatch; the payload is the
     model-facing sentence.

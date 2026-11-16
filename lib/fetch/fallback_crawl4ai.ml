@@ -1,7 +1,3 @@
-(* Crawl4AI. fallback.mli owns what every remote fallback shares; this file
-   is the renderer's request shape, its two status arms, and the two-layer
-   envelope that separates "the crawl ran" from "the page answered". *)
-
 module Caps = Mcp_caps
 
 let crawl4ai_crawl_path = "/crawl"

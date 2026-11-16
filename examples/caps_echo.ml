@@ -1,13 +1,6 @@
-(** The same echo tool registered through `mcp-caps`.
+(** Echo tool registered through [mcp-caps].
 
-    The point is the registration line: [~grant:()] says out loud that this tool
-    has no power at all, and [Server.of_registry] is the only place mcp-kit is
-    touched. Transports stay in the application, which is where the switch that
-    owns grant resources will live once there are grants
-    (plans/capability-gated-mcp-server.md §7).
-
-    Same transcript as examples/echo.ml, with "echo" served by the layer, and a
-    structured result to show [output_schema] validation working:
+    Run it and speak the protocol on stdin/stdout:
 
     {e|
     {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"manual","version":"0"}}}
@@ -48,5 +41,4 @@ let () =
       | Error (Mcp_caps.Server.Duplicate_tool name) -> fail ("duplicate tool: " ^ name)
       | Error (Mcp_caps.Server.Invalid_declaration message) -> fail message
       | Ok server ->
-          (* stdout is the JSON-RPC channel; startup diagnostics went to stderr. *)
           Mcp_kit_stdio.run_channels server stdin stdout)

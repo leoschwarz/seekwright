@@ -1,13 +1,6 @@
-(** Failures that are safe to hand to a model.
-
-    A tool's [run] returns one of these when it refuses or fails: a stable
-    [kind] the caller can branch on, plus a message. The message is the whole
-    point of the module — it is copied into an MCP tool result and from there
-    into a caller's model context, so it must never carry an exception, a
-    backtrace, a header, a credential, a response body, or a local value
-    (plans/capability-gated-mcp-server.md §3). [make] runs every message
-    through [sanitize], which is the one place text is reduced to a single
-    bounded line; [sanitize] is exported so [Event] notes go through it too. *)
+(** Failures safe to return in model-facing tool results.
+    Messages are sanitized into a single bounded line ([max_message_bytes])
+    stripped of control characters, exceptions, and headers. *)
 
 type kind =
   | Denied  (** the operation is outside what the grant allows *)

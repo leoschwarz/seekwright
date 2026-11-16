@@ -1,4 +1,4 @@
-(* The extraction runner (F2.2): a parse must cost its own core, never the Eio
+(* The extraction runner: a parse must cost its own core, never the Eio
    loop's, and it must come back on a deadline rather than hold everyone else's
    request. The oracle's shape is tests/fetch/test_fetch_guardrails.py's
    [_GrindingExtractor] and [TestExtractionTime] — the loop-open case, the
@@ -78,8 +78,6 @@ let grinder_backend (g : grinder) =
       { E.text = "extracted"; title = None; total_chars = 9; path_addressable = false });
   }
 
-(* {1 The harness} *)
-
 (* One pool per case, closed no matter how the case ends. The caller must
    [release] its grinder before returning: [close] waits for running jobs, and
    the point of [stop] is that the suite never waits for a parse it refused. *)
@@ -117,8 +115,6 @@ let render (e : K.error) =
   | K.Worker m -> "Worker " ^ m
 
 let open_fds () = Array.length (Sys.readdir "/proc/self/fd")
-
-(* {1 The cases} *)
 
 (* A real extraction, answered across the socket, is the answer inline gives —
    and the bytes of the page crossed as data, not as a shared value. *)

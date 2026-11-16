@@ -46,9 +46,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = [])
     safe_search;
   }
 
-(* {1 The fixture}
-
-   The envelope with three records: one well-formed, one whose [title] is
+(* The envelope with three records: one well-formed, one whose [title] is
    documented as always present but empty (a drop), and one whose [snippet] is
    documented as omitted when unavailable (never invented). The first record
    also carries the [content] extract this adapter does not read. *)
@@ -84,8 +82,6 @@ let sample_data =
   match Provider.Json.field "data" (Yojson.Safe.from_string sample) with
   | `Assoc _ as data -> data
   | _ -> A.failf "the fixture carries no data object"
-
-(* {1 The seam} *)
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
     ?(cost_per_1k = 0.) () =
@@ -135,8 +131,6 @@ let parse ?(snippet_chars = 500) ?(limit = 10) data =
 
 let record fields = `Assoc fields
 let payload items = `Assoc [ ("results", `List items) ]
-
-(* {1 Parsing} *)
 
 let records_that_carry_a_title_and_url () =
   let hits = parse sample_data in
@@ -225,9 +219,7 @@ let missing_container_is_empty_not_an_error () =
       ("the envelope is a string", `String "a page, not a document");
     ]
 
-(* {1 The upstream field guards}
-
-   The payload is untrusted: the schema documents these fields as strings and
+(* The payload is untrusted: the schema documents these fields as strings and
    nothing enforces it. Shape drift drops the field, it does not raise out of
    the engine's provider-error handling as an internal error. *)
 
@@ -300,9 +292,7 @@ let a_string_snippet_still_reaches_the_caller () =
   check_opt_string "the snippet" (Some "Introduction to the changes in Go 1.26.")
     (List.hd outcome.results).result.snippet
 
-(* {1 The request}
-
-   Only [language] rides the wire: there is no domain field, no date field, no
+(* Only [language] rides the wire: there is no domain field, no date field, no
    safe-search field, and [zone] takes [cn] / [intl] — a binary a country code
    cannot map into without guessing. Every drop is named in the [notice], which
    is the only thing between a caller that asked for a filter and the belief
@@ -385,8 +375,6 @@ let all_dropped_buckets_are_named_together () =
     "cannot filter by domain or dates or country or safe-search; that constraint was ignored"
     (Option.get outcome.notice)
 
-(* {1 The failures this adapter owns} *)
-
 let quota_and_rate_limit_are_quota () =
   List.iter
     (fun status ->
@@ -442,8 +430,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:"secret-query")
-
-(* {1 Cost and endpoint} *)
 
 let cost_is_flat_zero () =
   let provider, _ = dial () in

@@ -1,14 +1,5 @@
-(** JSON documents on the fetch path: what counts as one, how one is rendered,
-    and how part of one is addressed.
-
-    Port of [src/seekwright/jsondoc.py]. A JSON page is extracted as one line
-    per node, each labelled with the path that addresses it, so the document
-    arrives as its own map: [total_chars], [offset] and the [[...]] marker keep
-    their meaning, [query] still selects by terms, and [path] selects by
-    structure. A line's path is the exact string a caller passes back as
-    [path], which is why it is absolute and printed on every line rather than
-    implied by indentation, and why {!parse_path} reads the same syntax
-    {!render_json} writes. *)
+(** JSON documents on the fetch path: media types, rendering,
+    and path selection. *)
 
 type key =
   | Name of string

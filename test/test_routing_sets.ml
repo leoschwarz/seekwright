@@ -1,4 +1,4 @@
-(* One routable provider set (F1.1): the factory classifies what a config asks
+(* One routable provider set: the factory classifies what a config asks
    for against what this build can dispatch, and that classification is the
    single source both the server's startup verdict and [--check]'s provider
    section read. The cases below pin the startup-fatal half — which
@@ -42,8 +42,6 @@ let build ~env ~sw config =
 let refusal = function
   | Ok () -> A.fail "the verdict was expected to refuse"
   | Error message -> message
-
-(* {1 The shipped default: the transition's one exception} *)
 
 let the_default_config_starts_over_its_built_remainder () =
   with_env (fun ~env ~sw ->
@@ -102,8 +100,6 @@ let no_keyless_adapter_left_refuses_the_implicit_config () =
   includes "the fact is the same one" "not built on this port" text;
   includes "and it names keylessness as the reason" "keyless" text;
   includes "every skipped name is listed" "freeserp" text
-
-(* {1 Explicitly enabled names with no adapter: startup-fatal, listed whole} *)
 
 let only_exa_free_is_startup_fatal () =
   (* [exa:free] is a keyless name, so an *explicit* table enabling it is the
@@ -191,8 +187,6 @@ let a_default_outside_the_built_set_is_refused_wherever_it_came_from () =
   includes "the default is named" "default provider 'freeserp'" text;
   includes "with the same phrase" "not built on this port" text
 
-(* {1 Permission narrowing} *)
-
 let permission_narrowing_narrows_the_sets_not_the_startup () =
   (* Both names are built, so the permission set is a runtime narrowing, not a
      startup fact: the verdict passes, [enabled] still lists both, and
@@ -218,8 +212,6 @@ let stub (n : string) : Provider.t =
      let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
      let aclose () = ()
    end)
-
-(* {1 [--check]'s five-way distinction} *)
 
 let the_five_sets_are_reported_apart () =
   (* One config that touches all five categories at once: [serper] is enabled
@@ -259,8 +251,6 @@ let the_five_sets_are_reported_apart () =
   (* [Unix] has no unsetenv, and [Config.api_key] reads an empty value as
      absent, so restoring means writing the empty form. *)
   Unix.putenv (Config.api_key_env_var "search1api") ""
-
-(* {1 [/healthz] reports the built set} *)
 
 let make_app ~(enabled : string list) ?default ?permitted (built : string list) =
   let cfg = config ?default ?permitted enabled in

@@ -1,20 +1,7 @@
-(* The log discipline, ported from [src/seekwright/logs.py]: a constant dotted
-   event name, every value a named bound field, stderr only, never a backtrace,
-   never an exception object. stdout is the JSON-RPC channel under stdio, so
-   nothing here ever writes to it; [--check] and [--metrics] print their report
-   to stdout themselves, and that is the one sanctioned exception.
-
-   The sink type is this module's own — see {!log} — and {!Engine}, {!Usage} and
-   {!Health} alias it, so the server hands one function to all four. Levels are
-   [Config]'s vocabulary, because [logging.level] in TOML spells them that way. *)
-
 type log =
   Config.log_level -> string -> (string * Yojson.Safe.t) list -> unit
 
-(* A raised exception is classified by constructor family, never rendered:
-   rendering it would carry the payload, and an [Eio.Io]'s payload names the
-   path or endpoint that failed. The set is deliberately finite so a log field
-   says the same thing on every run. *)
+(* Bounded classification of raised exceptions avoiding leaking payload/endpoints. *)
 let classify_exn = function
   | Eio.Io _ -> "io"
   | Eio.Cancel.Cancelled _ -> "cancelled"

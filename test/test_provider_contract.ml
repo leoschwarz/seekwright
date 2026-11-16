@@ -228,9 +228,7 @@ let adapters =
     };
   ]
 
-(* {1 The probes}
-
-   Each row says how to answer the adapter's grant: a status line, a body, or a
+(* Each row says how to answer the adapter's grant: a status line, a body, or a
    transport failure whose own message carries [probe_key] on purpose — the
    contract is that none of it reaches the failure the engine logs. *)
 
@@ -350,8 +348,6 @@ let rows =
           non_object_bodies;
     };
   ]
-
-(* {1 Driving a row over an adapter} *)
 
 let net_of probe =
   {

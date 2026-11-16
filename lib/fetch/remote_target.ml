@@ -1,11 +1,3 @@
-(* remote_target.mli states the composition; this file is the two calls in
-   the order the oracle writes them, with the host taken from the URL
-   [Fetcher.validate_url] just normalised. *)
-
-(* [Eio.Net.t] is parameterised by the backend's resource tag, and a signature
-   cannot existentially hide that tag any more than a record type can — the
-   same reason [Policy_net] parameterises its confinement record. The check
-   holds nothing but the resolver, so [t] is the network itself. *)
 type 'tag t = 'tag Eio.Net.t
 
 let make (net : 'tag Eio.Net.t) : 'tag t = net

@@ -1,22 +1,5 @@
-(** The grant funnel: the one place [Seekwright_factory] turns a confinement
-    decision into a grant that runs, and the audit trail that grant carries.
-
-    Private to the library, and deliberately so: [Factory] re-exports
-    {!audit_sink}, {!grant_of_endpoint} and {!probe_net} — the three a caller
-    outside [Seekwright_factory] has a reason to name — and keeps
-    {!grant_of_decision} and {!fs_grant_of_written_root} here, where
-    {!grant_of_endpoint} and {!probe_net} are the first one's only two callers.
-
-    The single-funnel property is what this module is for. [Authority.with_log]
-    occurs exactly once across [lib/factory], in the [with_audit] decoration both
-    funnels pass through, and each [of_confinement] — [Authority.Net]'s in
-    {!grant_of_decision}, [Authority.Fs]'s in {!fs_grant_of_written_root} — occurs
-    once, here. [test/test_caps_audit.ml] counts those totals over the whole
-    library rather than over one file — a per-file count would let a split hide one
-    unaudited grant path per new module. [Authority.with_operation_budget] appears
-    in this library only as prose refusing it; no grant this module builds carries
-    a counter, because nothing in server construction has a caller's scope for one
-    (plans/capability-gated-mcp-server.md §6). *)
+(** The grant funnel: where confinement decisions become running grants
+    and receive their audit sinks. *)
 
 (** The audit sink: the one [caps.operation] line per authority operation, with
     the field dictionary [test_caps_audit] pins. [Factory.audit_sink] is the

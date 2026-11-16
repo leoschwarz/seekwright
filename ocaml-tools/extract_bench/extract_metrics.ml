@@ -93,9 +93,6 @@ let load_cases dir =
       | _ -> [])
   | _ -> []
 
-(* Whitespace-tolerant containment. Two renderers may break a paragraph at
-   different points and still hand the caller the same sentence, which is the
-   whole reason the corpus's phrases are short and specific. *)
 let collapse s =
   let buf = Buffer.create (String.length s) in
   let prev_space = ref false in
@@ -126,7 +123,6 @@ let contains ~haystack ~needle =
 let misses ~haystack ~needles =
   List.filter (fun n -> not (contains ~haystack ~needle:n)) needles
 
-(* Codepoints, the coordinate system [total_chars] is measured in. *)
 let codepoints s =
   let n = ref 0 in
   let i = ref 0 in
@@ -142,9 +138,6 @@ let codepoints s =
   done;
   !n
 
-(* U+FFFD, counted in codepoints: how much of a page the decoder had to give up
-   on. A fidelity metric rather than a pass/fail, because the two implementations
-   replace at the byte level differently. *)
 let replacement_chars s =
   let n = ref 0 in
   let i = ref 0 in
@@ -159,9 +152,6 @@ let replacement_chars s =
   done;
   !n
 
-(* A needle is searched over the text and the title together: both implementations
-   put the page's em dash in the title and nowhere else, so a body-only search
-   measures where a renderer puts a phrase rather than whether it kept it. *)
 let searchable text title = text ^ "\n" ^ Option.value ~default:"" title
 
 type outcome =

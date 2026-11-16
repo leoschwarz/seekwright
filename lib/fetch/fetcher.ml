@@ -1,7 +1,3 @@
-(* Fetching a URL safely, behind the Net authority grant. Port of
-   [src/seekwright/fetcher.py]'s [HttpFetcher]. See fetcher.mli for the split of
-   guardrails between this module and the grant. *)
-
 module Caps = Mcp_caps
 module E = Extractor
 module J = Jsondoc
@@ -67,24 +63,14 @@ let accept_header =
   "text/html,application/xhtml+xml,application/pdf;q=0.9,"
   ^ "text/plain;q=0.8,application/json;q=0.7,text/csv;q=0.6,*/*;q=0.1"
 
-(* {1 URL validation} *)
-
 let ascii_lower s =
   String.map (fun c -> if c >= 'A' && c <= 'Z' then Char.chr (Char.code c + 32) else c) s
 
-(* The port's [repr] for a token quoted back at the caller: Python's own refusal
-   messages use [repr], so a printable non-ASCII token stays readable (F1.5). *)
 let py_repr = Repr.py_repr
 
-(* {2 Bracketed hosts}
-
-   CPython's [urlsplit] validates a bracketed host before any code sees the
-   parsed URI: a netloc with one bracket of the pair, data before the [\[], or
-   junk between [\]] and the port delimiter is [Invalid IPv6 URL], and the
-   bracketed host itself has to be an IPvFuture literal or an IP address. [Uri]
-   accepts all of those silently and reparses them into something else, so the
-   check has to run on the raw netloc. The messages are the oracle's. *)
-
+(* Bracketed host validation: [Uri] accepts malformed IPv6 URLs silently and
+   reparses them into something else, so bracket validation runs on the raw
+   netloc. *)
 let invalid_ipv6 = "unparseable URL: Invalid IPv6 URL"
 
 let ipvfuture_ok host =
@@ -285,8 +271,6 @@ let validate_url (raw : string) : (string, string) result =
               let query = match query with Some q when q <> "" -> "?" ^ q | _ -> "" in
               Ok (scheme_l ^ "://" ^ netloc ^ path ^ query)
 
-(* {1 The response window} *)
-
 let rstrip_py = Utf8.rstrip
 
 let window_text (text : string) ~offset ~max_chars : string * bool =
@@ -332,8 +316,6 @@ let window_text (text : string) ~offset ~max_chars : string * bool =
       if sliced <> "" && more_remains then sliced ^ "\n\n[...]" else sliced
     in
     (sliced, more_remains)
-
-(* {1 The fetcher} *)
 
 type t = {
   net : Caps.Authority.Net.t;
@@ -421,10 +403,9 @@ let parse_timeout_refusal kind seconds =
           what (Printf.sprintf "%g" seconds)))
 
 (* Turning a body into text, on the pool when the fetcher has one and inline
-   only when it does not. The pool is the public fetch path's isolation
-   ([Extract_pool], plans/ocaml-finalisation.md F2.2): the download cap bounds
-   the input, and this is the half that bounds the *time* the backend then
-   spends on it, off the loop's own domain. [Extraction_failed] arrives here
+   only when it does not. The pool is the public fetch path's isolation:
+   the download cap bounds the input, and this is the half that bounds the
+   *time* the backend then spends on it, off the loop's own domain. [Extraction_failed] arrives here
    both ways — raised on the loop, or carried back across the pool's socket
    as [Backend] — and takes the same sentence either way, because a parse
    that failed and a parse that ran too long are both "cannot extract text"

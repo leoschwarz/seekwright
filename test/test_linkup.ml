@@ -64,9 +64,7 @@ let nth label index xs =
    oracle reads the wall clock, so a ported date has to name its own. *)
 let fixed_now = 1_700_000_000.
 
-(* {1 The fixture}
-
-   The [sourcedAnswer] payload: the prose, and the [sources[]] citations that
+(* The [sourcedAnswer] payload: the prose, and the [sources[]] citations that
    carry it. [favicon] is upstream's and never reaches the model. *)
 let sample =
   {|{
@@ -91,9 +89,7 @@ let sample_json =
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
 
-(* {1 The seam}
-
-   A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
+(* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
@@ -150,8 +146,6 @@ let has_body_field name request =
   | Some fields -> List.mem_assoc name fields
   | None -> false
 
-(* {1 Parsing the citation list} *)
-
 let sources ?(snippet_chars = 500) ?(limit = 10) data =
   Linkup.parse_sources ~snippet_chars data ~limit
 
@@ -201,8 +195,6 @@ let the_limit_slices_the_citation_list_before_filtering () =
   in
   check_int "the unusable row spent the only slot" 0 (List.length (sources ~limit:1 payload));
   check_int "two slots keep it" 1 (List.length (sources ~limit:2 payload))
-
-(* {1 Parsing the result list} *)
 
 let results ?(snippet_chars = 500) ?(limit = 10) data =
   Linkup.parse_results ~snippet_chars data ~limit
@@ -259,8 +251,6 @@ let missing_results_is_empty_not_an_error () =
   check_int "results is null" 0 (List.length (results (`Assoc [ ("results", `Null) ])));
   check_int "results is absent" 0 (List.length (results (`Assoc [])))
 
-(* {1 The answer follows the shape that was asked for} *)
-
 let the_answer_reaches_the_caller () =
   let outcome, _ = search_of () in
   check_opt_string "the prose rides through"
@@ -286,9 +276,7 @@ let the_answer_is_read_from_the_key_the_shape_uses () =
   check_opt_string "searchResults reads none" None
     (Linkup.answer ~output:Linkup.Search_results (`Assoc [ ("answer", `String "p") ]))
 
-(* {1 The upstream field guards}
-
-   A non-string [answer], [snippet] or [content] is dropped, not handed to the
+(* A non-string [answer], [snippet] or [content] is dropped, not handed to the
    wire model or to the truncate helper. The payload is untrusted: the fields are
    documented as strings, and a shape drift must not turn into an internal error
    that escapes the engine's provider-error handling. The call has to succeed
@@ -363,8 +351,6 @@ let a_string_snippet_still_reaches_the_model () =
         journal.")
     (hd "results" outcome.results).result.snippet
 
-(* {1 The request} *)
-
 let post_to_the_search_endpoint_with_the_bearer_token () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:3 ()) () in
   check_bool "the method" true (request.Caps.Authority.Net.meth = `POST);
@@ -407,8 +393,6 @@ let max_results_reaches_the_request_verbatim () =
   let _, request = search_of ~query:(query ~max_results:20 ()) () in
   check_opt_string "and at the schema ceiling" (Some "20")
     (body_field "maxResults" request)
-
-(* {1 The date computation, at an injected clock} *)
 
 let the_recency_windows_are_fixed_day_counts () =
   check_int "day" 1 (Linkup.age_days Model.Day);
@@ -455,8 +439,6 @@ let the_domain_filters_are_native () =
   check_opt_string "excludeDomains likewise" (Some "[\"spam.example\"]")
     (body_field "excludeDomains" request)
 
-(* {1 The constraint report} *)
-
 let the_geo_bucket_is_reported_joined () =
   (* No geo parameter and no language parameter at all, so neither half of the
      bucket is honoured and the token stays joined — which is the case
@@ -501,9 +483,7 @@ let the_domains_and_the_window_draw_no_notice () =
   in
   check_opt_string "no notice at all when nothing unasked is dropped" None outcome.notice
 
-(* {1 The failures this adapter owns}
-
-   The rows every HTTP adapter owes are pinned once for all of them by
+(* The rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is this adapter's quota row, which
    is narrower than the widened house row: Linkup's own error table reads "429 -
    Too Many Requests: You have run out of credit or you are sending too many
@@ -555,8 +535,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-(* {1 Cost and endpoint} *)
 
 let the_cost_is_flat_per_call () =
   (* Linkup bills the request, so [max_results] never scales the figure, and

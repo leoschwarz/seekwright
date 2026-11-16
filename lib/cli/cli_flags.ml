@@ -1,8 +1,3 @@
-(* Server-flag parsing and the startup refusals. The scanner and the guards
-   move here from [bin/main.ml] verbatim in their sentences — the tests that
-   pin those sentences (the flag-table guard in [test/test_p8_server.ml] and
-   the Python suite's usage errors) read this module instead. *)
-
 let ( let* ) = Result.bind
 
 module Config = Seekwright.Config
@@ -36,8 +31,6 @@ let log_format_of_string = function
   | "json" -> Some Config.Log_json
   | _ -> None
 
-(* The key, not the spelling, is what these two functions match on — the only
-   place a flag's name is written is [Server.server_flag_table]. *)
 let apply_boolean opts ~key ~flag =
   match key with
   | "check" -> Ok { opts with check = true }
@@ -104,7 +97,6 @@ let parse argv =
       }
       argv
   in
-  (* The combination guards, ported from cli.py's parser.error calls. *)
   if opts.metrics && (opts.check || opts.live || opts.http || opts.host <> None || opts.port <> None || opts.allowed_hosts <> []) then
     Error
       "--metrics reports and exits; it cannot be combined with --check, --live, --http, --host, --port or --allowed-host"
@@ -114,21 +106,12 @@ let parse argv =
     Error "--host, --port and --allowed-host only make sense together with --http"
   else Ok opts
 
-(** The startup refusals: the conditions the server refuses to start on, in the
-    Python's order — keys, extraction backend, an unbuildable [fetch.primary],
-    agent mode. Sentences, not effects: the binary prints them and exits. *)
+(** The startup refusals: test_p8_server.ml pins this marker to slice the scanner. *)
 let startup_refusal config _opts =
-  (* The refusals move out of [run_server] in the Python's order: keys first
-     (naming every offender and its variable, because a diagnosis that stops
-     at the first one costs a restart per key), then the extraction backend,
-     then a [fetch.primary] this deployment cannot build, then agent mode.
-     The log overrides are not a refusal: [Log.apply_overrides] folds them
-     into the config's logging section. *)
   match Config.missing_api_keys config with
   | _ when config.Config.fetch.Config.enabled
            && config.Config.fetch.Config.primary <> "http" ->
-      (* A primary this port cannot serve would read from this server's own
-         IP unasked; the refusal stands whatever the keys look like. *)
+      (* An unbuildable primary must refuse before keys: prevents falling back to local IP. *)
       Error
         (Printf.sprintf
            "fetch.primary names %S, which this deployment cannot build (see `seekwright --check` for why); refusing to start rather than read from this server's own IP unasked"

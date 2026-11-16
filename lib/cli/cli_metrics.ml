@@ -1,9 +1,3 @@
-(* The metrics report. Port of [src/seekwright/cli.py]'s [--metrics] path:
-   fold the usage journal and print the provider table. The snapshot arrives
-   as the JSON [Usage.snapshot] writes, so the report is driven from a value
-   in a test — no journal, no clock race: the window's two dates come from an
-   injected [now]. *)
-
 let json_field key = function
   | `Assoc fields -> ( match List.assoc_opt key fields with Some v -> v | None -> `Null)
   | _ -> `Null
@@ -36,9 +30,7 @@ let digit2 s i =
     let sub = String.sub s i 2 in
     if String.for_all (fun c -> c >= '0' && c <= '9') sub then int_of_string sub else 0
 
-(* Howard Hunt's civil-from-days, the mirror of [usage.ml]'s date arithmetic:
-   epoch seconds to a civil date and clock time. The floor split matters the
-   same way it does there: a pre-epoch stamp lands in the day before. *)
+(* Floor division for negative seconds: pre-epoch timestamps land in the day before. *)
 let civil_of_secs secs =
   let days = if secs >= 0 then secs / 86_400 else (secs - 86_399) / 86_400 in
   let day_of = secs - days * 86_400 in
@@ -54,9 +46,6 @@ let civil_of_secs secs =
   let year = if m <= 2 then y + 1 else y in
   Some (year, m, d, day_of / 3600, (day_of / 60) mod 60, day_of mod 60)
 
-(* [days_from_civil] beside [civil_of_secs] is the same pair [usage.ml] keeps,
-   and it has to be that exact pair: the two directions have to be inverses, and
-   a hand-folded era constant is where the off-by-one-year lives. *)
 let days_from_civil (y : int) (m : int) (d : int) : int =
   let y = if m <= 2 then y - 1 else y in
   let era = (if y >= 0 then y else y - 399) / 400 in
@@ -66,8 +55,6 @@ let days_from_civil (y : int) (m : int) (d : int) : int =
   (era * 146097) + doe - 719468
 
 let secs_of_utc day time offset_secs =
-  (* days since 1970-01-01 (the same civil arithmetic [usage.ml] uses) plus
-     the day's seconds, minus the written offset: [fromisoformat().astimezone(UTC)]. *)
   let (y, m, d) =
     let y = int_of_string (String.sub day 0 4) in
     let m = int_of_string (String.sub day 5 2) in
@@ -76,10 +63,6 @@ let secs_of_utc day time offset_secs =
   in
   days_from_civil y m d * 86_400 + time - offset_secs
 
-(* Port of [cli.py]'s [_seen]: [datetime.fromisoformat(value).astimezone(UTC)]
-   rendered as [%Y-%m-%dT%H:%M:%SZ]. The stamp is split into its date, clock
-   and offset parts; a stamp written in local time (no offset) is read as UTC,
-   which is what [astimezone] does to a naive datetime too. *)
 let seen value =
   match value with
   | None -> "—"
@@ -131,9 +114,6 @@ let row entry =
     seen (json_string "last_seen" entry);
   ]
 
-(* The Python's column rule: the first and last columns are left-aligned,
-   every column between them is right-aligned, and neighbours are two spaces
-   apart. *)
 let format_row cells widths =
   let last = List.length cells - 1 in
   String.concat "  "
@@ -155,8 +135,6 @@ let journal_state journal =
 let iso day =
   Printf.sprintf "%04d-%02d-%02d" (day.Unix.tm_year + 1900) (day.Unix.tm_mon + 1) day.Unix.tm_mday
 
-(* [endpoints] and [journal] are the two fields of [Usage.snapshot] this report
-   reads; [now] is injected so the window's first and last dates are pinned. *)
 let print_report ~emit ~now endpoints journal =
   let today = Unix.gmtime now in
   let window_days = Option.value ~default:14 (json_int "window_days" endpoints) in

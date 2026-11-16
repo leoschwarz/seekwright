@@ -5,20 +5,13 @@ type kind =
   | Timeout
   | Failed
 
-(* A tool result is one line of prose handed to a model, so the ceiling is a
-   protocol concern, not a display one: an uncapped provider body would decide
-   how large our own response is. *)
 let max_message_bytes = 512
 
 let is_control char =
   let code = Char.code char in
   code < 32 || code = 127
 
-(* Cutting at a byte boundary can split a UTF-8 sequence and put an invalid
-   string into JSON. The decision is made from the first *excluded* byte: if it
-   starts a character, the cut already lands on a boundary; if it is a
-   continuation byte, that character began earlier and the whole of it has to
-   be excluded, so the cut backs up to its lead byte. *)
+(* Backs up to UTF-8 lead byte: prevents invalid UTF-8 sequences in JSON. *)
 let utf8_start text limit =
   let length = String.length text in
   let off = min limit length in

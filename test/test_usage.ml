@@ -25,9 +25,7 @@ let today = Usage.utc_date now
 let clock () = now
 let ts secs = Usage.iso_utc_full secs
 
-(* {1 Snapshot reads}
-
-   [snapshot] is the wire contract: a [Yojson.Safe.t]. The helpers below are the
+(* [snapshot] is the wire contract: a [Yojson.Safe.t]. The helpers below are the
    loose typing the Python suite gets from [cast("dict[str, Any]")]. *)
 let get key = function
   | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
@@ -55,8 +53,6 @@ let money label expected value =
 let no_money label value = A.(check (option (float 1e-9)) label None (opt_money value))
 
 let rows json = items json |> List.map (fun row -> str (get "provider" row))
-
-(* {1 The recorder} *)
 
 let log_of lines =
   fun (_level : Config.log_level) event fields -> lines := (event, fields) :: !lines
@@ -93,9 +89,7 @@ let answer ?(run = "run-1") ?(model = Some "test-model") ?(depth = "brief")
     ~prompt_tokens ~completion_tokens ~answer_chars ~cited ~cited_invalid ~sources
     ~model_cost_usd ~ms ?error ()
 
-(* {1 The journal fixture}
-
-   The Python suite's [tmp_path]: one directory per case under a scratch root,
+(* The Python suite's [tmp_path]: one directory per case under a scratch root,
    so a case's file is a name the failure message can quote. *)
 (* The fixture root. Eio paths are built from the process's own filesystem handle,
    which is relative to the working directory, so the fixture is too: the file
@@ -208,9 +202,7 @@ let day_at n hour = now -. (float_of_int n *. day) +. (float_of_int (hour - 12) 
 
 let check name f = A.test_case name `Quick f
 
-(* {1 The clock}
-
-   The three formatters usage.ml exports because the engines share them, and the
+(* The three formatters usage.ml exports because the engines share them, and the
    civil-date arithmetic they are built on: a day bucket is only as good as the
    date maths that names it. *)
 
@@ -232,8 +224,6 @@ let iso_spans_the_calendar () =
     (Usage.utc_date 1709251200.);
   A.(check string) "a pre-epoch instant buckets to its own UTC day" "1969-12-31"
     (Usage.utc_date (-1.))
-
-(* {1 Aggregation} *)
 
 let totals_and_providers_add_up () =
   let rec_ = recorder () in
@@ -273,9 +263,7 @@ let a_failed_fetch_is_not_a_fallback_page () =
   A.(check int) "only a success carries a fallback name, and only that counts" 0
     (int (get "fetch_pages_via_fallback" (get "totals" (Usage.snapshot rec_))))
 
-(* {1 The fetch line's price}
-
-   A fetch line carries money only when a fallback that declares a price served
+(* A fetch line carries money only when a fallback that declares a price served
    the page. Everything else — the local fetcher, a failure, a free fallback —
    carries no [cost_usd] key at all, so the page count stays the sample size and
    the money total is null until something is priced. *)
@@ -393,8 +381,6 @@ let the_price_round_trips_through_the_journal () =
     A.(check json) "totals" (get "totals" original) (get "totals" rebuilt);
     A.(check json) "days" (get "days" original) (get "days" rebuilt)
 
-(* {1 The window} *)
-
 let a_fresh_recorder_zero_fills_fourteen_days_oldest_first () =
   let days = items (get "days" (Usage.snapshot (recorder ()))) in
   A.(check int) "the window is two weeks" Usage.window_days (List.length days);
@@ -421,8 +407,6 @@ let since_is_the_earliest_timestamp () =
   let rec_ = recorder () in
   search ~ms:1 ~cost:0.0 ~results:0 rec_;
   A.(check bool) "the first line sets it" true (not (is_null (get "since" (Usage.snapshot rec_))))
-
-(* {1 The endpoint series} *)
 
 let endpoints snap = get "endpoints" snap
 let one_endpoint snap =
@@ -648,8 +632,6 @@ let the_series_is_content_free_and_the_journal_gains_no_field () =
     no_marker "the journal" (read_file file);
     no_marker "the series" (Yojson.Safe.to_string (endpoints (Usage.snapshot rec_)))
 
-(* {1 The recent deque} *)
-
 let the_deque_is_bounded_and_newest_first () =
   let rec_ = recorder ~recent:2 () in
   List.iter (fun _n -> search ~ms:1 ~cost:0.0 ~results:0 rec_) [ 1; 2; 3 ];
@@ -668,8 +650,6 @@ let entries_carry_the_journal_schema () =
       A.(check string) "tool" "fetch" (str (get "tool" entry));
       A.(check string) "fallback" "crawl4ai" (str (get "fallback" entry))
   | other -> A.failf "expected one recent entry, got %d" (List.length other)
-
-(* {1 The journal} *)
 
 let round_trip_rebuilds_an_identical_snapshot () =
   with_journal "round_trip" @@ fun file open_rec ->
@@ -816,9 +796,7 @@ let the_journal_writes_its_keys_in_the_declared_order () =
       ]
       (key_list 4)
 
-(* {1 Pruning}
-
-   The Python suite reads [r._days]; the aggregates are private here, so the
+(* The Python suite reads [r._days]; the aggregates are private here, so the
    prune shows through where it is observable: a day bucket that was pruned has
    no row in the endpoint series. *)
 
@@ -839,9 +817,7 @@ let a_generous_keep_days_retains_old_buckets () =
     A.(check (list string)) "the old bucket survives" [ Usage.utc_date (ago 5) ]
       (List.map (fun d -> str (get "date" d)) (items (get "days" row)))
 
-(* {1 The answer line: accepted here, folded in the section below}
-
-   The [answer] line's whitelist is what this group pins: a reader that refused
+(* The [answer] line's whitelist is what this group pins: a reader that refused
    any tool but search and fetch dropped it with a warning on every restart. *)
 
 let an_answer_line_backfills_rather_than_being_skipped () =
@@ -893,8 +869,6 @@ let the_retrieval_keys_are_additive () =
       (str (get "run" (List.nth lines 1)), int (get "step" (List.nth lines 1)));
     A.(check (pair string int)) "the tagged fetch" ("a1b2c3d4", 1)
       (str (get "run" (List.nth lines 3)), int (get "step" (List.nth lines 3)))
-
-(* {1 The answer line's fold: the model's figures, and the citation join} *)
 
 let answers snap = get "answers" snap
 

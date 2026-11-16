@@ -284,8 +284,6 @@ let test_an_image_without_the_switch_names_the_switch () =
   with_fetcher ~allow_images:false (fun fetcher port ->
     expect_refusal_with "fetch.allow_images = true" (base fetcher port "/png"))
 
-(* {2 The chain budget} *)
-
 (* One bound over the whole redirect chain, not one per hop: the grant's
    operation timeout restarts at every hop, so without this a page behind
    [max_redirects] redirects can spend [max_redirects + 1] timeouts on one URL.

@@ -1,58 +1,13 @@
-(** Provider health: a passive circuit breaker fed by real traffic, plus the probe
-    that re-verifies a name without searching.
+(** Provider health board: passive circuit breaker and active connectivity probes.
 
-    Port of [src/seekwright/health.py]. Two signals land on one board: every
-    dispatch records its outcome, and a provider that fails repeatedly is gated
-    out of the {b default route's fallbacks} for a cooldown. The board gates
-    ladder fallbacks only — the first attempt of any search, whether it is the
-    resolved default or the name the caller gave, is never skipped: a breaker
-    saves the second attempt, it does not pre-empt the first. {!Engine.Search}
-    asks {!is_open} once per walk and passes the answer to {!Router.fallback_rungs},
-    which is where the gate becomes a skip.
+    Tracks consecutive failures and gates failing providers out of ladder fallbacks.
+    The primary attempt of any search is never gated. Half-open is implicit:
+    expired cooldowns read closed, but a single failure immediately re-arms the gate.
 
-    Half-open is implicit: an expired gate reads closed, one more failure re-opens
-    it without waiting for the threshold again, and any success closes it outright.
-
-    {1 The clock}
-
-    Python reads [asyncio.get_running_loop().time()] — monotonic per loop, so the
-    plain attributes need no locks. This module has no loop to read, so the clock
-    is {i injected} at {!create} and every comparison in here goes through it.
-    That is what makes the state machine testable without sleeping: the suite
-    moves the clock instead of waiting for it, and a cooldown that would
-    otherwise be a race is an exact assertion.
-
-    {1 Concurrency}
-
-    The same argument carries over to the Eio fibers that share one board. Every
-    public mutator — {!record_failure}, {!record_success} — is a critical
-    section with {b no suspension point}: the read of the clock, the lookup, the
-    update and the log emission all run between two yields, so an Eio fiber
-    cannot switch to another caller inside one. Concurrent traffic and health
-    ticks therefore interleave only {i between} whole state transitions, which
-    is why there is no lock here and why adding one would not change an
-    observable: Eio gives a fiber sole occupancy of the domain until it
-    suspends, and this module never suspends. The invariant to keep when editing
-    is exactly that: a yield ([Provider.Net.request]'s I/O, a sleep, a mutex)
-    inside a mutator would make two calls interleave and would need a guard.
-
-    {!t} is not shared across Eio domains, and {!run_probes} is called on the
-    listener's switch, so a probe tick and a search share one domain and one
-    fiber at a time. The monitor's own [sleep] sits between ticks, outside every
-    critical section.
-
-    {1 The log}
-
-    The sink type is the one {!Usage} and {!Engine} take, so P8 hands the same
-    function to all three. Two events, and each fires on the state {i change}:
-    [health.open] with the provider, the reason and the failure count that opened
-    the gate, and [health.closed] when an armed gate is cleared. Extending an
-    already-open gate logs nothing, so a sustained outage says "open" once. *)
-
-(** {1 The board} *)
+    Concurrency: Mutators ([record_failure], [record_success]) contain no suspension
+    points, guaranteeing atomic transitions within an Eio domain without mutex overhead. *)
 
 type log = Log.log
-(** The sink type is {!Log}'s, aliased here — style review M1. *)
 
 type t
 (** One board: per-name failure counts and open gates. *)
@@ -167,16 +122,7 @@ val probe :
     {!Key_required} {i before} the table is consulted, because [Reachable_no_key]
     is a readiness report and a provider that cannot be built keyless has none to
     report. A name with no row, or a row that cannot build a URL from this
-    deployment's config, is {!Unsupported} without a request.
-
-    {b The table is a parameter.} In Python it is a module-level dict keyed by
-    name, built from each adapter's [ENDPOINT] constant. Those constants live with
-    the adapters, and adapters live in [seekwright.providers], which depends on
-    this library — so naming them from here would close a dependency cycle
-    (plans/seekwright-ocaml-port.md, the P4 note). The caller that builds the
-    adapters builds the rows; {!probe_endpoint_const}, {!probe_headers_const} and
-    the four config-shaped builders above are the pieces it builds them from, and
-    they are what the suite pins. *)
+    deployment's config, is {!Unsupported} without a request. *)
 
 val probe_event : outcome -> bool
 (** Whether the board moves for this outcome: [Reachable] and [Reachable_no_key]

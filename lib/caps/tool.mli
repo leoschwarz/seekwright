@@ -1,11 +1,5 @@
-(** A tool: metadata, a typed input decoder, and a handler that needs a grant.
-
-    The plan's shape (plans/capability-gated-mcp-server.md §3): mcp-kit validates
-    the input JSON Schema, [decode] turns validated JSON into the application's
-    own input type, and [run] is applied to that plus the grant the tool was
-    registered with. Keeping [decode] explicit is what makes "the schema passed
-    but the value was not what we wanted" a testable case — it becomes an
-    [Error.Invalid] tool result, not a JSON-RPC failure. *)
+(** Tool definition: metadata, typed JSON input decoder, and grant-gated handler.
+    Input JSON is decoded into a typed value before invoking [run] with the grant. *)
 
 module Output : sig
   type t

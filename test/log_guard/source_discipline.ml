@@ -1,4 +1,4 @@
-(* F1.3's source guard: some log rules are not expressible as a type.
+(* Source guard: some log rules are not expressible as a type.
 
    [Printexc.to_string] is the wrong tool on a serving path even when it looks
    sanitised — an [Eio.Io] payload names the path or endpoint that failed, and an
@@ -45,8 +45,6 @@ let count path = count_occurrences ~haystack:(read path) ~needle:"Mcp_kit"
 
 let files = scan [ "../../lib"; "../../bin" ]
 
-(* {1 The scan is a real scan} *)
-
 let test_the_scan_is_not_vacuous () =
   A.(check bool) "the scan found a substantial tree" true (List.length files >= 40);
   List.iter
@@ -62,8 +60,6 @@ let test_the_scan_is_not_vacuous () =
       "../../lib/caps/server.mli";
       "../../bin/main.ml";
     ]
-
-(* {1 Raw exception rendering} *)
 
 let cli_boundary = "../../bin/main.ml"
 
@@ -85,8 +81,6 @@ let test_the_cli_boundary_is_the_declared_exception () =
     (List.mem cli_boundary files);
   A.(check bool) "and it is the stderr boundary the allowlist exists for" true
     (contains ~haystack:(read cli_boundary) ~needle:"prerr_endline")
-
-(* {1 Direct stderr writes} *)
 
 let stderr_writers = [ "../../lib/log.ml"; cli_boundary ]
 
@@ -115,14 +109,12 @@ let test_only_the_sink_and_the_cli_write_stderr () =
           stderr_tokens)
     files
 
-(* {1 The serving path's escape hatches} *)
-
 let serving_path = [ "../../lib/log.ml"; "../../lib/server.ml"; "../../lib/usage.ml" ]
 
 let test_the_serving_path_has_no_untyped_escape () =
   (* [failwith] and [invalid_arg] are the two ways a library turns a caller's
      input into an unclassified exception after the boundary promised values.
-     F1.3's modules carry neither; a [raise] that remains is cancellation
+     The modules carry neither; a [raise] that remains is cancellation
      re-raised, which must not be swallowed. *)
   List.iter
     (fun path ->
@@ -134,8 +126,6 @@ let test_the_serving_path_has_no_untyped_escape () =
             (count_occurrences ~haystack:(read path) ~needle:token))
         [ "failwith"; "invalid_arg"; "Printexc." ])
     serving_path
-
-(* {1 The capability core's dependency direction} *)
 
 let caps_sources = scan [ "../../lib/caps" ]
 

@@ -44,9 +44,7 @@ let z = Sanitize.zwsp
 let clock () = 1768478400.
 let now () = 1768478400.
 
-(* {1 Reads}
-
-   [Usage.snapshot] is a [Yojson.Safe.t] and the log capture is a field list; the
+(* [Usage.snapshot] is a [Yojson.Safe.t] and the log capture is a field list; the
    helpers below are the loose typing the Python suite gets from dicts. *)
 let get key = function
   | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
@@ -68,9 +66,7 @@ let money label expected = function
   | `Float f -> A.(check (float 1e-9) label f expected)
   | v -> A.failf "%s: not a money figure: %s" label (Yojson.Safe.to_string v)
 
-(* {1 The wire fixtures}
-
-   Python builds these with keyword defaults; an OCaml record has none, so the
+(* Python builds these with keyword defaults; an OCaml record has none, so the
    optional argument is the field a case cares about and the rest are [None]. *)
 let result ?snippet ?text ?(url = "https://example.com/a") title =
   {
@@ -96,9 +92,7 @@ let query ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?co
     safe_search;
   }
 
-(* {1 The stub provider}
-
-   {!Seekwright.Provider.t} is a packaged module, so the stub is a record of
+(* {!Seekwright.Provider.t} is a packaged module, so the stub is a record of
    mutable state plus a [behavior] field the module's [search] delegates to. A
    case Python writes as a subclass replaces that field instead — see [clip],
    [no_hits] and [recording]. *)
@@ -203,8 +197,6 @@ let provider (s : stub) : Provider.t =
 let failure ?(retryable = true) ~name message = Provider.provider_error ~retryable ~provider:name message
 let quota ~name = Provider.quota_exhausted ~provider:name ()
 
-(* {1 The log capture} *)
-
 type captured = {
   level : Config.log_level;
   event : string;
@@ -239,9 +231,7 @@ let level_name = function
   | Config.Log_trace -> "TRACE"
   | Config.Log_success -> "SUCCESS"
 
-(* {1 The engine fixture}
-
-   [make_engine]'s mirror: the config's provider block is built from the stubs
+(* [make_engine]'s mirror: the config's provider block is built from the stubs
    handed in, [searxng] carrying its url because that is the one provider whose
    config {i is} its prerequisite. The health board and the usage recorder are
    always built here and handed back, because the engine has no accessors for
@@ -344,8 +334,6 @@ let failed board ?provider ?mode q =
     A.failf "expected a failure (502), got a refusal (400): %s" sentence
   | Ok response -> A.failf "expected a failure, got results from %s" response.Model.provider
 
-(* {1 TestSearch} *)
-
 let results_are_returned () =
   let board = make_engine [ rig () ] in
   let r = served board (query "sqlite wal mode") in
@@ -367,8 +355,6 @@ let a_provider_notice_reaches_the_caller () =
   in
   let r = served board (query ~include_domains:[ "arxiv.org" ] "x y z") in
   includes "notice" "cannot filter by domain" (Option.value ~default:"" r.Model.notice)
-
-(* {1 TestProviderSelection} *)
 
 let a_named_provider_is_used () =
   let board = make_engine [ rig ~name:"serper" (); rig ~name:"linkup" () ] in
@@ -404,8 +390,6 @@ let the_default_is_only_offered_when_there_is_one () =
   let with_default = make_engine ~default:"serper" [ rig ~name:"serper" () ] in
   includes "a default to omit" "omit `provider`" (refused with_default ~provider:"linkup" (query "x y"))
 
-(* {1 TestProviderFailure} *)
-
 let a_failure_carries_retry_advice () =
   let board = make_engine [ rig ~fail:(failure ~name:"serper" "503") () ] in
   includes "advice" "Retry shortly" (failed board (query "sqlite wal mode"))
@@ -433,8 +417,6 @@ let a_non_object_json_body_reaches_the_caller_as_advice () =
   check_string "the whole sentence"
     "Search failed - freeserp: malformed JSON response. Retry shortly or try a different phrasing."
     (failed board (query "sqlite wal mode"))
-
-(* {1 TestDefaultRouteFailover} *)
 
 let a_failed_default_is_served_by_the_fallback () =
   let board =
@@ -566,8 +548,6 @@ let quota_exhausted_reroutes_and_all_quota_keeps_its_advice () =
   includes "the walk is named" " Fallbacks also failed: linkup." text;
   check_bool "quota advice ends the sentence" true
     (String.ends_with ~suffix:"Do not retry immediately." text)
-
-(* {1 TestFreeMode} *)
 
 (* The free names, in the order the Python suite hands them to the engine —
    never the walk's own order, which is what these cases are measuring. *)
@@ -725,8 +705,6 @@ let a_free_served_search_records_the_fallback_once () =
   check_string "provider" "tinyfish" (str (get "provider" entry));
   check_bool "fell_back" true (bool (get "fell_back" entry))
 
-(* {1 TestTheFreeOnlyDefaultRoute} *)
-
 let an_unnamed_search_is_served_by_the_free_walk () =
   let order = ref [] in
   let board =
@@ -883,8 +861,6 @@ let mode_stays_none_on_the_unnamed_walk () =
   check_bool "mode is null" true (is_null (field ok "mode"));
   check_bool "fell_back" false (bool (field ok "fell_back"))
 
-(* {1 TestTheAllowList} *)
-
 let a_name_enabled_but_not_permitted_never_reaches_the_adapter () =
   let board = make_engine ~permitted:[ "linkup" ] [ rig ~name:"serper" (); rig ~name:"linkup" () ] in
   let message = refused board ~provider:"serper" (query "q") in
@@ -992,8 +968,6 @@ let the_rejection_bind_is_none_when_unset () =
   ignore (refused board ~provider:"linkup" (query "q"));
   check_bool "permitted is null" true (is_null (field (event board.lines "search.rejected") "permitted"))
 
-(* {1 TestZeroResults} *)
-
 let empty_results_are_not_an_error () =
   let r = served (make_engine [ rig ~results:(`List []) () ]) (query "asdkjhasdkjh") in
   check_int "no hits, and no error" 0 (List.length r.Model.results)
@@ -1047,8 +1021,6 @@ let a_fallback_serving_zero_results_names_the_fallback () =
   includes "the walk is named first" "serper failed (upstream 503); served by linkup instead" notice;
   includes "the diagnostic names the fallback" "; No results from linkup." notice;
   includes "the alternatives name the default" "Other enabled providers: serper." notice
-
-(* {1 TestObservability} *)
 
 let a_search_records_cost_and_latency () =
   let board = make_engine [ rig () ] in
@@ -1236,8 +1208,6 @@ let the_cap_line_follows_search_oks_provider_rule () =
   check_string "the line names the first attempt" "serper" (str (field fields "provider"));
   check_int "and the length that first attempt discarded" 812 (int (field fields "uncapped_chars"))
 
-(* {1 TestUsageRecording} *)
-
 let a_success_records_provider_cost_and_results () =
   let board = make_engine ~usage:(recorder ()) [ rig () ] in
   ignore (served board (query "q"));
@@ -1307,9 +1277,7 @@ let no_recorder_means_nothing_is_counted () =
   check_string "the search was served" "serper" r.Model.provider;
   check_int "and the operator still saw it" 1 (count board.lines "search.ok")
 
-(* {1 TestSpecialTokenEscaping}
-
-   The engine escapes the response object it returns — before the decision line
+(* The engine escapes the response object it returns — before the decision line
    is emitted, so the count has a home, and before the agent's retrieval material
    is assembled from the same objects. The serialisation boundary re-checks the
    same escape ([test_sanitize.ml]); together the two passes are one rule,
@@ -1379,8 +1347,6 @@ let a_reread_response_is_not_escaped_again () =
   check_string "and changes nothing"
     (Option.value ~default:"" (List.hd first.Model.results).Model.text)
     (Option.value ~default:"" (List.hd again.Model.results).Model.text)
-
-(* {1 The suite} *)
 
 let search_cases =
   [
@@ -1523,9 +1489,7 @@ let escaping_cases =
     A.test_case "a reread response is not escaped again" `Quick a_reread_response_is_not_escaped_again;
   ]
 
-(* {1 One routable set (F1.1)
-
-   The engine's registry is the only set routing may name: the routing table's
+(* The engine's registry is the only set routing may name: the routing table's
    [effective] field is the registry narrowed by the permission set, not the
    config's enabled table. That makes the named route's refusal and the
    default route's answer describe one set — no served configuration where a

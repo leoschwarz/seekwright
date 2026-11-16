@@ -9,13 +9,8 @@ type t = {
   notes : (string * string) list;
 }
 
-(* Same reasoning as Error.max_message_bytes: a log line's length must come from
-   our fixed field set, never from what a caller or a provider happened to send. *)
 let max_notes = 8
 
-(* The same one-line rule applies to the operation name and to note keys: they
-   are constants chosen by the application, but "constant" is a convention, not
-   a type, so [sanitize] makes the invariant hold even for a mistaken caller. *)
 let make ~operation outcome =
   { operation = Error.sanitize operation; outcome; bytes = None; notes = [] }
 

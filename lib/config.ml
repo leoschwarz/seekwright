@@ -1,10 +1,3 @@
-(* Configuration loading: TOML for policy, the environment for secrets.
-
-   Secrets never live in the file, because files get committed; the file is too
-   structured for env vars, so both exist. What the file says is validated here
-   and nowhere else: the engine and the server read a resolved [t], never a
-   table. *)
-
 module T = Toml.Types
 
 (* Which keys a section's decoder actually consumed; see [section]. *)
@@ -13,11 +6,6 @@ module Name_set = Set.Make (String)
 let ( let* ) = Result.bind
 
 type name = string
-
-(* The frozen vocabularies. Each list is sorted, which is both the set semantics
-   Python's [frozenset] carries and the order a refusal sentence prints names
-   in — [String.compare] is byte order, the order Python's [sorted] gives these
-   ASCII names. *)
 
 let known_providers =
   [
@@ -44,15 +32,11 @@ let known_providers =
    declared set has to be able to vouch for. [jina] is the keyless third party. *)
 let permitted_fetch_names = [ "jina" ]
 
-(* Not a lookup — nothing resolves a provider through this. It exists so the
-   error can name the replacement for a retired name: a rename is hard, and the
-   name an operator wrote is not a typo. *)
+(* Retired spellings and what replaced them for error hints. *)
 let renamed_providers = [ ("exa_free", "exa:free"); ("parallel_free", "parallel:free") ]
 
-(* Keyless by nature: [exa:free], [parallel:free], [freeserp]; [searxng] is gated
-   on a config [url] rather than a key. Why each other name is keyed is its
-   providers.md entry: a metered free tier is an account allowance, so the key is
-   what names whose balance a search spends. *)
+(* Keyed providers: a metered free tier is an account allowance, so the key
+   names whose balance a search spends. *)
 let providers_requiring_key =
   [
     "algolia";
@@ -71,20 +55,12 @@ let providers_requiring_key =
 
 let free_providers = [ "exa:free"; "freeserp"; "parallel:free"; "searxng"; "tinyfish" ]
 
-(* What a config that enables nothing resolves to. Not sorted: the order is the
-   install default's walk, keyless names first. *)
 let keyless_providers = [ "exa:free"; "parallel:free"; "freeserp" ]
 
 let free_provider_order = keyless_providers @ [ "searxng"; "tinyfish" ]
 
-(* Shipped, but its live test has never run in-repo. A name leaves once it has,
-   and never through a config key. *)
 let untested_providers = [ "deepseek"; "querit"; "search1api"; "serpapi" ]
 
-(* The set the port can actually build, which is what the validator and the
-   default must both read. [trafilatura] is a Python-only member: its library
-   does not ride on this port, so naming it here would accept a config that
-   construction then refuses. *)
 let known_extractors = [ "stdlib" ]
 
 type fetch_fallback = {
@@ -94,15 +70,7 @@ type fetch_fallback = {
   fetch_key : string option;
 }
 
-(* The fallback registry: what [fetch.fallback] may name, and what each row says
-   about itself. [fetch.fallback]'s validator refuses a billable name anywhere
-   but last by asking [billable], so a new priced vendor inherits the rule rather
-   than a new clause. A row whose host is this deployment's own config declares
-   [endpoint = None] and names the [fetch] key holding that host, which is what
-   lets [--check] report a host no reading of the source can name.
-
-   What Python's row carries besides these columns is its builder; that arrives
-   with the P6 fetch stack, which keys it by this name. *)
+(* Fallback registry: billable fallbacks must come last in the ladder. *)
 let known_fetch_fallbacks =
   [
     { name = "crawl4ai"; billable = false; endpoint = None; fetch_key = Some "crawl4ai_url" };
@@ -127,9 +95,6 @@ let known_fetch_fallbacks =
     };
   ]
 
-(* [fetch.user_agent]'s default comes from the one version owner (F9.1), so a
-   release bump moves the User-Agent with the package instead of leaving a
-   second literal behind. *)
 let default_user_agent = Version.user_agent
 
 let default_config_path = "~/.config/seekwright/config.toml"
@@ -359,25 +324,16 @@ let default_logging_config = {
 
 let default_dashboard_config = { enabled = true; history_path = None }
 
-(* Sentences. Python writes the name-bearing ones with [repr], which quotes with
-   a single quote; matching that keeps a moved name one diff line instead of a
-   quoting change on every message an operator reads. *)
-
 let quote name = "'" ^ name ^ "'"
 
 let join names = String.concat ", " names
 
-(* ["a"; "b"; "c"] -> "a, b or c": what a closed vocabulary's error reads as. *)
 let or_list names =
   match List.rev names with
   | [] -> ""
   | [ single ] -> single
   | last :: rest -> String.concat ", " (List.rev rest) ^ " or " ^ last
 
-(* [enabled] is a label four of the section records carry, so the access is
-   annotated rather than left to disambiguation. Sorted: every sentence that
-   prints this list, and Python's own [sorted(...)], fixes its order. The
-   [providers] record keeps the file's key order instead, and nothing reads it. *)
 let enabled_names (providers : (name * provider_config) list) =
   List.sort String.compare
     (List.filter_map
@@ -385,16 +341,11 @@ let enabled_names (providers : (name * provider_config) list) =
          if config.enabled then Some name else None)
        providers)
 
-(* A key that is present but empty is not configured: Python's checks read
-   [not searxng.url], where [""] is falsy. *)
 let present = function
   | Some value when value <> "" -> true
   | _ -> false
 
-(* The one home for "unset is permissive", and the only reading of the field.
-   Asked *after* the enabled question, never instead of it: a name outside the
-   set is refused before dispatch, while a name inside it that is not enabled
-   still fails the startup check it fails today. *)
+(* Unset [permitted_providers] is permissive. *)
 let is_permitted config name =
   match config.permitted_providers with
   | None -> true
@@ -404,26 +355,18 @@ let provider config name = List.assoc_opt name config.providers
 
 let enabled_providers config = enabled_names config.providers
 
-(* Membership in the allow-list never enables anything, so a permitted name with
-   no [[providers.<name>]] table is not here. *)
 let effective_providers config =
   match config.permitted_providers with
   | None -> enabled_providers config
   | Some permitted -> List.filter (fun name -> List.mem name permitted) (enabled_providers config)
 
-(* True only while every name the deployment may dispatch to is in the free set,
-   which is what makes the substitution unable to spend: the walk's ceiling is
-   zero. One name that can bill and the refusal stands verbatim. *)
+(* True only while every name the deployment may dispatch to is in the free set. *)
 let default_route_is_free_only config =
   match effective_providers config with
   | [] -> false
   | names -> List.for_all (fun name -> List.mem name free_providers) names
 
-(* The variable is named for the *backend* — the segment before the first [:] —
-   because a key names the account and a flavour names the route through it. The
-   whole name would ask for [SEEKWRIGHT_EXA:FREE_API_KEY], which cannot be
-   exported. Every site that names a variable goes through here, so the
-   operator-facing messages cannot drift from [api_key]. *)
+(* The variable is named for the backend segment before any ':'. *)
 let api_key_env_var name =
   let backend =
     match String.index_opt name ':' with
@@ -432,27 +375,15 @@ let api_key_env_var name =
   in
   "SEEKWRIGHT_" ^ String.uppercase_ascii backend ^ "_API_KEY"
 
-(* An empty value reads as absent, as Python's [os.environ.get(..) or None] does;
-   on this compiler an unset variable can only ever be spelled empty, since
-   there is no unsetenv. *)
 let env name =
   match Sys.getenv_opt name with
   | Some value when value <> "" -> Some value
   | _ -> None
 
-(* The key lookup takes no [Config.t]: the variable is named by the provider
-   string alone (see [api_key_env_var]), and the Python method's [self] is used
-   no more than here — a parameter carried only to match the method's arity
-   would be a parameter no caller can influence. *)
 let api_key name = env (api_key_env_var name)
 
-(* Not [SEEKWRIGHT_<provider>_API_KEY]: the model is not a provider — not
-   searchable, not pinnable, not one of the interchangeable things
-   [[providers]] lists. *)
 let agent_api_key () = env "SEEKWRIGHT_AGENT_API_KEY"
 
-(* Reported, never raised: [server.main] refuses to start on this while [--check]
-   prints the same fact and keeps going. *)
 let missing_api_keys config =
   List.filter
     (fun name -> List.mem name providers_requiring_key && api_key name = None)
@@ -528,10 +459,7 @@ let validate_fetch_fallbacks registry fallbacks =
             (join unknown) (join registry_names))
     | _ ->
       let priced = fallbacks |> List.filter billable |> List.sort String.compare in
-      (* At most one billable rung, and it must be the ladder's last name. Read
-         by pattern rather than by index: the empty ladder already returned
-         [Ok ()] above, and the match stays total whatever this guard's shape
-         becomes later. *)
+      (* At most one billable rung, and it must be the ladder's last name. *)
       let priced_too_late =
         Printf.sprintf
           "fetch.fallback: %s can bill and belongs last, so a page reaches every free fallback \
@@ -543,9 +471,6 @@ let validate_fetch_fallbacks registry fallbacks =
       | last :: _, [only] -> if last = only then Ok () else Error priced_too_late
       | [], _ -> Ok ()
 
-(* The primary route's shape: a name, and no tier rule. The tier rule governs the
-   walk, not the route it leads, and the ladder behind a billable primary still
-   keeps the billable fallback last. *)
 let validate_fetch_primary registry primary =
   let registry_names = List.map (fun (row : fetch_fallback) -> row.name) registry in
   if primary = "http" || List.mem primary registry_names
@@ -563,9 +488,6 @@ let validate_fetch_extractor extractor =
       (Printf.sprintf "fetch.extractor names unknown extractor %s; supported: %s" (quote extractor)
          (join known_extractors))
 
-(* Unlike fetch's fallbacks, a search fallback that cannot run is a startup
-   error: the whole point of the ladder is serving through an outage, so a
-   dead-on-arrival rung would make it theatre. *)
 let validate_search_fallbacks fallbacks =
   if fallbacks = []
   then Ok ()
@@ -580,9 +502,7 @@ let validate_search_fallbacks fallbacks =
           (Printf.sprintf "search.fallback names unknown provider(s) %s%s; supported: %s"
              (join unknown) (renamed_hint unknown) (join known_providers))
 
-(* The free ladder's extra rule: no fallback that can bill. A paid name here is
-   not a rung the walk would skip — it is the mode's whole promise, a ceiling of
-   zero, contradicted by config, so it fails at startup naming the offender. *)
+(* Free ladder rule: no fallback that can bill. *)
 let validate_search_free_fallbacks fallbacks =
   if fallbacks = []
   then Ok ()
@@ -606,11 +526,7 @@ let validate_search_free_fallbacks fallbacks =
                "search.free_fallback names %s, which can bill; a free-only search walks only %s"
                (join paid) (join free_providers)))
 
-(* A list containing ["*"] reads as unset, and nothing else in it is validated:
-   ["*"] is not a provider name, and "everything" is the same list as no list.
-   Normalising here is what gives "unset is permissive" one home. An explicitly
-   empty list is a *declared* set with no members, so it refuses everything: [[]]
-   is not the absent key. *)
+(* A list containing ["*"] normalises to None (permissive). *)
 let validate_permitted_providers declared =
   let vocabulary = List.sort String.compare (known_providers @ permitted_fetch_names) in
   if List.mem "*" declared
@@ -674,16 +590,7 @@ let validate_search_section search =
   let* () = validate_search_fallbacks (Option.value ~default:[] search.fallback) in
   validate_search_free_fallbacks (Option.value ~default:[] search.free_fallback)
 
-(* Two keys of [logging] that the Python deployment reads and this port has
-   nothing to feed: [library_level] holds down uvicorn's loggers and
-   [access_log] is uvicorn's per-request line, and there is no uvicorn in this
-   build — the transport is mcp-kit over cohttp-eio, and its library loggers are
-   not a set this config can name. Inheriting the defaults is harmless, so the
-   defaults load; inheriting a {i non-default} value is the failure mode every
-   validator here exists to remove — a key the operator set, that changes
-   nothing. An operator who wants third-party or access logging on this port
-   needs the logging built first, and that change deletes this refusal in the
-   same pull request. *)
+(* library_level and access_log are uvicorn-specific; non-default values are refused. *)
 let validate_logging_on_this_port logging =
   if logging.library_level <> default_logging_config.library_level
   then
@@ -698,11 +605,6 @@ let validate_logging_on_this_port logging =
        does nothing)"
   else Ok ()
 
-(* pydantic's order: the section validators ran while the fields were built, so
-   they come first; then the provider block; then the permission set. The
-   port-side refusals go first of all: they are about this build, not about the
-   file's shape, and an operator who set one deserves to read that before the
-   list of anything else the file got wrong. *)
 let resolve ?(providers = []) ?default_provider ?permitted_providers
     ?(policy = default_policy_config) ?(fetch = default_fetch_config)
     ?(search = default_search_config) ?(agent = default_agent_config)
@@ -712,8 +614,7 @@ let resolve ?(providers = []) ?default_provider ?permitted_providers
   let* () = validate_search_section search in
   let providers = List.sort (fun (a, _) (b, _) -> String.compare a b) providers in
   let* () = validate_provider_names (List.map fst providers) in
-  (* Nothing enabled is the install default, not an error: the keyless set asks
-     the operator for nothing and has no credential to spend. *)
+  (* Nothing enabled resolves to the default keyless set. *)
   let providers, providers_defaulted =
     match enabled_names providers with
     | [] -> (List.map (fun name -> (name, default_provider_config)) keyless_providers, true)
@@ -729,8 +630,6 @@ let resolve ?(providers = []) ?default_provider ?permitted_providers
              (quote name)
              (join (if enabled = [] then [ "none" ] else enabled)))
     | declared ->
-        (* With several enabled names this stays unset: picking for the caller is
-           cost-guessing. With exactly one, that one is the default. *)
         Ok
           (match (declared, enabled) with
           | Some name, _ -> Some name
@@ -763,26 +662,12 @@ let resolve ?(providers = []) ?default_provider ?permitted_providers
     providers_defaulted;
   }
 
-(* What a fresh install with no file at all resolves to. Written as [resolve]
-   given nothing rather than as a record literal, so the defaults the sections
-   carry and the set the provider block resolves to cannot drift from what the
-   loader produces. *)
 let default =
   match resolve () with
   | Ok config -> config
   | Error fault -> failwith ("Config.default: " ^ fault)
 
-(* Decoding the TOML table. The vocabulary of accepted keys is whatever the
-   decoder actually reads — each getter notes the key it consumed — so the
-   "unknown key" check cannot drift from the fields that exist. *)
-
-(* [Toml.Types.Table.Key.to_string] re-quotes a key that is not bare, which is
-   what a printer wants and not what a name is: the parser already decoded
-   [providers."exa:free"] to the key [exa:free]. The quote it adds is a wrapper
-   only — the library escapes nothing inside it — so removing one matched pair
-   at each end recovers the name. A key that carries its own quote at both ends
-   would read wrongly here, and no provider, extractor, fallback or config key
-   this file knows is spelled that way. *)
+(* Strip outer quotes added by [Toml.Types.Table.Key.to_string] for non-bare keys. *)
 let key_name key =
   let spelling = T.Table.Key.to_string key in
   let last = String.length spelling - 1 in
@@ -915,8 +800,6 @@ let int_from_string s =
         | Some digits -> signed sign (Some digits)
         | None -> None
 
-(* What pydantic's number lexer takes: a decimal with an optional fraction and
-   exponent, [_] between digits, and the infinities and [nan] in any case. *)
 let float_from_string s =
   let text = trim s in
   let negative, body =
@@ -935,12 +818,6 @@ let float_from_string s =
         | Some digits -> float_of_string_opt digits
         | None -> None)
 
-(* Every key the section did not read, in one sentence, sorted. An operator who
-   mistyped two of them fixes the file in one pass rather than one restart per
-   typo, and the order is stable, so the same file reports the same sentence.
-   Each key keeps its own [path: unknown key] clause, so a reader scanning for
-   one key still finds it — with a single extra key the sentence is exactly what
-   it has always been. *)
 let unknown_keys loc keys =
   String.concat "; " (List.map (fun key -> unknown_key loc key) (List.sort String.compare keys))
 
@@ -1251,9 +1128,6 @@ let decode_table table =
     resolve ~providers ?default_provider ?permitted_providers ~policy ~fetch ~search ~agent ~logging
       ~dashboard ())
 
-(* Python's [Path.expanduser]. A [~] with no [HOME] to expand it to is left
-   alone rather than raising: the path then simply does not exist, and the
-   loader reports a first run. *)
 let expanduser path =
   match (path, Sys.getenv_opt "HOME") with
   | "~", Some home when home <> "" -> home
@@ -1261,8 +1135,6 @@ let expanduser path =
       home ^ String.sub path 1 (String.length path - 1)
   | _ -> path
 
-(* [path], else [$SEEKWRIGHT_CONFIG], else the install default. An empty value is
-   unset, as Python's [or] chain treats it. *)
 let config_path path =
   let named =
     match path with
@@ -1274,8 +1146,6 @@ let config_path path =
   in
   expanduser (Option.value ~default:default_config_path named)
 
-(* [Path.is_file]: a directory reads as no config file at all, which is what a
-   mistaken path pointing at one gets in Python. *)
 let is_file path =
   try Sys.file_exists path && not (Sys.is_directory path) with Sys_error _ -> false
 
@@ -1284,9 +1154,6 @@ let read_file path =
   Fun.protect ~finally:(fun () -> close_in_noerr channel) (fun () ->
     really_input_string channel (in_channel_length channel))
 
-(* Shown to an operator whose file named something this build could not build:
-   keyless, so it needs no export line, and in the quoted table form a flavoured
-   name requires. *)
 let example_config =
   {|[providers."exa:free"]
 enabled = true
@@ -1302,19 +1169,10 @@ let keyless_hint table =
   | _ -> ""
 
 (* The [toml] library's lexer reads TOML 1.0's decimal integers and floats, but
-   not the three non-decimal integer bases and not the [inf]/[nan] spellings:
-   every one of those is valid TOML that Python's [tomllib] accepts, so the port
-   rewrites just those literals before the parser sees the document. A
-   hexadecimal, octal or binary integer becomes the same value in decimal; an
-   infinity or NaN becomes the quoted spelling {!float_from_string} already
-   reads. Every other byte is left alone.
-
-   This is a lexical pass, not a parser: it tracks comments, the four string
-   forms, table headers and bracket/brace depth so a literal-looking run inside a
-   string or a key is never touched, and it rewrites only where a value can
-   begin. A signed non-decimal integer ([+0x10]) is left as it is because TOML
-   forbids it and the library's refusal is the right answer. *)
-
+   not non-decimal integer bases or [inf]/[nan] spellings. A hexadecimal, octal
+   or binary integer becomes decimal; infinity or NaN becomes a quoted string.
+   A signed non-decimal integer ([+0x10]) is invalid TOML and left for the parser
+   to reject. *)
 let value_terminator ch =
   ch = ' ' || ch = '\t' || ch = '\n' || ch = '\r' || ch = ',' || ch = ']' || ch = '}'
   || ch = '#'

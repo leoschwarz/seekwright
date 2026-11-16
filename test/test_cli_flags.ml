@@ -15,8 +15,6 @@ let usage argv =
   | Error message -> message
   | Ok _ -> Alcotest.fail "a malformed command parsed"
 
-(* {1 The valid shapes} *)
-
 let test_bare_server () =
   match parse [] with
   | Ok opts ->
@@ -65,8 +63,6 @@ let test_metrics_json () =
   | Ok opts -> Alcotest.(check bool) "json" true opts.Flags.json
   | Error m -> Alcotest.failf "--metrics --json: %s" m
 
-(* {1 The combination guards — the parser.error sentences} *)
-
 let test_metrics_combinations () =
   List.iter
     (fun argv ->
@@ -101,8 +97,6 @@ let test_bind_flags_need_http () =
         (usage argv))
     [ [ "--host"; "h" ]; [ "--port"; "8080" ]; [ "--allowed-host"; "x" ] ]
 
-(* {1 Unknown and malformed flags} *)
-
 let test_unknown_flag () =
   Alcotest.(check string) "unknown long flag" "unknown flag --nonsense" (usage [ "--nonsense" ])
 
@@ -126,8 +120,6 @@ let test_log_values () =
     (usage [ "--log-level"; "LOUD" ]);
   Alcotest.(check string) "log format" "--log-format needs text or json"
     (usage [ "--log-format"; "yaml" ])
-
-(* {1 The startup refusals} *)
 
 (* A config built in memory: [Config.load] reads a file, and the refusals are
    facts about the config, so the suite writes one to the test's own directory

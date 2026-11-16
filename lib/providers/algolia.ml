@@ -1,29 +1,17 @@
-(* Algolia, ported from src/seekwright/providers/algolia.py. *)
-
 module Caps = Mcp_caps
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 
 let name = "algolia"
 
-(* The DSN host {i is} the deployment: [app_id] names it, [index] names what is
-   searched, and the index rides the path percent-encoded so a name like
-   [products/2026] cannot escape its segment — [quote(index, safe="")] in the
-   oracle, which is {!Seekwright.Provider.escape_path_segment}. This is the one
-   spelling of the derivation: the registry resolves the row's endpoint and the
-   grant entry from here, so the destination in the request and the destination
-   in the confinement cannot drift. *)
+(* The index rides the path percent-encoded so a name like [products/2026] cannot
+   escape its segment. The registry and adapter share this single derivation. *)
 let endpoint_of_deployment ~app_id ~index =
   Uri.make ~scheme:"https" ~host:(app_id ^ "-dsn.algolia.net")
     ~path:("/1/indexes/" ^ Provider.escape_path_segment index ^ "/query")
     ()
 
-(* The first attribute holding a plain scalar, coerced to text. Records are
-   schemaless JSON, so a wrong type counts as absent and the chain continues
-   rather than failing the whole hit — the oracle's [isinstance] chain, [bool]
-   excluded: JSON [true] is not the prose a [title] claims to be. The textual
-   rendering of a number is the round-trip shortest one, which is what Python's
-   [str] writes for a number parsed out of JSON text. *)
+(* Coerces scalar values to text; booleans excluded as they are not prose. *)
 let scalar_text (value : Yojson.Safe.t) =
   match value with
   | `String text -> Some text
@@ -42,9 +30,8 @@ let first_str attrs record =
   in
   go attrs
 
-(* DocSearch-shaped records keep their title in [hierarchy.lvl0]..[lvl6], and the
-   most specific non-empty level is the displayed title — as DocSearch's own
-   frontend renders these records. *)
+(* DocSearch-shaped records keep title in [hierarchy.lvl0]..[lvl6]; most specific
+   non-empty level wins. *)
 let hierarchy_title record =
   let hierarchy = Provider.Json.field "hierarchy" record in
   match Provider.Json.members hierarchy with
@@ -66,13 +53,8 @@ let take n items =
   in
   go n items []
 
-(* [hits[]] mapped onto title/url/snippet. An explicitly configured [*]_attr is
-   used alone — no chain, no hierarchy fallback — because an operator who names
-   an attribute has said what their records hold; the common-name chains and the
-   hierarchy fallback are the guesses that fill in when nobody said. The slice is
-   of the upstream list before anything is dropped, and an empty string counts as
-   a missing title or url: a result the caller cannot cite or follow is not a
-   result. *)
+(* Configured attribute overrides fallback chain. Sliced before validation;
+   empty title or url drops the record. *)
 let parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit =
   let records =
     match Provider.Json.list (Provider.Json.field "hits" data) with
@@ -116,8 +98,6 @@ let parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit =
                       Model.title;
                       url;
                       snippet;
-                      (* Schemaless records carry no date or relevance this adapter
-                         could rescale, and the SERP shape promises no page text. *)
                       text = None;
                       text_truncated = None;
                       published_date = None;
@@ -133,17 +113,13 @@ let check_status status =
     (* 403, not 401, is Algolia's answer for an invalid Application-ID or key. *)
     Error (Provider.auth_error ~provider:name)
   else if status = 402 || status = 429 then
-    (* 402 is Algolia's [FeatureNotEnabled]: a plan question, like the 429 rate
-       limit — both answer what a [Grow] upgrade would change, so both move the
-       quota fallback walk. *)
+    (* 402 is Algolia's [FeatureNotEnabled], treated as quota exhaustion
+       alongside 429. *)
     Error (Provider.quota_exhausted ~provider:name ())
   else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
   else Ok ()
 
-(* Per-query cost in USD. Flat: Algolia bills per search request {i whatever it
-   returns}, so [max_results] never scales the figure. The argument is ignored
-   rather than absent because callers treat [cost_for] as the same duck-typed
-   extra on every adapter. *)
+(* Flat rate per request; max_results is ignored. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let request_body (q : Provider.search_query) =
@@ -161,9 +137,7 @@ let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_cha
     {
       Caps.Authority.Net.meth = `POST;
       uri = endpoint;
-      (* Both headers, and only on the deployment's own host: the Application-ID
-         identifies the deployment and the key authorises the index — a key alone
-         names nothing. *)
+      (* Application-ID identifies deployment, API key authorises index. *)
       headers =
         [
           ("x-algolia-application-id", app_id);
@@ -184,10 +158,8 @@ let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_cha
           results =
             parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data
               ~limit:q.Model.max_results;
-          (* The provider returns the operator's records, not prose. *)
           answer = None;
           cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          (* No filter field in this API; the record schema is the operator's. *)
           notice =
             Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false
               ~language:None ~safety:false;
@@ -203,7 +175,6 @@ let make ?(cost_per_1k = 0.50) ?(snippet_chars = 500) ?title_attr ?url_attr
       search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_chars
         ~key ~endpoint net
 
-    (* The grant is the server's, not the adapter's: closing it would break the
-       sibling providers that share the same confinement. *)
+    (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()
   end : Provider.S)

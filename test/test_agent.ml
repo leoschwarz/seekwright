@@ -32,8 +32,6 @@ open Test_support
 
 let zwsp = Sanitize.zwsp
 
-(* {1 Reads} *)
-
 let get key = function
   | `Assoc fields -> (try List.assoc key fields with Not_found -> `Null)
   | _ -> `Null
@@ -83,8 +81,6 @@ let rsplit_once separator text =
   | None -> None
   | Some first -> go first
 
-(* {1 The wire fixtures} *)
-
 let result ?snippet ?text ?(url = "https://example.com/a") title =
   {
     Model.title;
@@ -96,9 +92,7 @@ let result ?snippet ?text ?(url = "https://example.com/a") title =
     score = None;
   }
 
-(* {1 The stub provider}
-
-   [Provider.t] is a packaged module, so the stub is a record of mutable state
+(* [Provider.t] is a packaged module, so the stub is a record of mutable state
    plus a [behavior] field the module's [search] delegates to; a case that
    Python writes as a subclass replaces that field instead. *)
 
@@ -156,9 +150,7 @@ let provider_of (s : stub) : Provider.t =
     let aclose () = ()
   end : Provider.S)
 
-(* {1 The stub model endpoint}
-
-   The [Provider.Net.t] seam with a canned chat-completions body; [delay] moves
+(* The [Provider.Net.t] seam with a canned chat-completions body; [delay] moves
    the injected monotonic clock, which is how the whole-call timeout case runs
    without sleeping. *)
 
@@ -267,8 +259,6 @@ let material (m : model_stub) =
     | None -> rest)
   | None -> A.failf "the user turn carried no material:\n%s" user
 
-(* {1 The stub fetcher and the document readers} *)
-
 (* Longer than [fetch.min_text_chars] (200): a good page has to look like one, or
    every success case would be the empty-extraction case. *)
 let page_text =
@@ -320,8 +310,6 @@ let readers : Engine.Fetch.Readers.t =
     select_passages = (fun ~text:_ ~query:_ ~max_chars:_ -> ([], 0));
   }
 
-(* {1 The log capture} *)
-
 type captured = {
   level : Config.log_level;
   event : string;
@@ -341,9 +329,7 @@ let event lines name =
 
 let field fields name = get name (`Assoc fields)
 
-(* {1 The rig}
-
-   [build]'s mirror of the Python suite's [build]: real engines over the stubs,
+(* [build]'s mirror of the Python suite's [build]: real engines over the stubs,
    the agent engine over the stubbed model endpoint, one shared in-memory
    recorder, and the agent key set in the environment the way the autouse
    fixture sets it. *)
@@ -453,8 +439,6 @@ let one_answer_line rig =
 
 let source_urls (r : Model.answer_response) =
   List.map (fun (s : Model.answer_source) -> s.Model.source_url) r.Model.sources
-
-(* {1 TestThePlan} *)
 
 let a_brief_answer_runs_one_search_and_reads_no_pages () =
   let rig = build () in
@@ -612,8 +596,6 @@ let the_report_output_cap_is_the_reports () =
   ignore (answered rig ~depth:Model.Report ());
   check_int "the report output cap" 2500 (int (get "max_tokens" (last_payload rig.model)))
 
-(* {1 TestCitations} *)
-
 let sources_hold_only_what_the_prose_cited () =
   let rig = build ~model:(stub_model ~content:(Some "Scattering does it [1].") ()) () in
   let r = answered rig () in
@@ -703,8 +685,6 @@ let sources_are_in_first_citation_order () =
   let r = answered rig () in
   check_strings "first-citation order" [ "https://example.com/b"; "https://example.com/a" ]
     (source_urls r)
-
-(* {1 TestFailureContract} *)
 
 let no_results_at_all_fails_without_calling_the_model () =
   let m = stub_model () in
@@ -883,8 +863,6 @@ let an_unconfigured_agent_names_what_is_missing () =
   includes "error" "agent.model" message;
   includes "error" "SEEKWRIGHT_AGENT_API_KEY" message
 
-(* {1 TestTheAllowList} *)
-
 let an_unpermitted_pin_fails_before_the_model_call () =
   (* Agent mode's retrieval *is* the search path, so a pinned provider the
      permission set excludes fails the retrieval step — before any model call. *)
@@ -895,8 +873,6 @@ let an_unpermitted_pin_fails_before_the_model_call () =
   check_int "the provider was never dialed" 0 !(rig.provider.calls);
   includes "error" "Provider 'serper' is not permitted on this server" message;
   includes "error" "Permitted: linkup" message
-
-(* {1 TestUsageAccounting} *)
 
 let the_endpoints_usage_becomes_the_journal_line () =
   let rig =
@@ -1023,8 +999,6 @@ let the_prose_rides_its_own_event_behind_log_content () =
   let prose = event rig.lines "agent.answer" in
   includes "agent.answer" "An answer, cited [1]." (str (field prose "answer"))
 
-(* {1 TestSpecialTokenEscaping} *)
-
 let the_material_the_model_receives_is_already_escaped () =
   (* The retrieval engines escape before the plan assembles the material, so the
      model endpoint gets clean text — and the prose the model writes, echoing
@@ -1057,8 +1031,6 @@ let a_clean_call_counts_zero () =
   ignore (answered rig ());
   let ok = event rig.lines "answer.ok" in
   check_int "sanitized" 0 (int (field ok "sanitized"))
-
-(* {1 The suites} *)
 
 let plan_cases =
   [

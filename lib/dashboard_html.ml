@@ -1,12 +1,3 @@
-(** The usage dashboard's one self-contained page, served by [GET /dashboard].
-
-    Port of [src/seekwright/dashboard.py]: the Python tree reads
-    [resources/dashboard.html] from package data; this port has no
-    package-data directory, so the same document is embedded verbatim in one
-    quoted literal (generated from the resource file, byte for byte). The
-    document carries no external assets, so serving it needs no static mount;
-    all behaviour is client-side, polling [GET /dashboard/data]. *)
-
 let dashboard_html =
   {|<!DOCTYPE html>
 <html lang="en">

@@ -30,8 +30,6 @@ let lines ?cache_stats config =
   let n2 = Cli_check.report_agent (fun line -> out := !out @ [ line ]) config n1 in
   (n2, !out)
 
-(* {1 The default route line} *)
-
 let test_default_named () =
   match load {|
 default_provider = "exa"
@@ -76,8 +74,6 @@ enabled = true
       Alcotest.(check string) "free walk" "none (a bare search walks the free set)"
         (Cli_check.default_route_line config)
   | `Error m -> Alcotest.failf "fixture: %s" m
-
-(* {1 The fetch route rows — built, or inert with the reason} *)
 
 (* A row that mentions a phrase anywhere in the block. *)
 let mentions phrase out =
@@ -209,8 +205,6 @@ cache_dir = "/var/cache/seekwright"
   in
   Alcotest.(check int) "a disabled fetch configures nothing" 0 problems;
   Alcotest.(check bool) "and says so once" true (List.mem "  disabled in config" out)
-
-(* {1 The fetch and agent blocks} *)
 
 let test_fetch_block_states_the_private_address_stance () =
   match load {|

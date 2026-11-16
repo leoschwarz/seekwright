@@ -16,8 +16,6 @@ let cfg fixture =
 
 let fetch fixture url = Scrappa.fetch (cfg fixture) url ~offset:0 ~max_chars:None
 
-(* {1 Request shape} *)
-
 let string_of_meth = function
   | `GET -> "GET"
   | `POST -> "POST"
@@ -47,8 +45,6 @@ let request_shape () =
   Alcotest.(check (option string)) "title" page.title (Some "T");
   Alcotest.(check int) "status" page.status_code 200
 
-(* {1 Status arms} *)
-
 let arms () =
   let one status =
     let fixture = Fix.make [ Fix.Response (status, "{}") ] in
@@ -71,8 +67,6 @@ let arms () =
        (Result.get_error (Scrappa.fetch (cfg fixture) "https://internal.test/x" ~offset:0 ~max_chars:None)))
     (Fix.error_case ~kind:"url_blocked" ~message:"internal.test resolves to a non-public address (127.0.0.1); fetching private, loopback and link-local addresses is disabled");
   Fix.check_no_request fixture "the vendor saw nothing"
-
-(* {1 The envelope} *)
 
 let envelope body =
   let fixture = Fix.make [ Fix.Response (200, body) ] in
@@ -108,8 +102,6 @@ let envelope_cases () =
   Alcotest.(check string) "url fallback" (landed {|{"url":"https://public.test/u"}|})
     "https://public.test/u";
   Alcotest.(check string) "target stays" (landed {|{"url":""}|}) Fix.public_url
-
-(* {1 The timeout row is the vendor's, not the grant's wording} *)
 
 let timeout_row () =
   let fixture = Fix.make [ Fix.Transport (Caps.Error.make Caps.Error.Timeout ~message:"x") ] in

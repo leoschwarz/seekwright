@@ -1,34 +1,7 @@
-(* Escaping model special-token literals out of text that leaves the proxy.
-
-   The Python oracle is [src/seekwright/sanitize.py]. The rule is content
-   hygiene at the boundary: insert one U+200B after the opening delimiter of
-   every token literal, so a tokenizer no longer parses it as structure while
-   a reader still sees the text as written.
-
-   The escape is reversible (dropping every U+200B restores the source),
-   idempotent (escaped text no longer matches) and deterministic.
-
-   The match set is deliberately tight: the two [<|...|>] shapes cover the
-   ChatML / Qwen / GLM / Mistral / Phi / GPT-OSS / Llama-3 family (DeepSeek
-   spells the same shape with U+FF5C FULLWIDTH VERTICAL LINE), and a short
-   literal list covers the rest. [<s>]/[</s>], [<think>], comparisons and math
-   (the spaces keep them out of the [<|] shape) and unterminated fragments like
-   [<|endoftext] stay untouched. *)
-
-(* The scan steps codepoint by codepoint with [Seekwright_text.Utf8]'s step: a
-   malformed lead byte advances one byte, which keeps the scan total, and this
-   pass reads the content of a [<|...|>] literal looking for the closing bar — a
-   step that jumped a whole sequence would walk past that bar. *)
 module Utf8 = Seekwright_text.Utf8
 
 let zwsp = "\xe2\x80\x8b"
-(* U+200B ZERO WIDTH SPACE: the escape, and the only character escaping adds. *)
-
 let text_fields = [ "title"; "snippet"; "text"; "answer" ]
-(* The wire-model fields carrying provider-originated text. The caller's own
-   strings ([query], [url]) stay out: escaping what the caller wrote would be a
-   surprise. *)
-
 let is_text_field name = List.mem name text_fields
 
 let literal_tokens =
@@ -47,7 +20,6 @@ let escaped_literal marker =
 
 let escaped_literals = List.map escaped_literal literal_tokens
 
-
 (* U+FF5C FULLWIDTH VERTICAL LINE in UTF-8. *)
 let is_fullwidth_bar s j =
   j + 2 < String.length s
@@ -55,11 +27,7 @@ let is_fullwidth_bar s j =
   && Char.code s.[j + 1] = 0xbd
   && Char.code s.[j + 2] = 0x9c
 
-(* [<\|[^<>|\n]{1,64}\|>], subn'd with one U+200B after the opening [<].
-
-   The character class excludes ASCII delimiters only, so a fullwidth bar is
-   ordinary content here -- exactly the Python pattern. Content is counted in
-   codepoints, not bytes, so a multibyte token name has the same 64-ceiling. *)
+(* [<\|[^<>|\n]{1,64}\|>], inserting U+200B after opening '<'. *)
 let escape_angle_ascii s =
   let len = String.length s in
   let buf = Buffer.create (len + 16) in
@@ -97,8 +65,7 @@ let escape_angle_ascii s =
   done;
   (Buffer.contents buf, !count)
 
-(* [<｜[^<>|｜\n]{1,64}｜>], the fullwidth spelling, same insertion rule. Both
-   bars are excluded from the content class so the two shapes never overlap. *)
+(* [<｜[^<>|｜\n]{1,64}｜>], fullwidth bar variant. *)
 let escape_angle_fullwidth s =
   let len = String.length s in
   let buf = Buffer.create (len + 16) in
@@ -138,7 +105,6 @@ let escape_angle_fullwidth s =
   done;
   (Buffer.contents buf, !count)
 
-(* [str.replace]'s semantics: left to right, non-overlapping. *)
 let replace_all ~pattern ~with_ text =
   let plen = String.length pattern in
   let len = String.length text in

@@ -1,4 +1,4 @@
-(* P8: the frozen surface's last data block — the usage-journal field sets.
+(* The frozen surface's last data block — the usage-journal field sets.
    [ocaml-tools/surface.ml] prints {!Seekwright.Server.journal_fields}; this
    suite pins that list against a real journal: one recorder with a real
    [history_path], one line per kind (success and failure, so the optional

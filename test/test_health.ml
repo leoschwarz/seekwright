@@ -23,16 +23,12 @@ module A = Alcotest
 let outcome =
   A.testable (fun fmt o -> Format.pp_print_string fmt (Health.show_outcome o)) ( = )
 
-(* {1 The environment}
-
-   Keys come from the environment only, and OCaml 5.3 has no [unsetenv], so "no
+(* Keys come from the environment only, and OCaml 5.3 has no [unsetenv], so "no
    key" is an empty value: [Config.api_key] reads an empty variable as unset. *)
 let setenv = Unix.putenv
 let unsetenv name = Unix.putenv name ""
 let keyed name key = setenv (Config.api_key_env_var name) key
 let keyless name = unsetenv (Config.api_key_env_var name)
-
-(* {1 The board} *)
 
 (* The Python suite's [HealthBoard(failure_threshold=2, cooldown_seconds=0.05)]:
    the numbers are per case, and the clock is a reference the case advances. *)
@@ -56,9 +52,7 @@ let board ?(threshold = Health.default_failure_threshold)
   in
   (board, events)
 
-(* {1 The probe seam}
-
-   [Provider.Net.t] is the analogue of [httpx.MockTransport]: it records what was
+(* [Provider.Net.t] is the analogue of [httpx.MockTransport]: it records what was
    dialed and answers with a canned status or a transport failure. *)
 let dial ?(status = 200) ?refusal () =
   let sent = ref [] in
@@ -137,8 +131,6 @@ let scoped app_id index =
   { Config.default_provider_config with app_id = Some app_id; index = Some index }
 
 let check name f = A.test_case name `Quick f
-
-(* {1 The board's state machine} *)
 
 let below_the_threshold_stays_closed_and_silent () =
   let board, events = board ~threshold:2 ~cooldown:0.05 () in
@@ -232,8 +224,6 @@ let an_unknown_name_reads_closed () =
   let board, _ = board () in
   A.(check bool) "closed" false (Health.is_open board "serper");
   A.(check (float 1e-9) "nothing open for" 0.0 (Health.open_for_s board "serper"))
-
-(* {1 The probe's outcomes} *)
 
 let a_200_with_a_key_is_reachable () =
   keyed "serper" "k";
@@ -339,8 +329,6 @@ let algolia_with_a_bad_key_is_key_rejected () =
   A.(check outcome) "the key was refused" Health.Key_rejected
     (Health.probe ~net ~table config "algolia")
 
-(* {1 The row builders} *)
-
 let a_row_that_cannot_build_a_url_is_no_probe () =
   keyless "searxng";
   let net, sent = dial () in
@@ -368,8 +356,6 @@ let rows_are_constants_where_the_endpoint_is () =
   A.(check (A.option string)) "serpapi's key rides the query string"
     (Some "https://serpapi.com/search.json?api_key=k")
     (Health.serpapi_endpoint ~base:"https://serpapi.com/search.json" Config.default (Some "k"))
-
-(* {1 One monitor tick} *)
 
 let monitor ?(threshold = 1) ?(cooldown = 60.) () =
   let clock = ref 0. in

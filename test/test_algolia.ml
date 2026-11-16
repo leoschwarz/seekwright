@@ -63,9 +63,7 @@ let nth label index xs =
   | Some x -> x
   | None -> A.failf "%s has no item %d" label index
 
-(* {1 The fixture}
-
-   Five hits: the [title/url/description] chain, the [name/link/summary] chain,
+(* Five hits: the [title/url/description] chain, the [name/link/summary] chain,
    the DocSearch hierarchy (whose [lvl2] is null and whose title is [lvl2]'s
    emptier neighbour [lvl1]), and the two drop cases. *)
 let sample =
@@ -113,9 +111,7 @@ let sample_json =
   | `Assoc _ as json -> json
   | _ -> A.failf "the fixture is not an object"
 
-(* {1 The seam}
-
-   A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
+(* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
@@ -171,8 +167,6 @@ let has_body_field name request =
   match Provider.Json.members (body_of request) with
   | Some fields -> List.mem_assoc name fields
   | None -> false
-
-(* {1 Parsing schemaless records} *)
 
 let parse ?title_attr ?url_attr ?snippet_attr ?(limit = 10) data =
   Algolia.parse ~snippet_chars:500 ?title_attr ?url_attr ?snippet_attr data ~limit
@@ -319,9 +313,7 @@ let nothing_is_invented_per_hit () =
   check_bool "no answer from a provider that returns records" true
     ((fst (search_of ())).answer = None)
 
-(* {1 The upstream field guards}
-
-   A non-string snippet attribute is dropped, never handed to the truncate
+(* A non-string snippet attribute is dropped, never handed to the truncate
    helper, and the call still succeeds: records are schemaless, so the coercion
    happens at the adapter boundary and a wrong type counts as absent. A number
    is the one non-string shape kept — it is coerced, because a number in a
@@ -392,8 +384,6 @@ let a_string_snippet_still_reaches_the_model () =
         journal.")
     (hd "results" outcome.results).result.snippet
 
-(* {1 The request} *)
-
 let post_with_both_headers_and_the_body () =
   let _, request = search_of ~query:(query ~text:"wal mode" ~max_results:3 ()) () in
   check_bool "the method" true (request.Caps.Authority.Net.meth = `POST);
@@ -453,8 +443,6 @@ let the_app_id_rides_the_header_and_the_host () =
   check_bool "and no credential rides the URL" false
     (contains ~haystack:(Uri.to_string request.Caps.Authority.Net.uri) ~needle:test_key)
 
-(* {1 The constraint report} *)
-
 let an_unconstrained_query_has_no_notice () =
   let outcome, _ = search_of () in
   check_opt_string "nothing dropped" None outcome.notice;
@@ -495,9 +483,7 @@ let safe_search_false_is_noticed_too () =
         (Option.get outcome.notice))
     [ true; false ]
 
-(* {1 The failures this adapter owns}
-
-   The rows every HTTP adapter owes are pinned once for all of them by
+(* The rows every HTTP adapter owes are pinned once for all of them by
    test_provider_contract.ml. What stays here is the quota pair — 402 is Algolia's
    [FeatureNotEnabled], a plan question like the 429 rate limit — and the leak
    regression for the place this key actually rides. *)
@@ -526,8 +512,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-(* {1 Cost and endpoint} *)
 
 let the_cost_does_not_scale_with_result_count () =
   check_number "one call" 0.0005 (Algolia.cost_for ~cost_per_1k:0.5 1);

@@ -8,10 +8,9 @@
      [fetcher]. So the parity sweep asks the two paths for the same window instead
      of pinning a mirror against a copy — and it includes a body far larger than
      the streaming chunk, which is where a chunked walk goes wrong on its own;
-   - the LRU order is carried in the sidecar, not in the body's atime (the
-     divergence [Page_cache.mli] and plans/seekwright-ocaml-port.md (F7) record).
-     [a_hit_touches_the_sidecar_not_the_body] pins exactly that: a hit leaves the
-     body's inode and mtime alone and moves [accessed].
+   - the LRU order is carried in the sidecar, not in the body's atime
+     ([Page_cache.mli]). [a_hit_touches_the_sidecar_not_the_body] pins
+     exactly that: a hit leaves the body's inode and mtime alone and moves [accessed].
 
    Every case runs against a real temp directory and a real [Authority.Fs] grant —
    the cache has no other way to reach a filesystem — and against an injected
@@ -120,8 +119,6 @@ let meta_field meta key =
       try float_of_string (String.sub meta from (stop - from))
       with Failure _ -> Alcotest.failf "bad %S in the sidecar: %s" key meta
 
-(* {1 The key} *)
-
 let the_key_is_the_rungs_and_the_urls_hash () =
   (* The digests are the oracle's, computed over ["http\0" ^ url] and
      ["tavily\0" ^ url]: the key is the pair, hashed so a model-supplied URL never
@@ -143,8 +140,6 @@ let rungs_do_not_share_an_entry () =
         (entry_text (Page_cache.get h.cache ~rung:"http" ~url:(url "/a")));
       Alcotest.(check (option string)) "the vendor keeps its own answer" (Some "vendor text")
         (entry_text (Page_cache.get h.cache ~rung:"tavily" ~url:(url "/a"))))
-
-(* {1 Reads and misses} *)
 
 let a_stored_page_reads_back_whole () =
   with_cache () (fun h ->
@@ -246,8 +241,6 @@ let a_restart_reads_the_directory_not_a_previous_process () =
   Alcotest.(check bool) "the next process misses the half entry cleanly" false body_only;
   Alcotest.(check (option string)) "the next process finds the whole entry" (Some "durable") durable
 
-(* {1 The bounds} *)
-
 let an_entry_over_the_entry_cap_is_never_stored () =
   with_cache ~max_entry_bytes:64 () (fun h ->
       Alcotest.(check bool) "the store refuses" false
@@ -333,8 +326,6 @@ let a_read_only_root_refuses_the_store () =
         Page_cache.put (Page_cache.create ~fs ~now ()) ~rung:"http" ~url:(url "/a") ~page:(page "text")
   in
   Alcotest.(check bool) "the store refuses, and no page fails" false stored
-
-(* {1 The window} *)
 
 (* A cached window is the window a live read serves, because it is the same
    function cutting it. The sweep covers a body larger than the streaming chunk
@@ -535,8 +526,6 @@ let a_window_across_a_chunk_boundary_is_still_the_live_window () =
             [ 1; 5; 200 ]))
     [ "é", 2; "☃", 3; "😀", 4 ]
 
-(* {1 Concurrency} *)
-
 let range a b = List.init (b - a + 1) (fun i -> i + a)
 
 (* Eviction runs under the cache's own lock and every entry goes through a rename,
@@ -620,8 +609,6 @@ let concurrent_reads_writes_and_evictions_agree () =
   Alcotest.(check int) "each key is either there whole or not at all" (List.length keys) (whole + gone);
   Alcotest.(check bool) "the eviction pass kept the directory inside its cap" true (bytes <= cap);
   Alcotest.(check bool) "and it left entries behind" true (entries > 0)
-
-(* {1 Diagnosis} *)
 
 let stats_count_bodies () =
   with_cache () (fun h ->

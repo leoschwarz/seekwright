@@ -59,8 +59,6 @@ let page_text =
 
 let page_len = String.length page_text
 
-(* {1 The stub fetchers, the log capture, and the journal read} *)
-
 (* [test_fetch_engine.ml]'s duck-typed stub, local again: a cache case has to count
    dispatches per rung, and the [cached] flag is only meaningful against a count.
    [fails] counts down dispatches that answer with a provider failure. [park] runs
@@ -175,8 +173,6 @@ let render_line c = c.event ^ "|" ^ String.concat "|" (List.map (fun (k, v) -> k
    shipped default, and this is the assertion that makes the default mean
    something. *)
 
-(* {1 The fixture: a config that names a cache directory, and the engine over it} *)
-
 (* The fixture's wall clock on the board, so a stub can answer slowly the way a
    slow provider does. *)
 type board = {
@@ -290,8 +286,6 @@ let failed board ?offset ?provider target =
 
 let recent board = items (get "recent" (Usage.snapshot board.usage))
 
-(* {1 One cold fill per key} *)
-
 let the_call_that_filled_dispatched_and_the_next_one_did_not () =
   let local = stub () in
   with_board local (fun board ->
@@ -387,8 +381,6 @@ let three_readers_of_one_cold_key_fill_it_once () =
       A.(check (list bool) "one fill and two followers" [ false; true; true ]
            (List.sort Stdlib.compare (cached_flags board.lines))))
 
-(* {1 Rungs, and the price of a cached page} *)
-
 let each_rung_has_its_own_entry () =
   let local = stub () in
   let named = stub ~name:"jina" () in
@@ -436,8 +428,6 @@ let a_cached_page_of_a_priced_rung_is_unbilled () =
       A.(check int "both reads are counted as fetches" 2 (number (get "fetches" totals)));
       A.(check int "and the money total covers one priced call" 1
            (number (get "priced_fetches" totals))))
-
-(* {1 What the store never holds} *)
 
 let an_image_page_bypasses_the_store () =
   let local =
@@ -504,8 +494,6 @@ let waiters_on_a_failed_fill_all_get_that_failure () =
            sentences);
       includes "and the sentence says what failed" "HTTP 503" sentences.(0);
       A.(check int "and nothing was stored" 0 (entries board)))
-
-(* {1 The directory is created or refused, and the guardrail answers first} *)
 
 let an_unusable_cache_dir_is_a_refusal_not_a_miss () =
   (* Startup half of the F7 contract: [cache_dir] is the operator's word, so a

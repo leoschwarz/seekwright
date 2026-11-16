@@ -26,8 +26,6 @@
 
 open Seekwright
 
-(* ---------- the table's shape ---------- *)
-
 type table =
   { file : string
   (* the table's path in the test sandbox *)
@@ -129,8 +127,6 @@ let cell header column row =
 let is_placeholder text =
   List.mem text placeholder_values || starts "(none" text || text = "-"
 
-(* ---------- path-like tokens ---------- *)
-
 (* Cells mix paths with prose ([lib/engine.ml:Search capping]) and with
    verification detail ([unit(test_fetch)]). Splitting on every separator the
    tables use, then keeping the words that end in a source extension, is what
@@ -207,8 +203,6 @@ let check_pointers table_name header row =
                    (List.nth header column) token path))
         (List.filter_map path_token (words_of cell_text)))
     row
-
-(* ---------- per-row rules ---------- *)
 
 let check_row table header row =
   let name = Filename.basename table.file in
@@ -294,8 +288,6 @@ let check_row table header row =
               (Printf.sprintf "%s: %S = %S yet %S points at a later wave: %S" name table.state_column state header_name text))
       (List.mapi (fun at value -> (at, value)) row)
 
-(* ---------- the four tables ---------- *)
-
 let tables =
   [
     { file = "matrix/providers.tsv"
@@ -375,8 +367,6 @@ let check_table table () =
       if List.mem key !seen then failwith (Printf.sprintf "%s: two rows describe %S" table.file key);
       seen := key :: !seen)
     rows
-
-(* ---------- cross checks against the code and the harness ---------- *)
 
 (* The provider table is the inventory of the ported provider surface, so it has
    to be exactly the set the port's own validator accepts. A name added to
