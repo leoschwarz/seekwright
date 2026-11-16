@@ -298,18 +298,12 @@ let cache_max_entries = 10_000
 let preflight_of ~(net : _ Eio.Net.t) config =
   let fetch = config.Config.fetch in
   fun (raw : string) ->
-    match Fetcher.validate_url raw with
+    match
+      Remote_target.vet ~net
+        ~private_web_allowed:fetch.Config.allow_private_addresses raw
+    with
+    | Ok validated -> Ok validated
     | Error message -> Error (Engine.Fetch.Url_blocked message)
-    | Ok validated ->
-        if fetch.Config.allow_private_addresses
-        then Ok validated
-        else (
-          match Uri.host (Uri.of_string validated) with
-          | None -> Error (Engine.Fetch.Url_blocked "URL has no host")
-          | Some host -> (
-              match Caps.Policy_net.vet_public_host ~net ~host with
-              | Ok () -> Ok validated
-              | Error error -> Error (Engine.Fetch.Url_blocked (Caps.Error.message error))))
 
 let cache_seam ~(net : _ Eio.Net.t) config (cache : Page_cache.t) =
   let fetch = config.Config.fetch in

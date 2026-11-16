@@ -9,21 +9,25 @@ let host_of url =
      dropped — is the same hostname [urlsplit] hands the oracle. *)
   Uri.host (Uri.of_string url)
 
-let check net raw =
+let vet ~net ~private_web_allowed raw =
   match Fetcher.validate_url raw with
   | Error message -> Error message
-  | Ok target -> (
-      (* The vet runs on every remote route whatever
-         [fetch.allow_private_addresses] says: it is the vendor's egress that
-         reaches the private network, and this deployment does not own what a
-         vendor does with a target it is handed. *)
-      match host_of target with
-      | None -> Error "URL has no host"
-      | Some host -> (
-          match Mcp_caps.Policy_net.vet_public_host ~net ~host with
-          | Ok () -> Ok target
-          (* The vet's message, not its [render]: the refusal sentences are
-             the oracle's verbatim, and the kind prefix is a caps vocabulary
-             the caller has no use for — [Url_blocked] already says what
-             kind this is. *)
-          | Error error -> Error (Mcp_caps.Error.message error)))
+  | Ok target ->
+      if private_web_allowed then Ok target
+      else
+        (* The vet runs on every remote route whatever
+           [fetch.allow_private_addresses] says: it is the vendor's egress that
+           reaches the private network, and this deployment does not own what a
+           vendor does with a target it is handed. *)
+        match host_of target with
+        | None -> Error "URL has no host"
+        | Some host -> (
+            match Mcp_caps.Policy_net.vet_public_host ~net ~host with
+            | Ok () -> Ok target
+            (* The vet's message, not its [render]: the refusal sentences are
+               the oracle's verbatim, and the kind prefix is a caps vocabulary
+               the caller has no use for — [Url_blocked] already says what
+               kind this is. *)
+            | Error error -> Error (Mcp_caps.Error.message error))
+
+let check net raw = vet ~net ~private_web_allowed:false raw
