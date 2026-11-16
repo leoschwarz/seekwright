@@ -197,7 +197,14 @@ let run_server ~env ~sw opts =
                     prerr_endline "seekwright: cannot open the HTTP listener";
                     exit 1)
               end
-              else Mcp_kit_stdio.run_channels server stdin stdout)
+              else begin
+                Mcp_kit_stdio.run_channels server stdin stdout;
+                (* EOF, with [sw] and [~env] still live: the remote MCP sessions
+                   a keyed [exa] or [parallel] warmed at boot get their DELETE
+                   here rather than lingering on the provider's endpoint until
+                   its own timeout. *)
+                close_providers built ()
+              end)
 
 let () =
   let argv = List.tl (Array.to_list Sys.argv) in
