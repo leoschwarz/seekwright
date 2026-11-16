@@ -807,8 +807,7 @@ let dashboard_html =
   // The per-provider decomposition of the spend bar above: one bar per day, cut
   // into one segment per provider, drawn from the `endpoints` series the
   // Endpoint panel already reads -- same poll, same window, no second fetch and
-  // no chart library (the rule the whole page follows, stated in `dashboard.py`'s
-  // module docstring).
+  // no chart library (the rule the whole page follows).
   // The stack order is the sorted name list rather than the cost ranking the
   // tables use: a bar whose layers reorder themselves from day to day is a
   // stacked chart no reader can trace.

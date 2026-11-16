@@ -1,13 +1,8 @@
-; The OCaml surface printer (P8): root [tools/] belongs to the read-only
-; Python tree, so the port's instrument lives here. It prints the frozen
-; manifest in the same body format [tools/surface.py] prints, and the two
-; goldens below are what make drift fail [dune runtest]:
-;
-; - [surface.expected] is the full rendering (the Python-compatible body plus
-;   the usage-journal fields) diffed against the printer's output;
-; - the [py_body.out]/[our_body.out] pair diffs the Python-compatible body
-;   against the body of the checked-in [../docs/reference/surface.md], which
-;   is the "the two manifests diff clean" exit criterion.
+; [surface.expected] is the full rendering of the frozen manifest: the
+; manifest body plus the usage-journal summary. Rendering [surface.actual] from
+; the library and diffing it against that golden is what makes an unintended
+; change to the manifest, or to its rendering, fail [dune runtest].
+
 (executable
  (name surface)
  (libraries seekwright))
@@ -21,27 +16,56 @@
  (alias runtest)
  (action (diff surface.expected surface.actual)))
 
-(rule
- (targets py_body.out)
- (deps ../docs/reference/surface.md)
- (action
-  (with-outputs-to py_body.out
-   (run sh -c "awk 'f{print} /<!-- surface:body -->/{f=1}' ../docs/reference/surface.md"))))
+; The deployment's egress lists, printed from the rows rather than re-typed:
+; [search-allow.txt] is the union of the destinations on [Registry.rows],
+; [fetch-allow.txt] the operator's strict list checked against
+; [Config.known_fetch_fallbacks], and [fetch-deny.txt] the operator's sink list
+; plus the metadata names the program carries. The committed copies under
+; [../deploy/compose/generated/] feed an operator's firewall ruleset, so the diffs
+; below are the pin that makes a provider or fallback row which moves without the
+; deployment fail [dune runtest]. Re-render a moved row with
+; [dune runtest ocaml-tools --auto-promote].
+
+(executable
+ (name egress_lists)
+ (modules egress_lists)
+ (libraries seekwright seekwright.factory uri))
 
 (rule
- (targets our_body.out)
- (deps surface.exe ../lib/config.mli)
- (action (with-outputs-to our_body.out (run ./surface.exe --python-body))))
+ (targets search-allow.actual)
+ (deps egress_lists.exe)
+ (action (with-outputs-to search-allow.actual (run ./egress_lists.exe search-allow))))
 
 (rule
  (alias runtest)
- (action (diff py_body.out our_body.out)))
+ (action (diff ../deploy/compose/generated/search-allow.txt search-allow.actual)))
 
-; The embedded-prose pins (M8). Each literal in [lib/] is a copy of a
-; read-only file under [../src/seekwright/resources/]; these rules print the
-; literal and diff it against the original, so a drift in either direction
-; fails [dune runtest] instead of waiting for a reader to notice two
-; deployments phrasing one rule differently.
+(rule
+ (targets fetch-allow.actual)
+ (deps egress_lists.exe ../deploy/compose/egress/fetch-allow-hosts.txt)
+ (action
+  (with-outputs-to fetch-allow.actual
+   (run ./egress_lists.exe fetch-allow ../deploy/compose/egress/fetch-allow-hosts.txt))))
+
+(rule
+ (alias runtest)
+ (action (diff ../deploy/compose/generated/fetch-allow.txt fetch-allow.actual)))
+
+(rule
+ (targets fetch-deny.actual)
+ (deps egress_lists.exe ../deploy/compose/egress/deny-hosts.txt)
+ (action
+  (with-outputs-to fetch-deny.actual
+   (run ./egress_lists.exe fetch-deny ../deploy/compose/egress/deny-hosts.txt))))
+
+(rule
+ (alias runtest)
+ (action (diff ../deploy/compose/generated/fetch-deny.txt fetch-deny.actual)))
+
+; Every string embedded in [lib/prompts.ml] and [lib/dashboard_html.ml] has a
+; committed [.expected] golden beside this file. Each rule prints the embedded
+; literal and diffs it against its golden, so a reworded or reformatted
+; deployed string fails [dune runtest] instead of shipping unnoticed.
 (executable
  (name resources)
  (libraries seekwright))
@@ -53,7 +77,7 @@
 
 (rule
  (alias runtest)
- (action (diff ../src/seekwright/resources/server_instructions.txt server_instructions.out)))
+ (action (diff server_instructions.expected server_instructions.out)))
 
 (rule
  (targets search_description.out)
@@ -62,7 +86,7 @@
 
 (rule
  (alias runtest)
- (action (diff ../src/seekwright/resources/search_description.txt search_description.out)))
+ (action (diff search_description.expected search_description.out)))
 
 (rule
  (targets fetch_description.out)
@@ -71,7 +95,7 @@
 
 (rule
  (alias runtest)
- (action (diff ../src/seekwright/resources/fetch_description.txt fetch_description.out)))
+ (action (diff fetch_description.expected fetch_description.out)))
 
 (rule
  (targets answer_description.out)
@@ -80,7 +104,7 @@
 
 (rule
  (alias runtest)
- (action (diff ../src/seekwright/resources/answer_description.txt answer_description.out)))
+ (action (diff answer_description.expected answer_description.out)))
 
 (rule
  (targets answer_system.out)
@@ -89,7 +113,7 @@
 
 (rule
  (alias runtest)
- (action (diff ../src/seekwright/resources/answer_system.txt answer_system.out)))
+ (action (diff answer_system.expected answer_system.out)))
 
 (rule
  (targets dashboard.out)
@@ -98,4 +122,4 @@
 
 (rule
  (alias runtest)
- (action (diff ../src/seekwright/resources/dashboard.html dashboard.out)))
+ (action (diff dashboard_html.expected dashboard.out)))
