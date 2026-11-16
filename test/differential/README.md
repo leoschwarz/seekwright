@@ -3,10 +3,12 @@
 Two artefacts live here, and they answer two different questions.
 
 - `matrix/` — *what is the parity story, row by row?* One row per provider, config
-  key, behaviour and surface item, naming the consumer on both sides and the kind
-  of verification that backs the claim. It is the inventory the finalisation plan
-  asks for, and `test_differential_matrix.ml` keeps it honest.
-- `corpus/` + `golden/` — *does the port answer the way the Python tree answers?*
+  key, behaviour and surface item, naming the port consumer, the baseline
+  evidence this tree keeps, and the kind of verification that backs the claim. It
+  is the inventory the finalisation plan asks for, and
+  `test_differential_matrix.ml` keeps it honest.
+- `corpus/` + `golden/` — *does the port answer the way the Python
+  implementation answered?*
   A case in, a pinned answer out, diffed by a plain `dune runtest`.
 
 Nothing here reaches the network, a provider endpoint, an API key, or a Python
@@ -25,7 +27,7 @@ them lives in `../../ocaml-tools/oracle/` and is never run by the gate.
 | `test_differential_matrix.ml` | The matrix validator. One test per table, plus cross-checks against `Config.known_providers` and the corpus areas. |
 | `corpus/<area>/` | The inputs, written by `ocaml-tools/oracle/gen_corpus.py`. |
 | `golden/<area>/` | The pinned answers. |
-| `matrix/*.tsv` | The parity tables, written by `ocaml-tools/oracle/gen_matrix.py`. |
+| `matrix/*.tsv` | The parity tables: hand-committed, one row per thing, each naming the port consumer, the baseline evidence this tree keeps, and the verification. |
 
 ## The golden format (v1)
 
@@ -170,13 +172,16 @@ afterwards.
 
 ## Regenerating
 
-Only when a corpus case or an oracle answer legitimately changes. From the
-repository root:
+Only when a corpus case or an oracle answer legitimately changes, and only from a
+checkout that still carries the Python tree: `gen_corpus.py` reads its
+`docs/reference/` pages, both projections import `seekwright` from `src/`, and
+`gen_goldens.py` is run through the `uv` environment `pyproject.toml` pins. This
+branch carries none of that, and the baseline is frozen — see
+`ocaml-docs/testing.md`, "The differential harness". The port's half stays
+buildable and runnable:
 
 ```bash
 dune build test/differential/drive.exe        # the port half
-python3 ocaml-tools/oracle/gen_corpus.py      # write the inputs (deterministic)
-uv run python ocaml-tools/oracle/gen_goldens.py [area ...]   # re-pin the goldens
 dune runtest test/differential --force        # the gate, with no Python involved
 ```
 
@@ -188,9 +193,9 @@ there rather than listed case by case — the extractor-default difference
 (`trafilatura` vs `stdlib`, a P6 decision) and pydantic's structured validation
 report vs the port's one sentence. Everything else must be named in `DIVERGENCES`.
 
-`gen_matrix.py` regenerates `matrix/*.tsv`. The TSVs are committed data: the
-generator exists so a wave can update a column mechanically, and the validator
-reads the committed tables, not the generator.
+`matrix/*.tsv` is hand-maintained committed data: the validator reads the tables
+in the tree, so a column change is an edit to the table and to the pinned header
+in `test_differential_matrix.ml`.
 
 ### Adding a case, adding an area
 
@@ -212,9 +217,9 @@ Four tables, one row per thing that has to be equivalent:
 
 | Table | Row per |
 | --- | --- |
-| `providers.tsv` | provider name — endpoint, auth, default price, timeout, constraint behaviour, result field, quota class, live status, port state |
-| `config-fields.tsv` | config key — the consumer on both sides, and whether it is honoured, transitional, refused on the port, or declined |
-| `behaviours.tsv` | behaviour — the oracle module and suite, the port module and suite, status |
+| `providers.tsv` | provider name — baseline evidence, endpoint, auth, default price, timeout, constraint behaviour, result field, quota class, live status, port state |
+| `config-fields.tsv` | config key — the port consumer, and whether it is honoured, transitional, refused on the port, or declined |
+| `behaviours.tsv` | behaviour — the baseline evidence, the port module and suite, status |
 | `surface.tsv` | surface item — the three tools, the REST routes, the operational paths, the CLI, the log and journal fields |
 
 `test_differential_matrix.ml` pins the headers and column counts, requires every
@@ -224,10 +229,13 @@ vocabulary — `unit`, `differential-golden`, `loopback-integration`,
 `official-conformance`, `local-live`, `keyless-live`, `keyed-live`,
 `explicit-divergence` — or to be an explicit `pending-F*` on a row whose port side
 does not exist yet. A ported or honoured row resting on `pending` fails, and a
-not-ported row may not claim a verification it does not have. Every `.ml`/`.py`
-pointer a row names has to exist in the sandbox, which is what the source globs in
-this `dune` file are for: a row crediting a consumer that was renamed away or
-never written is a failure. The provider rows must be exactly
+not-ported row may not claim a verification it does not have. Every `.ml` pointer
+a row names has to exist in the sandbox — pointers are port-owned, so the source
+globs in this `dune` file carry this tree and nothing outside it — and a row
+crediting a consumer that was renamed away or never written is a failure. A
+`baseline` cell names the evidence that survives here: `differential:<area>` for a
+corpus area, `differential-golden(provider)` where a pinned provider golden set
+exists for the name, or the port suite. The provider rows must be exactly
 `Config.known_providers`, and the areas the behaviour rows claim must be exactly
 the areas `corpus/` carries.
 

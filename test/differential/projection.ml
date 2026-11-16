@@ -2,9 +2,9 @@
 
     One function per corpus area, each taking the corpus input as text and
     answering with the projection lines the golden pins. [../ocaml-tools/oracle/
-    projections.py] is the Python half, written against the oracle tree, and the
-    golden file is what makes the two agree: neither side's rendering is trusted,
-    only the pinned one.
+    projections.py] is the Python half, written against the Python implementation,
+    and the golden file is what makes the two agree: neither side's rendering is
+    trusted, only the pinned one.
 
     The area names and the line grammar are the corpus format's, written down in
     [README.md] beside this module. Two rules every area follows, because they

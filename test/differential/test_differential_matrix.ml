@@ -1,10 +1,10 @@
 (* The parity-matrix validator.
 
    [matrix/*.tsv] is the F0.1 inventory: one row per provider, config key,
-   behaviour and surface item, each naming the consumer on both sides and the
-   verification that backs the parity claim. A table like that is evidence only
-   while its shape holds, so this suite re-reads it at every [dune runtest]
-   instead of trusting the generator that wrote it:
+   behaviour and surface item, each naming the port consumer, the baseline
+   evidence behind the claim and the verification that tests it. A table like
+   that is evidence only while its shape holds, so this suite re-reads it at
+   every [dune runtest] rather than taking the table's word for it:
 
    - the header and the column count are pinned, so a column cannot be renamed,
      dropped or reordered without a failure naming the table;
@@ -17,12 +17,16 @@
      explicit [pending-F*] on a row whose port side does not exist yet. A ported
      or honoured row resting on [pending] fails, and a not-ported row may not
      quietly claim a verification it does not have;
-   - every module or suite a row points at is a file that exists — the staged
-     deps are the point, so a consumer that was renamed away or never written
-     fails the row that credits it;
+   - every module or suite a row points at is a file this tree carries — the
+     staged deps are the point, so a consumer that was renamed away or never
+     written fails the row that credits it;
    - the provider rows are exactly [Config.known_providers], and the corpus
      areas the golden runner pins are exactly the areas the behaviour rows
-     claim to cover. *)
+     claim to cover.
+
+   The [baseline] columns are the frozen corpus's counterpart: a cell names the
+   corpus area, provider golden set or port suite that carries the evidence, so a
+   pointer outside this tree is not one of the forms the check accepts. *)
 
 open Seekwright
 
@@ -98,7 +102,7 @@ let names_wave text =
 
 let read_lines path =
   if not (Sys.file_exists path)
-  then failwith (Printf.sprintf "the matrix has no %s — regenerate with ocaml-tools/oracle/gen_matrix.py" path);
+  then failwith (Printf.sprintf "the matrix has no %s — the tables under matrix/ are committed data, so a missing one is a deleted file" path);
   let channel = open_in_bin path in
   let rec go acc =
     match input_line channel with
@@ -154,38 +158,29 @@ let path_token word =
   let candidate = strip_marks head in
   if candidate = "" || Filename.check_suffix candidate ".mli"
   then None
-  else if Filename.check_suffix candidate ".py" || Filename.check_suffix candidate ".ml"
+  else if Filename.check_suffix candidate ".ml"
   then Some candidate
   else None
 
 let has_no_slash token = not (String.contains token '/')
 
-(* Where a path-like token lives, given how the tables spell their pointers. The
-   rule order is the tables' own convention: a Python oracle pointer is either
-   under [tests/] or a bare module name read from [src/seekwright/], an OCaml
-   pointer is under [lib/] (or [test/] when it starts with [test_]), and
-   [providers/x.py] / [providers/x.ml] are read relative to the tree each column
-   owns. The [../../] is the sandbox's: a [dune runtest] runs in the stanza's
-   build directory, so the repository root is two levels up. *)
+(* Where a path-like token lives, given how the tables spell their pointers.
+   Every pointer names a module this tree owns, so the rules are the port's
+   layout: [lib/], [bin/] and [test/] keep their own prefix, [fetch/], [factory/]
+   and [providers/] are the [lib/] subtrees the tables name without it,
+   [extractors/] is the backend directory under [lib/fetch/], and a bare name is
+   a [test_] suite or a [lib/] module. The [../../] is the sandbox's: a
+   [dune runtest] runs in the stanza's build directory, so the repository root is
+   two levels up. *)
 let resolve token =
-  let python = Filename.check_suffix token ".py" in
-  if starts "tests/" token || starts "src/" token || starts "bin/" token || starts "test/" token
+  if starts "lib/" token || starts "bin/" token || starts "test/" token
   then Some ("../../" ^ token)
-  else if starts "lib/" token || starts "bin/" token
-  then Some ("../../" ^ token)
-  else if starts "fetch/" token || starts "factory/" token
+  else if starts "fetch/" token || starts "factory/" token || starts "providers/" token
   then Some ("../../lib/" ^ token)
-  else if starts "providers/" token
-  then if python then Some ("../../src/seekwright/" ^ token) else Some ("../../lib/" ^ token)
-  else if has_no_slash token
-  then
-    if python
-    then Some ("../../src/seekwright/" ^ token)
-    else if starts "test_" token
-    then Some ("../../test/" ^ token)
-    else Some ("../../lib/" ^ token)
   else if starts "extractors/" token
-  then Some ("../../src/seekwright/" ^ token)
+  then Some ("../../lib/fetch/" ^ token)
+  else if has_no_slash token
+  then if starts "test_" token then Some ("../../test/" ^ token) else Some ("../../lib/" ^ token)
   else None
 
 let check_pointers table_name header row =
@@ -292,26 +287,26 @@ let tables =
   [
     { file = "matrix/providers.tsv"
     ; header =
-        [ "provider"; "oracle_adapter"; "port_adapter"; "port_state"; "kind"; "endpoint"; "auth"
+        [ "provider"; "baseline"; "port_adapter"; "port_state"; "kind"; "endpoint"; "auth"
         ; "cost_per_1k_default"; "timeout"; "constraints"; "result_field"; "quota_class"; "live_status"; "verification" ]
     ; state_column = "port_state"
     ; state_allowed = [ "ported"; "not-ported" ]
     ; placeholder_columns = [ "port_adapter"; "cost_per_1k_default" ]
     }
   ; { file = "matrix/config-fields.tsv"
-    ; header = [ "path"; "oracle_consumer"; "port_consumer"; "status"; "verification" ]
+    ; header = [ "path"; "port_consumer"; "status"; "verification" ]
     ; state_column = "status"
     ; state_allowed = [ "honoured"; "transitional"; "refused"; "declined" ]
     ; placeholder_columns = []
     }
   ; { file = "matrix/behaviours.tsv"
-    ; header = [ "behaviour"; "oracle"; "oracle_suite"; "port"; "port_suite"; "status"; "verification" ]
+    ; header = [ "behaviour"; "baseline"; "port"; "port_suite"; "status"; "verification" ]
     ; state_column = "status"
     ; state_allowed = [ "ported"; "partial"; "not-ported" ]
-    ; placeholder_columns = [ "oracle"; "oracle_suite"; "port"; "port_suite" ]
+    ; placeholder_columns = [ "port"; "port_suite" ]
     }
   ; { file = "matrix/surface.tsv"
-    ; header = [ "item"; "kind"; "oracle"; "port"; "status"; "verification" ]
+    ; header = [ "item"; "kind"; "port"; "status"; "verification" ]
     ; state_column = "status"
     ; state_allowed = [ "honoured"; "partial"; "not-ported"; "transitional"; "declined" ]
     ; placeholder_columns = [ "port" ]
