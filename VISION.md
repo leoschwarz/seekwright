@@ -3,18 +3,19 @@
 What this project is for, what it will refuse, and which good wins when two collide.
 Every task and decision steers by this page; if a task cannot be reconciled with it, the
 reconciliation is a change to this page in the same pull request: either the task is
-refused, or this page states which goal yields and why. The mechanism
-is [`docs/architecture.md`](docs/architecture.md), the open work is
-[`docs/ROADMAP.md`](docs/ROADMAP.md), and every name a caller may depend on is
-[`docs/reference/surface.md`](docs/reference/surface.md).
+refused, or this page states which goal yields and why. The mechanism is the module
+map in [`AGENTS.md`](AGENTS.md), the open work is in [`plans/`](plans/), and every
+name a caller may depend on is printed by `ocaml-tools/surface.ml` and pinned in
+[`ocaml-tools/surface.expected`](ocaml-tools/surface.expected).
 
 ## Possibilities
 
 - **Every provider worth using, behind one shape.** Search, extraction and answering
   reached as three operations whatever vendor answers, so a calling model never learns a
   vendor's request format.
-- **A first run with nothing to arrange.** `uv sync && uv run seekwright` searches with no
-  account, key, card or config edit.
+- **A first run with nothing to arrange.** One image build and one `docker run` search
+  with no account, key, card or config edit: with no config file the server runs on the
+  names that answer anonymously.
 - **A router the caller can afford.** With nothing named, a search may pick by a declared
   priority — cost, quality, task — but only where it can state the price and the evidence
   for its pick.
@@ -29,7 +30,8 @@ is [`docs/architecture.md`](docs/architecture.md), the open work is
 - Every response names the provider or fallback that served it, and the price it declared.
 - Adding or removing a vendor is configuration, not code.
 - The surface is enumerable and checked: the three tools and every frozen name move only
-  in a pull request that moves the code and the printed surface together.
+  in a pull request that moves the code and the printed surface together — the printed
+  manifest is a checked-in golden, so drift fails the build rather than the review.
 - An `answer` citation resolves to a page this deployment actually retrieved.
 
 ## Diagnosis
@@ -95,3 +97,8 @@ Highest first. When two collide, the earlier line wins.
 - **2026-10-27** — written. Precedence settled by the maintainer: explicit caller input
   first, coverage over surface stability, one-operator operability over multi-user, and a
   priced router as a future possibility rather than a refusal.
+- **2026-11-16** — pointers retargeted after the reference implementation left the tree:
+  one dune workspace with one implementation, so the mechanism is the module map, the open
+  work is `plans/`, the frozen surface is a printed golden, and the first run is a built
+  image rather than a package-manager checkout. No goal, precedence line or non-goal
+  changed; the artifact did.

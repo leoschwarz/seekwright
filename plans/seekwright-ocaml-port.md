@@ -3123,10 +3123,11 @@ narrative.
   including no PDF page text, and `production candidate` is still the honest
   label. Deleting the tree the baseline was taken from removes a kind of evidence,
   not a defect.
-- **The one dangling pointer left on purpose** is `VISION.md`: three links into
-  `docs/` and a `uv sync && uv run seekwright` first run. The rule is that the spec
-  is never edited to match the tree, so it waits for a maintainer pass; the
-  deletion commit says so in its body.
+- **`VISION.md` moved with the tree, on the maintainer's word.** Its three `docs/` links
+  and its `uv sync && uv run seekwright` first run are retargeted — mechanism to the
+  module map, open work to `plans/`, the frozen surface to the printed golden, the first
+  run to the built image — and its amendment log states plainly that no goal, precedence
+  line or non-goal changed.
 - §38's `cr_f3e67d7f27e4` finding is closed by this section: the payload that was
   rejected for touching protected paths without approval is, in substance, what
   this branch did deliberately, with the lanes moved first.

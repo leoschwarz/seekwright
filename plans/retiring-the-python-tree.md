@@ -68,11 +68,12 @@ no Python release is planned in between.
 
 ## What it left behind
 
-- `VISION.md` points at `docs/architecture.md`, `docs/ROADMAP.md` and
-  `docs/reference/surface.md`, and its first-run example is
-  `uv sync && uv run seekwright`. The rule is that the spec is never edited to
-  match the tree, so those three pointers and that line now dangle and wait for
-  a maintainer pass; the deletion commit says so in its body.
+- `VISION.md`'s three pointers into `docs/` and its `uv sync && uv run seekwright` first
+  run were retargeted on the maintainer's word, in the same breath as the deletion: the
+  mechanism is the module map in `AGENTS.md`, the open work is `plans/`, the frozen
+  surface is the printed golden `ocaml-tools/surface.expected`, and the first run is a
+  built image. Its amendment log records that no goal, precedence line or non-goal
+  moved — the artifact did.
 - `ghcr.io/leoschwarz/seekwright` is private until the repository's package
   visibility is set to Public. The publish workflow's own smoke passes (it pulls
   with the pushing token); an unauthenticated `docker compose pull` does not.
