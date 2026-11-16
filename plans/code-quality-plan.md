@@ -1,9 +1,9 @@
 # Plan: the 2026-11-16 code-quality findings
 
-Status: **design only.** No `lib/`, `bin/` or `test/` file was modified, no commit
-made. The findings are registered in `plans/reviews/code_review_ledger.md` as
-R-001…R-011; this is the plan they point at — one section per ID, plus the order to
-land them in.
+Status: **landed** for commits 1–9 (R-001…R-010); commit 10 is R-011's measurement,
+and its verdict sits in its own section. The findings are registered in
+`plans/reviews/code_review_ledger.md` as R-001…R-011; this is the plan they point at —
+one section per ID, plus the order to land them in.
 
 Tree read at `38007a0`. Baseline: `dune build @install` exits 0 against the cached
 `_build`; `dune runtest --force` was **not** run this session (the previous session's
@@ -87,18 +87,18 @@ the `test/corpus_html` rules — need `dune runtest`.
 
 ## 2. Order of work
 
-| # | Commit line | Findings | Depends on |
-|---|---|---|---|
-| 1 | `fetch: one owner for the URL gate` | R-006 | — |
-| 2 | `factory: the fallback rows carry their price` | R-003, R-004 | — |
-| 3 | `factory: one prologue for the keyed fetch fallbacks` | R-005 | 1 |
-| 4 | `factory: one recursive step in build_providers` | R-007 | — |
-| 5 | `time: civil-date arithmetic on the floor` | R-009 | — |
-| 6 | `fetch.stdlib: a hash table for the entity table` | R-008 | — |
-| 7 | `cli: one serve call; stdio closes providers` | R-001, D3 | — |
-| 8 | `caps: prepend, reverse once` | R-002 | — |
-| 9 | `test: prepend the fixture's request log` | R-010 | — |
-| 10 | measure, then decide: `Usage`'s field sets | R-011 | — |
+| # | Commit line | Findings | Depends on | Landed |
+|---|---|---|---|---|
+| 1 | `fetch: one owner for the URL gate` | R-006 | — | `197a681` |
+| 2 | `factory: the fallback rows carry their price` | R-003, R-004 | — | `a56ccab` |
+| 3 | `factory: one prologue for the keyed fetch fallbacks` | R-005 | 1 | `818a605` |
+| 4 | `factory: one recursive step in build_providers` | R-007 | — | `d01a0ba` |
+| 5 | `time: civil-date arithmetic on the floor` | R-009 | — | `828bd1c` |
+| 6 | `fetch.stdlib: a hash table for the entity table` | R-008 | — | `78f1f27` |
+| 7 | `cli: one serve call; stdio closes providers` | R-001, D3 | — | `71110c3` |
+| 8 | `caps: prepend, reverse once` | R-002 | — | `b8e6704` |
+| 9 | `test: prepend the fixture's request log` | R-010 | — | `9b61d9a` |
+| 10 | measure, then decide: `Usage`'s field sets | R-011 | — | declined, see R-011 |
 
 Commit 3 goes after 1 because its prologue calls the gate 1 just gave a single
 owner. 10 is last because it is a measurement, not a patch.
@@ -576,15 +576,45 @@ If the measurement is noise, the entry closes as **declined** with the number in
 this section — a speculatively rewritten `usage.ml` buys nothing and its 1126 lines
 carry the dashboard's whole contract.
 
+**Measurement (the deliverable; run on this host, 2026-11-16).** Synthetic journal:
+356,142 lines, 61 MB, over 370 UTC days — about 244k `search` lines across the
+seventeen names, 33k `fetch` lines, and 5,091 agent runs, each contributing six
+run-tagged `search` lines and one `answer` line, so `runs_max` is filled many times
+over and `keep_days` exactly. `SEEKWRIGHT_CONFIG` points `dashboard.history_path` at
+it and `bin/main.exe --metrics` is timed as the process wall clock: `--metrics` does
+nothing but `Usage.create` and its `backfill`, so that number *is* the backfill. The
+pre-change binary comes from a worktree at `9b61d9a`, the post-change one from this
+branch with all three rewrites above in place; both ran on the same host, alternating,
+one process per run.
+
+| aggregate shape | runs | mean | range |
+|---|---|---|---|
+| association lists (`9b61d9a`) | 13 | 6.97 s | 6.51–7.60 s |
+| `Hashtbl`s + run FIFO + consed models | 13 | 6.87 s | 6.52–7.51 s |
+
+The paired differences average −92 ms (1.3%) with a standard error of 86 ms, so the
+95% interval straddles zero; the sign is not stable (the first five pairs were
+−416, −922, −106, +62, −31 ms), and the two non-alternating rounds taken earlier sat in
+the same 6.4–8.6 s band on both sides. The variant prints a byte-identical report and
+passes `test_usage`'s 65 cases, so it is equivalent — it is just not measurable: at
+this size the line parse and the per-line allocation dominate, and the list walks the
+finding priced are under the floor. **R-011 closes as declined**; `usage.ml` is
+unchanged on this branch.
+
+That settles the cost rule the next paragraph asks for: an associative accumulator
+behind a config or protocol bound is not rewritten for cost. What gets rewritten is an
+accumulator that grows with input — which is why `Jsondoc.normalize`/`dedupe` is
+already a `Hashtbl` and `Engine.try_fallbacks`' `tried`/`failed`/`notices`,
+`Cli_flags`' `allowed_hosts`, `Health.ensure`'s states and `Cli_check`'s report lines
+stay lists.
+
 The same idiom sits in `Engine.try_fallbacks`/`fallback_failed` (`tried`, `failed`,
 `notices` — bounded by the ladder), `Cli_flags`' `allowed_hosts`, `Health.ensure`'s
 states and `Cli_check`'s report lines. `plans/reviews/2026-11-12-style-review.md` L3
 filed all of them together and the unbounded instance, `Jsondoc.normalize`/`dedupe`,
-was already rewritten onto a `Hashtbl`. Decide the *cost* rule once — config-bounded
-lists are not rewritten for cost, per-input accumulators are — and apply it to
-whichever of these the measurement puts on the wrong side of that line. (D1's fixes
-for R-002/R-004/R-010 are a separate axis: they land for idiom consistency, not
-cost.)
+was already rewritten onto a `Hashtbl`. The measurement above decides the cost rule:
+none of these is rewritten for cost. (D1's fixes for R-002/R-004/R-010 are a separate
+axis: they land for idiom consistency, not cost.)
 
 ---
 
