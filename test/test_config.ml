@@ -771,7 +771,13 @@ let fallback_names rows = List.map (fun (row : Config.fetch_fallback) -> row.nam
 (* A fallback this build has never heard of, which can bill: the tier rule asks
    each row's flag, never a name, so an unknown priced fallback falls under it. *)
 let priced_elsewhere : Config.fetch_fallback =
-  { Config.name = "pricedelsewhere"; billable = true; endpoint = Some "https://priced-elsewhere.example/"; fetch_key = None }
+  {
+    Config.name = "pricedelsewhere";
+    billable = true;
+    endpoint = Some "https://priced-elsewhere.example/";
+    fetch_key = None;
+    default_cost = None;
+  }
 
 let registry_with_extra = Config.known_fetch_fallbacks @ [ priced_elsewhere ]
 

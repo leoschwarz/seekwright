@@ -213,8 +213,11 @@ type fetch_fallback = {
 
 Rows: `crawl4ai` and `jina` → `None` (nothing was billed — the same reason the
 local reader answers `None` and not `0.`), `scrappa` → `Some 0.30`, `tavily` →
-`Some 1.60`, `linkup` → `Some 5.00`, each with a one-line comment naming the
-`providers.md` section the figure was read from (never a line cite). Then:
+`Some 1.60`, `linkup` → `Some 5.00`. Landed as: each priced row carries a
+one-line comment naming the vendor product the figure belongs to and the
+`lib/factory/registry.ml` search row it is *not* — the `providers.md` the finding
+named is no longer in this tree, so the provider row beside it is the prose
+owner, and the `[None]`-is-unbilled fact lives once, on the `.mli` field. Then:
 
 ```ocaml
 let fallback_cost config (row : Config.fetch_fallback) =

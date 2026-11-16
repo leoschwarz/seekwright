@@ -45,12 +45,14 @@ val known_extractors : string list
     validated against this. *)
 
 (** One row of the fetch fallback registry: what [fetch.fallback] may name, and
-    the two facts the ladder and the report need from it. *)
+    the facts the ladder and the report need from it. *)
 type fetch_fallback = {
   name : name;  (** what the ladder and the journal record *)
   billable : bool;  (** the tier: [fetch.fallback] refuses it anywhere but last *)
   endpoint : string option;  (** the constant it dials... *)
   fetch_key : string option;  (** ...or the [fetch] key holding its host *)
+  default_cost : float option;  (** the price the journal records; [None] is
+      nothing billed, not free, and [fetch.cost_per_1k] corrects a priced row *)
 }
 
 val known_fetch_fallbacks : fetch_fallback list

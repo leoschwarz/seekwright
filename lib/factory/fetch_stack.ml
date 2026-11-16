@@ -43,21 +43,13 @@ let cap_of (cap : Engine.Fetch.cap) : int option =
   | Engine.Fetch.Limit n -> Some n
   | Engine.Fetch.Uncapped -> Some Fetcher.uncapped
 
-(* Default cost per 1k pages when not overridden by config. *)
-let fallback_price name =
-  match name with
-  | "scrappa" -> Some 0.30
-  | "tavily" -> Some 1.60
-  | "linkup" -> Some 5.00
-  | _ -> None
-
-let fallback_cost config name =
-  match fallback_price name with
-  | Some _ -> (
-      match config.Config.fetch.Config.cost_per_1k with
-      | Some c -> Some c
-      | None -> fallback_price name)
+(* The row's declared price is the default; the operator's override applies only
+   where a price exists, so an unbilled rung still records [None]. *)
+let fallback_cost config (row : Config.fetch_fallback) =
+  match row.Config.default_cost with
   | None -> None
+  | Some declared ->
+      Some (Option.value ~default:declared config.Config.fetch.Config.cost_per_1k)
 
 let fallback_error_of (name : Config.name) error =
   match error with
@@ -116,7 +108,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
             let vendor_net = Fallback.of_grant grant in
             Ok
               (Some
-                 (wrap_fallback name (fallback_cost config name)
+                 (wrap_fallback name (fallback_cost config row)
                     (Seekwright_fetch.Fallback_jina.fetch
                        {
                          net = vendor_net;
@@ -139,7 +131,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
               let target = Remote_target.make net in
               Ok
                 (Some
-                   (wrap_fallback name (fallback_cost config name)
+                   (wrap_fallback name (fallback_cost config row)
                       (Seekwright_fetch.Fallback_crawl4ai.fetch
                          {
                            net = Fallback.of_grant grant;
@@ -203,7 +195,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                         in
                         match built with
                         | Some fetch_fn ->
-                            Ok (Some (wrap_fallback name (fallback_cost config name) fetch_fn))
+                            Ok (Some (wrap_fallback name (fallback_cost config row) fetch_fn))
                         | None -> Ok None)))
 
 
@@ -278,14 +270,18 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
                 aclose = (fun () -> Extract_pool.close workers);
               }
             in
-            let rec build_ladder = function
-              | [] -> Ok []
-              | name :: rest -> (
-                  match build_fallback ~sw ~net ~mono_clock ?audit config name with
-                  | Error message -> Error message
-                  | Ok None -> build_ladder rest
-                  | Ok Some fetcher ->
-                      Result.map (( @ ) [ fetcher ]) (build_ladder rest))
+            let build_ladder names =
+              let* acc =
+                List.fold_left
+                  (fun acc name ->
+                    let* acc = acc in
+                    match build_fallback ~sw ~net ~mono_clock ?audit config name with
+                    | Error message -> Error message
+                    | Ok None -> Ok acc
+                    | Ok Some rung -> Ok (rung :: acc))
+                  (Ok []) names
+              in
+              Ok (List.rev acc)
             in
             match build_ladder (Option.value ~default:[] fetch.Config.fallback) with
             | Error message -> Some (Error message)

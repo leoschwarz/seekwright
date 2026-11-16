@@ -68,30 +68,50 @@ type fetch_fallback = {
   billable : bool;
   endpoint : string option;
   fetch_key : string option;
+  default_cost : float option;
 }
 
 (* Fallback registry: billable fallbacks must come last in the ladder. *)
 let known_fetch_fallbacks =
   [
-    { name = "crawl4ai"; billable = false; endpoint = None; fetch_key = Some "crawl4ai_url" };
-    { name = "jina"; billable = false; endpoint = Some "https://r.jina.ai/"; fetch_key = None };
+    {
+      name = "crawl4ai";
+      billable = false;
+      endpoint = None;
+      fetch_key = Some "crawl4ai_url";
+      default_cost = None;
+    };
+    {
+      name = "jina";
+      billable = false;
+      endpoint = Some "https://r.jina.ai/";
+      fetch_key = None;
+      default_cost = None;
+    };
+    (* The [v1/fetch] rate, not the [linkup] search row's higher one — the two
+       are different vendor products. *)
     {
       name = "linkup";
       billable = true;
       endpoint = Some "https://api.linkup.so/v1/fetch";
       fetch_key = None;
+      default_cost = Some 5.00;
     };
+    (* One credit per page, which is the [scrappa] search row's rate too. *)
     {
       name = "scrappa";
       billable = true;
       endpoint = Some "https://scrappa.co/api/web-scraper";
       fetch_key = None;
+      default_cost = Some 0.30;
     };
+    (* The extract endpoint's rate, a fifth of the [tavily] search row's. *)
     {
       name = "tavily";
       billable = true;
       endpoint = Some "https://api.tavily.com/extract";
       fetch_key = None;
+      default_cost = Some 1.60;
     };
   ]
 
