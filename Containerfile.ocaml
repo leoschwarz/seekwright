@@ -1,10 +1,11 @@
-# The OCaml port's image (plans/ocaml-finalisation.md §F9.2). The Python
-# artifact keeps its own Containerfile during the transition; this one builds the
-# `seekwright` executable from lib/ and bin/ and ships nothing else.
+# The image this tree ships (plans/ocaml-finalisation.md §F9.2): it builds the
+# `seekwright` executable from lib/ and bin/ and ships nothing else. The release
+# lane pushes it from a `v*` tag; `deploy/compose/compose.yaml` builds the same
+# file, twice, for its two role containers.
 #
 # Build from the repository root with this file's own ignore rules, because the
-# context this build needs is the opposite of the Python build's — lib/ and bin/
-# here, src/ there:
+# context this build needs is the sources, the dune files and the two opam
+# manifests — and nothing else:
 #
 #   VERSION="$(dune build version.txt >/dev/null; cat _build/default/version.txt)"
 #   docker build -f Containerfile.ocaml \
@@ -13,18 +14,16 @@
 #     -t seekwright-ocaml:dev .
 #
 # BuildKit picks this file's own ignore rules — `Containerfile.ocaml.dockerignore`
-# — because it looks for `<dockerfile>.dockerignore` before `.dockerignore`, so no
-# flag is needed and the Python build's `.containerignore` cannot leak in. podman
-# defaults to `.containerignore`, which is the Python build's and drops lib/ and
-# bin/, so there the flag is not optional:
+# — because it looks for `<dockerfile>.dockerignore` before `.dockerignore`. podman
+# does not: with no default ignore file in the tree it sends the whole checkout, so
+# there the flag is not optional:
 # `podman build --format docker -f Containerfile.ocaml \
 #    --ignorefile Containerfile.ocaml.dockerignore …`.
 
-# Alpine, as the Python image does: the scan gate fails the image at
-# CRITICAL/HIGH, and the Debian trixie base ships util-linux/zlib/perl builds
-# carrying HIGH CVEs with no fix released. `alpine:3.22` measured 0 findings at
-# CRITICAL/HIGH with --ignore-unfixed=false, which is the record in
-# plans/infra-setup.md.
+# Alpine because the scan gate fails the image at CRITICAL/HIGH and the Debian
+# trixie base ships util-linux/zlib/perl builds carrying HIGH CVEs with no fix
+# released. `alpine:3.22` measured 0 findings at CRITICAL/HIGH with
+# --ignore-unfixed=false, which is the record in plans/infra-setup.md.
 #
 # The builder is Alpine too, not a Debian compiler image: the executable is
 # musl-linked, so a glibc builder would produce a binary this runtime layer

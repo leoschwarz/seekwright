@@ -1,8 +1,8 @@
 # Ignore rules for Containerfile.ocaml. BuildKit picks this file up by name for
-# `docker buildx build -f Containerfile.ocaml .`; for podman pass it explicitly:
-# `--ignorefile=Containerfile.ocaml.dockerignore`. They are the mirror image of
-# .containerignore: that build ships src/ and needs no lib/, this one ships the
-# OCaml executable built from lib/ and bin/ and has no use for the Python tree.
+# `docker build -f Containerfile.ocaml .`; for podman pass it explicitly:
+# `--ignorefile=Containerfile.ocaml.dockerignore`, whose own default is not this
+# file. The context this build needs is lib/ and bin/ plus the two opam manifests
+# with their locks and the dune files.
 .git/
 .gitignore
 .github/
@@ -10,22 +10,12 @@
 _build/
 **/_build/
 **/_build/**
+# A checkout from before the Python tree's deletion can still carry these; nothing
+# in the surviving tree writes them, and .venv is the large one.
 .venv/
 .pytest_cache/
-.ruff_cache/
-__pycache__/
-*.py[cod]
-
-# The read-only Python oracle and everything that reads it.
-src/
-tests/
-tools/
-pyproject.toml
-uv.lock
-.python-version
 
 # Pages, notes and skills: prose this build cannot consume.
-docs/
 ocaml-docs/
 deploy/
 skills/
@@ -46,10 +36,6 @@ test/
 live/
 ocaml-tools/
 examples/
-
-# The other build's files.
-Containerfile
-.containerignore
 
 .agents/
 .research/

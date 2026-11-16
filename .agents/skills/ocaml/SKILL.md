@@ -11,8 +11,10 @@ history (which phase landed, what the suite counted, what the runner scored) liv
 in `plans/seekwright-ocaml-port.md` and `plans/capability-gated-mcp-server.md` —
 see "How to append" at the end.
 
-The Python tree (`src/`, `tests/`, `docs/`, `tools/`, `pyproject.toml`) is a
-read-only oracle on this branch. Dune ignores directories without `dune` files.
+One implementation lives here: the dune workspace (`lib/`, `bin/`, `test/`,
+`live/`, `ocaml-tools/`, `examples/`). Dune ignores the directories without
+`dune` files — `plans/`, `ocaml-docs/`, `deploy/` — which is why a rule that
+reads one of them has to name it in `(deps …)`.
 
 ## Environment (verified 2026-11-10, Debian 13, vps-01)
 

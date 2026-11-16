@@ -67,7 +67,7 @@ All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.
 
 This is a single-maintainer project, so "community leaders" is the maintainer:
-the same address published in `pyproject.toml`, and the one
+the same address published in the `.opam` manifests, and the one
 [SECURITY.md](SECURITY.md) uses for vulnerabilities. A security report is not a
 conduct report and belongs there rather than here.
 
