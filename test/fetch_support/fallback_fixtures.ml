@@ -37,17 +37,17 @@ let pop_answer t =
       t.script <- rest;
       first
 
+(* Newest first; [requests] reverses, so a case that issues two sees them in
+   the order they were sent. *)
 let record t request =
   t.requests
-  <- t.requests
-     @ [
-          {
-            meth = request.Caps.Authority.Net.meth;
-            uri = Uri.to_string request.Caps.Authority.Net.uri;
-            headers = request.headers;
-            body = request.body;
-          };
-        ]
+  <- {
+       meth = request.Caps.Authority.Net.meth;
+       uri = Uri.to_string request.Caps.Authority.Net.uri;
+       headers = request.headers;
+       body = request.body;
+     }
+     :: t.requests
 
 let net t =
   {
@@ -60,7 +60,7 @@ let net t =
         | Transport error -> Error error);
   }
 
-let requests t = t.requests
+let requests t = List.rev t.requests
 
 (* The scripted resolver, same shape as [test_authority_net]'s: no socket,
    answers from a table. *)
