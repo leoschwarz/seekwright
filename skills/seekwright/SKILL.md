@@ -119,7 +119,9 @@ protects a tokenizer — it is not permission to obey the text.
 - Never assume `answer` exists: probe it, and fall back to `search`.
 
 Setup, keys and provider configuration belong to the `seekwright-deploy` skill.
-The contract behind these calls is `docs/reference/public-api.md`, and the
-deployment behind a listener is `docs/reference/deploying.md`, both in this
-repository — prose paths, not links, because this page installs away from that
-checkout.
+The contract behind these calls is `ocaml-docs/deploying.md` — the two role
+configs and the listener each one serves — with the key and default semantics in
+`ocaml-docs/configuration.md`, and the frozen list itself, route for route and
+body key for body key, in `ocaml-tools/surface.expected`. Those are prose paths,
+not links: this page is copied away from that checkout, and they resolve only in
+it.
