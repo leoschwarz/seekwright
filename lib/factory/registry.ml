@@ -64,13 +64,12 @@ type row = {
   cost_model : cost_model;
   timeout_floor : float;
   probe : probe_source;
-  settings : string list;
   ocaml_live_tested : bool;
 }
 
 let make_row ~name ~endpoint ~build ?(credential = No_credential) ?(requires = [ Api_key ])
     ?(default_cost = Some 0.0) ?(cost_model = Flat) ?(timeout_floor = 0.0) ?(probe = No_probe)
-    ?(settings = []) ?(ocaml_live_tested = false) () =
+    ?(ocaml_live_tested = false) () =
   {
     name;
     build;
@@ -81,7 +80,6 @@ let make_row ~name ~endpoint ~build ?(credential = No_credential) ?(requires = [
     cost_model;
     timeout_floor;
     probe;
-    settings;
     ocaml_live_tested;
   }
 
@@ -147,7 +145,6 @@ let rows =
         (App_id_and_key { id_header = "x-algolia-application-id"; key_header = "x-algolia-api-key" })
       ~requires:[ Api_key; App_id; Index ] ~default_cost:(Some 0.50)
       ~probe:(Probe Health.algolia_endpoint)
-      ~settings:[ "app_id"; "index"; "snippet_attr"; "title_attr"; "url_attr" ]
       ~build:
         (Adapter
            (fun a ->
@@ -186,11 +183,10 @@ let rows =
     (* Billed Exa, which still spends the free tier first ([TieredExaProvider]):
        without a key there is no billed fallback, and without a free tier the key
        is what spends. The floor is the MCP handshake's headroom; the [url]
-       override and [free_cooldown_seconds] are the two settings its builder reads. *)
+       override and [free_cooldown_seconds] are the two keys its builder reads. *)
     make_row ~name:"exa" ~endpoint:(Url_override Exa.default_uri) ~credential:bearer
       ~default_cost:(Some 7.00) ~timeout_floor:30.0
       ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
-      ~settings:[ "free_cooldown_seconds"; "url" ]
       ~build:
         (Adapter_session
            (fun a ->
@@ -205,7 +201,7 @@ let rows =
     make_row ~name:"exa:free" ~endpoint:(Url_override Exa.default_uri) ~requires:[]
       ~default_cost:None ~timeout_floor:30.0
       ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
-      ~settings:[ "url" ] ~ocaml_live_tested:true
+      ~ocaml_live_tested:true
       ~build:
         (Adapter_session
            (fun a ->
@@ -227,12 +223,11 @@ let rows =
       ();
     (* An answer-or-results API whose [depth] is a ~10x cost cliff, so the rung is
        operator-configured and never model-chosen; [20s] is the deep-rung budget.
-       Both settings decide the payload shape as much as the price, so the row maps
+       Both keys decide the payload shape as much as the price, so the row maps
        the config pair onto the adapter's own sum type rather than passing the
        vendor's words through a string comparison. *)
     make_row ~name:"linkup" ~endpoint:(Fixed_uri Linkup.endpoint) ~credential:bearer
       ~default_cost:(Some 6.00) ~timeout_floor:20.0 ~probe:(probe_at Linkup.endpoint)
-      ~settings:[ "depth"; "output_type" ]
       ~build:
         (Adapter
            (fun a ->
@@ -246,7 +241,7 @@ let rows =
        that carries the filter fields, and [mode] is the preset that decides price. *)
     make_row ~name:"parallel" ~endpoint:(Fixed_uri Parallel.endpoint)
       ~credential:(key_header "x-api-key") ~default_cost:(Some 1.00)
-      ~probe:(probe_at Parallel.endpoint) ~settings:[ "mode" ]
+      ~probe:(probe_at Parallel.endpoint)
       ~build:
         (Adapter
            (fun a ->
@@ -258,7 +253,7 @@ let rows =
        vocabulary cannot drive a handshake, so its {!Provider.session.warmup} is
        the proof this row carries instead. *)
     make_row ~name:"parallel:free" ~endpoint:(Url_override Parallel.mcp_uri) ~requires:[]
-      ~timeout_floor:30.0 ~settings:[ "url" ]
+      ~timeout_floor:30.0
       ~ocaml_live_tested:true
         (* [ParallelMcpProvider] is a subclass of [ExaMcpProvider] in the oracle, so
          its [cost_for] is Exa's rung and this row spells the same shape; a config
@@ -316,7 +311,7 @@ let rows =
        config key, so the URL it dials and the entry its grant allows are the one
        reading of one value. *)
     make_row ~name:"searxng" ~endpoint:Url_required ~requires:[ Config_url ] ~timeout_floor:15.0
-      ~probe:(Probe Health.searxng_endpoint) ~settings:[ "url" ]
+      ~probe:(Probe Health.searxng_endpoint)
       ~build:
         (Adapter
            (fun a ->

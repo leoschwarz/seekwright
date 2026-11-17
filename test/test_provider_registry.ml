@@ -423,18 +423,14 @@ let a_config_endpoint_comes_from_one_value () =
           includes (name ^ " names the key") "url" message;
           excludes (name ^ " does not echo the value") "hunter2" message)
     [ ("exa", "mcp.exa.ai"); ("exa:free", "mcp.exa.ai"); ("parallel:free", "search.parallel.ai") ];
-  (* a name with no [url] of its own ignores one it is given — and says so on
-     the row, which is what makes the inertness visible instead of a key that
-     parses, validates and does nothing (F1.4's failure mode). What the operator
-     reads is the row's [settings], and the endpoint stays the module constant. *)
+  (* a name with no [url] of its own ignores one it is given, which is what makes the
+     inertness visible instead of a key that parses, validates and does nothing
+     (F1.4's failure mode). The row keeps no index of the keys it reads, so this is
+     shown by behaviour: the endpoint stays the module constant. *)
   List.iter
     (fun name ->
       let row = row_of name in
       A.(
-        check bool
-          (name ^ " does not list url as its own")
-          true
-          (not (List.mem "url" row.Registry.settings));
         check bool
           (name ^ " ignores a url it was not given")
           true
@@ -748,62 +744,28 @@ let a_missing_prerequisite_is_named () =
   | None -> A.fail "a half registration looked complete");
   clear_keys ()
 
-(* [Config.provider_config]'s fields, spelled out: the union of the rows'
-   [settings] plus the two the factory reads for every name has to be that set,
-   or a key exists that parses, validates, and belongs to no row. *)
-let every_provider_key_belongs_to_a_row () =
-  let fields =
-    [
-      "enabled";
-      "cost_per_1k";
-      "depth";
-      "output_type";
-      "mode";
-      "url";
-      "free_cooldown_seconds";
-      "app_id";
-      "index";
-      "title_attr";
-      "url_attr";
-      "snippet_attr";
-    ]
+(* Which names take a [url] of their own is a property of the row's endpoint, and the
+   operator reads it as a config key: the two MCP overrides, the keyless Parallel
+   instance, and the [searxng] instance the row requires. Every other name accepts a
+   [url], parses it, and dials its module constant — F1.4's inertness shown rather than
+   indexed, which is why this is a resolution question and not a row field to police. *)
+let the_url_names_are_the_override_and_instance_names () =
+  let takes_url row =
+    let overridden = Registry.uri row (entry ~url:"https://override.example/" ()) in
+    match (overridden, Registry.uri row (entry ())) with
+    | Ok uri, Ok base -> Uri.host uri <> Uri.host base
+    (* an instance-only name has no default to compare against: the override is the
+       only answer it has *)
+    | Ok _, Error _ -> true
+    | Error _, _ -> false
   in
-  let from_rows =
-    Registry.rows
-    |> List.map (fun r -> r.Registry.settings)
-    |> List.concat
-    |> List.append [ "enabled"; "cost_per_1k" ]
-    |> List.sort_uniq String.compare
-  in
-  A.(
-    check (list string) "the rows account for every provider key" (List.sort String.compare fields)
-      from_rows);
-  List.iter
-    (fun r ->
-      A.(
-        check (list string)
-          (r.Registry.name ^ " lists its settings sorted")
-          (List.sort String.compare r.Registry.settings)
-          r.Registry.settings;
-        (* [enabled] and [cost_per_1k] are the factory's, so a row listing them
-           would be a row claiming a knob it does not read *)
-        check bool
-          (r.Registry.name ^ " claims no factory key")
-          true
-          (not
-             (List.mem "enabled" r.Registry.settings || List.mem "cost_per_1k" r.Registry.settings))))
-    Registry.rows;
-  (* [url] is the four names that can take an override or an instance, and no
-     other row mentions it *)
-  let url_rows =
-    List.filter_map
-      (fun r -> if List.mem "url" r.Registry.settings then Some r.Registry.name else None)
-      Registry.rows
+  let names =
+    List.filter_map (fun r -> if takes_url r then Some r.Registry.name else None) Registry.rows
   in
   A.(
     check (list string) "url is the override and instance names'"
       [ "exa"; "exa:free"; "parallel:free"; "searxng" ]
-      (List.sort String.compare url_rows))
+      (List.sort String.compare names))
 
 let build_all () =
   set_keys ();
@@ -1093,10 +1055,10 @@ let () =
             only_the_names_that_may_bill_are_handed_a_key;
           A.test_case "a missing prerequisite is named" `Quick a_missing_prerequisite_is_named;
         ] );
-      ( "settings",
+      ( "the url key",
         [
-          A.test_case "every provider key belongs to a row" `Quick
-            every_provider_key_belongs_to_a_row;
+          A.test_case "only the override and instance names take a url" `Quick
+            the_url_names_are_the_override_and_instance_names;
         ] );
       ( "construction",
         [

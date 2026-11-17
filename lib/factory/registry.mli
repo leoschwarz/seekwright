@@ -58,10 +58,10 @@ type args = {
     {!key_for}; [endpoint] is that row's {!uri} already resolved, which is what lets a
     config-derived destination ([searxng]'s instance) be dialed from the same reading the grant was
     built from rather than re-parsed from the config key. [entry] rides along because which of a
-    name's keys its adapter reads is that adapter's business, and the row names them in its
-    [settings]. [log] rides along for the one adapter that narrates its own ladder — the [exa] row's
-    free-before-key walk logs [exa.escalated], [exa.cooldown] and [exa.both_failed] as it runs — and
-    every other builder ignores it. *)
+    name's keys its adapter reads is that adapter's business: a builder reads the fields it needs
+    off the record, and no row keeps an index of them. [log] rides along for the one adapter that
+    narrates its own ladder — the [exa] row's free-before-key walk logs [exa.escalated],
+    [exa.cooldown] and [exa.both_failed] as it runs — and every other builder ignores it. *)
 
 (** Whether this build holds the adapter. [Adapter_session] builds a {!Seekwright.Provider.session}
     pair (adapter plus warmup) for MCP-backed adapters. *)
@@ -82,7 +82,6 @@ type row = {
   cost_model : cost_model;
   timeout_floor : float;
   probe : probe_source;
-  settings : string list;
   ocaml_live_tested : bool;
 }
 
