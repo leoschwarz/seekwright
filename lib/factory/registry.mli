@@ -116,13 +116,13 @@ val rate : row -> Seekwright.Config.provider_config -> float
     price. This is the figure [--check] prints. *)
 
 val cost_of : row -> cost_per_1k:float -> int -> float
-(** The row's {!cost_model} applied to a rate the caller names — the shape of the charge on its own.
+(** The row's [cost_model] applied to a rate the caller names — the shape of the charge on its own.
     {!price} is what a build hands the adapter; this is the same arithmetic with the rate spelled
     out, which is what lets the registry suite pin each row's published shape against a figure. *)
 
 val price : row -> Seekwright.Config.provider_config -> int -> float
 (** The row's price rule applied to {!rate}, as a function of the result count the caller asked for
-    — the one place a per-query figure comes from. The rule is the row's {!cost_model}, never the
+    — the one place a per-query figure comes from. The rule is the row's [cost_model], never the
     adapter's: an adapter is handed this function and reports its answer in the result's [cost_usd],
     so [--check --live] and the caller's figure cannot disagree. *)
 
