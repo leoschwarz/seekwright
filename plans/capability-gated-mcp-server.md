@@ -95,7 +95,7 @@ lib/caps/                        # (library (name caps) (public_name mcp-caps)) 
   policy.ml / .mli               # confined Fs/Net constructors and generic decorators
   policy_fs.ml / .mli            # Fs grant impl (Eio.Path.open_subtree confinement) — M1
   policy_net.ml / .mli           # Net grant impl: allowlist, vetted connect, redirect refusal — M3
-  budget.ml / controls.ml        # deadline/budget/log wrappers — M3
+  controls_raw.ml                # the bounds record and its run wrapper, no .mli — M3
   README.md                      # library docs: real guarantees + grant-retention limit — M4
   server.ml / .mli               # the only module importing Mcp_kit
 examples/
@@ -461,13 +461,22 @@ missing: a per-request or per-plan *factory* that hands a tool a fresh grant.
 scope is the process, and it prints that scope at startup rather than implying a
 per-request one.
 
-The three decorators are generic over `['kind]` because a grant is a confinement
-decision *plus* a shared `Controls.t` (the sink, the timeout, the budget); they are
+**Read at the structural pass (2026-11-17), D-C.** That counter is gone: `Budget`,
+`Authority.with_operation_budget` and the `budget` field of the bounds record are
+deleted, with their suite and with `--max-calls` on the example. The reason is the
+sentence above: nothing in this deployment has the caller scope a counter needs, so
+what the layer advertised was a ceiling it never enforced, policed by 431 lines of
+suite and two negative-compilation fixtures that exercised a seam no served grant
+crosses. A counter comes back with the change that spends one — `Agent`'s fixed
+retrieval plan is the candidate — not before.
+
+The two decorators are generic over `['kind]` because a grant is a confinement
+decision *plus* a shared `Controls.t` (the sink and the timeout); they are
 declared in `Authority`, beside the grant type they rewrite, for the reason §6
 gives — an endo-function on an abstract grant that returns its argument compiles
 and promises nothing — and `Policy` deliberately does not re-export them. Every
-`Fs` and `Net` operation runs inside `Controls.run`, the one place the budget is
-spent, the timeout applied and the audit event written, so no operation can be
+`Fs` and `Net` operation runs inside `Controls.run`, the one place the timeout is
+applied and the audit event written, so no operation can be
 bounded differently from its siblings by a forgotten line. `of_confinement`
 installs the kind's default bound (5 s for `Fs`, 15 s for `Net`) unless the
 application supplies `~controls`; `~controls:Controls.none` is how an operator

@@ -891,23 +891,6 @@
   ../lib/caps/policy_net.mli
   ../test/should_not_compile/mcp_caps.ml))
 
-; F1.2: the operation budget. The atomicity case fans out over domains and over
-; fibers, and the scope cases need a real filesystem grant, so this suite owns an
-; Eio loop, a loopback listener and stdlib Unix for the fixture trees.
-
-(test
- (name test_caps_budget)
- (libraries
-  mcp-caps
-  cohttp-eio
-  http
-  uri
-  eio
-  eio_main
-  alcotest
-  test_support
-  unix))
-
 ; Foundation wave A: the shared text basis (style review H1/H2). The walk and
 ; the repr pass live in [seekwright.text] and the fetch path re-exports the
 ; walk, so the suite names both libraries: pinning that the fetch path's [Utf8]

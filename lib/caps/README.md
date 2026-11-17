@@ -77,9 +77,7 @@ OCaml 5.3 has no linear, affine or uniqueness types in the compiler, so a grant
 handed to `run` can be captured in a closure, stored, and used later — including
 from another fiber, and after the tool call that received it has returned. What
 still applies to a retained grant is its own bounds: the operation timeout, the
-byte and entry ceilings, the address policy, and the caller-supplied
-`Budget.t` that `Authority.with_operation_budget` spends. What does **not**
-exist in v1:
+byte and entry ceilings, and the address policy. What does **not** exist in v1:
 
 - **revocation.** A grant is a server-lifetime value. There is no way to take a
   power back once registered.
@@ -91,9 +89,10 @@ exist in v1:
   authority is available today without any upstream change — one listener per
   policy, or eight lines of accept loop over `Cohttp_eio.Server.callback` — and
   it is keyed on transport-level identity, never on the request.
-- **a per-request budget inside a grant.** That would be a server-lifetime
-  budget wearing a per-request name, so the counter is the caller's
-  (`Budget.make n`) and the grant only spends it.
+- **any operation counter.** No served grant carries one: the deployment has no
+  caller scope to attach one to, so the layer enforces no operation ceiling and
+  says so. Bringing one back is the agent change that would spend it, not a seam
+  kept on spec (the structural pass's D-C).
 
 OxCaml's uniqueness and locality modes are a different language's answer to this
 and are out of scope, not a substitute for the missing lifecycle hook.
@@ -117,17 +116,16 @@ choice: they were never the layer's.
 | `Registry` | `empty`, `add ~grant` (`Duplicate_tool`), `entries`, `find`, `entry_*` accessors | `test_registry.ml`, `test_grant_wiring.ml` |
 | `Server` | `of_registry ~name ~version` → `(Mcp_kit.Server.t, build_error)`; validates every declaration before returning | `test_server.ml`, conformance run |
 | `Authority.Fs` | `of_confinement ~mono_clock`, `read_file ?max_bytes`, `list_dir ?max_entries` | `test_authority_fs.ml` (both Eio runners), `test_grant_wiring.ml` |
-| `Authority.Net` | `of_confinement ~mono_clock`, `request ?max_response_bytes` with `request`/`response` records | `test_authority_net.ml` (21 cases) |
-| `Authority` decorators | `with_log ~sink`, `with_operation_timeout`, `with_operation_budget` — generic over `'kind` | `test_authority_net.ml`, `test_authority_fs.ml`, `test_caps_budget.ml` |
+| `Authority.Net` | `of_confinement ~mono_clock`, `request ?max_response_bytes` with `request`/`response` records | `test_authority_net.ml` |
+| `Authority` decorators | `with_log ~sink`, `with_operation_timeout` — generic over `'kind` | `test_authority_net.ml`, `test_authority_fs.ml` |
 | `Policy` | `with_root`, `with_endpoints`, `with_public_web`, the `endpoint` record, the three default ceilings | the two authority suites |
 | `Error` | `kind` (`Denied`/`Invalid`/`Unavailable`/`Timeout`/`Failed`), sanitized `message`, `render` | `test_error.ml` |
 | `Event` | one bounded, content-free audit record: operation, outcome, optional byte count, ≤`max_notes` notes | `test_event.ml`, `test_caps_audit.ml` |
-| `Budget` | the caller-owned counter: `make`, `limit`, `remaining`, atomic `take` | `test_caps_budget.ml` |
 
 `Policy_fs` and `Controls_raw` are in the table's last column for a reason: they
 are the layer's inside, not its surface. The bounds record is applied by
-`Controls_raw.run`, the one place the budget is spent, the timeout is applied and
-the audit event is written, so no operation can be bounded differently from its
+`Controls_raw.run`, the one place the timeout is applied and the audit event is
+written, so no operation can be bounded differently from its
 siblings by forgetting a line of its own — and no consumer can choose its own
 bounds, because there is no value of that type to pass. An application that wants
 audited grants takes the decorators: `Authority.with_log ~sink grant` (one

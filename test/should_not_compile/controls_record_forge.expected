@@ -1,4 +1,4 @@
-File "controls_record_forge.ml", line 8, characters 4-25:
-8 |   { Mcp_caps.Controls.log = None; operation_timeout = Eio.Time.Timeout.none; budget = None }
-        ^^^^^^^^^^^^^^^^^^^^^
+File "controls_record_forge.ml", line 7, characters 15-36:
+7 | let forged = { Mcp_caps.Controls.log = None; operation_timeout = Eio.Time.Timeout.none }
+                   ^^^^^^^^^^^^^^^^^^^^^
 Error: Unbound module "Mcp_caps.Controls"

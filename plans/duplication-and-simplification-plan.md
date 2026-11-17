@@ -810,6 +810,18 @@ retrieval plan a real budget and make it load-bearing. *Recommend: delete now,
 re-add with the agent change that needs it* — keeping it means every future
 `Controls` change is tested against a caller that does not exist.
 
+**Decided: delete it, and the suite with it.** Landed as its own commit: the module,
+`Authority.with_operation_budget`, the `budget` field of the bounds record and its
+refusal sentence go, and with them `test_caps_budget.ml` (431 lines), the two budget
+rows in `test_authority_net.ml`, `test_caps_audit`'s needle case that counted
+mentions of the decorator, `--max-calls` on `examples/gated_search.ml`, and
+`budget.cmi` from the interface-mirror rule the fourteen negative fixtures compile
+against. `grant_path.ml` still compiles without it, which is the proof that the seal
+never depended on the seam; `controls_record_forge.ml`'s pinned diagnostic
+re-promotes because the record it spells out is one field shorter.
+`lib/caps/README.md` now states that the layer enforces no operation ceiling, and the
+capability plan's §6 carries the reason and the condition for a counter coming back.
+
 **D-D — `Extract_pool`.** 472 implementation lines, a 105-line interface and a
 353-line suite, plus `test_fetch_workers.ml`: fixed-size worker domains fed over
 an AF_UNIX socket, with request and response byte ceilings, permits, round-robin

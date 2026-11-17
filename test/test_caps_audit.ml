@@ -602,26 +602,6 @@ let test_the_diagnosis_never_builds_an_app () =
   source_includes "factory.ml re-exports the app build" "let build_app = App.build_app"
     (factory_source "lib/factory/factory.ml")
 
-(* The layer's per-operation counter is a caller's ceiling. Server construction
-   has no caller scope to attach one to, so a budget on the serving path is a
-   server-lifetime limit wearing a request's name. Every mention of it in the
-   factory is prose inside brackets, which is what makes this checkable: an
-   unbracketed occurrence is a call. *)
-let test_no_operation_budget_on_the_serving_path () =
-  List.iter
-    (fun (file, source) ->
-      A.(
-        check int
-          (file ^ " mentions the budget only to refuse it")
-          (source_count_occurrences ~haystack:source ~needle:"Authority.with_operation_budget")
-          (source_count_occurrences ~haystack:source ~needle:"[Authority.with_operation_budget]"));
-      A.(
-        check int
-          (file ^ " does not take a budget argument")
-          0
-          (source_count_occurrences ~haystack:source ~needle:"?budget")))
-    (factory_all @ [ ("lib/server.ml", server_source) ])
-
 (* A grant built outside the factory is a grant outside the audit trail. These are
    the production modules that could build one: every implementation in the
    library except the funnel itself, and the two modules that have to take their
@@ -744,8 +724,6 @@ let () =
             test_the_verdict_runs_before_the_engine;
           A.test_case "the diagnosis never builds an app" `Quick
             test_the_diagnosis_never_builds_an_app;
-          A.test_case "no operation budget on the serving path" `Quick
-            test_no_operation_budget_on_the_serving_path;
           A.test_case "production modules obtain grants from the factory" `Quick
             test_production_modules_obtain_grants_from_the_factory;
           A.test_case "nothing outside caps names the sealed layer" `Quick

@@ -89,6 +89,3 @@ let with_log ~sink grant = with_controls grant (Controls_raw.with_log ~sink (con
 
 let with_operation_timeout timeout grant =
   with_controls grant (Controls_raw.with_operation_timeout timeout (controls grant))
-
-let with_operation_budget budget grant =
-  with_controls grant (Controls_raw.with_operation_budget budget (controls grant))

@@ -6,8 +6,8 @@
 
    Nothing here names a private module: [Policy] hands back a confinement decision
    whose type is never written down, [Authority] turns it into a grant, and the
-   grant's bounds are set by the three decorators, all of which take and return a
-   grant. Compiled with [-c], so no loop and no socket: the claim is that this
+   grant's bounds are set by the two decorators, each of which takes and returns
+   a grant. Compiled with [-c], so no loop and no socket: the claim is that this
    code type-checks for a consumer of the package. *)
 (* A filesystem grant, read through, with every operation reported. *)
 let read_under_root
@@ -24,8 +24,7 @@ let read_under_root
       in
       Ok (Mcp_caps.Authority.Fs.read_file grant name, Mcp_caps.Authority.Fs.list_dir grant "")
 
-(* The one endpoint this server may dial, read through, bounded from config and
-   counted by a counter its caller owns. *)
+(* The one endpoint this server may dial, read through, bounded from config. *)
 let search_one_endpoint
     ~(env :
        < mono_clock : [> Eio.Time.Mono.ty ] Eio.Resource.t
@@ -39,10 +38,9 @@ let search_one_endpoint
   | Error error -> Error error
   | Ok decision ->
       let grant =
-        Mcp_caps.Authority.with_operation_budget (Mcp_caps.Budget.make 4)
-          (Mcp_caps.Authority.with_operation_timeout
-             (Eio.Time.Timeout.seconds env#mono_clock 10.)
-             (Mcp_caps.Authority.Net.of_confinement ~mono_clock:env#mono_clock decision))
+        Mcp_caps.Authority.with_operation_timeout
+          (Eio.Time.Timeout.seconds env#mono_clock 10.)
+          (Mcp_caps.Authority.Net.of_confinement ~mono_clock:env#mono_clock decision)
       in
       Mcp_caps.Authority.Net.request grant
         {

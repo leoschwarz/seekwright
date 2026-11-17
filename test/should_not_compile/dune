@@ -53,20 +53,16 @@
 ; version has no user-defined variables to name it once.
 
 (rule
- (targets error.cmi event.cmi budget.cmi)
- (deps
-  ../../lib/caps/error.mli
-  ../../lib/caps/event.mli
-  ../../lib/caps/budget.mli)
+ (targets error.cmi event.cmi)
+ (deps ../../lib/caps/error.mli ../../lib/caps/event.mli)
  (action
   (progn
    (copy ../../lib/caps/error.mli error.mli)
    (copy ../../lib/caps/event.mli event.mli)
-   (copy ../../lib/caps/budget.mli budget.mli)
    (run
     sh
     -c
-    "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c error.mli event.mli budget.mli 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'"))))
+    "set -o pipefail; ocamlfind ocamlc -I . -package eio,mcp-kit,uri,yojson,http,cohttp-eio,ipaddr,domain-name,tls,tls-eio,ca-certs,mirage-crypto-rng -c error.mli event.mli 2>&1 | sed -n '/^findlib:/d; /^ocamlfind: \\[WARNING\\]/d;p'"))))
 
 ; The bounds record's module is private and has no [.mli]. Dune hands the library's
 ; own siblings the implementation signature; so does this, by asking [ocamlc -i] for
@@ -76,7 +72,7 @@
 
 (rule
  (targets controls_raw.mli)
- (deps ../../lib/caps/controls_raw.ml error.cmi event.cmi budget.cmi)
+ (deps ../../lib/caps/controls_raw.ml error.cmi event.cmi)
  (action
   (with-outputs-to
    controls_raw.mli
@@ -101,8 +97,7 @@
   mcp_caps.ml
   controls_raw.mli
   error.cmi
-  event.cmi
-  budget.cmi)
+  event.cmi)
  (action
   (progn
    (copy ../../lib/caps/tool.mli tool.mli)
@@ -127,7 +122,6 @@
   no_grant_label.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -158,7 +152,6 @@
   mint_grant.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -189,7 +182,6 @@
   forge_confinement.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -220,7 +212,6 @@
   grant_type_mismatch.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -252,7 +243,6 @@
   confinement_is_not_a_grant.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -283,7 +273,6 @@
   mcp_kit_result.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -315,7 +304,6 @@
   direct_fs_operation.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -346,7 +334,6 @@
   raw_fs_write_needs_bounds.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -375,7 +362,6 @@
   direct_net_operation.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -404,7 +390,6 @@
   controls_none.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -433,7 +418,6 @@
   controls_record_forge.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -462,7 +446,6 @@
   controls_record_update.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -495,7 +478,6 @@
   raw_fs_call_needs_bounds.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi
@@ -529,7 +511,6 @@
   grant_path.ml
   error.cmi
   event.cmi
-  budget.cmi
   controls_raw.cmi
   tool.cmi
   policy_fs.cmi

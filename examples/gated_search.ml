@@ -18,7 +18,6 @@
     v} *)
 
 module Authority = Mcp_caps.Authority
-module Budget = Mcp_caps.Budget
 module Error = Mcp_caps.Error
 module Event = Mcp_caps.Event
 module Policy = Mcp_caps.Policy
@@ -93,7 +92,7 @@ let loopback = "127.0.0.1"
 type transport = Transport_stdio | Transport_http of int
 
 let usage () =
-  note "usage: gated_search <endpoint> [--http [<port>]] [--max-calls <n>]";
+  note "usage: gated_search <endpoint> [--http [<port>]]";
   note "  endpoint: [scheme://]host[:port], e.g. http://127.0.0.1:8099 or https://api.example.com";
   exit 2
 
@@ -126,25 +125,17 @@ let cli () =
   match Array.to_list Sys.argv with
   | [] | [ _ ] -> usage ()
   | _ :: endpoint_text :: rest -> (
-      let transport = ref Transport_stdio and max_calls = ref None in
+      let transport = ref Transport_stdio in
       let scan = function
         | [] -> ()
         | [ "--http" ] -> transport := port_of None
         | [ "--http"; text ] -> transport := port_of (Some text)
-        | [ "--max-calls"; text ] -> (
-            match int_of_string_opt text with
-            | Some n when n > 0 -> max_calls := Some n
-            | _ ->
-                note (Printf.sprintf "--max-calls: %S is not a positive count" text);
-                exit 2)
         | _ -> usage ()
       in
       scan rest;
-      match target_of endpoint_text with
-      | Error () -> exit 2
-      | Ok target -> (target, !transport, !max_calls))
+      match target_of endpoint_text with Error () -> exit 2 | Ok target -> (target, !transport))
 
-let build ~sw env target max_calls =
+let build ~sw env target =
   let ( let* ) = Result.bind in
   let ( >>= ) = Result.bind in
   let invalid message = Error (Server.Invalid_declaration message) in
@@ -160,11 +151,6 @@ let build ~sw env target max_calls =
          (Eio.Time.Timeout.seconds clock operation_timeout_seconds)
          (Authority.Net.of_confinement ~mono_clock:clock confinement))
   in
-  let grant =
-    match max_calls with
-    | None -> grant
-    | Some calls -> Authority.with_operation_budget (Budget.make calls) grant
-  in
   let* registry =
     Registry.add Registry.empty (search_web target) ~grant
     >>= (fun registry -> Registry.add registry fetch_url ~grant)
@@ -172,14 +158,11 @@ let build ~sw env target max_calls =
   in
   List.iter (fun entry -> note ("serves " ^ Registry.entry_name entry)) (Registry.entries registry);
   note
-    (Printf.sprintf "one endpoint allowed: %s://%s%s, at most %d response bytes%s"
+    (Printf.sprintf "one endpoint allowed: %s://%s%s, at most %d response bytes"
        (match target.endpoint.Policy.scheme with `Http -> "http" | `Https -> "https")
        target.endpoint.Policy.host
        (match target.endpoint.Policy.port with Some port -> ":" ^ string_of_int port | None -> "")
-       max_response_bytes
-       (match max_calls with
-       | Some calls -> ", at most " ^ string_of_int calls ^ " calls per process"
-       | None -> ""));
+       max_response_bytes);
   Server.of_registry ~name:"gated-search" ~version:"0.1.0" registry
 
 let serve_http ~sw env server port =
@@ -193,10 +176,10 @@ let serve_http ~sw env server port =
     socket handler
 
 let () =
-  let target, transport, max_calls = cli () in
+  let target, transport = cli () in
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  match build ~sw env target max_calls with
+  match build ~sw env target with
   | Error (Server.Duplicate_tool name) -> note ("duplicate tool: " ^ name)
   | Error (Server.Invalid_declaration message) -> note message
   | Ok server -> (

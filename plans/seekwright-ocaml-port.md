@@ -3211,16 +3211,17 @@ where the row says so.
 | §3 — the derived endpoint grant | twelve `policy_endpoint` vals are gone, with the 34 host/scheme/port assertions that restated them; each adapter suite keeps its endpoint literal and the "the adapter dials that host" check, now taken against its own `endpoint`, because the row→adapter→grant chain is pinned once in `test_provider_registry`'s `the_grant_is_the_endpoint_read_once` and `a_fixed_endpoint_is_the_adapters_own` | this change |
 | D-F's safe half — the constraint sentence | Parallel's REST-half notices go through `Provider.ignored_constraints`, which gained the mandatory `~drops_exclude_domains` bucket every adapter answers; the adapter's private sentence is gone and the differential case that pinned it is now a registered divergence | this change |
 | §3 — the price has one owner | the price is a function the row hands over: `Registry.price row pc : int -> float` reaches every adapter as `make ~cost_for` through `Registry.args`, `Provider.S` loses `cost_per_1k` and `cost_for`, and the fifteen adapters lose their own arithmetic and their `?(cost_per_1k = …)` defaults — `Serper.credit_over`, Exa's extra-results rung and Parallel's credit reading go with them. `--check` prints `Registry.rate`; `--check --live` and the caller's `cost_usd` read `price`, one reading of the same entry. The differential provider projection links `seekwright.factory` and builds each adapter with its row's `price`, exactly as the factory injects it, so a golden's `cost_usd` is the row's figure and no golden moved; the one corpus case that carries a stub `cost` key leaves it unread, because a stub has no price to report and its golden already printed `cost_usd= -`. `cost_of` is exported only so the registry suite can pin a row's published shape against a figure. 66 files, net −361 lines | this change |
+| D-C — the operation-budget seam | `Budget`, `Authority.with_operation_budget` and the `budget` field of the bounds record go, and with them `test_caps_budget.ml` (431 lines), the two budget rows in `test_authority_net.ml`, `test_caps_audit`'s needle case that counted mentions of the decorator, `--max-calls` on `examples/gated_search.ml`, and `budget.cmi` in the interface-mirror rule the negative fixtures compile against. `grant_path.ml` still compiles without it, which is the proof the seal never needed the seam; `controls_record_forge.ml`'s diagnostic re-promotes over a record one field shorter. `lib/caps/README.md` now states that the layer enforces no operation ceiling, and the capability plan's §6 carries the reason and the condition for a counter coming back | this change |
 
 Two corrections to the plan's own predictions, recorded where they were wrong rather
 than left for a reader to find: D2's resolver (above, in §40), and S-010's line-count
 claim — the five readers lost 19 lines while `fallback.ml` gained 31, so the gain is the
 single owner of the status reading, not a smaller tree.
 
-Still open on this pass: the last contested §3 weight row (the `Factory` façade) and D-C, D-D and
-D-E — all three decided 2026-11-17, each landing in its own commit. The `context` row closed with
-D-B rather than on its own: its one reader was the `providers.tsv` row the validator cross-checked,
-so `context_cap`, the field and the six `~context:` rows went with the table that consumed them.
+Still open on this pass: the last contested §3 weight row (the `Factory` façade) and D-D and D-E —
+all three decided 2026-11-17, each landing in its own commit. The `context` row closed with D-B
+rather than on its own: its one reader was the `providers.tsv` row the validator cross-checked, so
+`context_cap`, the field and the six `~context:` rows went with the table that consumed them.
 
 One design point was settled rather than changed. `Exa.make_tiered` keeps its own
 cooldown clock, deliberately: its escalation happens inside one in-flight call — the

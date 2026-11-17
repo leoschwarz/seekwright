@@ -224,7 +224,7 @@ capability layer's own contract, and `ocaml-docs/` is the operator's map.
 
 | Path | Role |
 |---|---|
-| `lib/caps/` | package `mcp-caps`, wrapped as `Mcp_caps`: `authority` (the `'caps` GADT, `Fs`/`Net` operations, `of_confinement`), `policy` / `policy_fs` / `policy_net` (the confinement decisions, never the grants), `tool`, `registry` (`add ~grant` — the one place a grant meets a tool), `budget`, `controls` / `controls_raw`, `event`, `error`, `server` (the only module that knows mcp-kit: `Mcp_caps.Server.of_registry` folds a `Registry.t` into an `Mcp_kit.Server.t`) |
+| `lib/caps/` | package `mcp-caps`, wrapped as `Mcp_caps`: `authority` (the `'caps` GADT, `Fs`/`Net` operations, `of_confinement`), `policy` / `policy_fs` / `policy_net` (the confinement decisions, never the grants), `tool`, `registry` (`add ~grant` — the one place a grant meets a tool), `controls` / `controls_raw`, `event`, `error`, `server` (the only module that knows mcp-kit: `Mcp_caps.Server.of_registry` folds a `Registry.t` into an `Mcp_kit.Server.t`) |
 | `lib/router.ml` | the routing decisions, stdlib-only by machine check: which name serves, the free walk, the fallback rungs, the refusal sentences |
 | `lib/model.ml`, `lib/wire/` | the wire records and their `Yojson` encoders (the absent-field rule); `wire/page.ml` is the page and image record both halves of the fetch path speak |
 | `lib/text/` | package `seekwright.text`: `Utf8` — every length cap and offset in the tree counts codepoints, not bytes — and `Repr`, the quoting that keeps scraped text from fabricating a log record |

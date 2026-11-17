@@ -1,7 +1,6 @@
 (** Capability grants: phantom-typed I/O tokens passed to tool handlers. Operations are methods on
     ['kind Authority.t]; grants are abstract and cannot be forged or widened. Grants carry bounded
-    execution controls (audit logging, operation timeout, operation budget) configured via
-    decorators. *)
+    execution controls (audit logging and an operation timeout) configured via decorators. *)
 
 type fs
 type net
@@ -75,7 +74,3 @@ val with_log : sink:(Event.t -> unit) -> 'kind t -> 'kind t
 
 val with_operation_timeout : Eio.Time.Timeout.t -> 'kind t -> 'kind t
 (** [with_operation_timeout timeout grant] sets the per-operation timeout bound. *)
-
-val with_operation_budget : Budget.t -> 'kind t -> 'kind t
-(** [with_operation_budget budget grant] attaches a caller-owned operation counter; refuses with
-    [Denied] when spent. *)

@@ -30,7 +30,6 @@
 let () = Mirage_crypto_rng_unix.use_default ()
 
 module Authority = Mcp_caps.Authority
-module Budget = Mcp_caps.Budget
 module Error = Mcp_caps.Error
 module Event = Mcp_caps.Event
 module Policy = Mcp_caps.Policy
@@ -44,9 +43,8 @@ let kind_testable =
    directly: the wrapper is what keeps a failure message one [failf] call away. *)
 let failf format = Format.kasprintf (fun message -> Alcotest.fail message) format
 
-(* Several operations through one {e grant} is what a per-operation bound and a
-   caller's budget are about; [repeat n f] says the count instead of hiding it in
-   a unit list. *)
+(* Several operations through one {e grant} is what a per-operation bound is
+   about; [repeat n f] says the count instead of hiding it in a unit list. *)
 let repeat n f =
   for _ = 1 to n do
     f ()
@@ -273,8 +271,7 @@ let endpoint ?(scheme = `Http) ?port host = { Policy.scheme; host; port }
 
 (* No [~controls]: the bounds record's module is private, so a grant's bounds are
    whatever [of_confinement] installs plus what the [Authority] decorators change
-   afterwards — which is the point, and what the timeout and budget rows below
-   rely on. *)
+   afterwards — which is the point, and what the timeout rows below rely on. *)
 let grant_of ~env decision =
   Authority.Net.of_confinement ~mono_clock:(Eio.Stdenv.mono_clock env) decision
 
@@ -982,52 +979,6 @@ let timeout_is_per_operation () =
               | Ok response -> Alcotest.(check int) "served" 200 response.status
               | Error error -> failf "a repeated operation failed: %s" (Error.render error))))
 
-(* A caller-owned counter, spent once per operation; the refusal does no I/O,
-   which is what makes the budget observable at the far end (§6). *)
-let operation_budget () =
-  with_fixture (fun env sw port ->
-      with_endpoints ~net:env#net ~sw
-        [ endpoint ~port "127.0.0.1" ]
-        (fun decision ->
-          let budget = Budget.make 2 in
-          let grant = Authority.with_operation_budget budget (grant_of ~env decision) in
-          let served = ref 0 in
-          let refused = ref 0 in
-          repeat 4 (fun () ->
-              match request grant (Printf.sprintf "http://127.0.0.1:%d/ok" port) with
-              | Ok _ -> incr served
-              | Error error ->
-                  check_kind Error.Denied error;
-                  incr refused);
-          Alcotest.(check int) "two operations were served" 2 !served;
-          Alcotest.(check int) "two were refused by the budget" 2 !refused;
-          Alcotest.(check int) "the counter does not go below zero" 0 (Budget.remaining budget);
-          Alcotest.(check int)
-            "the fixture was called exactly twice" 2
-            (List.length (Atomic.get seen))))
-
-(* A grant shared by two fibers spends one budget atomically: N fibers cannot all
-   pass the same check. *)
-let budget_is_atomic () =
-  Eio_main.run @@ fun env ->
-  Eio.Switch.run @@ fun sw ->
-  let state, net = scripted_net ~answers:[ ("api.test", [ "93.184.216.34" ]) ] () in
-  with_endpoints ~net ~sw
-    [ endpoint "api.test" ]
-    (fun decision ->
-      let budget = Budget.make 3 in
-      let grant = Authority.with_operation_budget budget (grant_of ~env decision) in
-      let taken = Atomic.make 0 in
-      let attempt () =
-        match request grant "http://api.test/" with
-        | exception Simulated _ -> Atomic.incr taken
-        | Ok _ -> failf "the scripted network handed out a socket"
-        | Error _ -> ()
-      in
-      Eio.Fiber.both (fun () -> repeat 4 attempt) (fun () -> repeat 4 attempt);
-      Alcotest.(check int) "eight calls, three operations' worth of budget" 3 (Atomic.get taken);
-      ignore state)
-
 (* §6's claim is that a deployment can log {e every} authority operation without
    a page, a body or a header reaching the log, so the assertions worth making are
    about what the line does not contain. *)
@@ -1169,8 +1120,6 @@ let () =
         [
           Alcotest.test_case "a waiting operation hits its time bound" `Quick timeout_trip;
           Alcotest.test_case "the bound is per operation" `Quick timeout_is_per_operation;
-          Alcotest.test_case "a caller's operation budget" `Quick operation_budget;
-          Alcotest.test_case "the budget is atomic across fibers" `Quick budget_is_atomic;
           Alcotest.test_case "one bounded audit line per operation" `Quick audit_events;
         ] );
       ( "https",
