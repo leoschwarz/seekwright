@@ -1,7 +1,7 @@
 behaviour	baseline	port	port_suite	status	verification
 routing decisions: resolve, permit, free walk, rungs, refusal sentences	differential:router	lib/router.ml	test_router.ml + corpus/router	ported	unit; differential-golden
 stdlib-only routing core (no seekwright imports)	test/dune ocamldep rule	lib/router.ml	test/dune ocamldep rule	ported	unit(build-time)
-config parsing, defaults, validation, refusal sentences	differential:config	lib/config.ml	test_config.ml + test/differential/corpus/config	ported	unit; differential-golden
+config parsing, defaults, validation, refusal sentences	differential:config	lib/config.ml	test_config.ml + test/differential/corpus/config	ported	unit; differential-golden; explicit-divergence(scalars read at their TOML type)
 special-token escaping (reversible, idempotent, byte-level)	differential:sanitize	lib/sanitize.ml	test_sanitize.ml + corpus/sanitize	ported	unit; differential-golden
 wire models: unset dropped, TEXT_FIELDS escaped, provider-boundary nulls kept	differential:model	lib/model.ml	test_model.ml + corpus/model	ported	unit; differential-golden; explicit-divergence(coercion)
 search engine walk: ladder, health gate, notices, caps, events	differential:engine	lib/engine.ml	test_engine.ml + corpus/engine	ported	unit; differential-golden

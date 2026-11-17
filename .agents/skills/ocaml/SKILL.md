@@ -328,12 +328,16 @@ Each entry cost a build; one or two lines, dated. Group by the tool that bit.
   error here, a `string_type` error in Python. Two more accepted divergences: a
   TOML integer above `int64` and a decimal string above `int63`. All three are
   named in `test_config.ml`'s header. (2026-11-11)
-- pydantic's lax scalar coercion was measured, not guessed: `int` accepts
-  `" 400 "`, `"+7"`, `"1_000"`, `"500.0"` but not `"1."`, `"1e2"`, `"0x10"`;
-  `bool` accepts the twelve spellings `true/t/yes/y/on/1` and
-  `false/f/no/n/off/0` case-insensitively with **no trimming**; TOML numbers 0/1
-  coerce too. Typing scalars straight into fields refuses an operator's
-  `max_chars = "400"`. (2026-11-11)
+- A TOML scalar is read at its own type. The only widening is number-to-number:
+  an `int` where a float is wanted, and a fractionless `float` where an int is
+  wanted. A quoted number, a boolean word in quotes and a bare `0`/`1` for a
+  boolean are each a `type_error` naming the key. pydantic coerced all of them —
+  the twelve spellings and `" 400 "`, `"+7"`, `"1_000"`, `"500.0"`, `"nan"`,
+  `"inf"` were measured off pydantic 2.14, not guessed — and this port stopped
+  matching that grammar: D-E in `plans/duplication-and-simplification-plan.md`,
+  with the refusals pinned in `test_config.ml`'s "the scalar types" group and in
+  eight `explicit-divergence` config goldens. (measured 2026-11-11, declined
+  2026-11-17)
 
 ### Eio 1.6
 

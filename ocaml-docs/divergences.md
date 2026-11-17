@@ -77,6 +77,25 @@ there is no uvicorn here. Both keys exist (the config grammar is shared), both
 are parsed, and setting either to a non-default value is a load-time refusal
 naming the reason. Everything else in `[logging]` works.
 
+## Scalars are typed, not coerced
+
+The Python deployment read a dozen scalars loosely: pydantic took `"1_000"`,
+`"1.000"`, `"nan"`, `"inf"`, `"yes"`, `"on"` out of a string, and a bare `0` or `1`
+as a boolean. This loader takes TOML's types at their word, with one widening —
+an integer for a float, or a float with no fractional part for an integer, because
+TOML spells one number two ways. So a config that started there can fail to start
+here, and it fails by naming the key: `policy.max_snippet_chars: expected an
+integer, found '400'`. The rule is stated for operators in
+`ocaml-docs/configuration.md`; `test/differential/corpus/config/` keeps the loose
+spellings as cases, the goldens pin this port's refusal, and
+`test/differential/divergences.tsv` carries the reason for each — decision D-E in
+`plans/duplication-and-simplification-plan.md`.
+
+TOML's own float literals survive the cut: `inf`, `+inf` and `-inf` are read (the
+loader rewrites them to an overflowing decimal float, which the parser reads and
+which lands on the same value). A bare `nan` is refused — `tomllib` plus pydantic
+handed a NaN to the same key, and no bound in this file can be satisfied by one.
+
 ## Live verification is thinner than the shipped surface
 
 All seventeen names are registered and buildable (`lib/factory/registry.ml`).

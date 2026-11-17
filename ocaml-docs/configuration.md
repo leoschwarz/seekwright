@@ -37,6 +37,21 @@ enabled = true
 A provider entry is a table, not a boolean: `[providers] exa = true` is refused
 with `providers.exa: expected a table, found a boolean`.
 
+A key takes the TOML type it declares. The one widening is TOML's own spelling of
+a number: an integer is accepted where a float is wanted (`timeout_seconds = 15`)
+and a float with no fractional part where an integer is wanted
+(`max_snippet_chars = 15.0`). Nothing is coerced. `max_snippet_chars = "400"`,
+`log_content = "yes"`, `enabled = "TRUE"`, `enabled = 1` and
+`max_snippet_chars = true` are each a startup failure naming the key —
+`policy.max_snippet_chars: expected an integer, found '400'` — because a quoted
+number is the commonest typo in a config file and the loader reports a value it
+cannot honour instead of re-typing it. TOML's own non-decimal integers
+(`0x10`, `0o10`, `0b101`) and its `inf` are numbers and read as numbers. Its
+`nan` is refused (`expected a number, found 'nan'`): no bound in this file can be
+satisfied by a NaN, so the loader reports it rather than accepting it. The
+rewrite pass that makes those literals visible to the parser never touches a
+string or a comment.
+
 `[providers."exa:free"]` must be quoted when you configure the flavoured name
 itself — a bare `exa:free` is not a TOML bare key. (`Config.key_name` strips one
 matched pair of quotes on read, which is what makes a quoted flavoured key

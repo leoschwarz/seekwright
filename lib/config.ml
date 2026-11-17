@@ -691,113 +691,16 @@ let type_error loc key expected value =
 let unknown_key loc key = Printf.sprintf "%s: unknown key" (dotted loc key)
 
 (* TOML writes [15] and [15.0] differently, and an operator who wants a duration
-   writes either, so an integer is accepted for a float and a boolean for either
-   number. The same reading accepts a quoted number and the twelve boolean
-   spellings, because a quoted number is the commonest typo in a config file and
-   the Python deployment has always taken it: refusing it here would turn a
-   working [config.toml] into a startup failure the operator cannot see. The
-   accepted spellings below were read off pydantic 2.14 rather than guessed, and
-   they are narrower than OCaml's own [float_of_string] on purpose — no
-   hexadecimal, and an [_] separator only between two digits. *)
-
-let trim s =
-  let stop ch = ch <> ' ' && ch <> '\t' && ch <> '\n' && ch <> '\r' in
-  let finish = ref (String.length s) in
-  while !finish > 0 && not (stop s.[!finish - 1]) do
-    decr finish
-  done;
-  let start = ref 0 in
-  while !start < !finish && not (stop s.[!start]) do
-    incr start
-  done;
-  String.sub s !start (!finish - !start)
+   writes either, so an integer is accepted for a float and a float with no
+   fractional part for an integer. Nothing else is coerced. A quoted number, a
+   bare integer for a boolean and a boolean for a number are each the wrong TOML
+   type for the key and meet the same [type_error] as any other. The Python
+   deployment read a dozen of these laxly — ["1_000"], ["1.000"], ["nan"],
+   ["yes"], a [0] for a boolean — and this port refuses them: a quoted number in
+   a config file is a typo, and the tree's rule is that an unhonourable value is
+   reported at startup rather than quietly re-typed. *)
 
 let is_digit ch = ch >= '0' && ch <= '9'
-
-(* An underscore separates digits, so it has to sit between two of them: [_1]
-   and [1__0] are not numbers. *)
-let drop_separators s =
-  let buffer = Buffer.create (String.length s) in
-  let ok = ref true in
-  String.iteri
-    (fun i ch ->
-      if ch <> '_' then Buffer.add_char buffer ch
-      else if i > 0 && i + 1 < String.length s && is_digit s.[i - 1] && is_digit s.[i + 1] then ()
-      else ok := false)
-    s;
-  if !ok then Some (Buffer.contents buffer) else None
-
-let lower = String.map Char.lowercase_ascii
-
-let bool_words =
-  [
-    ("true", true);
-    ("t", true);
-    ("yes", true);
-    ("y", true);
-    ("on", true);
-    ("1", true);
-    ("false", false);
-    ("f", false);
-    ("no", false);
-    ("n", false);
-    ("off", false);
-    ("0", false);
-  ]
-
-let bool_from_string s = List.assoc_opt (lower s) bool_words
-
-(* [0] and [1], and no other number: pydantic reads a boolean out of an integer
-   or a float only when the value is exactly one of those two. *)
-let bool_from_number value =
-  if Float.equal value 0.0 then Some false else if Float.equal value 1.0 then Some true else None
-
-(* A whole number written in decimal, with an optional fraction of nothing but
-   zeros: ["1.000"] is [1], while ["1.001"], ["1e2"] and ["1."] are not
-   integers. A value past what this build's [int] holds is refused; Python
-   carries it as an arbitrary-precision integer, and no limit key here means
-   anything near that size. *)
-let int_from_string s =
-  let digits_only text = text <> "" && String.for_all is_digit text in
-  let zeros text = text <> "" && String.for_all (fun ch -> ch = '0') text in
-  let signed sign digits =
-    match digits with
-    | Some digits when digits_only digits -> Option.map (( * ) sign) (int_of_string_opt digits)
-    | _ -> None
-  in
-  let text = trim s in
-  let sign, body =
-    if text = "" then (1, "")
-    else if text.[0] = '+' then (1, String.sub text 1 (String.length text - 1))
-    else if text.[0] = '-' then (-1, String.sub text 1 (String.length text - 1))
-    else (1, text)
-  in
-  match String.index_opt body '.' with
-  | None -> signed sign (drop_separators body)
-  | Some at -> (
-      let whole = String.sub body 0 at in
-      let fraction = String.sub body (at + 1) (String.length body - at - 1) in
-      if not (zeros fraction) then None
-      else
-        match drop_separators whole with
-        | Some "" -> None
-        | Some digits -> signed sign (Some digits)
-        | None -> None)
-
-let float_from_string s =
-  let text = trim s in
-  let negative, body =
-    if text <> "" && (text.[0] = '+' || text.[0] = '-') then
-      (text.[0] = '-', String.sub text 1 (String.length text - 1))
-    else (false, text)
-  in
-  match lower body with
-  | "nan" -> Some Float.nan
-  | "inf" | "infinity" -> Some (if negative then Float.neg infinity else infinity)
-  | _ -> (
-      if String.exists (fun ch -> ch = 'x' || ch = 'X') text then None
-      else
-        match drop_separators body with Some digits -> float_of_string_opt digits | None -> None)
 
 let unknown_keys loc keys =
   String.concat "; " (List.map (fun key -> unknown_key loc key) (List.sort String.compare keys))
@@ -819,22 +722,12 @@ let bool_field get loc key default =
   match get key with
   | None -> Ok default
   | Some (T.TBool value) -> Ok value
-  | Some (T.TInt number as value) -> (
-      match bool_from_number (float_of_int number) with
-      | Some flag -> Ok flag
-      | None -> refuse loc key value)
-  | Some (T.TFloat number as value) -> (
-      match bool_from_number number with Some flag -> Ok flag | None -> refuse loc key value)
-  | Some (T.TString text as value) -> (
-      match bool_from_string text with Some flag -> Ok flag | None -> refuse loc key value)
   | Some value -> refuse loc key value
 
 let float_of_value value =
   match value with
   | T.TFloat number -> Some number
   | T.TInt number -> Some (float_of_int number)
-  | T.TBool value -> Some (if value then 1.0 else 0.0)
-  | T.TString text -> float_from_string text
   | _ -> None
 
 let float_field get loc key default =
@@ -864,11 +757,6 @@ let int_field get loc key default =
         Error
           (Printf.sprintf "%s: expected an integer, found a number with a fractional part"
              (dotted loc key))
-  | Some (T.TBool value) -> Ok (if value then 1 else 0)
-  | Some (T.TString text as given) -> (
-      match int_from_string text with
-      | Some value -> Ok value
-      | None -> Error (type_error loc key "an integer" given))
   | Some value -> Error (type_error loc key "an integer" value)
 
 let string_field get loc key default =
@@ -1155,7 +1043,9 @@ let keyless_hint table =
 
 (* The [toml] library's lexer reads TOML 1.0's decimal integers and floats, but
    not non-decimal integer bases or [inf]/[nan] spellings. A hexadecimal, octal
-   or binary integer becomes decimal; infinity or NaN becomes a quoted string.
+   or binary integer becomes decimal; an infinity becomes [1e1000], which the
+   lexer reads and which overflows to the same value; NaN becomes a quoted
+   string, so the number reader refuses it by name — see {!inf_nan_literal}.
    A signed non-decimal integer ([+0x10]) is invalid TOML and left for the parser
    to reject. *)
 let value_terminator ch =
@@ -1229,12 +1119,17 @@ let non_decimal_literal text i =
   end
 
 (* [i] is at the start of an infinity or NaN value, with an optional sign, as
-   (quoted spelling, end index). The quoted spelling is what the loader's number
-   reader takes, so the parser never has to know the word. *)
+   (replacement, end index). An infinity becomes an overflowing decimal float:
+   the lexer has no word for infinity, but [1e1000] is TOML's own float grammar
+   and it lands on the same value. NaN has no such spelling, and no key here has
+   a NaN bound it could honour, so it stays a string and the accessor reports the
+   wrong type naming the key rather than accepting a value nothing can compare
+   against. *)
 let inf_nan_literal text i =
   let n = String.length text in
   let signed = i < n && (text.[i] = '+' || text.[i] = '-') in
   let body = if signed then i + 1 else i in
+  let sign = if signed then String.make 1 text.[i] else "" in
   let word =
     if body + 3 <= n && String.sub text body 3 = "inf" then Some "inf"
     else if body + 3 <= n && String.sub text body 3 = "nan" then Some "nan"
@@ -1242,10 +1137,14 @@ let inf_nan_literal text i =
   in
   match word with
   | None -> None
-  | Some _ ->
+  | Some word ->
       let stop = body + 3 in
       if stop < n && not (value_terminator text.[stop]) then None
-      else Some ("\"" ^ String.sub text i (stop - i) ^ "\"", stop)
+      else
+        let replacement =
+          if word = "inf" then sign ^ "1e1000" else "\"" ^ String.sub text i (stop - i) ^ "\""
+        in
+        Some (replacement, stop)
 
 let translate_toml_literals text =
   let n = String.length text in

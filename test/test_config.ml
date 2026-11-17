@@ -1411,10 +1411,13 @@ let agent_cases =
         unsetenv "SEEKWRIGHT_AGENT_API_KEY" );
   ]
 
-(* pydantic's lax scalar reading, ported because a quoted number is the commonest
-   typo in a config file and the Python deployment has always taken it. The
-   accepted and refused spellings were read off pydantic 2.14 and are pinned
-   here, which is the stronger side of the pair. *)
+(* A key takes the TOML type it declares, with one widening: TOML writes [15] and
+   [15.0] as two different values and an operator meaning a duration may write either,
+   so a number is a number however it is spelled. Everything the Python deployment
+   coerced out of a string — ["1_000"], ["1.000"], ["nan"], ["yes"] — and a bare
+   integer read as a boolean or a boolean as a number, is refused here with the same
+   [type_error] any other wrong type meets. D-E in
+   [plans/duplication-and-simplification-plan.md] records the decision. *)
 
 let policy_with value =
   Config.load (Some (write_config (Printf.sprintf "[policy]\nmax_snippet_chars = %s\n" value)))
@@ -1436,71 +1439,65 @@ let seconds value =
 let flag value =
   match logging_with value with Ok cfg -> Some cfg.Config.logging.log_content | Error _ -> None
 
-let test_an_integer_takes_a_whole_float () =
-  A.(check (option int) "500.0" (Some 500) (snippet "500.0"));
-  A.(check (option int) "1.000 is a whole number" (Some 1) (snippet "\"1.000\""));
-  A.(check (option int) "500.5 has a fractional part" None (snippet "500.5"))
-
-let test_an_integer_takes_a_quoted_number () =
+let test_a_number_is_a_number_however_toml_spells_it () =
   A.(
-    check (option int) "quoted" (Some 500) (snippet "\"500\"");
-    check (option int) "quoted float of zeros" (Some 500) (snippet "\"500.0\"");
-    check (option int) "padded" (Some 400) (snippet "\" 400 \"");
-    check (option int) "signed" (Some 7) (snippet "\"+7\"");
-    check (option int) "digit separators" (Some 1000) (snippet "\"1_000\""))
+    check (option int) "an integer" (Some 500) (snippet "500");
+    check (option int) "a float with no fractional part" (Some 500) (snippet "500.0");
+    check maybe_number "an integer for a duration" (Some 10.0) (seconds "10");
+    check maybe_number "a float for a duration" (Some 15.5) (seconds "15.5");
+    check (option bool) "true" (Some true) (flag "true");
+    check (option bool) "false" (Some false) (flag "false"))
 
-let test_an_integer_refuses_what_is_not_one () =
+let test_a_number_refuses_a_value_with_a_fraction () =
   A.(
-    check (option int) "not a number" None (snippet "\"abc\"");
+    check (option int) "500.5 has a fractional part" None (snippet "500.5");
+    check (option int) "a fraction an exponent cannot hide" None (snippet "1.0001");
+    check (option int) "a whole float in exponent form is still whole" (Some 100) (snippet "1e2");
+    check (option int) "an exponent can land on a whole number" (Some 150) (snippet "1.5e2"))
+
+let test_a_quoted_value_is_the_wrong_type () =
+  (* Every spelling the old lax reading used to accept. A quoted number is the
+     commonest typo in a config file, and the answer to a typo is the sentence that
+     names the key, not a re-typed value. *)
+  A.(
+    check (option int) "a quoted integer" None (snippet "\"500\"");
+    check (option int) "a quoted float of zeros" None (snippet "\"500.0\"");
+    check (option int) "a padded number" None (snippet "\" 400 \"");
+    check (option int) "a signed number" None (snippet "\"+7\"");
+    check (option int) "digit separators" None (snippet "\"1_000\"");
+    check (option int) "not a number at all" None (snippet "\"abc\"");
     check (option int) "hexadecimal" None (snippet "\"0x10\"");
     check (option int) "an exponent" None (snippet "\"1e2\"");
     check (option int) "a trailing point" None (snippet "\"1.\"");
     check (option int) "a non-ASCII digit" None (snippet "\"١٢\"");
-    check (option int) "past this build's int" None (snippet "\"99999999999999999999\""))
-
-let test_a_number_takes_a_whole_number () =
-  A.(
-    check maybe_number "an integer for a duration" (Some 10.0) (seconds "10");
-    check maybe_number "a quoted number" (Some 15.5) (seconds "\"15.5\"");
-    check maybe_number "an exponent" (Some 100.0) (seconds "\"1e2\"");
-    check maybe_number "separators" (Some 10.5) (seconds "\"1_0.5\""))
-
-let test_a_number_takes_the_infinities () =
-  (* pydantic reads the two infinities and a NaN from a string, so a duration
-     written "inf" starts rather than refusing; the value's shape is what matters
-     here, not its magnitude. *)
-  let infinite value =
-    match seconds value with
-    | Some v -> Float.equal v Float.infinity || Float.equal v Float.neg_infinity
-    | None -> false
-  in
-  let nan value = match seconds value with Some v -> Float.is_nan v | None -> false in
-  A.(
-    check bool "inf" true (infinite "\"inf\"");
-    check bool "+infinity" true (infinite "\"+Infinity\"");
-    check bool "-inf" true (infinite "\"-inf\"");
-    check bool "nan" true (nan "\"nan\"");
-    check bool "NAN" true (nan "\"NAN\""))
-
-let test_a_number_refuses_what_is_not_one () =
-  A.(
+    check (option int) "past this build's int" None (snippet "\"99999999999999999999\"");
+    check maybe_number "a quoted float" None (seconds "\"15.5\"");
+    check maybe_number "a quoted exponent" None (seconds "\"1e2\"");
+    check maybe_number "separators around a point" None (seconds "\"1_0.5\"");
+    check maybe_number "a doubled separator" None (seconds "\"1__0\"");
     check maybe_number "a word" None (seconds "\"abc\"");
-    check maybe_number "hexadecimal" None (seconds "\"0x1p3\"");
-    check maybe_number "a doubled separator" None (seconds "\"1__0\""))
+    check maybe_number "a quoted infinity" None (seconds "\"inf\"");
+    check maybe_number "a quoted NaN" None (seconds "\"nan\"");
+    check (option bool) "a quoted boolean word" None (flag "\"true\"");
+    check (option bool) "yes" None (flag "\"yes\"");
+    check (option bool) "on" None (flag "\"on\"");
+    check (option bool) "a quoted one" None (flag "\"1\"");
+    check (option bool) "a quoted zero" None (flag "\"0\""))
 
-let test_a_boolean_takes_its_twelve_spellings () =
-  List.iter
-    (fun spelling -> A.(check (option bool) spelling (Some true) (flag spelling)))
-    [ "true"; "\"true\""; "\"TRUE\""; "\"yes\""; "\"y\""; "\"on\""; "\"t\""; "\"1\""; "1"; "1.0" ];
-  List.iter
-    (fun spelling -> A.(check (option bool) spelling (Some false) (flag spelling)))
-    [ "false"; "\"false\""; "\"off\""; "\"no\""; "\"n\""; "\"f\""; "\"0\""; "0"; "0.0" ]
-
-let test_a_boolean_refuses_everything_else () =
+let test_a_boolean_takes_only_the_two_toml_words () =
   A.(
+    check (option bool) "an upper-case word" None (flag "TRUE");
     check (option bool) "a padded word" None (flag "\" tRuE \"");
+    check (option bool) "a bare integer" None (flag "1");
+    check (option bool) "a bare zero" None (flag "0");
+    check (option bool) "a bare float" None (flag "1.0");
     check (option bool) "another number" None (flag "2");
     check (option bool) "a fractional number" None (flag "2.5"))
+
+let test_a_number_refuses_a_boolean () =
+  A.(
+    check maybe_number "true for a duration" None (seconds "true");
+    check (option int) "false for a limit" None (snippet "false"))
 
 (* TOML 1.0 writes integers in three non-decimal bases and spells its two float
    limits as bare words; the [toml] library's lexer reads neither, so the loader
@@ -1541,13 +1538,15 @@ let test_a_bare_infinity_and_nan () =
   let negative value =
     match seconds value with Some v -> Float.equal v Float.neg_infinity | None -> false
   in
-  let nan value = match seconds value with Some v -> Float.is_nan v | None -> false in
   A.(
     check bool "inf" true (positive "inf");
     check bool "+inf" true (positive "+inf");
     check bool "-inf" true (negative "-inf");
-    check bool "nan" true (nan "nan");
-    check bool "+nan" true (nan "+nan");
+    (* TOML spells NaN a way this lexer cannot read, and no key here has a bound a
+       NaN could satisfy, so the loader hands the word to the number reader, which
+       refuses it by name. A mixed-case spelling is not TOML at all. *)
+    check maybe_number "nan" None (seconds "nan");
+    check maybe_number "+nan" None (seconds "+nan");
     check bool "a mixed-case spelling is not TOML" true (seconds "NaN" = None))
 
 let test_literal_lookalikes_are_left_alone () =
@@ -1775,21 +1774,17 @@ let () =
         cases "provider name scheme" name_scheme_cases;
         cases "search free fallback" search_free_fallback_cases;
         cases "agent config" agent_cases;
-        ( "lax scalars",
+        ( "the scalar types",
           [
-            A.test_case "an integer takes a whole float" `Quick test_an_integer_takes_a_whole_float;
-            A.test_case "an integer takes a quoted number" `Quick
-              test_an_integer_takes_a_quoted_number;
-            A.test_case "an integer refuses what is not one" `Quick
-              test_an_integer_refuses_what_is_not_one;
-            A.test_case "a number takes a whole number" `Quick test_a_number_takes_a_whole_number;
-            A.test_case "a number takes the infinities" `Quick test_a_number_takes_the_infinities;
-            A.test_case "a number refuses what is not one" `Quick
-              test_a_number_refuses_what_is_not_one;
-            A.test_case "a boolean takes its twelve spellings" `Quick
-              test_a_boolean_takes_its_twelve_spellings;
-            A.test_case "a boolean refuses everything else" `Quick
-              test_a_boolean_refuses_everything_else;
+            A.test_case "a number is a number however TOML spells it" `Quick
+              test_a_number_is_a_number_however_toml_spells_it;
+            A.test_case "an integer refuses a value with a fraction" `Quick
+              test_a_number_refuses_a_value_with_a_fraction;
+            A.test_case "a quoted value is the wrong type" `Quick
+              test_a_quoted_value_is_the_wrong_type;
+            A.test_case "a boolean takes only the two TOML words" `Quick
+              test_a_boolean_takes_only_the_two_toml_words;
+            A.test_case "a number refuses a boolean" `Quick test_a_number_refuses_a_boolean;
           ] );
         ( "toml literals",
           [

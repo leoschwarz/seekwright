@@ -1,7 +1,7 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 steps 0–8 are landed, as are D-A, D-B, D-C, D-F and D-G; D-D is settled by
-a measurement that declines the change it proposed.** What remains is D-E and the
+Status: **§5 steps 0–8 are landed, as are D-A, D-B, D-C, D-E, D-F and D-G; D-D is
+settled by a measurement that declines the change it proposed.** What remains is the
 `Factory` façade row of §3. Tree read at `6e4ad90`; reviewed and corrected against the
 tree at `742a9c7` on 2026-11-17 (the code is unchanged between the two commits — the
 diff is plans only). The corrections are recorded in §8; the §4 decisions were taken by
@@ -907,6 +907,31 @@ of Python's numeric grammar is a large thing to own. If it goes: `test_config.ml
 frozen-vocabulary cases, the config differential corpus and its goldens, and
 `config-fields.tsv` if D-B keeps it, all move in the same commit.
 
+**Decided: refuse, and landed.** The seven helpers go — `lib/config.ml` loses 101 lines
+net — and a TOML scalar is read at its own type, with one widening: an integer where a
+float is wanted, and a float with no fractional part where an integer is wanted, because
+TOML spells one number two ways. `test_config.ml`'s "the scalar types" group pins the
+refusals by name (`policy.max_snippet_chars: expected an integer, found '400'`), seven
+`explicit-divergence` config goldens re-pin to the refusal, `matrix/behaviours.tsv` names
+the kind on the config row, and the prose moves with the code:
+`ocaml-docs/configuration.md` states the rule for operators, `ocaml-docs/divergences.md`
+carries the difference from the Python deployment, and the `ocaml` skill's TOML line
+records what pydantic used to take.
+
+Two facts the proposal did not know, both found by the gate rather than by reading. The
+corpus is frozen input, so the change lands as golden edits — no case is added, moved or
+removed — and `94-float-inf` is a *bare* `inf`, not a quoted one: the port reads it, so
+that golden goes back to the extractor-only registration and its `divergences.tsv` row is
+deleted. And `Config`'s literal-rewrite pass was leaning on the deleted grammar: it
+rewrote TOML's `inf` and `nan` into quoted strings so `float_from_string` could read them
+back, which is how a value the lexer cannot spell reached a duration key. Measured against
+`toml` 7.1.0: the lexer rejects `inf`, `+inf`, `-inf`, `nan` and `NaN` outright, and
+`1e1000` parses to `inf`. The pass now rewrites an infinity to `±1e1000` — the same value
+reached through the lexer's own float grammar — and leaves NaN a string the accessor
+refuses by name, because no bound in this file can be satisfied by a NaN and the tree's
+rule is that an unhonourable value is reported, not re-typed. That is a new divergence
+from `tomllib`, registered in the golden and the docs rather than smoothed over.
+
 **D-F — Exa's private free-to-keyed ladder.** `Exa.make_tiered` is an escalation
 engine inside one adapter: its own monotonic cooldown clock, its own reading of
 which free-tier failure means exhaustion, its own notice composition, three event
@@ -982,10 +1007,10 @@ in the same commit.
 |3|S-002 test harness|**landed** — −659 in the sixteen adapter suites, −80 in the six journal suites that copied the JSON accessors, +242 in `test/support/` (net −497, short of the estimate for the reasons in §2); one harness for the `Net` mock, one for the accessors, four contract-duplicate cases deleted|
 |4|S-003 one dispatch per verb, answering Q-002|**landed** — three dispatch functions, six call sites collapsed; Q-002 answered (the types stay, the call is shared); the `api_answer` pre-check asymmetry resolved by pre-checking on both surfaces, so an unbuilt `answer` pin is `invalid:` on the tool call and 400 on REST|
 |5|S-004 field lists, then S-006, then S-007|**landed** — S-004: ten key lists, one per wire model, read by `reject_extra` and by the schema builder, with the schema mismatch reported by name through `Server.untabled_wire_fields` and failed by a suite because `lib/server.ml` may not raise (net +82, all three pins byte-stable). S-006: one `answer_metrics` record and one `(key, getter)` vocabulary feeding the journal line, `Agent`'s log line and the manifest's `[answer]` row, which was a third hand-typed spelling (+10 in `lib/`, +48 in the two suites, `surface.expected` unmoved at 37). S-007: `Civil.clock_of_instant` keeps the fraction, `Usage.civil_of`'s hand-rolled floored division is gone, and the journal's `+00:00` key and the model-facing `Z` are documented apart and pinned equal by a clock case|
-|6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|
-|7|S-010 fallback readers, lifting D2|the `'tag` goes, one `Fallback.run` owns the tail, and the factory builds the host check once|
+|6|S-008 page cache, S-009 the CLI grant|**landed** — the cache holds one `Wire.Page` record and one sidecar codec instead of four copies of the page shape (`ff7cf44`), and `bin/main.ml`'s private cohttp-eio + TLS stack is gone: the client verbs dial through `Factory.grant_of_endpoint`, with the response ceiling and the operation bound now grant properties (`b98a460`)|
+|7|S-010 fallback readers, lifting D2|**landed** — the `'tag` is off every `Fallback_*.config`, `Remote_target.make_check` is a value the factory builds once per rung, and `Fallback.status_rule` / `status_error` / `send` / `send_json` own the tail the five readers shared (`423ee5b`); the readers lost 19 lines while `fallback.ml` gained 31, so the gain is one owner of the status reading, not a smaller tree|
 |8|§3 table + D-A/D-B docs|**landed except the façade** — `context`, `settings`, `cost_model` and the extractor duality each went in their own commit, the regeneration driver and the two hand-typed matrix tables went with D-A and D-B, and `AGENTS.md`, `ocaml-docs/testing.md`, `test/differential/README.md` and the port plan moved in the same commits. The `Factory` façade row is the one §3 item still open|
-|9|D-C … D-F, one decision at a time (D-G landed as step 0)|**D-C, D-D and D-F landed; D-E open.** D-C's seam went in its own commit; D-D was measured and the rewrite declined, so it is the one decision that moves no code; D-F went with the shared constraint sentence and its registered divergence; D-E is the only item left that changes what an operator's config file may say|
+|9|D-C … D-F, one decision at a time (D-G landed as step 0)|**all four landed.** D-C's seam went in its own commit; D-D was measured and the rewrite declined, so it is the one decision that moves no code; D-F went with the shared constraint sentence and its registered divergence; D-E landed as the refusal — the coercion grammar out of `lib/config.ml`, the refusals pinned in a new `test_config.ml` group, seven config goldens re-pinned and one un-registered, and the two gate-found corrections recorded where the decision is written (§4)|
 
 ## 6. Verification
 
