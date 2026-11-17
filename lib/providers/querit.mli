@@ -38,13 +38,8 @@ val parse : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provid
     [needContent: true] and [highlights] behind its request field; this adapter sends neither, so
     neither is read. *)
 
-val cost_for : cost_per_1k:float -> int -> float
-(** Per-query cost in USD. Flat: one call per search, whatever [count] says. The argument is ignored
-    rather than absent because callers treat [cost_for] as a duck-typed method and other adapters do
-    scale with it. *)
-
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?snippet_chars:int ->
   key:string ->
   net:Seekwright.Provider.Net.t ->

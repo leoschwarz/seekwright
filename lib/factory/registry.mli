@@ -48,7 +48,7 @@ type args = {
   key : string option;
   endpoint : Uri.t;
   entry : Seekwright.Config.provider_config;
-  cost_per_1k : float;
+  cost_for : int -> float;
   snippet_chars : int;
   text_chars : int;
   log : Seekwright.Log.log option;
@@ -111,14 +111,20 @@ val timeout_seconds : row -> policy_seconds:float -> float
 (** [max policy_seconds row.timeout_floor] — the oracle's merge, and the reason a raised policy
     timeout still gives [tavily] its normal budget while [exa] keeps its thirty seconds. *)
 
-val price : row -> Seekwright.Config.provider_config -> float
-(** What the name is built at: config wins, unless the row fixes the price. *)
+val rate : row -> Seekwright.Config.provider_config -> float
+(** What the name is built at, per thousand: config's [cost_per_1k] wins, unless the row fixes the
+    price. This is the figure [--check] prints. *)
 
 val cost_of : row -> cost_per_1k:float -> int -> float
-(** The per-query figure for a search that asks for [n] results: the row's [cost_model] applied to
-    the price. This is the figure [--check --live] prints; an adapter mirrors it in its own
-    [cost_for], and the registry suite pins the two together for every adapter this build carries.
-*)
+(** The row's {!cost_model} applied to a rate the caller names — the shape of the charge on its own.
+    {!price} is what a build hands the adapter; this is the same arithmetic with the rate spelled
+    out, which is what lets the registry suite pin each row's published shape against a figure. *)
+
+val price : row -> Seekwright.Config.provider_config -> int -> float
+(** The row's price rule applied to {!rate}, as a function of the result count the caller asked for
+    — the one place a per-query figure comes from. The rule is the row's {!cost_model}, never the
+    adapter's: an adapter is handed this function and reports its answer in the result's [cost_usd],
+    so [--check --live] and the caller's figure cannot disagree. *)
 
 val key_for : row -> string option
 (** The name's credential, environment-only, and only for a row that declares [Api_key]. A keyless

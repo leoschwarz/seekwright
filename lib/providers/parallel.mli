@@ -23,7 +23,7 @@ val parse_results : Yojson.Safe.t -> limit:int -> text_chars:int -> Seekwright.P
 (** Parses hits from [results[]], mapping excerpts to text. *)
 
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?text_chars:int ->
   ?mode:string ->
   key:string ->
@@ -31,10 +31,10 @@ val make :
   net:Seekwright.Provider.Net.t ->
   unit ->
   Seekwright.Provider.t
-(** Constructs the billed REST provider. [key], [now], and [net] are mandatory. *)
+(** Constructs the billed REST provider. [cost_for], [key], [now], and [net] are mandatory. *)
 
 val make_mcp :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?text_chars:int ->
   name:string ->
   uri:Uri.t ->

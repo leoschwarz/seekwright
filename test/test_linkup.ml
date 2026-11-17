@@ -62,20 +62,24 @@ let sample_json = json_object sample
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?(depth = "standard")
+(* The row's price rule lives in the factory, so the suite injects the vendor's published
+   [$6.00/1k]: the flat per-call figure is what a served search reports. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(depth = "standard")
     ?(output = Linkup.Sourced_answer) () =
   let net, sent = answered ~status ~body in
-  ( Linkup.make ?cost_per_1k ~snippet_chars ~depth ~output ~key:test_key
+  ( Linkup.make ~cost_for:(published_price 6.00) ~snippet_chars ~depth ~output ~key:test_key
       ~now:(fun () -> fixed_now)
       ~net (),
     sent )
 
 let refusal kind ~message =
-  Linkup.make ~key:test_key ~now:(fun () -> fixed_now) ~net:(refusing kind ~message) ()
+  Linkup.make ~cost_for:(published_price 6.00) ~key:test_key
+    ~now:(fun () -> fixed_now)
+    ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?depth ?output
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?depth ?output
     ?(query = query ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k ?depth ?output () in
+  let provider, sent = dial ~status ~body ~snippet_chars ?depth ?output () in
   drive provider sent query
 
 let body_field name request =
@@ -468,26 +472,10 @@ let a_network_failure_does_not_echo_the_request () =
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
-let the_cost_is_flat_per_call () =
-  (* Linkup bills the request, so [max_results] never scales the figure, and
-     [depth] — the ~10x cliff — is the operator's setting rather than a number
-     the adapter can multiply. *)
-  check_number "one call" 0.006 (Linkup.cost_for ~cost_per_1k:6.0 1);
-  check_number "and the same call at twenty results" 0.006 (Linkup.cost_for ~cost_per_1k:6.0 20)
-
 let the_result_carries_the_flat_figure () =
   let outcome, _ = search_of ~query:(query ~max_results:20 ()) () in
   check_string "named by the adapter that served it" "linkup" outcome.provider;
   check_opt_number "one call, not twenty" (Some 0.006) outcome.cost_usd
-
-let the_default_price_is_the_rows_figure () =
-  let provider, _ = dial () in
-  check_number "the published figure" 6.00 (Provider.cost_per_1k provider)
-
-let an_operator_corrected_cost_reaches_the_adapter () =
-  let provider, _ = dial ~cost_per_1k:0.50 () in
-  check_number "the corrected figure" 0.50 (Provider.cost_per_1k provider);
-  check_number "and its per-call reading" 0.0005 (Provider.cost_for provider 1)
 
 let the_snippet_cap_follows_the_policy () =
   let body =
@@ -599,12 +587,7 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "the cost is flat per call" `Quick the_cost_is_flat_per_call;
             test_case "the result carries the flat figure" `Quick the_result_carries_the_flat_figure;
-            test_case "the default price is the row's figure" `Quick
-              the_default_price_is_the_rows_figure;
-            test_case "an operator-corrected cost reaches the adapter" `Quick
-              an_operator_corrected_cost_reaches_the_adapter;
             test_case "the snippet cap follows the policy" `Quick the_snippet_cap_follows_the_policy;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;

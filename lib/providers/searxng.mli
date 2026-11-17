@@ -17,16 +17,13 @@ val search_uri : Uri.t -> Uri.t
 (** [search_uri instance] appends [/search] to the instance base URI. *)
 
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?snippet_chars:int ->
   endpoint:Uri.t ->
   net:Seekwright.Provider.Net.t ->
   unit ->
   Seekwright.Provider.t
 (** Constructs the SearXNG provider for the given instance endpoint. *)
-
-val cost_for : cost_per_1k:float -> int -> float
-(** Per-query cost in USD. Returns 0.0. *)
 
 val parse : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** Parses hits from [results[]]. *)

@@ -262,15 +262,12 @@ let parse ~text_chars data ~limit =
 
 let answer data = Provider.Json.string_field "answer" data
 
-(* Flat rate per request. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
 (* 432 is monthly credit exhaustion; 429 is rate limit. *)
 let check_status =
   Provider.check_status ~provider:name ~quota:[ 429; 432 ]
     ~quota_message:"rate limited or out of credits"
 
-let search ~cost_per_1k ~text_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
+let search ~cost_for ~text_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
   let country = match q.Model.country with Some code -> country_param code | None -> None in
   Provider.http_search ~provider:name ~net ~status:check_status
     ~request:
@@ -280,18 +277,16 @@ let search ~cost_per_1k ~text_chars ~key (net : Provider.Net.t) (q : Provider.se
         headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
         body = Some (request_body ~country q);
       }
-    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~text_chars) ~answer
+    ~cost_for ~parse:(parse ~text_chars) ~answer
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:(country <> None)
         ~language:(Some true) ~safety:true ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 8.00) ?(text_chars = 2000) ~key ~net () : Provider.t =
+let make ~cost_for ?(text_chars = 2000) ~key ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~text_chars ~key net
+    let search = search ~cost_for ~text_chars ~key net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

@@ -84,21 +84,22 @@ let sample_json = json_object sample
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?title_attr ?url_attr
-    ?snippet_attr () =
+(* The row's price rule lives in the factory, so the suite injects one: the vendor's published flat
+   rate is what makes the reported figure the vendor's own. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?title_attr ?url_attr ?snippet_attr
+    () =
   let net, sent = answered ~status ~body in
-  ( Algolia.make ?cost_per_1k ~snippet_chars ?title_attr ?url_attr ?snippet_attr ~app_id
-      ~key:test_key ~endpoint:deployment ~net (),
+  ( Algolia.make ~cost_for:(published_price 0.50) ~snippet_chars ?title_attr ?url_attr ?snippet_attr
+      ~app_id ~key:test_key ~endpoint:deployment ~net (),
     sent )
 
 let refusal kind ~message =
-  Algolia.make ~app_id ~key:test_key ~endpoint:deployment ~net:(refusing kind ~message) ()
+  Algolia.make ~cost_for:(published_price 0.50) ~app_id ~key:test_key ~endpoint:deployment
+    ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?title_attr
-    ?url_attr ?snippet_attr ?(query = query ()) () =
-  let provider, sent =
-    dial ~status ~body ~snippet_chars ?cost_per_1k ?title_attr ?url_attr ?snippet_attr ()
-  in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?title_attr ?url_attr
+    ?snippet_attr ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars ?title_attr ?url_attr ?snippet_attr () in
   drive provider sent query
 
 (* The body the adapter wrote, read field by field. *)
@@ -364,7 +365,7 @@ let the_index_is_percent_encoded_in_the_path () =
       }
     in
     let provider =
-      Algolia.make ~app_id ~key:test_key
+      Algolia.make ~cost_for:(published_price 0.50) ~app_id ~key:test_key
         ~endpoint:(Algolia.endpoint_of_deployment ~app_id ~index:"products/2026")
         ~net ()
     in
@@ -455,20 +456,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_string "the network row" "network error" failure.message;
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
-
-let the_cost_does_not_scale_with_result_count () =
-  check_number "one call" 0.0005 (Algolia.cost_for ~cost_per_1k:0.5 1);
-  check_number "and the same call at twenty results" 0.0005 (Algolia.cost_for ~cost_per_1k:0.5 20)
-
-let the_default_price_is_the_grow_overage_rate () =
-  (* The cheapest {i paid} rate: free is 10K requests a month, and the key is
-     mandatory on every tier, so the plan decides the price and the credential
-     never does. *)
-  let provider, _ = dial () in
-  check_number "the published figure" 0.50 (Provider.cost_per_1k provider);
-  let provider, _ = dial ~cost_per_1k:1.75 () in
-  check_number "and the Grow Plus correction, which reaches the adapter" 1.75
-    (Provider.cost_per_1k provider)
 
 let a_search_that_returns_nothing_still_costs () =
   (* Billed per request, whatever it returns: an empty [hits[]] is a served search
@@ -563,10 +550,6 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "the cost does not scale with result count" `Quick
-              the_cost_does_not_scale_with_result_count;
-            test_case "the default price is the Grow overage rate" `Quick
-              the_default_price_is_the_grow_overage_rate;
             test_case "a search that returns nothing still costs" `Quick
               a_search_that_returns_nothing_still_costs;
             test_case "the snippet cap follows the policy" `Quick the_snippet_cap_follows_the_policy;

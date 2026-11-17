@@ -48,8 +48,6 @@ type scenario =
 let provider scenario : Provider.t =
   (module struct
     let name = "serper"
-    let cost_per_1k = 1.0
-    let cost_for n = float_of_int n /. 1000.
 
     let search (q : Model.search_query) =
       (match scenario with

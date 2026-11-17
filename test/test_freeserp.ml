@@ -85,13 +85,16 @@ let sample_json = json_object sample
    a canned response — the analogue of the Python suite's
    [httpx.MockTransport]. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.) () =
+(* The row's price rule lives in the factory, so the suite injects one: this name is keyless and
+   priced at zero, so the injected zero is what a served search reports. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) () =
   let net, sent = answered ~status ~body in
-  (Freeserp.make ~cost_per_1k ~snippet_chars ~now ~net (), sent)
+  (Freeserp.make ~cost_for:(published_price 0.) ~snippet_chars ~now ~net (), sent)
 
 (* A Net that answers with a transport failure instead of a response: the
    grant refusing the endpoint, the name not resolving, the bound expiring. *)
-let refusal kind ~message = Freeserp.make ~now ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Freeserp.make ~cost_for:(published_price 0.) ~now ~net:(refusing kind ~message) ()
 
 let record fields =
   `Assoc (("title", `String "t") :: ("url", `String "https://example.com/a") :: fields)
@@ -106,9 +109,8 @@ let hits_json hits =
 
 (* The adapter, driven: [search_of ()] answers with the fixture and hands back
    both the outcome and the request that was dialed. *)
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.)
-    ?(query = query ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ~cost_per_1k () in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars () in
   drive provider sent query
 
 let engine_fallback_refusal body query =
@@ -449,20 +451,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:"secret-marker")
 
-let it_cannot_bill () =
-  let provider, _ = dial () in
-  check_number "the reporting figure" 0. (Provider.cost_per_1k provider);
-  check_number "flat, whatever the caller asks for" 0. (Provider.cost_for provider 1);
-  check_number "the same at the schema ceiling" 0. (Provider.cost_for provider 20)
-
-let an_operator_corrected_cost_reaches_the_adapter () =
-  (* Reporting only, but an operator may want a figure they recognise. The
-     Python row's [default_cost] in [factory._PROVIDERS] is the figure that
-     takes effect there, so the two move together (P5). *)
-  let provider, _ = dial ~cost_per_1k:0.25 () in
-  check_number "the corrected figure" 0.25 (Provider.cost_per_1k provider);
-  check_number "and its per-query reading" 0.00025 (Provider.cost_for provider 5)
-
 let the_adapter_dials_the_endpoint_it_declares () =
   (* The URL the adapter dials and the entry the factory must allowlist are one
      fact: the endpoint literal, and the host the recorded request went to. *)
@@ -547,9 +535,6 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "it cannot bill" `Quick it_cannot_bill;
-            test_case "an operator-corrected cost reaches the adapter" `Quick
-              an_operator_corrected_cost_reaches_the_adapter;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

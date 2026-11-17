@@ -139,8 +139,6 @@ let only_exa_free_is_startup_fatal () =
 let stub (n : string) : Provider.t =
   (module struct
     let name = n
-    let cost_per_1k = 0.001
-    let cost_for n = float_of_int n /. 1000.
     let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
     let aclose () = ()
   end)
@@ -214,8 +212,6 @@ let permission_narrowing_narrows_the_sets_not_the_startup () =
 let stub (n : string) : Provider.t =
   (module struct
     let name = n
-    let cost_per_1k = 0.001
-    let cost_for n = float_of_int n /. 1000.
     let search _q = Error (Provider.provider_error ~provider:n "this test never dispatches")
     let aclose () = ()
   end)

@@ -39,10 +39,7 @@ let check_business_code data =
   | `Int 0 | `Float 0. -> Ok ()
   | _ -> Error (Provider.provider_error ~provider:name "search failed (business error)")
 
-(* Keyless; zero cost. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
-let search ~cost_per_1k ~snippet_chars (net : Provider.Net.t) (q : Provider.search_query) =
+let search ~cost_for ~snippet_chars (net : Provider.Net.t) (q : Provider.search_query) =
   Provider.http_search ~provider:name ~net ~status:check_status
     ~request:
       {
@@ -51,18 +48,16 @@ let search ~cost_per_1k ~snippet_chars (net : Provider.Net.t) (q : Provider.sear
         headers = [ ("content-type", "application/json") ];
         body = Some (request_body q);
       }
-    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars) ~check:check_business_code
+    ~cost_for ~parse:(parse ~snippet_chars) ~check:check_business_code
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:(Some true)
         ~safety:false ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars net
+    let search = search ~cost_for ~snippet_chars net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

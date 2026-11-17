@@ -26,6 +26,12 @@ val query :
     when the query is the claim, and [max_results] is 5 because every cap assertion then reads as a
     multiple of it. *)
 
+val published_price : float -> int -> float
+(** [published_price rate] is a flat vendor rate quoted per thousand, as a price function. The row's
+    price rule lives in the factory, so an adapter suite {i injects} one: this is the rate the
+    vendor publishes, which lets a case assert the figure a served search reports without the
+    adapter owning the rule. *)
+
 val answered :
   status:int -> body:string -> Seekwright.Provider.Net.t * (unit -> Mcp_caps.Authority.Net.request)
 (** [answered ~status ~body] answers every call with that status and body, and the reader is the

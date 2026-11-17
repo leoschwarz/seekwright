@@ -98,9 +98,6 @@ let parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit =
           | _ -> None))
     (Provider.take limit records)
 
-(* Flat rate per request; max_results is ignored. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
 let request_body (q : Provider.search_query) =
   Yojson.Safe.to_string
     (`Assoc [ ("query", `String q.Model.query); ("hitsPerPage", `Int q.Model.max_results) ])
@@ -109,7 +106,7 @@ let request_body (q : Provider.search_query) =
    402 is its [FeatureNotEnabled] rather than a plain billing error. Those are
    the shared status mapping's own rows with its default wording, so this adapter
    sends no [~status] of its own. *)
-let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_chars ~key ~endpoint
+let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_for ~snippet_chars ~key ~endpoint
     (net : Provider.Net.t) (q : Provider.search_query) =
   Provider.http_search ~provider:name ~net
     ~request:
@@ -125,22 +122,19 @@ let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_cha
           ];
         body = Some (request_body q);
       }
-    ~cost_for:(cost_for ~cost_per_1k)
+    ~cost_for
     ~parse:(parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:None
         ~safety:false ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 0.50) ?(snippet_chars = 500) ?title_attr ?url_attr ?snippet_attr ~app_id
-    ~key ~endpoint ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ?title_attr ?url_attr ?snippet_attr ~app_id ~key ~endpoint
+    ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
     let search =
-      search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_chars ~key ~endpoint
-        net
+      search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_for ~snippet_chars ~key ~endpoint net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

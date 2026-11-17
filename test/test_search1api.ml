@@ -55,15 +55,17 @@ let sample =
 
 let sample_json = json_object sample
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
+(* The row's price rule lives in the factory, so the suite injects the entry plan's published
+   [$0.76/1k]. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) () =
   let net, sent = answered ~status ~body in
-  (Search1api.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
+  (Search1api.make ~cost_for:(published_price 0.76) ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message = Search1api.make ~key:test_key ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Search1api.make ~cost_for:(published_price 0.76) ~key:test_key ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?(query = query ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars () in
   drive provider sent query
 
 (* The request body, read the way the Python suite reads
@@ -346,20 +348,6 @@ let a_network_error_does_not_echo_the_request () =
       check_bool "the key is nowhere in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
-let cost_does_not_scale_with_result_count () =
-  let provider, _ = dial () in
-  check_number "one query, whatever max_results says" 0.00076 (Provider.cost_for provider 1);
-  check_number "and at the ceiling" 0.00076 (Provider.cost_for provider 20)
-
-let the_default_price_is_the_rows_figure () =
-  (* The adapter default and the registry row's [default_cost] are one fact:
-     [$0.76/1k] is the entry Basic plan's rate, a cheaper plan corrects it, and
-     [--check --live] prints whichever of the two is wrong. *)
-  let provider, _ = dial () in
-  check_number "the entry plan's rate" 0.76 (Provider.cost_per_1k provider);
-  let provider, _ = dial ~cost_per_1k:0.49 () in
-  check_number "an operator on a cheaper plan can correct it" 0.49 (Provider.cost_per_1k provider)
-
 let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.search1api.com/search"
     (Uri.to_string Search1api.endpoint);
@@ -427,10 +415,6 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "cost does not scale with result count" `Quick
-              cost_does_not_scale_with_result_count;
-            test_case "the default price is the row's figure" `Quick
-              the_default_price_is_the_rows_figure;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

@@ -58,15 +58,17 @@ let sample =
    so the fixture stays the body the vendor sends. *)
 let sample_data = json_object sample
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.) () =
+(* The row's price rule lives in the factory, so the suite injects one: this name is keyless and
+   priced at zero, and the injected zero is what the served search reports. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) () =
   let net, sent = answered ~status ~body in
-  (Anysearch.make ~cost_per_1k ~snippet_chars ~net (), sent)
+  (Anysearch.make ~cost_for:(published_price 0.) ~snippet_chars ~net (), sent)
 
-let refusal kind ~message = Anysearch.make ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Anysearch.make ~cost_for:(published_price 0.) ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.)
-    ?(query = query ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ~cost_per_1k () in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars () in
   drive provider sent query
 
 let failed_search ?(status = 200) ?(body = sample) ?(query = query ()) () =
@@ -401,24 +403,11 @@ let a_network_failure_does_not_echo_the_request () =
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:"secret-query")
 
-let cost_is_flat_zero () =
-  let provider, _ = dial () in
-  check_number "the reporting figure" 0. (Provider.cost_per_1k provider);
-  check_number "flat at one result" 0. (Provider.cost_for provider 1);
-  check_number "flat at the documented ceiling" 0. (Provider.cost_for provider 10)
-
 let the_result_reports_its_flat_cost () =
   let outcome, _ = search_of ~query:(query ~max_results:5 ()) () in
   check_string "named by the adapter that served it" "anysearch" outcome.provider;
   check_opt_number "flat zero" (Some 0.) outcome.cost_usd;
   check_opt_string "no answer from a SERP adapter" None outcome.answer
-
-let an_operator_corrected_cost_reaches_the_adapter () =
-  (* An operator on a future paid tier can fix what [--check] reports; the
-     Python row's [default_cost] in [factory._PROVIDERS] moves with it (P5). *)
-  let provider, _ = dial ~cost_per_1k:0.5 () in
-  check_number "the corrected figure" 0.5 (Provider.cost_per_1k provider);
-  check_number "and its per-query reading" 0.0005 (Provider.cost_for provider 5)
 
 let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.anysearch.com/v1/search"
@@ -494,10 +483,7 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "cost is flat zero" `Quick cost_is_flat_zero;
             test_case "the result reports its flat cost" `Quick the_result_reports_its_flat_cost;
-            test_case "an operator-corrected cost reaches the adapter" `Quick
-              an_operator_corrected_cost_reaches_the_adapter;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

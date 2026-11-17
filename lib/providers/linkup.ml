@@ -121,16 +121,13 @@ let answer ~output data =
   | Search_results -> None
   | Sourced_answer -> Provider.Json.string_field "answer" data
 
-(* Flat rate per request; max_results does not affect price. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
 (* 429 indicates rate limiting (10 QPS org-wide); Linkup answers no 402 at all,
    so its quota list holds one status. *)
 let check_status =
   Provider.check_status ~provider:name ~quota:[ 429 ]
     ~quota_message:"rate limited (10 QPS org-wide)"
 
-let search ~cost_per_1k ~snippet_chars ~depth ~output ~key ~(now : unit -> float)
+let search ~cost_for ~snippet_chars ~depth ~output ~key ~(now : unit -> float)
     (net : Provider.Net.t) (q : Provider.search_query) =
   (* [output] picks both the record list and whether an answer is expected. *)
   let parse data ~limit =
@@ -150,19 +147,17 @@ let search ~cost_per_1k ~snippet_chars ~depth ~output ~key ~(now : unit -> float
         headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
         body = Some (request_body ~depth ~output ~from_date:date q);
       }
-    ~cost_for:(cost_for ~cost_per_1k) ~parse ~answer:(answer ~output)
+    ~cost_for ~parse ~answer:(answer ~output)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:None
         ~safety:false ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 6.00) ?(snippet_chars = 500) ?(depth = "standard")
-    ?(output = Sourced_answer) ~key ~(now : unit -> float) ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ?(depth = "standard") ?(output = Sourced_answer) ~key
+    ~(now : unit -> float) ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars ~depth ~output ~key ~now net
+    let search = search ~cost_for ~snippet_chars ~depth ~output ~key ~now net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

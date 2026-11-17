@@ -157,12 +157,10 @@ let compose_notices (q : Provider.search_query) data =
 let check_status =
   Provider.check_status ~provider:name ~quota_message:"rate limited or out of credits"
 
-let make ?(cost_per_1k = 1.00) ?(text_chars = 2000) ?(mode = "fast") ~key ~now ~net () =
+let make ~cost_for ?(text_chars = 2000) ?(mode = "fast") ~key ~now ~net () =
   let adapter =
     (module struct
       let name = name
-      let cost_per_1k = cost_per_1k
-      let cost_for _max_results = cost_per_1k /. 1000.0
 
       (* This half keeps its own decode: a body that is valid JSON but not an
          object answers with an empty result set here — [parse_results] is shared
@@ -198,13 +196,11 @@ let mcp_arguments (q : Provider.search_query) =
   `Assoc
     [ ("objective", `String q.Model.query); ("search_queries", `List [ `String q.Model.query ]) ]
 
-let make_mcp ?(cost_per_1k = 0.0) ?(text_chars = 2000) ~name ~uri ~net () =
+let make_mcp ~cost_for ?(text_chars = 2000) ~name ~uri ~net () =
   let client = Mcp.create ~provider:name ~net ~uri () in
   let adapter =
     (module struct
       let name = name
-      let cost_per_1k = cost_per_1k
-      let cost_for = Exa.cost_for ~cost_per_1k
 
       let search q =
         let* answer = Mcp.call_tool client ~name:mcp_tool ~arguments:(mcp_arguments q) in

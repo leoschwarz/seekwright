@@ -34,11 +34,8 @@ val parse_results : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwrigh
 val answer : output:output -> Yojson.Safe.t -> string option
 (** Extracts prose answer when [output] is [Sourced_answer]; returns [None] otherwise. *)
 
-val cost_for : cost_per_1k:float -> int -> float
-(** Per-query cost in USD. Flat per request. *)
-
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?snippet_chars:int ->
   ?depth:string ->
   ?output:output ->
@@ -47,4 +44,4 @@ val make :
   net:Seekwright.Provider.Net.t ->
   unit ->
   Seekwright.Provider.t
-(** Constructs the Linkup provider. [key], [now], and [net] are mandatory. *)
+(** Constructs the Linkup provider. [cost_for], [key], [now], and [net] are mandatory. *)

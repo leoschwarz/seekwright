@@ -52,17 +52,21 @@ let sample_json = json_object sample
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with
    a canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
-  let net, sent = answered ~status ~body in
-  (Serper.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
+(* The row owns this vendor's price rule — one credit per thousand up to ten results, two past ten —
+   and the suite injects that rule so a driven search reports the credit figure the vendor bills. *)
+let credit_price n = (if n > 10 then 2.0 else 1.0) *. published_price 1.00 n
 
-let refusal kind ~message = Serper.make ~key:test_key ~net:(refusing kind ~message) ()
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) () =
+  let net, sent = answered ~status ~body in
+  (Serper.make ~cost_for:credit_price ~snippet_chars ~key:test_key ~net (), sent)
+
+let refusal kind ~message =
+  Serper.make ~cost_for:credit_price ~key:test_key ~net:(refusing kind ~message) ()
 
 (* The adapter, driven: [search_of ()] answers with the fixture and hands back
    both the outcome and the request that was dialed. *)
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?(query = query ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars () in
   drive provider sent query
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Serper.parse ~snippet_chars data ~limit
@@ -282,33 +286,10 @@ let a_network_failure_does_not_echo_the_request () =
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
-let the_cost_doubles_past_ten_results () =
-  (* "2 credits for more than 10 results" is the published rule, and the flat
-     [cost_per_1k /. 1000.] reading would under-report a 20-result search by
-     half. *)
-  check_number "one credit at the threshold" 0.001
-    (Provider.cost_for (fst (dial ())) Serper.credit_over);
-  check_number "two credits past it" 0.002
-    (Provider.cost_for (fst (dial ())) (Serper.credit_over + 1));
-  check_number "the schema ceiling is two credits" 0.002 (Provider.cost_for (fst (dial ())) 20)
-
 let the_result_carries_the_credit_figure () =
   let outcome, _ = search_of ~query:(query ~max_results:20 ()) () in
   check_string "named by the adapter that served it" "serper" outcome.provider;
   check_opt_number "two credits, not one" (Some 0.002) outcome.cost_usd
-
-let the_default_price_is_the_rows_figure () =
-  (* The adapter default and the registry row's [default_cost] are one fact:
-     [$1.00/1k] is what Serper publishes, and [--check --live] prints whichever
-     of the two is wrong. *)
-  let provider, _ = dial () in
-  check_number "the published figure" 1.00 (Provider.cost_per_1k provider)
-
-let an_operator_corrected_cost_reaches_the_adapter () =
-  let provider, _ = dial ~cost_per_1k:0.50 () in
-  check_number "the corrected figure" 0.50 (Provider.cost_per_1k provider);
-  check_number "and its per-query reading at one credit" 0.0005 (Provider.cost_for provider 10);
-  check_number "and at two" 0.001 (Provider.cost_for provider 11)
 
 let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://google.serper.dev/search" (Uri.to_string Serper.endpoint);
@@ -381,13 +362,8 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "the cost doubles past ten results" `Quick the_cost_doubles_past_ten_results;
             test_case "the result carries the credit figure" `Quick
               the_result_carries_the_credit_figure;
-            test_case "the default price is the row's figure" `Quick
-              the_default_price_is_the_rows_figure;
-            test_case "an operator-corrected cost reaches the adapter" `Quick
-              an_operator_corrected_cost_reaches_the_adapter;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

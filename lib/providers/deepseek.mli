@@ -44,12 +44,8 @@ val parse :
     filled because [need_content] is never sent. [rerank_score] is the 0–3 rerank score on the
     backend's own scale, as for every other adapter. *)
 
-val cost_for : cost_per_1k:float -> int -> float
-(** Per-query cost in USD: one request, flat in result count. [count] does not affect the price; the
-    argument is the protocol's. *)
-
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?snippet_chars:int ->
   ?text_chars:int ->
   key:string ->

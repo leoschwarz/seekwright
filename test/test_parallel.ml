@@ -68,13 +68,17 @@ let sample =
 
 let sample_json = json_object sample
 
-let dial ?(status = 200) ?(body = sample) ?text_chars ?cost_per_1k ?mode () =
+(* The row's price rule lives in the factory, so the suite injects the billed half's published
+   [$1.00/1k]: one request, whatever the preset or the count. *)
+let dial ?(status = 200) ?(body = sample) ?text_chars ?mode () =
   let net, sent = answered ~status ~body in
-  ( Parallel.make ?cost_per_1k ?text_chars ?mode ~key:test_key ~now:(fun () -> fixed_now) ~net (),
+  ( Parallel.make ~cost_for:(published_price 1.00) ?text_chars ?mode ~key:test_key
+      ~now:(fun () -> fixed_now)
+      ~net (),
     sent )
 
-let search_of ?status ?body ?text_chars ?cost_per_1k ?mode ?(query = query ()) () =
-  let adapter, sent = dial ?status ?body ?text_chars ?cost_per_1k ?mode () in
+let search_of ?status ?body ?text_chars ?mode ?(query = query ()) () =
+  let adapter, sent = dial ?status ?body ?text_chars ?mode () in
   drive adapter sent query
 
 let field name json = Provider.Json.string_field name json
@@ -341,7 +345,7 @@ let payment_and_rate_limit_are_one_quota_row () =
 
 let a_network_failure_does_not_echo_the_request () =
   let adapter =
-    Parallel.make ~key:test_key
+    Parallel.make ~cost_for:(published_price 1.00) ~key:test_key
       ~now:(fun () -> fixed_now)
       ~net:(refusing Caps.Error.Denied ~message:"connection refused to x-api-key: test-key")
       ()
@@ -351,13 +355,6 @@ let a_network_failure_does_not_echo_the_request () =
   | Error failure ->
       check_string "the house row" "network error" failure.message;
       excludes "no echo of the header that holds the key" test_key (Provider.render_error failure)
-
-let the_price_tracks_the_preset_not_the_count () =
-  let adapter, _sent = dial () in
-  check_number "one call" 0.001 (Provider.cost_for adapter 1);
-  check_number "the same call at twenty results" 0.001 (Provider.cost_for adapter 20);
-  let priced, _sent = dial ~cost_per_1k:5.00 () in
-  check_number "an operator-corrected figure" 0.005 (Provider.cost_for priced 5)
 
 let the_result_carries_the_flat_figure () =
   let outcome, _request = search_of ~query:(query ~max_results:5 ()) () in
@@ -443,10 +440,10 @@ let mcp_endpoint ~text () =
   in
   net
 
-let free_half ?cost_per_1k text =
+let free_half ?(cost_for = published_price 0.0) text =
   calls := [];
   let net = mcp_endpoint ~text () in
-  Parallel.make_mcp ?cost_per_1k ~name:"parallel:free" ~uri:Parallel.mcp_uri ~net ()
+  Parallel.make_mcp ~cost_for ~name:"parallel:free" ~uri:Parallel.mcp_uri ~net ()
 
 let the_free_half_asks_its_tool_with_the_query_twice () =
   (* [web_search] requires an [objective] and at least one [search_queries]
@@ -464,12 +461,8 @@ let the_free_half_asks_its_tool_with_the_query_twice () =
     (Option.get (strings_of [ "search_queries" ] arguments));
   check_int "the shared parser read the text block" 2 (List.length outcome.results);
   check_string "titled by the url where the title was null" "https://example.com/untitled"
-    (nth "results" 1 outcome.results).result.title
-
-let the_free_half_answers_zero () =
-  let session = free_half sample in
-  check_number "the default figure" 0.0 (Provider.cost_per_1k session.Provider.adapter);
-  check_number "at twenty results" 0.0 (Provider.cost_for session.Provider.adapter 20)
+    (nth "results" 1 outcome.results).result.title;
+  check_opt_number "and the free half reports the price it was handed" (Some 0.0) outcome.cost_usd
 
 let the_free_half_reports_a_malformed_text_block () =
   let session = free_half "not json" in
@@ -555,8 +548,6 @@ let () =
           ] );
         ( "cost and endpoints",
           [
-            test_case "the price tracks the preset, not the count" `Quick
-              the_price_tracks_the_preset_not_the_count;
             test_case "the result carries the flat figure" `Quick the_result_carries_the_flat_figure;
             test_case "the endpoints are the two halves" `Quick the_endpoints_are_the_two_halves;
           ] );
@@ -564,7 +555,6 @@ let () =
           [
             test_case "its tool is asked with the query twice" `Quick
               the_free_half_asks_its_tool_with_the_query_twice;
-            test_case "it answers zero" `Quick the_free_half_answers_zero;
             test_case "it reports a malformed text block" `Quick
               the_free_half_reports_a_malformed_text_block;
             test_case "it notices a filter it cannot reach" `Quick

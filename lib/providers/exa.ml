@@ -9,13 +9,6 @@ let default_uri = Uri.of_string "https://mcp.exa.ai/mcp"
 
 let tool_name = "web_search_exa"
 
-(* Base price covers up to 10 results; extra results billed per item. Free mode costs 0. *)
-let cost_for ~cost_per_1k max_results =
-  if cost_per_1k = 0.0 then 0.0
-  else
-    let extra = max 0 (max_results - 10) in
-    (cost_per_1k +. (float_of_int extra *. 1.0)) /. 1000.0
-
 (* [Author], [ID] and [Score] are parsed only to terminate continuation runs. *)
 let field_names = [ "title"; "url"; "published"; "author"; "highlights"; "text"; "id"; "score" ]
 
@@ -138,27 +131,25 @@ let parse ~text_chars text ~limit =
 let tool_arguments (q : Provider.search_query) =
   `Assoc [ ("query", `String q.Model.query); ("numResults", `Int q.Model.max_results) ]
 
-let mcp_search ~name ~cost_per_1k ~text_chars ~tool client q =
+let mcp_search ~name ~cost_for ~text_chars ~tool client q =
   let* answer = Mcp.call_tool client ~name:tool ~arguments:(tool_arguments q) in
   Ok
     {
       Provider.provider = name;
       results = parse ~text_chars answer.Mcp.text ~limit:q.Model.max_results;
       answer = None;
-      cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
+      cost_usd = Some (cost_for q.Model.max_results);
       notice =
         Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:None
           ~safety:false ~drops_exclude_domains:false;
     }
 
-let make_mcp ?(cost_per_1k = 0.0) ?(text_chars = 2000) ~name ?auth ~uri ~net () =
+let make_mcp ~cost_for ?(text_chars = 2000) ~name ?auth ~uri ~net () =
   let client = Mcp.create ?auth ~provider:name ~net ~uri () in
   let adapter =
     (module struct
       let name = name
-      let cost_per_1k = cost_per_1k
-      let cost_for = cost_for ~cost_per_1k
-      let search = mcp_search ~name ~cost_per_1k ~text_chars ~tool:tool_name client
+      let search = mcp_search ~name ~cost_for ~text_chars ~tool:tool_name client
       let aclose () = Mcp.aclose client
     end : Provider.S)
   in
@@ -173,15 +164,15 @@ let round_decisecond value =
   let rounded = if scaled >= 0.0 then floor (scaled +. 0.5) else ceil (scaled -. 0.5) in
   rounded /. 10.0
 
-let make_tiered ?(cost_per_1k = 7.00) ?(text_chars = 2000) ?(cooldown_seconds = 60.0) ~now ?log ~key
-    ~uri ~net () =
+let make_tiered ~cost_for ?(text_chars = 2000) ?(cooldown_seconds = 60.0) ~now ?log ~key ~uri ~net
+    () =
   let sink level event fields = match log with Some log -> log level event fields | None -> () in
   (* Both fallbacks report "exa" as provider name. *)
-  let free = make_mcp ~cost_per_1k:0.0 ~text_chars ~name:"exa" ~uri ~net () in
-  let keyed = make_mcp ~cost_per_1k ~text_chars ~name:"exa" ~auth:key ~uri ~net () in
+  let free = make_mcp ~cost_for:(fun _ -> 0.0) ~text_chars ~name:"exa" ~uri ~net () in
+  let keyed = make_mcp ~cost_for ~text_chars ~name:"exa" ~auth:key ~uri ~net () in
   (* Monotonic timestamp for cooldown; wall-clock shifts must not affect it. *)
   let free_blocked_until = ref 0.0 in
-  let cost (q : Provider.search_query) = cost_for ~cost_per_1k q.Model.max_results in
+  let cost (q : Provider.search_query) = cost_for q.Model.max_results in
   let on_key q reason original =
     match Provider.search keyed.Provider.adapter q with
     | Ok result ->
@@ -240,10 +231,6 @@ let make_tiered ?(cost_per_1k = 7.00) ?(text_chars = 2000) ?(cooldown_seconds = 
   let adapter =
     (module struct
       let name = "exa"
-      let cost_per_1k = cost_per_1k
-
-      (* The billed fallback's price: what a caller should assume it might pay. *)
-      let cost_for = cost_for ~cost_per_1k
       let search = search
 
       let aclose () =

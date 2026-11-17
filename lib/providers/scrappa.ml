@@ -49,16 +49,13 @@ let parse ~snippet_chars data ~limit =
   Provider.map_records ~list_path:[ "organic_results" ] ~url_field:"link" ~title_field:"title"
     ~snippet_field:"snippet" ~snippet_chars ~limit data
 
-(* Flat rate per request. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
 (* 402 is credit exhaustion; 429 is rate limit. *)
 let check_status =
   Provider.check_status ~provider:name ~quota_message:"rate limited or out of credits"
 
 (* Every constraint in the request has a parameter here — site operators, [gl],
    [hl], [dateRestrict], [safe] — so the constraint report is always [None]. *)
-let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
+let search ~cost_for ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
   Provider.http_search ~provider:name ~net ~status:check_status
     ~request:
       {
@@ -67,18 +64,16 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
         headers = [ ("x-api-key", key) ];
         body = None;
       }
-    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars)
+    ~cost_for ~parse:(parse ~snippet_chars)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some true)
         ~safety:true ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 0.30) ?(snippet_chars = 500) ~key ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ~key ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars ~key net
+    let search = search ~cost_for ~snippet_chars ~key net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

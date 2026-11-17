@@ -143,18 +143,6 @@ let a_record_without_a_url_is_not_a_result () =
   check_int "empty input" 0 (List.length (parse ""));
   check_int "garbage input does not raise" 0 (List.length (parse "total nonsense\nwith no fields"))
 
-let the_published_price_is_a_subscription_plus_a_rung () =
-  check_number "up to ten results" 0.007 (Exa.cost_for ~cost_per_1k:7.00 10);
-  check_number "one result" 0.007 (Exa.cost_for ~cost_per_1k:7.00 1);
-  check_number "and ~$1/1k for each result past ten" 0.012 (Exa.cost_for ~cost_per_1k:7.00 15);
-  check_number "at twenty" 0.017 (Exa.cost_for ~cost_per_1k:7.00 20)
-
-let a_free_session_costs_nothing_at_any_count () =
-  (* The per-result surcharge must not invent a price for the tier that cannot
-     bill. *)
-  check_number "zero at one result" 0.0 (Exa.cost_for ~cost_per_1k:0.0 1);
-  check_number "zero at twenty" 0.0 (Exa.cost_for ~cost_per_1k:0.0 20)
-
 let the_endpoint_and_the_tool () =
   check_string "one documented endpoint" "https://mcp.exa.ai/mcp" (Uri.to_string Exa.default_uri);
   check_string "one advertised tool" "web_search_exa" Exa.tool_name
@@ -289,8 +277,13 @@ let header (request : Caps.Authority.Net.request) name =
     (fun (key, value) -> if String.lowercase_ascii key = name then Some value else None)
     request.Caps.Authority.Net.headers
 
-let mcp_session ?cost_per_1k ?(name = "exa") ?auth ep =
-  Exa.make_mcp ?cost_per_1k ~name ?auth ~uri:fixture_uri ~net:ep.net ()
+(* The row owns Exa's published shape — [$7.00/1k] covering the first ten results and [$1.00/1k]
+   for each result past ten — and the suite injects that rule, so a driven search reports the figure
+   the vendor bills. *)
+let billed_price n = (7.00 +. (float_of_int (max 0 (n - 10)) *. 1.00)) /. 1000.
+
+let mcp_session ?(cost_for = published_price 0.0) ?(name = "exa") ?auth ep =
+  Exa.make_mcp ~cost_for ~name ?auth ~uri:fixture_uri ~net:ep.net ()
 
 let free_session ep = mcp_session ~name:"exa:free" ep
 
@@ -356,7 +349,7 @@ let a_keyed_session_carries_the_bearer_token () =
 let a_keyed_session_reports_the_billed_price () =
   let ep = endpoint ~keyed:[ Text sample ] () in
   let outcome =
-    search (mcp_session ~auth:test_key ~cost_per_1k:7.00 ep) (query ~max_results:20 ())
+    search (mcp_session ~auth:test_key ~cost_for:billed_price ep) (query ~max_results:20 ())
   in
   check_opt_number "twenty results at the published shape" (Some 0.017) outcome.cost_usd
 
@@ -403,8 +396,8 @@ let close_terminates_the_session_and_refuses_after () =
   | Ok _ -> A.failf "a closed session answered"
   | Error failure -> check_string "the closed row" "MCP client is closed" failure.message
 
-let tiered ?(cooldown = 60.0) ?(now = fun () -> 1_000.0) ?log ?(cost_per_1k = 7.00) ep =
-  Exa.make_tiered ~cost_per_1k ~cooldown_seconds:cooldown ~now ?log ~key:test_key ~uri:fixture_uri
+let tiered ?(cooldown = 60.0) ?(now = fun () -> 1_000.0) ?log ?(cost_for = billed_price) ep =
+  Exa.make_tiered ~cost_for ~cooldown_seconds:cooldown ~now ?log ~key:test_key ~uri:fixture_uri
     ~net:ep.net ()
 
 let ladder ?asked session =
@@ -673,13 +666,7 @@ let () =
               a_record_without_a_url_is_not_a_result;
           ] );
         ( "the price and the endpoint",
-          [
-            test_case "the published price is a subscription plus a rung" `Quick
-              the_published_price_is_a_subscription_plus_a_rung;
-            test_case "a free session costs nothing at any count" `Quick
-              a_free_session_costs_nothing_at_any_count;
-            test_case "the endpoint and the tool" `Quick the_endpoint_and_the_tool;
-          ] );
+          [ test_case "the endpoint and the tool" `Quick the_endpoint_and_the_tool ] );
         ( "one session on one credential",
           [
             test_case "the advertised arguments and nothing else" `Quick

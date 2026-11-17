@@ -42,11 +42,8 @@ val parse :
 (** [hits[]] mapped onto title/url/snippet. The limit slices the upstream list before anything is
     dropped; non-object records are skipped. *)
 
-val cost_for : cost_per_1k:float -> int -> float
-(** Per-query cost in USD. Flat per request. *)
-
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?snippet_chars:int ->
   ?title_attr:string ->
   ?url_attr:string ->
@@ -57,4 +54,5 @@ val make :
   net:Seekwright.Provider.Net.t ->
   unit ->
   Seekwright.Provider.t
-(** Constructs the Algolia provider. [app_id], [key], [endpoint], and [net] are mandatory. *)
+(** Constructs the Algolia provider. [cost_for], [app_id], [key], [endpoint], and [net] are
+    mandatory. *)

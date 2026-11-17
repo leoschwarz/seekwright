@@ -176,8 +176,6 @@ let result_of_query (q : Model.search_query) : Provider.hit =
 let provider_of_search_stub (s : search_stub) : Provider.t =
   (module struct
     let name = s.name
-    let cost_per_1k = 1.0
-    let cost_for n = float_of_int n /. 1000.
 
     let search (q : Model.search_query) =
       ignore (Atomic.fetch_and_add s.calls 1);

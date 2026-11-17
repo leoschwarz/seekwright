@@ -129,7 +129,7 @@ let build_status = function
 let keyless row = not (List.mem Registry.Api_key row.Registry.requires)
 
 let price_note row =
-  let price = Registry.price row Config.default_provider_config in
+  let price = Registry.rate row Config.default_provider_config in
   if price = 0.0 then "unbilled"
   else
     match row.Registry.cost_model with
@@ -144,7 +144,7 @@ let cost_class selector =
   match selector with
   | Provider name -> (
       match Registry.row name with
-      | Some row when Registry.price row Config.default_provider_config > 0.0 -> Billed
+      | Some row when Registry.rate row Config.default_provider_config > 0.0 -> Billed
       | _ -> Unbilled)
   | Fetch (Scrappa | Tavily | Linkup) -> Billed
   | Fetch (Local | Metadata | Jina) -> Unbilled
@@ -163,7 +163,7 @@ let cost_prose selector =
       | None -> "unknown: this name has no registry row"
       | Some row ->
           let calls = calls_note selector in
-          if Registry.price row Config.default_provider_config = 0.0 then
+          if Registry.rate row Config.default_provider_config = 0.0 then
             if keyless row then Printf.sprintf "unbilled — keyless, %s" calls
             else
               Printf.sprintf

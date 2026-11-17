@@ -24,6 +24,9 @@
  (libraries
   mcp-caps
   seekwright
+  ; [seekwright.factory] for one thing: the provider projection prices an adapter the way the
+  ; factory does, by reading its registry row, so a golden's [cost_usd] is the row's own figure.
+  seekwright.factory
   seekwright.fetch
   seekwright.providers
   seekwright.text

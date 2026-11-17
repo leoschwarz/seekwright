@@ -20,7 +20,7 @@ val max_size : int
 (** Documented maximum result count (100). *)
 
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?snippet_chars:int ->
   now:(unit -> float) ->
   net:Seekwright.Provider.Net.t ->

@@ -78,7 +78,7 @@ let build_providers ~sw ~net ~mono_clock ~now ?audit ?log config =
                                      from one call. *)
                                   endpoint = adapter.uri;
                                   entry = pc;
-                                  cost_per_1k = Registry.price row pc;
+                                  cost_for = Registry.price row pc;
                                   snippet_chars;
                                   text_chars;
                                   log;

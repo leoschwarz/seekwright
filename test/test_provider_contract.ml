@@ -68,13 +68,17 @@ type adapter = {
 
 let shared_quota_statuses = [ 402; 429 ]
 
+(* The row owns the price, so the contract hands every adapter a zero one: what this suite drives is
+   the shared behaviour behind {!Seekwright.Provider.http_search}, never a figure. *)
+let no_price = fun _max_results -> 0.0
+
 let adapters =
   [
     {
       name = "algolia";
       build =
         (fun net ->
-          Seekwright_providers.Algolia.make ~app_id:"app123"
+          Seekwright_providers.Algolia.make ~cost_for:no_price ~app_id:"app123"
             ~endpoint:
               (Seekwright_providers.Algolia.endpoint_of_deployment ~app_id:"app123"
                  ~index:"products")
@@ -87,14 +91,16 @@ let adapters =
     };
     {
       name = "anysearch";
-      build = (fun net -> Seekwright_providers.Anysearch.make ~net ());
+      build = (fun net -> Seekwright_providers.Anysearch.make ~cost_for:no_price ~net ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
       non_object_is_empty = false;
     };
     {
       name = "deepseek";
-      build = (fun net -> Seekwright_providers.Deepseek.make ~net ~key:probe_key ~now:clock ());
+      build =
+        (fun net ->
+          Seekwright_providers.Deepseek.make ~cost_for:no_price ~net ~key:probe_key ~now:clock ());
       auth_message = None;
       (* 402 is DeepSeek's own "insufficient balance" answer, so the payment
          status belongs to the quota row here. Its 408 row is narrower than the
@@ -106,14 +112,16 @@ let adapters =
     };
     {
       name = "freeserp";
-      build = (fun net -> Seekwright_providers.Freeserp.make ~now:clock ~net ());
+      build = (fun net -> Seekwright_providers.Freeserp.make ~cost_for:no_price ~now:clock ~net ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
       non_object_is_empty = false;
     };
     {
       name = "linkup";
-      build = (fun net -> Seekwright_providers.Linkup.make ~net ~key:probe_key ~now:clock ());
+      build =
+        (fun net ->
+          Seekwright_providers.Linkup.make ~cost_for:no_price ~net ~key:probe_key ~now:clock ());
       auth_message = None;
       (* Linkup's 402 belongs to the keyless x402 lane this adapter never enters,
          so a payment status on a bearer-keyed request is the [HTTP 402] row. *)
@@ -122,7 +130,8 @@ let adapters =
     };
     {
       name = "querit";
-      build = (fun net -> Seekwright_providers.Querit.make ~net ~key:probe_key ());
+      build =
+        (fun net -> Seekwright_providers.Querit.make ~cost_for:no_price ~net ~key:probe_key ());
       auth_message = None;
       (* 429 is the documented 1 QPS free limit and the exhausted monthly
          allowance answers the same code; 402 says the same about the account. *)
@@ -131,14 +140,16 @@ let adapters =
     };
     {
       name = "scrappa";
-      build = (fun net -> Seekwright_providers.Scrappa.make ~net ~key:probe_key ());
+      build =
+        (fun net -> Seekwright_providers.Scrappa.make ~cost_for:no_price ~net ~key:probe_key ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
       non_object_is_empty = false;
     };
     {
       name = "search1api";
-      build = (fun net -> Seekwright_providers.Search1api.make ~net ~key:probe_key ());
+      build =
+        (fun net -> Seekwright_providers.Search1api.make ~cost_for:no_price ~net ~key:probe_key ());
       auth_message = None;
       (* 402 is documented ([application/problem+json]) for a bearer-keyed
          client: the credits are gone, the same failure as the rate limit. *)
@@ -147,7 +158,9 @@ let adapters =
     };
     {
       name = "parallel";
-      build = (fun net -> Seekwright_providers.Parallel.make ~net ~key:probe_key ~now:clock ());
+      build =
+        (fun net ->
+          Seekwright_providers.Parallel.make ~cost_for:no_price ~net ~key:probe_key ~now:clock ());
       auth_message = None;
       (* 402 and 429 are one sentence for this backend — "rate limited or out
          of credits" — because the payment status and the rate limit are the
@@ -164,7 +177,7 @@ let adapters =
       name = "searxng";
       build =
         (fun net ->
-          Seekwright_providers.Searxng.make ~net
+          Seekwright_providers.Searxng.make ~cost_for:no_price ~net
             ~endpoint:(Uri.of_string "http://searx.invalid/search")
             ());
       (* A locked-down instance can refuse the JSON format specifically, so this
@@ -175,7 +188,8 @@ let adapters =
     };
     {
       name = "serpapi";
-      build = (fun net -> Seekwright_providers.Serpapi.make ~net ~key:probe_key ());
+      build =
+        (fun net -> Seekwright_providers.Serpapi.make ~cost_for:no_price ~net ~key:probe_key ());
       auth_message = None;
       (* 429 is documented as the hourly throughput limit, or an exhausted
          account; 402 for this vendor says the same about the account. The key
@@ -187,14 +201,16 @@ let adapters =
     };
     {
       name = "serper";
-      build = (fun net -> Seekwright_providers.Serper.make ~net ~key:probe_key ());
+      build =
+        (fun net -> Seekwright_providers.Serper.make ~cost_for:no_price ~net ~key:probe_key ());
       auth_message = None;
       quota_statuses = shared_quota_statuses;
       non_object_is_empty = false;
     };
     {
       name = "tavily";
-      build = (fun net -> Seekwright_providers.Tavily.make ~net ~key:probe_key ());
+      build =
+        (fun net -> Seekwright_providers.Tavily.make ~cost_for:no_price ~net ~key:probe_key ());
       auth_message = None;
       (* Tavily's quota pair is 429 and its own 432 (monthly credits exhausted);
          402 is not a status this vendor answers with, so it stays on the plain
@@ -204,7 +220,8 @@ let adapters =
     };
     {
       name = "tinyfish";
-      build = (fun net -> Seekwright_providers.Tinyfish.make ~net ~key:probe_key ());
+      build =
+        (fun net -> Seekwright_providers.Tinyfish.make ~cost_for:no_price ~net ~key:probe_key ());
       auth_message = None;
       (* 402 here reads "Search API access is required for your account", which is
          the account question the quota row is for — the same status is the plain

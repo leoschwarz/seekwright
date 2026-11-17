@@ -75,10 +75,7 @@ let get_page net uri ~required =
   | Error failure -> if required then Error failure else Ok None
   | Ok data -> Ok (Some data)
 
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
-let search ~cost_per_1k ~snippet_chars ~endpoint (net : Provider.Net.t) (q : Provider.search_query)
-    =
+let search ~cost_for ~snippet_chars ~endpoint (net : Provider.Net.t) (q : Provider.search_query) =
   let search = search_uri endpoint in
   let page_uri pageno =
     Uri.with_query search (base_params q @ [ ("pageno", [ string_of_int pageno ]) ])
@@ -101,18 +98,16 @@ let search ~cost_per_1k ~snippet_chars ~endpoint (net : Provider.Net.t) (q : Pro
       Provider.provider = name;
       results;
       answer = None;
-      cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
+      cost_usd = Some (cost_for q.Model.max_results);
       notice =
         Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:(Some true)
           ~safety:true ~drops_exclude_domains:false;
     }
 
-let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~endpoint ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ~endpoint ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars ~endpoint net
+    let search = search ~cost_for ~snippet_chars ~endpoint net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

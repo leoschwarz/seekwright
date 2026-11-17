@@ -1,7 +1,7 @@
 module Config = Seekwright.Config
 module Factory = Seekwright_factory.Factory
 module Health = Seekwright.Health
-module Provider = Seekwright.Provider
+module Registry = Seekwright_factory.Registry
 
 let outcome_prose = function
   | Health.Reachable -> "reachable"
@@ -222,11 +222,16 @@ let run ~env ~sw ~config ~emit ~live =
             problems := !problems + 1;
             incr failed
           end
-      | Some provider ->
+      | Some _provider ->
           let outcome = Health.probe ~net:probe_net ~table:built.Factory.probe_table config name in
+          (* The rate is the row's, not the adapter's: an adapter is handed a price function and
+             reports only what a search actually cost. *)
           let price =
-            let cost = Provider.cost_per_1k provider in
-            if cost > 0.0 then Printf.sprintf "$%.2f/1k" cost else "unbilled"
+            match (Registry.row name, List.assoc_opt name config.Config.providers) with
+            | Some row, Some pc ->
+                let rate = Registry.rate row pc in
+                if rate > 0.0 then Printf.sprintf "$%.2f/1k" rate else "unbilled"
+            | _ -> "unbilled"
           in
           (match outcome with
           | Health.Reachable | Health.Reachable_no_key -> incr ready

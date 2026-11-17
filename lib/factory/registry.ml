@@ -41,7 +41,7 @@ type args = {
   key : string option;
   endpoint : Uri.t;
   entry : Config.provider_config;
-  cost_per_1k : float;
+  cost_for : int -> float;
   snippet_chars : int;
   text_chars : int;
   log : Log.log option;
@@ -148,7 +148,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Algolia.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Algolia.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars
                ~app_id:(require_setting "algolia" "app_id" a.entry.Config.app_id)
                ?title_attr:a.entry.Config.title_attr ?url_attr:a.entry.Config.url_attr
                ?snippet_attr:a.entry.Config.snippet_attr ~key:(require_key "algolia" a)
@@ -164,7 +164,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Anysearch.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars ~net:a.net ()))
+             Anysearch.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars ~net:a.net ()))
       ();
     (* Keyed, and the only name here with no free tier to be keyed {i despite}:
        billed per successful request. It is also the one name that fills [snippet]
@@ -177,7 +177,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Deepseek.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Deepseek.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars
                ~text_chars:a.text_chars ~key:(require_key "deepseek" a) ~now:a.now ~net:a.net ()))
       ();
     (* Billed Exa, which still spends the free tier first ([TieredExaProvider]):
@@ -190,7 +190,7 @@ let rows =
       ~build:
         (Adapter_session
            (fun a ->
-             Exa.make_tiered ~cost_per_1k:a.cost_per_1k ~text_chars:a.text_chars
+             Exa.make_tiered ~cost_for:a.cost_for ~text_chars:a.text_chars
                ~cooldown_seconds:a.entry.Config.free_cooldown_seconds ~now:a.now ?log:a.log
                ~key:(require_key "exa" a) ~uri:a.endpoint ~net:a.net ()))
       ();
@@ -205,7 +205,7 @@ let rows =
       ~build:
         (Adapter_session
            (fun a ->
-             Exa.make_mcp ~cost_per_1k:a.cost_per_1k ~name:"exa:free" ~text_chars:a.text_chars
+             Exa.make_mcp ~cost_for:a.cost_for ~name:"exa:free" ~text_chars:a.text_chars
                ~uri:a.endpoint ~net:a.net ()))
       ();
     (* Keyless — no account, no key, no card — and priced at zero: nothing about a
@@ -218,8 +218,8 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Freeserp.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars ~now:a.now
-               ~net:a.net ()))
+             Freeserp.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars ~now:a.now ~net:a.net
+               ()))
       ();
     (* An answer-or-results API whose [depth] is a ~10x cost cliff, so the rung is
        operator-configured and never model-chosen; [20s] is the deep-rung budget.
@@ -231,8 +231,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Linkup.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
-               ~depth:a.entry.depth
+             Linkup.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars ~depth:a.entry.depth
                ~output:(linkup_output a.entry.output_type)
                ~key:(require_key "linkup" a) ~now:a.now ~net:a.net ()))
       ();
@@ -245,8 +244,8 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Parallel.make ~cost_per_1k:a.cost_per_1k ~text_chars:a.text_chars
-               ~mode:a.entry.Config.mode ~key:(require_key "parallel" a) ~now:a.now ~net:a.net ()))
+             Parallel.make ~cost_for:a.cost_for ~text_chars:a.text_chars ~mode:a.entry.Config.mode
+               ~key:(require_key "parallel" a) ~now:a.now ~net:a.net ()))
       ();
     (* Keyless anonymous hosted MCP, priced at zero like [exa:free], and proven by
        its MCP handshake rather than a bodyless GET — the readiness contract's
@@ -263,8 +262,8 @@ let rows =
       ~build:
         (Adapter_session
            (fun a ->
-             Parallel.make_mcp ~cost_per_1k:a.cost_per_1k ~name:"parallel:free"
-               ~text_chars:a.text_chars ~uri:a.endpoint ~net:a.net ()))
+             Parallel.make_mcp ~cost_for:a.cost_for ~name:"parallel:free" ~text_chars:a.text_chars
+               ~uri:a.endpoint ~net:a.net ()))
       ();
     (* Keyed despite the 1,000 free calls/month for the metered-quota reason;
        [default_cost] is the free plan and the PAYG tier corrects it in config. *)
@@ -275,7 +274,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Querit.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Querit.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars
                ~key:(require_key "querit" a) ~net:a.net ()))
       ();
     (* A scraping backend, not a cached SERP index: slower than [serper] on the same
@@ -288,7 +287,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Scrappa.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Scrappa.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars
                ~key:(require_key "scrappa" a) ~net:a.net ()))
       ();
     (* Keyed despite the 100 free credits: a metered allowance is a billable quota.
@@ -300,7 +299,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Search1api.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Search1api.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars
                ~key:(require_key "search1api" a) ~net:a.net ()))
       ();
     (* A metasearch instance queries its upstream engines live, so it answers at
@@ -315,8 +314,8 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Searxng.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
-               ~endpoint:a.endpoint ~net:a.net ()))
+             Searxng.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars ~endpoint:a.endpoint
+               ~net:a.net ()))
       ();
     (* Keyed despite the 250 searches/month free tier. The documented request puts
        the key in the {i query string}, so this is the one row whose credential is
@@ -329,22 +328,21 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Serpapi.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Serpapi.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars
                ~key:(require_key "serpapi" a) ~net:a.net ()))
       ();
     (* An API with its own SERP cache, not a scrape: the policy timeout is enough,
-       and its header spelling is the vendor's own. The one name whose per-query
-       figure doubles past {!Seekwright_providers.Serper.credit_over} results —
-       two credits for more than ten — so [--check --live] and the caller's notice
+       and its header spelling is the vendor's own. The one name whose per-query figure doubles past
+       ten results — two credits for more than ten — so [--check --live] and the caller's notice
        both report the search that actually bills. *)
     make_row ~name:"serper" ~endpoint:(Fixed_uri Serper.endpoint)
       ~credential:(key_header "X-API-KEY") ~default_cost:(Some 1.00)
-      ~cost_model:(Credit_multiplier { over = Serper.credit_over; multiplier = 2 })
+      ~cost_model:(Credit_multiplier { over = 10; multiplier = 2 })
       ~probe:(probe_at Serper.endpoint)
       ~build:
         (Adapter
            (fun a ->
-             Serper.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Serper.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars
                ~key:(require_key "serper" a) ~net:a.net ()))
       ();
     (* An API, not a scrape: normal timeout. The figure is the free-then-metered
@@ -357,8 +355,8 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Tavily.make ~cost_per_1k:a.cost_per_1k ~text_chars:a.text_chars
-               ~key:(require_key "tavily" a) ~net:a.net ()))
+             Tavily.make ~cost_for:a.cost_for ~text_chars:a.text_chars ~key:(require_key "tavily" a)
+               ~net:a.net ()))
       ();
     (* An API, not a scrape, and free but keyed: a metered allowance, so the key is
        what names whose allowance a search spends. *)
@@ -367,7 +365,7 @@ let rows =
       ~build:
         (Adapter
            (fun a ->
-             Tinyfish.make ~cost_per_1k:a.cost_per_1k ~snippet_chars:a.snippet_chars
+             Tinyfish.make ~cost_for:a.cost_for ~snippet_chars:a.snippet_chars
                ~key:(require_key "tinyfish" a) ~net:a.net ()))
       ();
   ]
@@ -429,11 +427,14 @@ let grant_endpoint (row : row) (pc : Config.provider_config) =
 
 let timeout_seconds row ~policy_seconds = max policy_seconds row.timeout_floor
 
-let price (row : row) (pc : Config.provider_config) =
+(* The rate the operator pays per thousand: their own figure when they wrote one, the row's default
+   otherwise, and zero for a row that fixes no price. This is the figure [--check] prints. *)
+let rate (row : row) (pc : Config.provider_config) =
   match row.default_cost with
   | None -> 0.0
   | Some default -> Option.value ~default pc.Config.cost_per_1k
 
+(* The shape of the charge, applied to a rate of the caller's choosing. *)
 let cost_of row ~cost_per_1k n =
   match row.cost_model with
   | Flat -> cost_per_1k /. 1000.
@@ -447,11 +448,16 @@ let cost_of row ~cost_per_1k n =
         (cost_per_1k +. (extra *. per_extra_1k)) /. 1000.
   (* The vendor's rate is per thousand {i credits}, and a request past [over]
      results spends [multiplier] of them. Written as the vendor states it — the
-     per-thousand figure, then the credit count — so it matches the adapter's own
-     [cost_for] bit for bit rather than only to a tolerance. *)
+     per-thousand figure, then the credit count — so it matches the vendor's own
+     billing arithmetic bit for bit. *)
   | Credit_multiplier { over; multiplier } ->
       let credits = if n > over then multiplier else 1 in
       cost_per_1k /. 1000. *. float_of_int credits
+
+(* The price an adapter is handed: this row's rate through this row's model. The one place a
+   per-query figure comes from, which is what makes [--check --live]'s figure and the caller's
+   [cost_usd] the same reading. *)
+let price row pc = cost_of row ~cost_per_1k:(rate row pc)
 
 (* The credential decision, in one place: a keyless row answers [None] whatever the
    environment holds, so [exa:free] stays anonymous while [exa] spends the same

@@ -190,24 +190,24 @@ let the_rows_price_their_names () =
         check (float 1e-9)
           (name ^ " is built at its row's figure")
           (Option.value ~default:0.0 want)
-          (Registry.price row (entry ())));
+          (Registry.rate row (entry ())));
       (* and a [[providers]] [cost_per_1k] corrects it — except for the name
          that cannot bill, where the correction is what would bill it *)
       let overridden = entry ~cost:4.25 () in
       match want with
-      | None -> A.(check (float 1e-9) (name ^ " stays at zero") 0.0 (Registry.price row overridden))
+      | None -> A.(check (float 1e-9) (name ^ " stays at zero") 0.0 (Registry.rate row overridden))
       | Some figure ->
           A.(
             check (float 1e-9)
               (name ^ " takes the config figure")
-              4.25 (Registry.price row overridden);
+              4.25 (Registry.rate row overridden);
             check bool (name ^ " is not the fixed-zero name") true (figure <> 4.25)))
     oracle_cost;
   (* the flavour shares its backend's endpoint and none of its price: one key
      variable serves both halves, and the free half never reads it *)
   A.(
     check (float 1e-9) "the free half is fixed at zero" 0.0
-      (Registry.price (row_of "exa:free") (entry ~cost:7.00 ()));
+      (Registry.rate (row_of "exa:free") (entry ~cost:7.00 ()));
     check string "one key variable serves both halves" (Config.api_key_env_var "exa")
       (Config.api_key_env_var "exa:free");
     check string "and it names the backend" "SEEKWRIGHT_EXA_API_KEY"
@@ -893,7 +893,7 @@ let an_adapter_is_built_at_its_rows_figures () =
       now = (fun () -> 1768478400.);
       key = Some sentinel;
       entry = entry_of name;
-      cost_per_1k = 1.25;
+      cost_for = Registry.cost_of row ~cost_per_1k:1.25;
       snippet_chars = 400;
       text_chars = 2000;
       endpoint = ok (Registry.uri row (entry_of name));
@@ -909,43 +909,26 @@ let an_adapter_is_built_at_its_rows_figures () =
         | None -> A.failf "%s did not build" name
       in
       A.(check string "the adapter answers to the row's name" name (Provider.name adapter));
-      (* the row's builder is the only producer of a provider here, and a
-         builder run with a price of its own passes that price through: the
-         [1.25] handed to [args] is the figure the adapter shows, and it is
-         the figure the row's [cost_of] model then prices by — for a session
-         row the pair arrives beside the adapter, and it is the pair's
-         adapter that carries the price *)
+      (* The row's builder is the only producer of a provider here, and a builder run straight from
+         the row takes its price from the arguments it is handed — what that function does with a
+         served search is each adapter suite's own [cost_usd] case. For a session row the pair
+         arrives beside the adapter, and it is the pair's adapter that gets the function. *)
       let built =
         match row.Registry.build with
         | Registry.Adapter make -> make (direct_args row name)
         | Registry.Adapter_session make -> (make (direct_args row name)).Provider.adapter
         | Registry.Deferred wave -> A.failf "%s built from a row deferred to %s" name wave
       in
-      A.(
-        check (float 1e-9) "a builder run directly takes its price from its arguments" 1.25
-          (Provider.cost_per_1k built));
-      List.iter
-        (fun n ->
-          (* the row's pricing model is the figure the adapter reports:
-             [--check --live] prints the row's [cost_of], a caller's notice
-             carries the adapter's [cost_for], and two spellings of a quote is
-             how one of them starts lying *)
-          A.(
-            check (float 1e-9)
-              (name ^ " prices " ^ string_of_int n ^ " results like its row")
-              (Registry.cost_of row ~cost_per_1k:1.25 n)
-              (Provider.cost_for built n)))
-        [ 1; 10; 20 ])
+      A.(check string "the row's own builder answers to the row's name" name (Provider.name built)))
     [ "anysearch"; "exa"; "exa:free"; "freeserp"; "parallel"; "parallel:free" ]
-(* [parallel:free]'s row fixes its price at zero but passes [a.cost_per_1k]
-     into the builder, which defaults to the row's figure through [Registry.price]
-     — the pass-through walk above sees the entry's price on that name only when
-     the row itself can bill, and this name shows the row's zero either way. *)
+(* [parallel:free]'s row fixes its price at zero and the build still hands that adapter a price
+   function: the walk above runs the row too, so a flavour that cannot bill is exercised like one
+   that can. *)
 
-(* A config correction reaches the adapter through the row, which is the whole
-   point of [cost_per_1k] being a config key: the figure [--check --live] prints
-   is the figure the adapter reports. *)
-let a_config_correction_reaches_the_adapter () =
+(* A config correction reaches the figure a caller is quoted, which is the whole point of
+   [cost_per_1k] being a config key: the rate [--check] prints and the per-query figure the
+   adapter is handed come from one reading of the entry. *)
+let a_config_correction_reaches_the_quoted_figure () =
   set_keys ();
   let corrected =
     config [ ("freeserp", entry ~cost:3.50 ()); ("anysearch", entry ~cost:0.25 ()) ]
@@ -958,13 +941,14 @@ let a_config_correction_reaches_the_adapter () =
           corrected)
   in
   clear_keys ();
+  let entry_of name = some (List.assoc_opt name corrected.Config.providers) in
   A.(
     check (list string) "both built" [ "anysearch"; "freeserp" ]
       (List.sort String.compare (List.map fst providers.Factory.built));
-    check (float 1e-9) "the corrected freeserp figure" 3.50
-      (Provider.cost_per_1k (some (List.assoc_opt "freeserp" providers.Factory.built)));
-    check (float 1e-9) "and the corrected anysearch figure" 0.25
-      (Provider.cost_per_1k (some (List.assoc_opt "anysearch" providers.Factory.built))))
+    check (float 1e-9) "the corrected freeserp entry prices a search at its figure" 0.0035
+      (Registry.price (row_of "freeserp") (entry_of "freeserp") 5);
+    check (float 1e-9) "and the corrected anysearch entry at its own" 0.00025
+      (Registry.price (row_of "anysearch") (entry_of "anysearch") 5))
 
 (* Permission narrowing is a routing decision, not a construction one: the table
    holds the same seventeen rows whatever [permitted_providers] says, and a built
@@ -990,8 +974,8 @@ let a_permission_set_narrows_routing_not_rows () =
   let unpermitted_entry = some (List.assoc_opt "anysearch" narrowed.Config.providers) in
   A.(
     check (float 1e-9) "an unpermitted name prices the same as a permitted one"
-      (Registry.price anysearch_row (entry_of "anysearch"))
-      (Registry.price anysearch_row unpermitted_entry);
+      (Registry.price anysearch_row (entry_of "anysearch") 5)
+      (Registry.price anysearch_row unpermitted_entry 5);
     check string "and grants the same endpoint"
       (show_endpoint (ok (Registry.grant_endpoint anysearch_row (entry_of "anysearch"))))
       (show_endpoint (ok (Registry.grant_endpoint anysearch_row unpermitted_entry)));
@@ -1065,8 +1049,8 @@ let () =
           A.test_case "construction answers from the rows" `Quick construction_answers_from_the_rows;
           A.test_case "an adapter is built at its row's figures" `Quick
             an_adapter_is_built_at_its_rows_figures;
-          A.test_case "a config correction reaches the adapter" `Quick
-            a_config_correction_reaches_the_adapter;
+          A.test_case "a config correction reaches the quoted figure" `Quick
+            a_config_correction_reaches_the_quoted_figure;
           A.test_case "a permission set narrows routing, not rows" `Quick
             a_permission_set_narrows_routing_not_rows;
         ] );

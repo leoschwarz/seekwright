@@ -21,6 +21,10 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_dom
     safe_search;
   }
 
+(* The factory injects an adapter's price, so a suite injects one: the vendor's flat published rate
+   per thousand, which is what makes a case's expected [cost_usd] the vendor's own figure. *)
+let published_price rate = fun _max_results -> rate /. 1000.
+
 let response ~status ~body = { Caps.Authority.Net.status; headers = []; body }
 
 type egress = {

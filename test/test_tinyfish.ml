@@ -50,15 +50,17 @@ let sample =
 
 let sample_json = json_object sample
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
+(* The row's price rule lives in the factory, so the suite injects one: a Search API request draws
+   nothing from the wallet, so the injected price is zero. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) () =
   let net, sent = answered ~status ~body in
-  (Tinyfish.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
+  (Tinyfish.make ~cost_for:(published_price 0.) ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message = Tinyfish.make ~key:test_key ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Tinyfish.make ~cost_for:(published_price 0.) ~key:test_key ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?(query = query ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars () in
   drive provider sent query
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Tinyfish.parse ~snippet_chars data ~limit
@@ -313,24 +315,10 @@ let a_network_failure_does_not_echo_the_request () =
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
-let the_cost_is_flat_zero () =
-  (* A Search API request draws nothing from the wallet whatever the balance: the
-     account pays for agent and browser work, not for this. *)
-  let provider, _ = dial () in
-  check_number "at one result" 0.0 (Provider.cost_for provider 1);
-  check_number "at the schema ceiling" 0.0 (Provider.cost_for provider 20)
-
 let the_result_carries_the_zero () =
   let outcome, _ = search_of ~query:(query ~max_results:20 ()) () in
   check_string "named by the adapter that served it" "tinyfish" outcome.provider;
   check_opt_number "free, and reported as free" (Some 0.0) outcome.cost_usd
-
-let zero_is_the_default_and_a_correction_reaches_the_adapter () =
-  let provider, _ = dial () in
-  check_number "the row's figure" 0.0 (Provider.cost_per_1k provider);
-  let provider, _ = dial ~cost_per_1k:2.00 () in
-  check_number "an operator-corrected figure" 2.00 (Provider.cost_per_1k provider);
-  check_number "and its per-query reading" 0.002 (Provider.cost_for provider 5)
 
 let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.search.tinyfish.ai" (Uri.to_string Tinyfish.endpoint);
@@ -403,10 +391,7 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "the cost is flat zero" `Quick the_cost_is_flat_zero;
             test_case "the result carries the zero" `Quick the_result_carries_the_zero;
-            test_case "zero is the default and a correction reaches the adapter" `Quick
-              zero_is_the_default_and_a_correction_reaches_the_adapter;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

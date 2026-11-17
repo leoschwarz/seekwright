@@ -107,10 +107,7 @@ let parse ~snippet_chars data ~limit =
 let check_status =
   Provider.check_status ~provider:name ~quota_message:"rate limited or out of monthly calls"
 
-(* Flat rate per request. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
-let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
+let search ~cost_for ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
   let country = match q.Model.country with Some code -> country_param code | None -> None in
   let language = match q.Model.language with Some code -> language_param code | None -> None in
   (* A filter the vendor has no code for is dropped from the body, so the
@@ -125,18 +122,16 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
         headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
         body = Some (request_body ~country ~language q);
       }
-    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars)
+    ~cost_for ~parse:(parse ~snippet_chars)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:geo_honoured
         ~language:(Some language_honoured) ~safety:false ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 0.0) ?(snippet_chars = 500) ~key ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ~key ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars ~key net
+    let search = search ~cost_for ~snippet_chars ~key net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

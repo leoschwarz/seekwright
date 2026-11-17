@@ -45,15 +45,17 @@ let sample =
 
 let sample_json = json_object sample
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
+(* The row's price rule lives in the factory, so the suite injects the vendor's published
+   [$0.30/1k]. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) () =
   let net, sent = answered ~status ~body in
-  (Scrappa.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
+  (Scrappa.make ~cost_for:(published_price 0.30) ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message = Scrappa.make ~key:test_key ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Scrappa.make ~cost_for:(published_price 0.30) ~key:test_key ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?(query = query ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars () in
   drive provider sent query
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Scrappa.parse ~snippet_chars data ~limit
@@ -278,25 +280,6 @@ let a_network_error_does_not_echo_the_request () =
       check_bool "the key is nowhere in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
-let cost_does_not_scale_with_result_count () =
-  let provider, _ = dial () in
-  check_number "one query, whatever num says" 0.0003 (Provider.cost_for provider 1);
-  check_number "and at the ceiling" 0.0003 (Provider.cost_for provider 20)
-
-let it_is_cheaper_than_serper () =
-  (* The reason for adopting it: same Google index, a third of the price. *)
-  let provider, _ = dial () in
-  check_bool "under Serper's $1.00/1k" true (Provider.cost_per_1k provider < 1.00)
-
-let the_default_price_is_the_rows_figure () =
-  (* The adapter default and the registry row's [default_cost] are one fact:
-     [$0.30/1k] is what the vendor publishes, and [--check --live] prints
-     whichever of the two is wrong. *)
-  let provider, _ = dial () in
-  check_number "the published figure" 0.30 (Provider.cost_per_1k provider);
-  let provider, _ = dial ~cost_per_1k:0.15 () in
-  check_number "an operator on another tier can correct it" 0.15 (Provider.cost_per_1k provider)
-
 let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://scrappa.co/api/search-light" (Uri.to_string Scrappa.endpoint);
   let _, request = search_of () in
@@ -361,11 +344,6 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "cost does not scale with result count" `Quick
-              cost_does_not_scale_with_result_count;
-            test_case "it is cheaper than serper" `Quick it_is_cheaper_than_serper;
-            test_case "the default price is the row's figure" `Quick
-              the_default_price_is_the_rows_figure;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

@@ -281,11 +281,11 @@ val http_search :
     {!decode_json_object} for a vendor that tolerates a 200 whose body is valid JSON but not an
     object. *)
 
-(** The search provider module signature. *)
+(** The search provider module signature. A provider is priced from outside: the row that builds it
+    hands [make] a [cost_for] function, so the pricing rule has one owner and the adapter only
+    reports the figure it was given. *)
 module type S = sig
   val name : string
-  val cost_per_1k : float
-  val cost_for : int -> float
   val search : search_query -> (outcome, error) result
   val aclose : unit -> unit
 end
@@ -294,8 +294,6 @@ type t = (module S)
 (** Provider instance packed as a first-class module. *)
 
 val name : t -> string
-val cost_per_1k : t -> float
-val cost_for : t -> int -> float
 val search : t -> search_query -> (outcome, error) result
 val aclose : t -> unit
 

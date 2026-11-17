@@ -167,8 +167,6 @@ let no_hits ?answer ?notice s =
 let provider (s : stub) : Provider.t =
   (module struct
     let name = s.name
-    let cost_per_1k = 1.0
-    let cost_for n = float_of_int n /. 1000.
     let search q = !(s.behavior) q
     let aclose () = ()
   end : Provider.S)
@@ -387,7 +385,7 @@ let a_non_object_json_body_reaches_the_caller_as_advice () =
         (fun _request -> Ok { Caps.Authority.Net.status = 200; headers = []; body = "[]" });
     }
   in
-  let adapter = Freeserp.make ~now ~net () in
+  let adapter = Freeserp.make ~cost_for:(fun _ -> 0.) ~now ~net () in
   let board =
     make_engine ~default:"freeserp"
       [ { stub = stub ~name:"freeserp" (); provider = adapter; name = "freeserp" } ]

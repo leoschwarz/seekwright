@@ -51,15 +51,19 @@ let sample =
 
 let sample_json = json_object sample
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
+(* The row's price rule lives in the factory, so the suite injects one: the row fixes this name at
+   zero — the 1,000-calls-a-month plan is an account quota, not a price — and the injected zero is
+   what a served search reports. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) () =
   let net, sent = answered ~status ~body in
-  (Querit.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
+  (Querit.make ~cost_for:(published_price 0.0) ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message = Querit.make ~key:test_key ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Querit.make ~cost_for:(published_price 0.0) ~key:test_key ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
     ?(query = query ~text:"hybrid search" ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
+  let provider, sent = dial ~status ~body ~snippet_chars () in
   drive provider sent query
 
 let body_has request name = Provider.Json.field name (body_of request) <> `Null
@@ -396,29 +400,10 @@ let a_network_error_does_not_echo_the_request () =
       check_bool "the key is nowhere in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:test_key)
 
-let cost_does_not_scale_with_result_count () =
-  let provider, _ = dial () in
-  check_number "one call, whatever count says" 0. (Provider.cost_for provider 1);
-  check_number "and at the cap" 0. (Provider.cost_for provider 20)
-
-let cost_tracks_the_declared_rate () =
-  let provider, _ = dial ~cost_per_1k:4.0 () in
-  check_number "the PAYG tier, flat" 0.004 (Provider.cost_for provider 1);
-  check_number "whatever count says" 0.004 (Provider.cost_for provider 10)
-
 let the_result_reports_its_flat_cost () =
   let outcome, _ = search_of ~query:(query ~max_results:5 ()) () in
   check_string "named by the adapter that served it" "querit" outcome.provider;
   check_opt_number "the free plan costs nothing" (Some 0.) outcome.cost_usd
-
-let the_default_price_is_the_rows_figure () =
-  (* The adapter default and the registry row's [default_cost] are one fact:
-     the 1,000-calls-a-month free plan, with the $4/1k PAYG tier correcting it
-     in config. *)
-  let provider, _ = dial () in
-  check_number "the free plan" 0. (Provider.cost_per_1k provider);
-  let provider, _ = dial ~cost_per_1k:4.0 () in
-  check_number "the PAYG tier" 4.0 (Provider.cost_per_1k provider)
 
 let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.querit.ai/v1/search" (Uri.to_string Querit.endpoint);
@@ -496,12 +481,7 @@ let () =
           ] );
         ( "cost and endpoint",
           [
-            test_case "cost does not scale with result count" `Quick
-              cost_does_not_scale_with_result_count;
-            test_case "cost tracks the declared rate" `Quick cost_tracks_the_declared_rate;
             test_case "the result reports its flat cost" `Quick the_result_reports_its_flat_cost;
-            test_case "the default price is the row's figure" `Quick
-              the_default_price_is_the_rows_figure;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

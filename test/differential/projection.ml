@@ -23,6 +23,7 @@ module Fetcher = Seekwright_fetch.Fetcher
 module Jsondoc = Seekwright_fetch.Jsondoc
 module Model = Seekwright.Model
 module Provider = Seekwright.Provider
+module Registry = Seekwright_factory.Registry
 module Repr = Seekwright_text.Repr
 module Router = Seekwright.Router
 module Sanitize = Seekwright.Sanitize
@@ -656,7 +657,6 @@ let model spec_text =
 
 type state = {
   name : string;
-  cost : float;
   fail : Provider.error option;
   results : Provider.hit list;
   answer : string option;
@@ -666,9 +666,6 @@ type state = {
 let stub (state : state) (attempts : string list ref) : Provider.t =
   (module struct
     let name = state.name
-    let cost_per_1k = state.cost
-    let cost_for _count = state.cost
-
     let search _query =
       attempts := state.name :: !attempts;
       match state.fail with
@@ -721,11 +718,6 @@ let engine_provider_entry spec =
   ( name,
     {
       name;
-      cost =
-        (match member "cost" spec with
-        | Some (`Float f) -> f
-        | Some (`Int n) -> float_of_int n
-        | _ -> 0.);
       fail = error_of_spec name spec;
       results;
       answer = maybe_string "answer" spec;
@@ -960,30 +952,42 @@ let net_of sent replies =
   }
 
 let provider_adapter name ~endpoint spec =
+  (* The price is the registry row's, injected exactly as the factory injects it: a golden's
+     [cost_usd] is therefore the figure the row's own rule says that search costs. A case may carry
+     [cost_per_1k] the way an operator's config entry does. *)
+  let cost_for =
+    let entry =
+      { Config.default_provider_config with Config.cost_per_1k = maybe_float "cost_per_1k" spec }
+    in
+    match Registry.row name with
+    | Some row -> Registry.price row entry
+    | None -> failwith (Printf.sprintf "provider corpus has no registry row %S" name)
+  in
   match name with
-  | "serper" -> fun ~net () -> Seekwright_providers.Serper.make ~key:probe_key ~net ()
-  | "scrappa" -> fun ~net () -> Seekwright_providers.Scrappa.make ~key:probe_key ~net ()
-  | "searxng" -> fun ~net () -> Seekwright_providers.Searxng.make ~endpoint ~net ()
+  | "serper" -> fun ~net () -> Seekwright_providers.Serper.make ~cost_for ~key:probe_key ~net ()
+  | "scrappa" -> fun ~net () -> Seekwright_providers.Scrappa.make ~cost_for ~key:probe_key ~net ()
+  | "searxng" -> fun ~net () -> Seekwright_providers.Searxng.make ~cost_for ~endpoint ~net ()
   | "algolia" ->
       (* The deployment is config here: [app_id] names the host's left half and
          [index] the path segment, so the projection derives the destination from
          the same spec the Python half hands to its adapter constructor. *)
       fun ~net () ->
-        Seekwright_providers.Algolia.make ~app_id:(want_string "app_id" spec) ~key:probe_key
+        Seekwright_providers.Algolia.make ~cost_for ~key:probe_key
+          ~app_id:(want_string "app_id" spec)
           ~endpoint:
             (Seekwright_providers.Algolia.endpoint_of_deployment ~app_id:(want_string "app_id" spec)
                ~index:(want_string "index" spec))
           ?title_attr:(maybe_string "title_attr" spec) ?url_attr:(maybe_string "url_attr" spec)
           ?snippet_attr:(maybe_string "snippet_attr" spec)
           ~net ()
-  | "tavily" -> fun ~net () -> Seekwright_providers.Tavily.make ~key:probe_key ~net ()
-  | "tinyfish" -> fun ~net () -> Seekwright_providers.Tinyfish.make ~key:probe_key ~net ()
+  | "tavily" -> fun ~net () -> Seekwright_providers.Tavily.make ~cost_for ~key:probe_key ~net ()
+  | "tinyfish" -> fun ~net () -> Seekwright_providers.Tinyfish.make ~cost_for ~key:probe_key ~net ()
   | "linkup" ->
       (* The two operator settings decide the payload shape, and [fromDate] is the
          one date an adapter computes: the case names the instant its clock reads,
          which is what keeps the golden free of the machine's clock. *)
       fun ~net () ->
-        Seekwright_providers.Linkup.make
+        Seekwright_providers.Linkup.make ~cost_for
           ~depth:(match maybe_string "depth" spec with Some d -> d | None -> "standard")
           ~output:
             (match maybe_string "output_type" spec with
@@ -994,14 +998,15 @@ let provider_adapter name ~endpoint spec =
           ~now:(fun () ->
             match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
           ~key:probe_key ~net ()
-  | "search1api" -> fun ~net () -> Seekwright_providers.Search1api.make ~key:probe_key ~net ()
-  | "serpapi" -> fun ~net () -> Seekwright_providers.Serpapi.make ~key:probe_key ~net ()
-  | "querit" -> fun ~net () -> Seekwright_providers.Querit.make ~key:probe_key ~net ()
+  | "search1api" ->
+      fun ~net () -> Seekwright_providers.Search1api.make ~cost_for ~key:probe_key ~net ()
+  | "serpapi" -> fun ~net () -> Seekwright_providers.Serpapi.make ~cost_for ~key:probe_key ~net ()
+  | "querit" -> fun ~net () -> Seekwright_providers.Querit.make ~cost_for ~key:probe_key ~net ()
   | "deepseek" ->
       (* [after:] is the other date an adapter computes — the same clock pin
          [linkup]'s [fromDate] case needs, read from the spec the same way. *)
       fun ~net () ->
-        Seekwright_providers.Deepseek.make
+        Seekwright_providers.Deepseek.make ~cost_for
           ~now:(fun () ->
             match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
           ~key:probe_key ~net ()
@@ -1010,8 +1015,8 @@ let provider_adapter name ~endpoint spec =
          does in the registry row, and [cost_per_1k] tracks it: a dearer mode
          wants the matching config figure, which is what the case carries. *)
       fun ~net () ->
-        Seekwright_providers.Parallel.make ?cost_per_1k:(maybe_float "cost_per_1k" spec)
-          ?text_chars:(maybe_int "text_chars" spec) ?mode:(maybe_string "mode" spec) ~key:probe_key
+        Seekwright_providers.Parallel.make ~cost_for ?text_chars:(maybe_int "text_chars" spec)
+          ?mode:(maybe_string "mode" spec) ~key:probe_key
           ~now:(fun () ->
             match maybe_float "now" spec with Some epoch -> epoch | None -> fixed_clock)
           ~net ()

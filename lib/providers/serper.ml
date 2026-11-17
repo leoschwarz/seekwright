@@ -12,13 +12,6 @@ let tbs_of = function
   | Model.Month -> "qdr:m"
   | Model.Year -> "qdr:y"
 
-(* 2 credits charged if max_results > 10. *)
-let credit_over = 10
-
-let credits max_results = if max_results > credit_over then 2 else 1
-
-let cost_for ~cost_per_1k max_results = cost_per_1k /. 1000. *. float_of_int (credits max_results)
-
 let request_body (q : Provider.search_query) =
   let fields =
     [ ("q", `String (Provider.site_filtered_query q)); ("num", `Int q.Model.max_results) ]
@@ -48,7 +41,7 @@ let parse ~snippet_chars data ~limit =
 let check_status =
   Provider.check_status ~provider:name ~quota_message:"rate limited or out of credits"
 
-let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
+let search ~cost_for ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
   Provider.http_search ~provider:name ~net ~status:check_status
     ~request:
       {
@@ -57,18 +50,16 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
         headers = [ ("X-API-KEY", key); ("Content-Type", "application/json") ];
         body = Some (request_body q);
       }
-    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars)
+    ~cost_for ~parse:(parse ~snippet_chars)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:None
         ~safety:false ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 1.00) ?(snippet_chars = 500) ~key ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ~key ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars ~key net
+    let search = search ~cost_for ~snippet_chars ~key net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

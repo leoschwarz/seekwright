@@ -72,11 +72,8 @@ let check_status =
     ~named:
       [ (408, Provider.provider_error ~provider:name "upstream timed out reading the request") ]
 
-(* Flat rate per successful request. Zero cost if results list is empty. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
-let search ~cost_per_1k ~snippet_chars ~text_chars ~key ~(now : unit -> float)
-    (net : Provider.Net.t) (q : Provider.search_query) =
+let search ~cost_for ~snippet_chars ~text_chars ~key ~(now : unit -> float) (net : Provider.Net.t)
+    (q : Provider.search_query) =
   let ( let* ) = Result.bind in
   if Utf8.count q.Model.query > max_query_chars then
     (* Upstream limit is 128 characters; fail immediately if bare query exceeds it. *)
@@ -97,7 +94,7 @@ let search ~cost_per_1k ~snippet_chars ~text_chars ~key ~(now : unit -> float)
             headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
             body = Some (request_body ~query:(if folded_fits then folded else q.Model.query) q);
           }
-        ~cost_for:(cost_for ~cost_per_1k)
+        ~cost_for
         ~parse:(parse ~snippet_chars ~text_chars)
         ~notice:(fun q _data ->
           Provider.ignored_constraints q ~domains:folded_fits ~dates:folded_fits ~geo:false
@@ -110,17 +107,13 @@ let search ~cost_per_1k ~snippet_chars ~text_chars ~key ~(now : unit -> float)
       {
         outcome with
         Provider.cost_usd =
-          (if outcome.Provider.results <> [] then Some (cost_for ~cost_per_1k q.Model.max_results)
-           else Some 0.0);
+          (if outcome.Provider.results <> [] then Some (cost_for q.Model.max_results) else Some 0.0);
       }
 
-let make ?(cost_per_1k = 0.75) ?(snippet_chars = 500) ?(text_chars = 2000) ~key ~now ~net () :
-    Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ?(text_chars = 2000) ~key ~now ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars ~text_chars ~key ~now net
+    let search = search ~cost_for ~snippet_chars ~text_chars ~key ~now net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

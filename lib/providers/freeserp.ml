@@ -68,25 +68,20 @@ let check_engine data =
     Error (Provider.provider_error ~provider:name "upstream index unavailable")
   else Ok ()
 
-(* Keyless; zero cost. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
-let search ~cost_per_1k ~snippet_chars ~(now : unit -> float) (net : Provider.Net.t)
+let search ~cost_for ~snippet_chars ~(now : unit -> float) (net : Provider.Net.t)
     (q : Provider.search_query) =
   Provider.http_search ~provider:name ~net
     ~request:{ Caps.Authority.Net.meth = `GET; uri = request_uri ~now q; headers = []; body = None }
-    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars) ~check:check_engine
+    ~cost_for ~parse:(parse ~snippet_chars) ~check:check_engine
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:false ~dates:true ~geo:false ~language:(Some true)
         ~safety:false ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~(now : unit -> float) ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ~(now : unit -> float) ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars ~now net
+    let search = search ~cost_for ~snippet_chars ~now net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

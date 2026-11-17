@@ -59,15 +59,19 @@ let sample =
 
 let sample_json = json_object sample
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
+(* The row's price rule lives in the factory, so the suite injects one: the free plan is what an
+   install most often runs on, and a case can inject a paid plan's rate instead. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_for = published_price 0.0)
+    () =
   let net, sent = answered ~status ~body in
-  (Serpapi.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
+  (Serpapi.make ~cost_for ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message = Serpapi.make ~key:test_key ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Serpapi.make ~cost_for:(published_price 0.0) ~key:test_key ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?(query = query ~text:"coffee" ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500)
+    ?(cost_for = published_price 0.0) ?(query = query ~text:"coffee" ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars ~cost_for () in
   drive provider sent query
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Serpapi.parse ~snippet_chars data ~limit
@@ -363,28 +367,16 @@ let payment_and_rate_limit_are_quota () =
           check_bool "a spent quota is not transient" false failure.retryable)
     [ 402; 429 ]
 
-let cost_does_not_scale_with_result_count () =
-  let provider, _ = dial () in
-  check_number "one query, whatever max_results says" 0. (Provider.cost_for provider 1);
-  check_number "and at the ceiling" 0. (Provider.cost_for provider 20)
-
 let the_result_reports_its_cost () =
   let outcome, _ = search_of ~query:(query ~text:"q" ~max_results:5 ()) () in
   check_string "named by the adapter that served it" "serpapi" outcome.provider;
   check_opt_number "the free plan costs nothing" (Some 0.) outcome.cost_usd
 
 let a_paid_plan_corrects_the_cost () =
-  let outcome, _ = search_of ~cost_per_1k:1.0 ~query:(query ~text:"q" ~max_results:5 ()) () in
+  let outcome, _ =
+    search_of ~cost_for:(published_price 1.0) ~query:(query ~text:"q" ~max_results:5 ()) ()
+  in
   check_opt_number "and the figure tracks it" (Some 0.001) outcome.cost_usd
-
-let the_default_price_is_the_rows_figure () =
-  (* The adapter default and the registry row's [default_cost] are one fact:
-     the 250-searches-a-month free plan is what an install most often runs on,
-     and [--check --live] prints whichever figure is wrong. *)
-  let provider, _ = dial () in
-  check_number "the free plan" 0. (Provider.cost_per_1k provider);
-  let provider, _ = dial ~cost_per_1k:1.0 () in
-  check_number "an operator on a paid plan can correct it" 1.0 (Provider.cost_per_1k provider)
 
 let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://serpapi.com/search" (Uri.to_string Serpapi.endpoint);
@@ -460,12 +452,8 @@ let () =
         );
         ( "cost and endpoint",
           [
-            test_case "cost does not scale with result count" `Quick
-              cost_does_not_scale_with_result_count;
             test_case "the result reports its cost" `Quick the_result_reports_its_cost;
             test_case "a paid plan corrects the cost" `Quick a_paid_plan_corrects_the_cost;
-            test_case "the default price is the row's figure" `Quick
-              the_default_price_is_the_rows_figure;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

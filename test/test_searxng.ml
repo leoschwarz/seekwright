@@ -71,20 +71,22 @@ let n_results n =
 (* A {!Seekwright.Provider.Net.t} that records every request it was handed —
    paging is observable through the [pageno] the adapter sent — and answers
    with what the case's handler decides. *)
-let dial_pages ?(snippet_chars = 500) ?cost_per_1k ?(instance = instance) ~handler () =
+(* The row's price rule lives in the factory, so the suite injects one: a self-hosted instance
+   charges nothing through this proxy, so the injected price is zero. *)
+let dial_pages ?(snippet_chars = 500) ?(instance = instance) ~handler () =
   let net, sent = recording (fun request -> Ok (handler request)) in
-  (Searxng.make ?cost_per_1k ~snippet_chars ~endpoint:instance ~net (), sent)
+  (Searxng.make ~cost_for:(published_price 0.) ~snippet_chars ~endpoint:instance ~net (), sent)
 
 let answering ?(status = 200) ?(body = sample) () = response ~status ~body
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
-  dial_pages ~snippet_chars ?cost_per_1k ~handler:(fun _ -> answering ~status ~body ()) ()
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) () =
+  dial_pages ~snippet_chars ~handler:(fun _ -> answering ~status ~body ()) ()
 
-let refusal kind ~message = Searxng.make ~endpoint:instance ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Searxng.make ~cost_for:(published_price 0.) ~endpoint:instance ~net:(refusing kind ~message) ()
 
-let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
-    ?(query = query ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
+let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(query = query ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars () in
   let outcome = ok_search provider query in
   (outcome, List.hd (sent ()))
 
@@ -411,16 +413,6 @@ let a_network_error_does_not_echo_the_request () =
       check_bool "the instance is not named in the failure" false
         (contains ~haystack:(Provider.render_error failure) ~needle:"searx.internal")
 
-let the_cost_is_flat_zero () =
-  let provider, _ = dial () in
-  check_number "one page" 0. (Provider.cost_for provider 1);
-  check_number "and a full ask" 0. (Provider.cost_for provider 20)
-
-let config_can_correct_the_figure_but_zero_is_the_default () =
-  let provider, _ = dial ~cost_per_1k:5.0 () in
-  check_number "a metered instance can be priced by the operator" 0.005
-    (Provider.cost_for provider 1)
-
 let the_endpoint_is_the_instance_the_grant_allows () =
   (* This name has no fixed host: the destination is the config value, read once
      by the registry and handed here as [endpoint], so the adapter dials the
@@ -521,9 +513,6 @@ let () =
           ] );
         ( "cost and the instance",
           [
-            test_case "the cost is flat zero" `Quick the_cost_is_flat_zero;
-            test_case "config can correct the figure, and zero is the default" `Quick
-              config_can_correct_the_figure_but_zero_is_the_default;
             test_case "the endpoint is the instance the grant allows" `Quick
               the_endpoint_is_the_instance_the_grant_allows;
           ] );

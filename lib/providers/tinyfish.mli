@@ -23,14 +23,11 @@ val request_uri : Seekwright.Provider.search_query -> Uri.t
 val parse : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** Parses hits from [results[]]. *)
 
-val cost_for : cost_per_1k:float -> int -> float
-(** Per-query cost in USD. Returns 0.0. *)
-
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?snippet_chars:int ->
   key:string ->
   net:Seekwright.Provider.Net.t ->
   unit ->
   Seekwright.Provider.t
-(** Constructs the TinyFish provider. [key] and [net] are mandatory. *)
+(** Constructs the TinyFish provider. [cost_for], [key], and [net] are mandatory. *)

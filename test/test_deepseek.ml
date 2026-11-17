@@ -65,16 +65,21 @@ let sample =
 
 let sample_json = json_object sample
 
-let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(text_chars = 2000) ?cost_per_1k
-    () =
+(* The row's price rule lives in the factory, so the suite injects one: the published flat rate of
+   [$0.75] per thousand is what makes the reported figure the vendor's own. *)
+let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(text_chars = 2000) () =
   let net, sent = answered ~status ~body in
-  (Deepseek.make ?cost_per_1k ~snippet_chars ~text_chars ~key:test_key ~now:clock ~net (), sent)
+  ( Deepseek.make ~cost_for:(published_price 0.75) ~snippet_chars ~text_chars ~key:test_key
+      ~now:clock ~net (),
+    sent )
 
-let refusal kind ~message = Deepseek.make ~key:test_key ~now:clock ~net:(refusing kind ~message) ()
+let refusal kind ~message =
+  Deepseek.make ~cost_for:(published_price 0.75) ~key:test_key ~now:clock
+    ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(text_chars = 2000)
-    ?cost_per_1k ?(query = query ~text:"deepseek v4" ()) () =
-  let provider, sent = dial ~status ~body ~snippet_chars ~text_chars ?cost_per_1k () in
+    ?(query = query ~text:"deepseek v4" ()) () =
+  let provider, sent = dial ~status ~body ~snippet_chars ~text_chars () in
   drive provider sent query
 
 let body_field request name = Provider.Json.string_field name (body_of request)
@@ -346,7 +351,7 @@ let a_query_past_the_documented_limit_is_refused_before_sending () =
           Ok { Caps.Authority.Net.status = 200; headers = []; body = sample });
     }
   in
-  let provider = Deepseek.make ~key:test_key ~now:clock ~net () in
+  let provider = Deepseek.make ~cost_for:(published_price 0.75) ~key:test_key ~now:clock ~net () in
   match Provider.search provider (query ~text:(String.make 129 'x') ()) with
   | Ok _ -> A.failf "a 129-codepoint query was sent"
   | Error failure ->
@@ -429,11 +434,6 @@ let a_network_error_does_not_echo_the_request () =
 
 (* Search bills per successful request, whatever [count] says. *)
 
-let cost_does_not_scale_with_result_count () =
-  let provider, _ = dial ~cost_per_1k:0.75 () in
-  check_number "one request, whatever count says" 0.00075 (Provider.cost_for provider 1);
-  check_number "even at the range top" 0.00075 (Provider.cost_for provider 50)
-
 let the_result_reports_its_flat_cost () =
   let outcome, _ = search_of ~query:(query ~max_results:5 ()) () in
   check_string "named by the adapter that served it" "deepseek" outcome.provider;
@@ -445,15 +445,6 @@ let a_search_with_no_results_is_not_billed () =
   let outcome, _ = search_of ~body:{|{"results": []}|} () in
   check_int "no hits" 0 (List.length outcome.results);
   check_opt_number "and no cost" (Some 0.) outcome.cost_usd
-
-let the_default_price_is_the_rows_figure () =
-  (* The adapter default and the registry row's [default_cost] are one fact:
-     no free tier is documented, so the default is the published rate itself,
-     and an operator on different terms corrects it in config. *)
-  let provider, _ = dial () in
-  check_number "the published rate" 0.75 (Provider.cost_per_1k provider);
-  let provider, _ = dial ~cost_per_1k:1.0 () in
-  check_number "different terms can correct it" 1.0 (Provider.cost_per_1k provider)
 
 let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.deepseek.com/v1/tools/search"
@@ -543,13 +534,9 @@ let () =
           ] );
         ( "cost",
           [
-            test_case "cost does not scale with result count" `Quick
-              cost_does_not_scale_with_result_count;
             test_case "the result reports its flat cost" `Quick the_result_reports_its_flat_cost;
             test_case "a search with no results is not billed" `Quick
               a_search_with_no_results_is_not_billed;
-            test_case "the default price is the row's figure" `Quick
-              the_default_price_is_the_rows_figure;
             test_case "the adapter dials the endpoint it declares" `Quick
               the_adapter_dials_the_endpoint_it_declares;
           ] );

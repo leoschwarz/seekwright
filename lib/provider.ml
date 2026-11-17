@@ -314,8 +314,6 @@ let http_search ~provider ~(net : Net.t) ~request ~cost_for ~parse ~notice ?stat
 
 module type S = sig
   val name : string
-  val cost_per_1k : float
-  val cost_for : int -> float
   val search : search_query -> (outcome, error) result
   val aclose : unit -> unit
 end
@@ -323,8 +321,6 @@ end
 type t = (module S)
 
 let name (module P : S) = P.name
-let cost_per_1k (module P : S) = P.cost_per_1k
-let cost_for (module P : S) n = P.cost_for n
 let search (module P : S) q = P.search q
 let aclose (module P : S) = P.aclose ()
 

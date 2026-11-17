@@ -51,14 +51,11 @@ let parse ~snippet_chars data ~limit =
     ~date:(Provider.Json.string_field "published_date")
     ~limit data
 
-(* Flat rate per request. *)
-let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
-
 (* 402/429 indicates credit exhaustion or rate limit. *)
 let check_status =
   Provider.check_status ~provider:name ~quota_message:"out of credits or rate limited"
 
-let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
+let search ~cost_for ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
   Provider.http_search ~provider:name ~net ~status:check_status
     ~request:
       {
@@ -67,18 +64,16 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
         headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
         body = Some (request_body q);
       }
-    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars)
+    ~cost_for ~parse:(parse ~snippet_chars)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:(Some true)
         ~safety:false ~drops_exclude_domains:false)
     q
 
-let make ?(cost_per_1k = 0.76) ?(snippet_chars = 500) ~key ~net () : Provider.t =
+let make ~cost_for ?(snippet_chars = 500) ~key ~net () : Provider.t =
   (module struct
     let name = name
-    let cost_per_1k = cost_per_1k
-    let cost_for = cost_for ~cost_per_1k
-    let search = search ~cost_per_1k ~snippet_chars ~key net
+    let search = search ~cost_for ~snippet_chars ~key net
 
     (* Shared network grant; must not be closed by adapter instance. *)
     let aclose () = ()

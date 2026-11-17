@@ -63,8 +63,6 @@ let stub ?(name = "serper") () =
 let provider (s : stub) : Provider.t =
   (module struct
     let name = s.name
-    let cost_per_1k = 1.0
-    let cost_for n = float_of_int n /. 1000.
     let search q = s.behavior q
     let aclose () = ()
   end : Provider.S)

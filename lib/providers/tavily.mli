@@ -25,14 +25,11 @@ val parse : text_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.
 val answer : Yojson.Safe.t -> string option
 (** Extracts the vendor's answer prose if present. *)
 
-val cost_for : cost_per_1k:float -> int -> float
-(** Per-query cost in USD. Flat per request. *)
-
 val make :
-  ?cost_per_1k:float ->
+  cost_for:(int -> float) ->
   ?text_chars:int ->
   key:string ->
   net:Seekwright.Provider.Net.t ->
   unit ->
   Seekwright.Provider.t
-(** Constructs the Tavily provider. [key] and [net] are mandatory. *)
+(** Constructs the Tavily provider. [cost_for], [key], and [net] are mandatory. *)

@@ -101,8 +101,6 @@ let hit ?snippet ?text title url : Provider.hit =
 let search_provider () : Provider.t =
   (module struct
     let name = "exa"
-    let cost_per_1k = 0.0
-    let cost_for _ = 0.0
 
     let search _query =
       Ok
