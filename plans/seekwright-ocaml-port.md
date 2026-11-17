@@ -3245,3 +3245,66 @@ failing call has no way to read. What did move is the constraint vocabulary:
 every adapter answers it, and the one sentence Parallel used to own went with it —
 model-facing, so `provider/141-parallel-constraints` is now a registered divergence
 with its reason in `test/differential/divergences.tsv`.
+
+## 42. The money path pass — what landed, and what it settled (2026-11-17)
+
+`plans/cost-simplification-plan.md` is the argument; this is the record. The pass
+asked the question the owner raised after the structural pass closed: is the cost API
+still too big, and if so where. Four cuts landed, one was declined on measurement, and
+one operator-facing promise got wider on purpose.
+
+| Cut | Disposition | Commit |
+|---|---|---|
+| C-002 `Config.fetch_fallback.billable` restated `default_cost` | landed — the field is gone; `validate_fetch_fallbacks` asks `row.default_cost <> None`, and the frozen-vocabulary case derives the priced subset from the registry instead of typing it twice | `8f7e0bf` |
+| C-001 `Usage` wrote the money pattern four times | landed — `money { total; priced }` with `add_money` and `money_json` own the "an unpriced figure is null, never `0.0`" rule; the JSON reader is `figure`; search money deliberately stays a plain float so a quiet day still renders `0.0` for the chart's axis | `69e96ab` |
+| C-003 a fetch rung carried a rate, not an amount | landed — `Fetch_stack.fallback_price` divides where the rate is known, the rung field is `cost_usd`, and `Engine.Fetch.rung_price` keeps only the name→rung lookup; the local `http` rung's price was dead and went | `5f300c1` |
+| C-004 the agent priced a model call twice, and its ceiling saw half the spend | landed, with a second check point the plan had not specified — below | `bf53064` |
+| C-005 `Registry.cost_of` public for one suite | declined, on the arithmetic the suite already pins | — |
+
+Two predictions were wrong and are recorded where they were made. C-001 and C-003 were
+estimated at about −40 and −9 lines and landed near flat (`lib/usage.ml` 1073 → 1075,
+`lib/engine.ml` 999 → 1000, `lib/factory/fetch_stack.ml` 381 → 387). What those cuts buy
+is the field count, one owner of the null rule, and the unit of a price living in the
+one module allowed to know it — not a smaller file. The line-count claim in the plan was
+corrected there rather than left for a reader to discover.
+
+C-004 is the pass's only behaviour change and also the place where the plan's fix was
+insufficient as written. Widening `Usage.search_cost_usd` into `Usage.spend` — priced
+search money plus priced fetch money — changes nothing at the retrieval step checks,
+because agent mode reads its pages *after* the walk: when a step is judged, the page
+money is not in the journal yet. The bound needed a check point, not only a wider
+accessor. `Agent.over_ceiling` now judges `max_cost_usd` at each step and again once the
+material has been read, which is the last point at which a billed page can still stop
+the model call, and `answer` compares against the call's delta from `spend_at_start`
+instead of the process total, so a concurrent call's spend rides the bound in the
+conservative direction. `max_cost_usd` therefore bounds more than it used to, and
+`ocaml-docs/configuration.md` and `ocaml-docs/reference-config.md` say so; `privacy.md`
+needed no clause because it names the journal's fields, not the bound. Evidence: two new
+`test_agent.ml` cases (free searches, one priced rung, no model call — the case that
+passed through before; and one rate unset, answer line still `Null`), and
+`test_usage.ml`'s accessor case now pinning that `spend` carries a priced rung's money
+while an unpriced read adds nothing.
+
+C-005 was declined on a fact about `Registry.rate` rather than a preference. `rate`
+mediates through `default_cost` — the operator's figure wins unless the row fixes no
+price — so `price row pc` cannot be driven at a rate a test chooses. The shape case pins
+the three cost models at named rates (flat at 4.0, `Extra_results` at exa's published
+7.0 with the zero short-circuit on `exa:free`, `Credit_multiplier` at 4.0 across the
+ten-result threshold); no single config entry gives all three rows the rate their
+assertions name. Driving the case through `price` would replace three generic shape arms
+with seventeen per-row constants and collapse the free names' pins to `0.0` whatever
+their shape. `cost_of` stays: it is the shape of the charge on its own, which is what the
+suite has to hold a row to.
+
+What the pass exercised, beyond the suites: the served path was run against a loopback
+fixture for C-001 — a local `fetch` and a keyless `searxng` search through
+`POST /api/v1/…`, the journal then appended with one priced and one unpriced line of
+each kind, a restart, and `/dashboard/data` reporting the priced totals with their
+sample sizes — which is how the live-record and journal-reload halves of `apply` were
+shown to agree rather than assumed to. Nothing in the pass dialled a real provider:
+`dune runtest` dials nothing by construction, and no live-run row was added, because no
+live case was run. Each of the four commits ends with all four gate targets green.
+
+Open after the pass: the decisions in §4 of the cost plan — D-H above all, whether
+`[fetch] cost_per_1k` stays one number over three declared prices — remain the
+maintainer's, and the structural pass's exclusions in §38 are untouched by any of this.

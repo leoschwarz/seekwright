@@ -3,8 +3,8 @@
 Status: **C-002, C-001, C-003 and C-004 are landed** (`config: the ladder's tier is the
 row's declared price`, `usage: one money record over the lines that carry a figure`,
 `fetch: a rung carries the amount, not the rate`, `agent: one token price and a ceiling
-that counts fetch money`); C-005 and the §4 decisions are the maintainer's. Tree
-read at `4de7fe2`, after the
+that counts fetch money`); C-005 is declined, with the arithmetic that decided it in
+§3, and the §4 decisions remain the maintainer's. Tree read at `4de7fe2`, after the
 structural pass closed: `plans/duplication-and-simplification-plan.md` §2 S-001–S-010,
 its §3 weight rows and decisions D-A … D-G are all in the code,
 including the cost rows — `Adapter.cost_for` injection (S-011), the row that
@@ -272,16 +272,28 @@ widened promise; `privacy.md` needed no clause — it names the journal's fields
 bound. `matrix/behaviours.tsv`'s agent row already points at `test_agent.ml`, and both
 new cases live there. All four gate targets green.
 
-### C-005 — `Registry.cost_of` is public for one suite (optional)
+### C-005 — `Registry.cost_of` is public for one suite · **declined**
 
 `price` is what a build hands an adapter and `rate` is what `--check` and
 `Live.Cases` ask; `cost_of` is called only from `test_provider_registry.ml`, which
-uses it to test the three shapes apart from the rate resolution. Driving those
-cases through `price` with `cost_per_1k` in the config entry covers the same
-arithmetic and one less public name (with its doc paragraph) goes. **Recommend
-take** — it is −20 lines of interface and prose and the suite loses nothing it
-asserts. If the maintainer wants the shape testable apart from the resolution, the
-name stays and nothing else here changes.
+uses it to test the three shapes apart from the rate resolution. The proposal was to
+drive those cases through `price` with `cost_per_1k` in the config entry and lose one
+public name with its doc paragraph.
+
+**Declined, on the arithmetic the suite already pins.** `Registry.rate` is
+`default_cost`-mediated — the config figure wins unless the row fixes no price, in
+which case the rate is zero whatever the operator writes — so `price` cannot be driven
+at a rate the case chooses. The shape case pins all three shapes at named rates (flat
+at 4.0; `Extra_results` at exa's own 7.0, with the zero short-circuit falling out on
+`exa:free`; `Credit_multiplier` at 4.0 across the ten-result threshold). Through
+`price` one config entry cannot give all three rows the rate each assertion names:
+`entry ~cost:4.0` moves exa's rung figures off the published 7.00 (0.007 becomes
+0.004), and `entry ()` moves serper and parallel off 4.0, since their defaults are
+1.00. So the migration is not the same assertions with one fewer name — it is
+seventeen per-row constants replacing three generic shape arms, with the free names'
+pins collapsing to `0.0` whatever their shape. Weaker contract, more lines: the name
+stays, because `cost_of` is the shape of the charge on its own, which is exactly what
+the suite has to hold a row to.
 
 ## 4. Decisions the maintainer owns
 
@@ -297,10 +309,12 @@ common case, the coarseness is already documented in `config.mli`'s `default_cos
 doc, and the alternatives cost either a promise or keys.
 
 **D-I — whether `max_cost_usd` should count the model call's own worst case twice.**
-The check compares search-plus-worst-case-model against the ceiling; after C-004
-it also counts fetch money. It does **not** subtract the searches the run already
-paid for when a *later* step is gated — it is a per-call bound, re-evaluated per
-step, which is what `test_agent.ml`'s existing ceiling case pins. Keep.
+The check compares search-plus-worst-case-model against the ceiling; after C-004 it
+also counts fetch money, and it now runs at two points — each retrieval step, and once
+the material has been read, which is where the fetch money first exists. It does **not**
+subtract the searches the run already paid for when a *later* step is gated — it is a
+per-call bound, re-evaluated per step, which is what `test_agent.ml`'s existing ceiling
+case pins. Keep.
 
 ## 5. Checked and deliberately left alone
 
@@ -341,7 +355,7 @@ step, which is what `test_agent.ml`'s existing ceiling case pins. Keep.
 |2|C-001 `money`|**landed** — `figure` / `money ()` / `add_money` / `money_json`, search money deliberately left a plain float; every pre-existing money assertion passed unmodified, and the served path was run: a loopback fixture, one local `fetch` and one `searxng` search through `POST /api/v1/…`, then the journal appended with one priced and one unpriced line of each kind, restart, and `/dashboard/data` reporting `fetch_cost_usd 0.0003` with `priced_fetches 1` of `fetches 2` and `model_cost_usd 0.0012` with `priced_calls 1` of `calls 2`. New case: a day bucket pairing both kinds. 1073 → 1075 lines|
 |3|C-003 the rung's amount|**landed** — `Fetch_stack.fallback_price` divides, the rung field is `cost_usd`, `Engine.Fetch.rung_price` keeps only the name→rung lookup, and the local `http` rung's never-readable price is gone; ten construction sites renamed and the four walk-billing assertions kept their exact figures|
 |4|C-004 the agent price and the widened ceiling|**landed** — `Agent.token_cost` is the one formula and the answer line takes it; `Usage.spend` covers priced search *and* fetch money, and `Agent.over_ceiling` judges the ceiling at each retrieval step **and** once the material has been read, the only point where a billed page can still stop the model call. Two new `test_agent.ml` cases, the `test_usage.ml` accessor case widened to the priced rung, and both config pages carry the widened promise. `lib/agent.ml` 660 → 685|
-|5|C-005 `cost_of`|optional, last|
+|5|C-005 `cost_of`|**declined** — `price` cannot be driven at a rate the case chooses, because `rate` mediates through `default_cost`; the migration trades three generic shape arms for seventeen per-row constants and collapses the free names' pins to `0.0` whatever their shape. The name stays|
 
 Every step ends on the four gate targets — `dune build @fmt`,
 `dune build @install`, `dune runtest --force`, `dune build @doc` — and each
