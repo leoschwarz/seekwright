@@ -67,28 +67,36 @@ val record_fetch :
 (** One terminal fetch. [fallback] names the fallback that served it, or [None] for the local
     fetcher and for every failure. [cost_usd] is absent whenever nothing was billed. *)
 
-val record_answer :
-  t ->
-  run:string ->
-  model:string option ->
-  depth:string ->
-  searches:int ->
-  results:int ->
-  fetched:int ->
-  material_chars:int ->
-  prompt_tokens:int option ->
-  completion_tokens:int option ->
-  answer_chars:int ->
-  cited:int ->
-  cited_invalid:int ->
-  sources:int ->
-  model_cost_usd:float option ->
-  ms:int ->
-  ?error:string ->
-  unit ->
-  unit
-(** One terminal [answer] call: one line per call, content-free. [sources] is a count of distinct
-    URLs cited. *)
+type answer_metrics = {
+  model : string option;
+  depth : string;
+  searches : int;
+  results : int;
+  fetched : int;
+  material_chars : int;
+  prompt_tokens : int option;
+  completion_tokens : int option;
+  answer_chars : int;
+  cited : int;
+  cited_invalid : int;
+  sources : int;
+  model_cost_usd : float option;
+  ms : int;
+}
+(** One terminal [answer] call's figures. [sources] is a count of distinct URLs cited;
+    [prompt_tokens] and [completion_tokens] are [None] when the model reported none,
+    [model_cost_usd] when nothing was priced. *)
+
+val answer_metric_fields : answer_metrics -> (string * Yojson.Safe.t) list
+(** The same figures as named fields, in the journal's order. The log line and the journal line take
+    their shared vocabulary from here, so the two sinks cannot spell an answer metric differently.
+*)
+
+val answer_metric_keys : string list
+(** The field names alone — what the surface manifest prints for the [answer] line kind. *)
+
+val record_answer : t -> run:string -> answer_metrics -> ?error:string -> unit -> unit
+(** One terminal [answer] call: one line per call, content-free. *)
 
 val search_cost_usd : t -> float
 (** Search spend so far, unrounded, from the in-memory aggregate. *)

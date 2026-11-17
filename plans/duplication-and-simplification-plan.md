@@ -438,7 +438,7 @@ golden moved — `surface.expected`, the prose goldens and
 `test/router_dependencies.expected` are byte-stable, `health.ml` having already
 named `Provider`.
 
-### S-006 — `Agent.tally` and `Usage`'s answer line are one field set twice
+### S-006 — `Agent.tally` and `Usage`'s answer line are one field set twice · **landed**
 
 **Evidence (window scan).** Nine shared windows between `lib/agent.ml` and
 `lib/usage.ml`: `searches`, `results`, `fetched`, `material_chars`,
@@ -459,6 +459,42 @@ and by `Usage.answer_line`. Two sinks, one vocabulary. `Agent.tally` and
 **Gate.** `surface.expected`'s journal-field count must not move; if a field is
 genuinely missing from one half today, this fix exposes it and the manifest is
 re-pinned in the same commit, which is a *finding*, not a cosmetic diff.
+
+**Landed.** `Usage.answer_metrics` is the record and `answer_fields` — a list of
+`(key, getter)` pairs — is the one spelling of the names. `answer_line` writes
+those pairs to the journal, `answer_metric_fields` hands the identical pairs to
+`Agent`'s `answer.ok`/`answer.failed` line, and `Server.journal_fields` prints
+`answer_metric_keys` for the manifest's `[answer]` row. That row was a third
+hand-typed spelling of the set and is now derived; the manifest's count stayed at
+37 and `surface.expected` did not move, so no field was missing from either half.
+`Agent.record` builds one metrics value and feeds both sinks: the 16-argument
+`record_answer` call is gone, and so is the third hand-written field list.
+
+Two things the section overstated. First, the records did not merge and should
+not: `Agent.tally` is the plan-time accumulator (it is stepped as the retrieval
+plan runs, so a call that dies at the model still records what it paid for), and
+`Usage.answer_totals` is the aggregate over calls with its sample-size counts
+(`token_calls`, `priced_calls`) beside the sums. What agrees by construction is
+the field *vocabulary*, which is what the drift was. Second, `tally`'s fields and
+`answer_metrics`' are name-identical, so the conversion needs a type annotation
+on `~tally` — without it the record literal resolves `tally.searches` against the
+nearer vocabulary and the conversion does not typecheck. That is recorded at
+`Agent.record`.
+
+The journal pin keeps its teeth where it had them: `test_p8_surface` compares a
+real journal's keys per line kind against the manifest, which for `[search]` and
+`[fetch]` is still hand-typed against a single writer; the `[answer]` row is now
+true by construction, which is the point of one owner. The on-disk reader
+(`apply_answer`) stays string-keyed on purpose: it reads journals an older version
+wrote, where a missing key means absent from the aggregate, not zero. The
+`[answer.ok]` line's `ms` moved to the end of the field list — no pin covers log
+field order, and it is not a contract. The stale comment claiming seventeen keys
+on an `[answer]` line says eighteen now.
+
+Line counts: +10 across `lib/`, +48 in the two suites that call `record_answer`
+by keyword (a 16-label call becomes a record literal). The step is not a
+reduction; it is the removal of a third spelling and of the manifest's freedom to
+drift from the writer.
 
 ### S-007 — the civil-time residue after R-009
 
@@ -690,7 +726,7 @@ in the same commit.
 |2|S-001 adapter skeleton, `take` landing in `Provider`|**landed** — −511 lines in `lib/providers/`, +225 in `lib/provider.ml` and its interface (net −286, short of the estimate for the reasons in §2); 13 of 14 REST adapters on the shared tail, `parallel` onto the shared sentence with its per-bucket clauses kept word-for-word|
 |3|S-002 test harness|**landed** — −659 in the sixteen adapter suites, −80 in the six journal suites that copied the JSON accessors, +242 in `test/support/` (net −497, short of the estimate for the reasons in §2); one harness for the `Net` mock, one for the accessors, four contract-duplicate cases deleted|
 |4|S-003 one dispatch per verb, answering Q-002|**landed** — three dispatch functions, six call sites collapsed; Q-002 answered (the types stay, the call is shared); the `api_answer` pre-check asymmetry resolved by pre-checking on both surfaces, so an unbuilt `answer` pin is `invalid:` on the tool call and 400 on REST|
-|5|S-004 field lists, then S-006, then S-007|S-004 **landed** — ten key lists, one per wire model, read by `reject_extra` and by the schema builder; the schema mismatch is reported by name through `Server.untabled_wire_fields` and failed by a suite, because `lib/server.ml` may not raise; net +82 lines, all three pins byte-stable. S-006 and S-007 to go|
+|5|S-004 field lists, then S-006, then S-007|S-004 **landed** — ten key lists, one per wire model, read by `reject_extra` and by the schema builder; the schema mismatch is reported by name through `Server.untabled_wire_fields` and failed by a suite, because `lib/server.ml` may not raise; net +82 lines, all three pins byte-stable. S-006 **landed** — one `answer_metrics` record and one `(key, getter)` vocabulary feeding the journal line, `Agent`'s log line and the manifest's `[answer]` row, which was a third hand-typed spelling; +10 in `lib/`, +48 in the two suites, `surface.expected` unmoved at 37. S-007 to go|
 |6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|
 |7|S-010 fallback readers, lifting D2|the `'tag` goes, one `Fallback.run` owns the tail, and the factory builds the host check once|
 |8|§3 table + D-A/D-B docs|`context`, `settings`, `cost_model`, the façade and the extractor duality go; the driver and the two matrix tables only if D-A/D-B decide so; `AGENTS.md`, `ocaml-docs/testing.md`, `test/differential/README.md` and the port plan move in the same commit|

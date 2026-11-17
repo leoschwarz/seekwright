@@ -68,12 +68,44 @@ let the_journal_fields_match_the_pin _ =
   Usage.record_fetch usage ~ms:20 ~chars:100 ~fallback:(Some "jina") ~cost_usd:0.002 ~run:"run-1"
     ~step:2 ();
   Usage.record_fetch usage ~ms:7 ~chars:0 ~fallback:None ~error:"FetchBlocked" ();
-  Usage.record_answer usage ~run:"run-1" ~model:(Some "stub-model") ~depth:"brief" ~searches:2
-    ~results:5 ~fetched:1 ~material_chars:900 ~prompt_tokens:(Some 120) ~completion_tokens:(Some 80)
-    ~answer_chars:300 ~cited:2 ~cited_invalid:0 ~sources:2 ~model_cost_usd:(Some 0.0004) ~ms:900 ();
-  Usage.record_answer usage ~run:"run-2" ~model:None ~depth:"brief" ~searches:1 ~results:0
-    ~fetched:0 ~material_chars:0 ~prompt_tokens:None ~completion_tokens:None ~answer_chars:0
-    ~cited:0 ~cited_invalid:0 ~sources:0 ~model_cost_usd:None ~ms:50 ~error:"ProviderError" ();
+  Usage.record_answer usage ~run:"run-1"
+    Usage.
+      {
+        model = Some "stub-model";
+        depth = "brief";
+        searches = 2;
+        results = 5;
+        fetched = 1;
+        material_chars = 900;
+        prompt_tokens = Some 120;
+        completion_tokens = Some 80;
+        answer_chars = 300;
+        cited = 2;
+        cited_invalid = 0;
+        sources = 2;
+        model_cost_usd = Some 0.0004;
+        ms = 900;
+      }
+    ();
+  Usage.record_answer usage ~run:"run-2"
+    Usage.
+      {
+        model = None;
+        depth = "brief";
+        searches = 1;
+        results = 0;
+        fetched = 0;
+        material_chars = 0;
+        prompt_tokens = None;
+        completion_tokens = None;
+        answer_chars = 0;
+        cited = 0;
+        cited_invalid = 0;
+        sources = 0;
+        model_cost_usd = None;
+        ms = 50;
+      }
+    ~error:"ProviderError" ();
   let actual = List.sort compare (journal_keys_by_kind (read_lines file)) in
   A.(check (list (pair string (list string))))
     "journal fields per line kind"

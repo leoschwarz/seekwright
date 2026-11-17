@@ -71,9 +71,25 @@ let answer ?(run = "run-1") ?(model = Some "test-model") ?(depth = "brief") ?(se
     ?(results = 5) ?(fetched = 0) ?(material_chars = 1200) ?(prompt_tokens = Some 900)
     ?(completion_tokens = Some 120) ?(answer_chars = 480) ?(cited = 2) ?(cited_invalid = 1)
     ?(sources = 2) ?(model_cost_usd = Some 0.0012) ?(ms = 900) ?error r =
-  Usage.record_answer r ~run ~model ~depth ~searches ~results ~fetched ~material_chars
-    ~prompt_tokens ~completion_tokens ~answer_chars ~cited ~cited_invalid ~sources ~model_cost_usd
-    ~ms ?error ()
+  Usage.record_answer r ~run
+    Usage.
+      {
+        model;
+        depth;
+        searches;
+        results;
+        fetched;
+        material_chars;
+        prompt_tokens;
+        completion_tokens;
+        answer_chars;
+        cited;
+        cited_invalid;
+        sources;
+        model_cost_usd;
+        ms;
+      }
+    ?error ()
 
 (* The Python suite's [tmp_path]: one directory per case under a scratch root,
    so a case's file is a name the failure message can quote. *)

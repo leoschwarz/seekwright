@@ -523,42 +523,41 @@ let citation_notices (citations : citations) =
     notices := "the answer carries no citations; read it against `sources`" :: !notices;
   List.rev !notices
 
-let record t ~tally ~run ~depth ~started ?error ?notice ?sanitized () =
+(* [tally] is annotated because its field names are shared with
+   [Usage.answer_metrics]: without it the record literal below resolves
+   [tally.searches] against the nearer vocabulary and the conversion is a type
+   error rather than a conversion. *)
+let record t ~(tally : tally) ~run ~depth ~started ?error ?notice ?sanitized () =
   let settings = t.config.Config.agent in
   let ms = int_of_float ((t.clock () -. started) *. 1000.) in
-  let model_cost = model_cost settings tally in
-  (match t.usage with
-  | Some usage ->
-      Usage.record_answer usage ~run ~model:settings.Config.model ~depth:(depth_string depth)
-        ~searches:tally.searches ~results:tally.results ~fetched:tally.fetched
-        ~material_chars:tally.material_chars ~prompt_tokens:tally.prompt_tokens
-        ~completion_tokens:tally.completion_tokens ~answer_chars:tally.answer_chars
-        ~cited:tally.cited ~cited_invalid:tally.cited_invalid ~sources:tally.sources
-        ~model_cost_usd:model_cost ~ms ?error ()
-  | None -> ());
+  let metrics =
+    Usage.
+      {
+        model = settings.Config.model;
+        depth = depth_string depth;
+        searches = tally.searches;
+        results = tally.results;
+        fetched = tally.fetched;
+        material_chars = tally.material_chars;
+        prompt_tokens = tally.prompt_tokens;
+        completion_tokens = tally.completion_tokens;
+        answer_chars = tally.answer_chars;
+        cited = tally.cited;
+        cited_invalid = tally.cited_invalid;
+        sources = tally.sources;
+        model_cost_usd = model_cost settings tally;
+        ms;
+      }
+  in
+  (match t.usage with Some usage -> Usage.record_answer usage ~run metrics ?error () | None -> ());
   let opt_string = function Some s -> `String s | None -> `Null in
   let opt_int = function Some n -> `Int n | None -> `Null in
-  let opt_float = function Some f -> `Float f | None -> `Null in
+  (* The metric names are [Usage]'s; only [notice], [sanitized] and [error] are
+     this line's own. A metric that changes name changes in one place. *)
   let fields =
-    [
-      ("run", `String run);
-      ("model", opt_string settings.Config.model);
-      ("depth", `String (depth_string depth));
-      ("ms", `Int ms);
-      ("searches", `Int tally.searches);
-      ("results", `Int tally.results);
-      ("fetched", `Int tally.fetched);
-      ("material_chars", `Int tally.material_chars);
-      ("prompt_tokens", opt_int tally.prompt_tokens);
-      ("completion_tokens", opt_int tally.completion_tokens);
-      ("answer_chars", `Int tally.answer_chars);
-      ("cited", `Int tally.cited);
-      ("cited_invalid", `Int tally.cited_invalid);
-      ("sources", `Int tally.sources);
-      ("model_cost_usd", opt_float model_cost);
-      ("notice", opt_string notice);
-      ("sanitized", opt_int sanitized);
-    ]
+    [ ("run", `String run) ]
+    @ Usage.answer_metric_fields metrics
+    @ [ ("notice", opt_string notice); ("sanitized", opt_int sanitized) ]
     @ match error with Some e -> [ ("error", `String e) ] | None -> []
   in
   match error with

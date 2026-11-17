@@ -397,37 +397,65 @@ let fetch_line (ts : string) (ms : int) (chars : int) (fallback : string option)
     @ (match cost_usd with Some c -> [ ("cost_usd", `Float c) ] | None -> [])
     @ run_fields run step)
 
-(* All seventeen keys are always written: [answer] is the one line kind whose
-   optional figures are meaningful as nulls, because the snapshot tells unknown
-   from absent by the sample-size counts beside them. *)
-let answer_line (ts : string) (run : string) (model : string option) (depth : string)
-    (searches : int) (results : int) (fetched : int) (material_chars : int)
-    (prompt_tokens : int option) (completion_tokens : int option) (answer_chars : int) (cited : int)
-    (cited_invalid : int) (sources : int) (model_cost_usd : float option) (ms : int)
-    (error : string option) : Yojson.Safe.t =
-  let opt_int = function Some n -> `Int n | None -> `Null in
-  let opt_float = function Some f -> `Float f | None -> `Null in
+(* One answer call's figures, and the one spelling of their names. The
+   [(key, getter)] list is the vocabulary: [answer_line] writes it to the journal,
+   [answer_metric_fields] hands the same pairs to [Agent]'s log line, and
+   [Server.journal_fields] prints [answer_metric_keys] in the surface manifest. A
+   metric that gains a name gains it once.
+
+   All eighteen keys of an [answer] line are always written — [answer] is the one
+   line kind whose optional figures are meaningful as nulls, because the snapshot
+   tells unknown from absent by the sample-size counts beside them. *)
+type answer_metrics = {
+  model : string option;
+  depth : string;
+  searches : int;
+  results : int;
+  fetched : int;
+  material_chars : int;
+  prompt_tokens : int option;
+  completion_tokens : int option;
+  answer_chars : int;
+  cited : int;
+  cited_invalid : int;
+  sources : int;
+  model_cost_usd : float option;
+  ms : int;
+}
+
+let nul_str = function Some s -> `String s | None -> `Null
+let nul_int = function Some n -> `Int n | None -> `Null
+let nul_float = function Some f -> `Float f | None -> `Null
+
+let answer_fields : (string * (answer_metrics -> Yojson.Safe.t)) list =
+  [
+    ("model", fun m -> nul_str m.model);
+    ("depth", fun m -> `String m.depth);
+    ("searches", fun m -> `Int m.searches);
+    ("results", fun m -> `Int m.results);
+    ("fetched", fun m -> `Int m.fetched);
+    ("material_chars", fun m -> `Int m.material_chars);
+    ("prompt_tokens", fun m -> nul_int m.prompt_tokens);
+    ("completion_tokens", fun m -> nul_int m.completion_tokens);
+    ("answer_chars", fun m -> `Int m.answer_chars);
+    ("cited", fun m -> `Int m.cited);
+    ("cited_invalid", fun m -> `Int m.cited_invalid);
+    ("sources", fun m -> `Int m.sources);
+    ("model_cost_usd", fun m -> nul_float m.model_cost_usd);
+    ("ms", fun m -> `Int m.ms);
+  ]
+
+let answer_metric_fields (m : answer_metrics) : (string * Yojson.Safe.t) list =
+  List.map (fun (key, get) -> (key, get m)) answer_fields
+
+let answer_metric_keys = List.map fst answer_fields
+
+let answer_line (ts : string) (run : string) (m : answer_metrics) (error : string option) :
+    Yojson.Safe.t =
   `Assoc
-    [
-      ("ts", `String ts);
-      ("tool", `String "answer");
-      ("run", `String run);
-      ("model", match model with Some m -> `String m | None -> `Null);
-      ("depth", `String depth);
-      ("searches", `Int searches);
-      ("results", `Int results);
-      ("fetched", `Int fetched);
-      ("material_chars", `Int material_chars);
-      ("prompt_tokens", opt_int prompt_tokens);
-      ("completion_tokens", opt_int completion_tokens);
-      ("answer_chars", `Int answer_chars);
-      ("cited", `Int cited);
-      ("cited_invalid", `Int cited_invalid);
-      ("sources", `Int sources);
-      ("model_cost_usd", opt_float model_cost_usd);
-      ("ms", `Int ms);
-      ("error", match error with Some e -> `String e | None -> `Null);
-    ]
+    ([ ("ts", `String ts); ("tool", `String "answer"); ("run", `String run) ]
+    @ answer_metric_fields m
+    @ [ ("error", nul_str error) ])
 
 let remember_run (t : t) (run : string) (provider : string) (results : int) : unit =
   (* The [run] id is the whole join: retrieval lines are written before the
@@ -778,17 +806,8 @@ let record_fetch (t : t) ~(ms : int) ~(chars : int) ~(fallback : string option) 
       ignore (apply t entry);
       append t entry)
 
-let record_answer (t : t) ~(run : string) ~(model : string option) ~(depth : string)
-    ~(searches : int) ~(results : int) ~(fetched : int) ~(material_chars : int)
-    ~(prompt_tokens : int option) ~(completion_tokens : int option) ~(answer_chars : int)
-    ~(cited : int) ~(cited_invalid : int) ~(sources : int) ~(model_cost_usd : float option)
-    ~(ms : int) ?error () : unit =
-  let entry =
-    answer_line
-      (iso_utc_full (t.now ()))
-      run model depth searches results fetched material_chars prompt_tokens completion_tokens
-      answer_chars cited cited_invalid sources model_cost_usd ms error
-  in
+let record_answer (t : t) ~(run : string) (m : answer_metrics) ?error () : unit =
+  let entry = answer_line (iso_utc_full (t.now ())) run m error in
   Eio.Mutex.use_ro t.lock (fun () ->
       ignore (apply t entry);
       append t entry)

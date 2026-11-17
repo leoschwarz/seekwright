@@ -989,7 +989,10 @@ let server_flags = List.map (fun (flag : server_flag) -> flag.name) server_flag_
 let flag_spec name = List.find_opt (fun (flag : server_flag) -> flag.name = name) server_flag_table
 
 (* The keys [Usage] writes on each journal line kind, sorted. Pinned against a
-   real journal by test/test_p8_surface.ml. *)
+   real journal by test/test_p8_surface.ml. The [answer] row is derived rather
+   than typed: those names are written by two modules — [Usage]'s journal line and
+   [Agent]'s log line — so a hand-typed manifest row is a third spelling free to
+   drift from both. The [search] and [fetch] rows have one writer each. *)
 let journal_fields =
   [
     ( "search",
@@ -997,24 +1000,5 @@ let journal_fields =
     );
     ("fetch", [ "chars"; "cost_usd"; "error"; "fallback"; "ms"; "run"; "step"; "tool"; "ts" ]);
     ( "answer",
-      [
-        "answer_chars";
-        "cited";
-        "cited_invalid";
-        "completion_tokens";
-        "depth";
-        "error";
-        "fetched";
-        "material_chars";
-        "model";
-        "model_cost_usd";
-        "ms";
-        "prompt_tokens";
-        "results";
-        "run";
-        "searches";
-        "sources";
-        "tool";
-        "ts";
-      ] );
+      List.sort String.compare (Usage.answer_metric_keys @ [ "error"; "run"; "tool"; "ts" ]) );
   ]
