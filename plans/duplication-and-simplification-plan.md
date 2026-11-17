@@ -1,10 +1,11 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 steps 0–7 are landed; §3, the §4 decisions and the D-C … D-F steps are
-proposals.** Tree read at `6e4ad90`;
-reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
-unchanged between the two commits — the diff is plans only). The corrections are
-recorded in §8; the §4 decisions remain the maintainer's.
+Status: **§5 steps 0–8 are landed, as are D-A, D-B, D-C, D-F and D-G; D-D is settled by
+a measurement that declines the change it proposed.** What remains is D-E and the
+`Factory` façade row of §3. Tree read at `6e4ad90`; reviewed and corrected against the
+tree at `742a9c7` on 2026-11-17 (the code is unchanged between the two commits — the
+diff is plans only). The corrections are recorded in §8; the §4 decisions were taken by
+the maintainer on 2026-11-17, each recorded where the decision is written.
 Successor to the 2026-11-16 code-quality wave recorded in
 `plans/seekwright-ocaml-port.md` §40: that wave read the factory, the URL gate,
 the civil-date arithmetic and four adapter files, and its own ledger coverage
@@ -764,8 +765,9 @@ D-B — and land only if those decisions do. The last row is a keep, not a remov
 ## 4. Decisions the maintainer owns
 
 Each carries a recommendation. Every decision on this page is the maintainer's, taken
-2026-11-17: D-A, D-B and D-G are landed, D-F is landed with this pass, and D-C, D-D and
-D-E land in their own commits, recorded where the decision is written.
+2026-11-17: D-A, D-B and D-G are landed, D-F is landed with this pass, D-C lands in its
+own commit, D-D is settled by a measurement (below) that declines the rewrite, and D-E
+lands in its own commit.
 
 **D-A — the differential harness's posture.** Keep the 413 goldens and the
 properties, delete `drive.exe` and the oracle README, and rename the suite's own
@@ -842,6 +844,53 @@ response ceiling defaults to four times it, and the download cap is already
 enforced fetcher-side by `Fetcher.cap_body` on the grant-delivered body. Note that
 the corpus bar is a wall-clock ceiling and load-sensitive, so a single A/B pair on
 a busy machine is not evidence — the bar is not to be moved to make a run green.
+
+**Decided: keep the pool; the rewrite is declined.** Measured 2026-11-17 on this host
+(three CPUs, load 0.05, `Extract_pool.workers_default` = 2) over the frozen corpus;
+seven alternating runs per case, median of each side, seven full sweeps. "Inline" is
+`Extract_stdlib.backend.extract` on the calling domain — exactly what `Fetcher.make`
+does with no `~workers` — and "pooled" is `Extract_pool.extract` with `~queue_limit:32`
+so no job in a latency run is refused:
+
+|Pooled minus inline|≤ 5 KB pages|4.7 KB portal|41 KB fixture|187 KB fixture|32-call sweep total|
+|---|---|---|---|---|---|
+|per call|+0.06…+0.24 ms|+0.0…+0.6 ms|−1.8…+1.9 ms|−3.2…+8.1 ms|+4.9…+24.6 ms|
+
+The sweep total is dominated by the seven PDF cases, which cost the backend no time at
+all (they are refusals) and so show the whole round trip, +0.05…+1.7 ms each. On the
+two big fixtures the sign flips run to run: the medians straddle zero within ±8 ms.
+
+The requirement the row concedes is real, and it is the axis where the difference is
+not marginal. A probe fiber asks the Eio loop for 25 × 2 ms of loop time while
+`huge-article` (187 KB, 39–46 ms a parse) is walked; its two readings are what a
+request arriving mid-parse would wait:
+
+|While parses run|idle loop|inline, 4 jobs|pooled, 4 jobs|inline, 8 jobs|pooled, 8 jobs|
+|---|---|---|---|---|---|
+|loop reaches the probe after|0.0 ms|145–191 ms|0.2–1.7 ms|259–323 ms|0.0–0.4 ms|
+|its 50 ms of loop work delayed by|1.6–2.3 ms|146–193 ms|20–98 ms|260–325 ms|11–40 ms|
+|batch wall time|—|196–243 ms|113–205 ms|310–375 ms|184–333 ms|
+
+So the socket is not the cost the paragraph above assumed: about 0.1 ms per call on
+the pages a deployment serves, with one visible price — a large body is copied into
+the request frame, which is what `~max_body_bytes` (carried from
+`fetch.max_download_bytes` at `Fetch_stack`'s pool construction) bounds. What it buys
+is not cosmetic: inline, a CPU-bound walk starves the loop domain for its whole
+duration, and a request arriving during eight parses waits ~260 ms to be *scheduled*.
+A `Domain` plus an admission semaphore could recover at most that 0.1 ms and would
+have to re-home the `Timed_out` rendering, the bounded queue's named refusal and the
+result ceiling — a rewrite of a load-bearing path for a difference this host cannot
+resolve. The batch rows also show the workers parallelising (310–375 ms of inline
+walks finish in 184–333 ms across two workers), which the rewrite would keep and the
+inline path cannot have.
+
+`bench.exe --check` and `digest_cases.exe --check-parity` are gate rules beside the
+corpus, so §6's before/after is the gate on this commit: the bar and the byte pin are
+re-read, and nothing about extraction moved. The A/B driver was a throwaway stanza
+over `extract_metrics` and `seekwright.fetch`, deleted with its file — the recipe
+above is what a reader needs to re-take the numbers, which are a spread, not a point,
+for the reason this section gave: the corpus bar is a wall-clock ceiling and
+load-sensitive, and one A/B pair on a busy machine is not evidence.
 
 **D-E — `Config`'s Python numeric-coercion grammar.** `trim`,
 `drop_separators`, `int_from_string`, `float_from_string`, `bool_words`,
@@ -935,8 +984,8 @@ in the same commit.
 |5|S-004 field lists, then S-006, then S-007|**landed** — S-004: ten key lists, one per wire model, read by `reject_extra` and by the schema builder, with the schema mismatch reported by name through `Server.untabled_wire_fields` and failed by a suite because `lib/server.ml` may not raise (net +82, all three pins byte-stable). S-006: one `answer_metrics` record and one `(key, getter)` vocabulary feeding the journal line, `Agent`'s log line and the manifest's `[answer]` row, which was a third hand-typed spelling (+10 in `lib/`, +48 in the two suites, `surface.expected` unmoved at 37). S-007: `Civil.clock_of_instant` keeps the fraction, `Usage.civil_of`'s hand-rolled floored division is gone, and the journal's `+00:00` key and the model-facing `Z` are documented apart and pinned equal by a clock case|
 |6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|
 |7|S-010 fallback readers, lifting D2|the `'tag` goes, one `Fallback.run` owns the tail, and the factory builds the host check once|
-|8|§3 table + D-A/D-B docs|`context`, `settings`, `cost_model`, the façade and the extractor duality go; the driver and the two matrix tables only if D-A/D-B decide so; `AGENTS.md`, `ocaml-docs/testing.md`, `test/differential/README.md` and the port plan move in the same commit|
-|9|D-C … D-F, one decision at a time (D-G landed as step 0)|each needs its own page section and, for D-E, an operator-visible behaviour change|
+|8|§3 table + D-A/D-B docs|**landed except the façade** — `context`, `settings`, `cost_model` and the extractor duality each went in their own commit, the regeneration driver and the two hand-typed matrix tables went with D-A and D-B, and `AGENTS.md`, `ocaml-docs/testing.md`, `test/differential/README.md` and the port plan moved in the same commits. The `Factory` façade row is the one §3 item still open|
+|9|D-C … D-F, one decision at a time (D-G landed as step 0)|**D-C, D-D and D-F landed; D-E open.** D-C's seam went in its own commit; D-D was measured and the rewrite declined, so it is the one decision that moves no code; D-F went with the shared constraint sentence and its registered divergence; D-E is the only item left that changes what an operator's config file may say|
 
 ## 6. Verification
 

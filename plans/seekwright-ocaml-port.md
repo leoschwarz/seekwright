@@ -3212,16 +3212,19 @@ where the row says so.
 | D-F's safe half — the constraint sentence | Parallel's REST-half notices go through `Provider.ignored_constraints`, which gained the mandatory `~drops_exclude_domains` bucket every adapter answers; the adapter's private sentence is gone and the differential case that pinned it is now a registered divergence | this change |
 | §3 — the price has one owner | the price is a function the row hands over: `Registry.price row pc : int -> float` reaches every adapter as `make ~cost_for` through `Registry.args`, `Provider.S` loses `cost_per_1k` and `cost_for`, and the fifteen adapters lose their own arithmetic and their `?(cost_per_1k = …)` defaults — `Serper.credit_over`, Exa's extra-results rung and Parallel's credit reading go with them. `--check` prints `Registry.rate`; `--check --live` and the caller's `cost_usd` read `price`, one reading of the same entry. The differential provider projection links `seekwright.factory` and builds each adapter with its row's `price`, exactly as the factory injects it, so a golden's `cost_usd` is the row's figure and no golden moved; the one corpus case that carries a stub `cost` key leaves it unread, because a stub has no price to report and its golden already printed `cost_usd= -`. `cost_of` is exported only so the registry suite can pin a row's published shape against a figure. 66 files, net −361 lines | this change |
 | D-C — the operation-budget seam | `Budget`, `Authority.with_operation_budget` and the `budget` field of the bounds record go, and with them `test_caps_budget.ml` (431 lines), the two budget rows in `test_authority_net.ml`, `test_caps_audit`'s needle case that counted mentions of the decorator, `--max-calls` on `examples/gated_search.ml`, and `budget.cmi` in the interface-mirror rule the negative fixtures compile against. `grant_path.ml` still compiles without it, which is the proof the seal never needed the seam; `controls_record_forge.ml`'s diagnostic re-promotes over a record one field shorter. `lib/caps/README.md` now states that the layer enforces no operation ceiling, and the capability plan's §6 carries the reason and the condition for a counter coming back | this change |
+| D-D — the extraction pool | measured, not moved. An inline-vs-pool A/B over the frozen corpus on this host (medians of seven alternating runs per case, seven sweeps) puts the socket hop at +0.06…+0.24 ms on a ≤ 5 KB page and inside run-to-run noise on the two big fixtures, while the loop starvation it prevents is two orders of magnitude: with eight 187 KB parses running inline, a probe fiber asking the Eio loop for 50 ms is not even scheduled for 259–323 ms; pooled, for 0.0–0.4 ms. The `Domain` plus admission-semaphore rewrite could recover only the socket hop and would re-home the `Timed_out` rendering, the bounded queue's named refusal and the result ceiling, so it is declined and `Extract_pool` stands as written | no code change |
 
 Two corrections to the plan's own predictions, recorded where they were wrong rather
 than left for a reader to find: D2's resolver (above, in §40), and S-010's line-count
 claim — the five readers lost 19 lines while `fallback.ml` gained 31, so the gain is the
 single owner of the status reading, not a smaller tree.
 
-Still open on this pass: the last contested §3 weight row (the `Factory` façade) and D-D and D-E —
-all three decided 2026-11-17, each landing in its own commit. The `context` row closed with D-B
-rather than on its own: its one reader was the `providers.tsv` row the validator cross-checked, so
-`context_cap`, the field and the six `~context:` rows went with the table that consumed them.
+Still open on this pass: the last contested §3 weight row (the `Factory` façade) and D-E —
+both decided 2026-11-17, each landing in its own commit. D-D closed without a change: the A/B
+it asked for was run and is recorded in §4 of the structural plan, and the numbers decline the
+rewrite. The `context` row closed with D-B rather than on its own: its one reader was the
+`providers.tsv` row the validator cross-checked, so `context_cap`, the field and the six
+`~context:` rows went with the table that consumed them.
 
 One design point was settled rather than changed. `Exa.make_tiered` keeps its own
 cooldown clock, deliberately: its escalation happens inside one in-flight call — the
