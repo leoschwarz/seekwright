@@ -13,7 +13,7 @@
 (library
  (name extract_metrics)
  (modules extract_metrics)
- (libraries seekwright.fetch seekwright.fetch.stdlib yojson))
+ (libraries seekwright.fetch yojson))
 
 ; The fixture generator. It writes the corpus under [../../test/corpus_html/]
 ; when given a directory to write into; [gen_fixtures --check <dir>] re-derives
@@ -51,4 +51,4 @@
 (executable
  (name digest_cases)
  (modules digest_cases)
- (libraries seekwright.fetch seekwright.fetch.stdlib extract_metrics))
+ (libraries seekwright.fetch extract_metrics))

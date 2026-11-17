@@ -13,7 +13,6 @@
   seekwright.factory
   seekwright.providers
   seekwright.fetch
-  seekwright.fetch.stdlib
   mcp-caps
   mcp-kit
   mcp-kit.stdio

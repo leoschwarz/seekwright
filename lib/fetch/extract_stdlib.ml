@@ -1,6 +1,6 @@
-module E = Seekwright_fetch.Extractor
-module J = Seekwright_fetch.Jsondoc
-module T = Seekwright_fetch.Tabledoc
+module E = Extractor
+module J = Jsondoc
+module T = Tabledoc
 module U = Seekwright_text.Utf8
 
 (* Never the answer: what a browser executes or draws, and the sectioning

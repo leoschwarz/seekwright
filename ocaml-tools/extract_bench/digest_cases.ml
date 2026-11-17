@@ -1,6 +1,6 @@
 (* Extraction identity check: digest of backend output for each corpus case. *)
 
-module S = Seekwright_fetch_stdlib.Stdlib
+module S = Seekwright_fetch.Extract_stdlib
 module E = Seekwright_fetch.Extractor
 module M = Extract_metrics
 

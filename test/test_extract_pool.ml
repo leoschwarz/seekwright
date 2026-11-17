@@ -14,7 +14,7 @@
 
 module K = Seekwright_fetch.Extract_pool
 module E = Seekwright_fetch.Extractor
-module S = Seekwright_fetch_stdlib.Stdlib
+module S = Seekwright_fetch.Extract_stdlib
 
 module A = Alcotest
 

@@ -181,7 +181,7 @@ mounted config and journal, layer size).
   has no interface — the raw-bounds record has no name outside the library, so a
   `~controls` argument cannot be filled by a consumer. Preserve that boundary.
 - Library direction is fixed: `mcp-caps` → `seekwright` → `seekwright.providers`,
-  `seekwright.fetch` (+ `seekwright.fetch.stdlib`), `seekwright.factory`,
+  `seekwright.fetch`, `seekwright.factory`,
   `seekwright.cli`, with `seekwright.text` and `seekwright.wire` as the
   stdlib-only floor both big libraries link. A factory that builds adapters
   cannot live in `lib/`; it would close the cycle. `mcp-caps` never depends back
@@ -231,7 +231,7 @@ capability layer's own contract, and `ocaml-docs/` is the operator's map.
 | `lib/config.ml` | TOML config and every key of the frozen surface; credentials from `SEEKWRIGHT_*` env only; an enabled name without its key is startup-fatal; the vocabulary lists (`known_providers`, `free_providers`, `keyless_providers`, `known_fetch_fallbacks`, `known_extractors`) |
 | `lib/provider.ml`, `lib/providers/` | package `seekwright.providers`: the adapter contract (`module type S`, `Provider.Net` as the HTTP seam, the constraint report, the caps) and fifteen adapters over seventeen names; `mcp_client.ml` is the narrow streamable-HTTP MCP client `exa:free` and `parallel:free` use |
 | `lib/engine.ml`, `lib/health.ml`, `lib/usage.ml` | execution around the routing decisions, the circuit-breaker board (the first attempt of any search is never gated, and the board gates fallbacks only), the in-memory aggregate and the append-only JSONL journal |
-| `lib/fetch/` | package `seekwright.fetch`: `fetcher` behind the SSRF-validated `Net` grant, `remote_target`, `extractor` + `extractors/stdlib` (own stanza, `seekwright.fetch.stdlib`), `extract_pool` (bounded worker domains), `fallback` + the five `fallback_*` readers, `jsondoc`, `tabledoc`, `utf8`, `page_cache` |
+| `lib/fetch/` | package `seekwright.fetch`: `fetcher` behind the SSRF-validated `Net` grant, `remote_target`, `extractor` (the backend contract and the shared plumbing) + `extract_stdlib` (the one backend this build can construct), `extract_pool` (bounded worker domains), `fallback` + the five `fallback_*` readers, `jsondoc`, `tabledoc`, `page_cache` |
 | `lib/factory/` | package `seekwright.factory`: one facade (`Factory.build_providers`, `build_fetch_stack`, `build_app`, `grant_of_endpoint`) over `providers_build`, `fetch_stack`, `provider_set`, `registry`, `grants`, `verdict`, `app`; `Registry.rows` is one declarative row per name — endpoint, credential, cost model, live status — and `grants.ml` is the single funnel every served grant goes through |
 | `lib/agent.ml` | agent mode: the fixed retrieval plan and **exactly one** model call; the model writes prose, never drives retrieval |
 | `lib/server.ml` | the three tools, both transports, `/healthz`, the dashboard, the REST projection, the Host allowlist, the drain |

@@ -8,15 +8,15 @@
 ;
 ; All HTTP goes through a [Mcp_caps.Authority.Net] grant — no raw cohttp — and
 ; the fetcher receives the grant plus the extraction backend injected, with no
-; default backend, so importing this library never imports a backend's
-; dependencies. The page cache ([page_cache.ml], F7) is in this library because
+; default backend, so nothing here decides which backend runs. The page cache
+; ([page_cache.ml], F7) is in this library because
 ; a cached window is cut with [Fetcher.window_text], and the cut has to be one
 ; function rather than a mirror kept true by a test.
 ;
-; The stdlib extraction backend sits in [extractors/] with its own stanza
-; ([seekwright.fetch.stdlib]) for the same reason [lib/providers/] has one:
-; a backend is a separate install unit, and [extractors/] is where the next one
-; lands without the fetcher naming it.
+; The stdlib backend ([extract_stdlib.ml]) sits in this library because it needs nothing
+; this library does not already link. [seekwright.fetch.stdlib] was its own stanza, which
+; bought an install unit for a backend with no dependencies of its own.
+
 (library
  (name seekwright_fetch)
  (public_name seekwright.fetch)

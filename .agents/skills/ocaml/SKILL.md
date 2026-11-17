@@ -119,9 +119,10 @@ Verified against `opam list` on 2026-11-13 (switch `default`):
 - Root dune workspace, packages `mcp-caps` and `seekwright`. Generated `*.opam`
   files are committed, never hand-edited.
 - Library direction is fixed: `mcp-caps → seekwright →
-  seekwright.providers`/`seekwright.fetch`. `lib/fetch/extractors/` is its own
-  stanza (`seekwright.fetch.stdlib`). A factory that builds adapters cannot live
-  in `lib/`; it would close the cycle.
+  seekwright.providers`/`seekwright.fetch`. The extraction backend this build ships
+  (`lib/fetch/extract_stdlib.ml`) is inside `seekwright.fetch`; a backend with its own
+  dependencies would be its own library. A factory that builds adapters cannot live in
+  `lib/`; it would close the cycle.
 - `lib/caps/` holds `Mcp_caps`; `lib/providers/`, `lib/fetch/` mirror it.
   `bin/main.ml` is the executable, `test/` mirrors `lib/`, `ocaml-tools/` holds
   tree-reading instruments, `test/differential/` and `test/conformance/` are

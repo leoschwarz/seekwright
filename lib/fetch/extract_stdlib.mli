@@ -2,4 +2,4 @@
 
 val name : string
 val supported_types : string list
-val extract : string -> string option -> Seekwright_fetch.Extractor.extract_result
+val extract : string -> string option -> Extractor.extract_result

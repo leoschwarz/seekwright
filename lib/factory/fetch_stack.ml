@@ -17,7 +17,7 @@ let grant_of_decision = Grants.grant_of_decision
 
 let build_extractor config =
   match config.Config.fetch.Config.extractor with
-  | "stdlib" -> Ok (Extractor.of_module (module Seekwright_fetch_stdlib.Stdlib))
+  | "stdlib" -> Ok (Extractor.of_module (module Seekwright_fetch.Extract_stdlib))
   | name ->
       Error
         (Printf.sprintf "unknown fetch extractor %S; supported: %s" name

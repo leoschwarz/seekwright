@@ -10,7 +10,7 @@ module F = Seekwright_fetch.Fetcher
 module E = Seekwright_fetch.Extractor
 module J = Seekwright_fetch.Jsondoc
 module T = Seekwright_fetch.Tabledoc
-module S = Seekwright_fetch_stdlib.Stdlib
+module S = Seekwright_fetch.Extract_stdlib
 module A = Alcotest
 open Test_support
 

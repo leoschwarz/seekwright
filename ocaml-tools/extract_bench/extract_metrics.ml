@@ -1,5 +1,5 @@
 module E = Seekwright_fetch.Extractor
-module S = Seekwright_fetch_stdlib.Stdlib
+module S = Seekwright_fetch.Extract_stdlib
 
 type case = {
   id : string;

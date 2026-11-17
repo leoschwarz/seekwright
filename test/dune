@@ -220,7 +220,7 @@
 ; Unix; no socket is opened.
 (test
  (name test_boot)
- (libraries seekwright seekwright.fetch seekwright.fetch.stdlib
+ (libraries seekwright seekwright.fetch
    seekwright.providers seekwright.factory mcp-caps uri yojson eio eio_main
    mirage-crypto-rng.unix unix alcotest))
 
@@ -231,12 +231,12 @@
 ; as in [test_boot].
 (test
  (name test_routing_sets)
- (libraries seekwright seekwright.fetch seekwright.fetch.stdlib
+ (libraries seekwright seekwright.fetch
    seekwright.providers seekwright.factory mcp-caps uri yojson eio eio_main
    mirage-crypto-rng.unix unix alcotest test_support))
 
 ; F4.1: the provider registry. The suite reads the table itself for all
-; seventeen names — price, floor, endpoint, probe, credential, settings — so
+; seventeen names — price, floor, endpoint, probe, credential — so
 ; the row is what is under test, not the adapter beside it. Grants are
 ; constructed and never dialled, and [unix] is only the environment variable a
 ; keyless row must prove it ignores.
@@ -408,7 +408,7 @@
 ; its extractor plumbing.
 (test
  (name test_fetch)
- (libraries seekwright.fetch seekwright.fetch.stdlib alcotest test_support))
+ (libraries seekwright.fetch alcotest test_support))
 
 ; P6: the fetcher over a real loopback fixture and a [Policy.with_endpoints]
 ; grant — the networked guardrail cases. The grant's own address policy is
@@ -417,7 +417,6 @@
  (name test_fetch_http)
  (libraries
   seekwright.fetch
-  seekwright.fetch.stdlib
   mcp-caps
   cohttp-eio
   http
@@ -435,7 +434,6 @@
  (name test_extract_pool)
  (libraries
   seekwright.fetch
-  seekwright.fetch.stdlib
   eio
   eio_main
   unix
@@ -445,7 +443,6 @@
  (name test_fetch_workers)
  (libraries
   seekwright.fetch
-  seekwright.fetch.stdlib
   mcp-caps
   cohttp-eio
   http
@@ -492,7 +489,6 @@
   seekwright
   seekwright.factory
   seekwright.fetch
-  seekwright.fetch.stdlib
   mcp-caps
   cohttp-eio
   http
@@ -899,7 +895,6 @@
   seekwright
   seekwright.factory
   seekwright.fetch
-  seekwright.fetch.stdlib
   mcp-caps
   cohttp-eio
   http

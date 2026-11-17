@@ -12,7 +12,7 @@
 
 module F = Seekwright_fetch.Fetcher
 module E = Seekwright_fetch.Extractor
-module S = Seekwright_fetch_stdlib.Stdlib
+module S = Seekwright_fetch.Extract_stdlib
 module Caps = Mcp_caps
 
 module Policy = Caps.Policy

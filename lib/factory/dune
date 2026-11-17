@@ -20,7 +20,6 @@
   seekwright
   seekwright.providers
   seekwright.fetch
-  seekwright.fetch.stdlib
   mcp-caps
   eio
   uri
