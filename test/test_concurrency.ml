@@ -43,18 +43,6 @@ let now () = 1768478400.
 
 (* [Usage.snapshot] and the REST bodies are [Yojson.Safe.t]; these are the loose
    reads the Python suite gets from dicts. *)
-let get key = function
-  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
-  | _ -> `Null
-
-let items = function `List xs -> xs | _ -> []
-let str = function `String s -> s | `Null -> "" | v -> Yojson.Safe.to_string v
-
-let int = function
-  | `Int n -> n
-  | `Float f -> int_of_float f
-  | v -> A.failf "not a count: %s" (Yojson.Safe.to_string v)
-
 let money = function
   | `Int n -> float_of_int n
   | `Float f -> f

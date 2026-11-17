@@ -17,32 +17,9 @@ module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module Querit = Seekwright_providers.Querit
 module A = Alcotest
+module Utf8 = Seekwright_text.Utf8
 open Test_support
-
-let chars s =
-  let n = ref 0 and i = ref 0 in
-  while !i < String.length s do
-    let c = Char.code s.[!i] in
-    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
-    incr n
-  done;
-  !n
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent to anything real: the string a leak would carry. *)
-let test_key = "test-key"
+open Adapter_support
 
 (* The documented payload: the [result] list under the [results] container,
    the second record without the optional [page_age], beside the [took] /
@@ -72,46 +49,23 @@ let sample =
   }
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let provider = Querit.make ?cost_per_1k ~snippet_chars ~key:test_key ~net () in
-  (provider, fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  (Querit.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Querit.make ~key:test_key ~net ()
+let refusal kind ~message = Querit.make ~key:test_key ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
     ?(query = query ~text:"hybrid search" ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
+  drive provider sent query
 
-(* The request body as a Yojson value, read the way the Python suite reads
-   [json.loads(request.content)]. *)
-let body (request : Caps.Authority.Net.request) =
-  match Yojson.Safe.from_string (Option.get request.Caps.Authority.Net.body) with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the request body is not an object"
-
-let body_has request name = Provider.Json.field name (body request) <> `Null
+let body_has request name = Provider.Json.field name (body_of request) <> `Null
 
 let body_path request path =
-  List.fold_left (fun json key -> Provider.Json.field key json) (body request) path
+  List.fold_left (fun json key -> Provider.Json.field key json) (body_of request) path
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Querit.parse ~snippet_chars data ~limit
 
@@ -139,7 +93,7 @@ let the_snippet_is_kept_and_never_text () =
 let the_snippet_is_truncated () =
   let found = parse ~snippet_chars:40 sample_json in
   let snippet = Option.get (List.hd found).result.snippet in
-  check_int "cut at the cap plus the ellipsis" 41 (chars snippet)
+  check_int "cut at the cap plus the ellipsis" 41 (Utf8.count snippet)
 
 let the_length_the_cap_discarded_is_recorded () =
   (* [search.cap] reads this: the pre-cap length, log-only and off the wire. *)
@@ -147,8 +101,9 @@ let the_length_the_cap_discarded_is_recorded () =
   let hit = List.hd found in
   let uncapped = Option.get hit.uncapped_chars in
   let whole = "Hybrid search combines a vector index with BM25 for recall and precision." in
-  check_int "the whole snippet was longer than the cap" (chars whole) uncapped;
-  check_bool "and longer than what shipped" true (uncapped > chars (Option.get hit.result.snippet));
+  check_int "the whole snippet was longer than the cap" (Utf8.count whole) uncapped;
+  check_bool "and longer than what shipped" true
+    (uncapped > Utf8.count (Option.get hit.result.snippet));
   (* Private, so a caller can never see it: the response carries the clipped
      snippet, never a measurement of the clip. *)
   excludes "absent from the wire model" "uncapped"
@@ -159,7 +114,7 @@ let a_short_snippet_reports_its_own_length () =
   let hit = List.nth (parse sample_json) 1 in
   check_bool "the snippet is there" true (hit.result.snippet <> None);
   check_opt_int "measured at its own length"
-    (Some (chars (Option.get hit.result.snippet)))
+    (Some (Utf8.count (Option.get hit.result.snippet)))
     hit.uncapped_chars
 
 let the_page_age_is_kept_only_when_a_string () =
@@ -253,8 +208,8 @@ let post_with_the_bearer_key () =
 let the_query_and_count_are_sent () =
   let _, request = search_of ~query:(query ~text:"hybrid search" ~max_results:3 ()) () in
   check_string "the query" "\"hybrid search\""
-    (Yojson.Safe.to_string (Provider.Json.field "query" (body request)));
-  check_string "count" "3" (Yojson.Safe.to_string (Provider.Json.field "count" (body request)))
+    (Yojson.Safe.to_string (Provider.Json.field "query" (body_of request)));
+  check_string "count" "3" (Yojson.Safe.to_string (Provider.Json.field "count" (body_of request)))
 
 let count_is_clamped_to_the_free_plan_cap () =
   (* The free plan answers at most 10 results, so the request never asks it
@@ -266,7 +221,7 @@ let count_is_clamped_to_the_free_plan_cap () =
       check_string
         (Printf.sprintf "count at max_results=%d" max_results)
         (string_of_int Querit.max_results)
-        (Yojson.Safe.to_string (Provider.Json.field "count" (body request)));
+        (Yojson.Safe.to_string (Provider.Json.field "count" (body_of request)));
       check_int "the cap is ten" 10 Querit.max_results;
       check_opt_string "no notice over the clamp" None outcome.notice)
     [ 11; 20; 100 ]

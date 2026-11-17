@@ -32,21 +32,6 @@ open Test_support
 
 let zwsp = Sanitize.zwsp
 
-let get key = function
-  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
-  | _ -> `Null
-
-let items = function `List xs -> xs | _ -> []
-let str = function `String s -> s | `Null -> "" | v -> Yojson.Safe.to_string v
-
-let int = function
-  | `Int n -> n
-  | `Float f -> int_of_float f
-  | v -> A.failf "not a count: %s" (Yojson.Safe.to_string v)
-
-let bool = function `Bool b -> b | v -> A.failf "not a flag: %s" (Yojson.Safe.to_string v)
-let is_null = ( = ) `Null
-
 let float_of = function
   | `Int n -> float_of_int n
   | `Float f -> f

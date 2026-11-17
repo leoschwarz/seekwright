@@ -1,6 +1,6 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 steps 0–2 (D-G formatting, S-005, S-001) are landed; everything
+Status: **§5 steps 0–3 (D-G formatting, S-005, S-001, S-002) are landed; everything
 else on this page is a proposal.** Tree read at `6e4ad90`;
 reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
 unchanged between the two commits — the diff is plans only). The corrections are
@@ -218,7 +218,7 @@ notice case is renamed to what it pins. `test/router_dependencies.expected`
 grows two lines: `lib/usage.ml` links `Provider` for `take` instead of its own
 `take_first`.
 
-### S-002 — the adapter suites: 9,217 lines, 103 lines of shared support
+### S-002 — the adapter suites: 9,217 lines, 103 lines of shared support · **landed**
 
 **Evidence (`read`, window scan).** The set is the fifteen per-adapter suites plus
 `test_mcp_client.ml`; `Test_support`'s own header states the rule — a helper "copied
@@ -253,7 +253,47 @@ test lines with strictly better coverage, because the harness then has one
 definition to fix.
 
 **Gate.** No production change, no golden. `test/dune` already links
-`test_support` for these stanzas.
+`test_support` for these stanzas — but not a second support library: the eight
+counter suites also need `seekwright.text`, a fact the plan did not carry.
+
+**Landed.** The harness is a second private library under `test/support/`, not
+new modules in `Test_support`, and the split is the link closure:
+`Test_support` holds what a suite needs without the server — strings, files,
+Alcotest and now the JSON and list accessors (`get`, `items`, `str`, `int`,
+`bool`, `is_null`, `hd`, `nth`) — while `Adapter_support` drives a
+`Seekwright.Provider.Net.t` (`query`, `test_key`, `response`, `answered`,
+`refusing`, `recording`, `ok_search`, `drive`, `json_object`, `body_of`,
+`body_field`, `has_body_field`, `params`, `param`, `has_param`) and is linked
+only by the suites that already link `seekwright`. Each suite keeps its own
+`dial`, `refusal` and `search_of`, because those wrappers are where that
+adapter's `make` signature is named: `~snippet_chars`, `~text_chars`,
+`?title_attr`, `~now`, `~endpoint`, `~app_id` are not the harness's to know.
+
+Measured, against the proposal's −1,800: the sixteen adapter suites go 9,072 →
+8,413 (−659) and the six journal suites that copied the accessors
+(`agent`, `engine`, `concurrency`, `usage`, `fetch_cache`, `fetch_engine`)
+another −80, while `test/support/` grows 208 → 450 (+185 harness, +57
+accessors that used to sit in the suites) — net −497 in `test/`. The estimate
+counted the `dial`/`refusal` wrappers as removable and the failure rows as
+still duplicated. Neither holds: the wrappers are the adapters' signatures, and
+most of the contract duplication had moved in an earlier wave — every suite's
+section comment already says the six rows are pinned once by
+`test_provider_contract.ml`. What was left to delete is four cases:
+`freeserp`'s grant-bound row and not-JSON row, `serpapi`'s constant-message row
+and `parallel`'s malformed-body row. Every failure case that stays in an
+adapter suite states a vendor fact that suite cannot drive — which statuses mean
+"you have run out", the auth wording, and the non-echo assertion (serper's
+`X-API-KEY`, searxng's instance host, serpapi's key riding in the query string,
+freeserp's secret marker, parallel's credential header).
+
+The case count moves by exactly those four: 1,434 → 1,430 (`freeserp` 38 → 36,
+`serpapi` 34 → 33, `parallel` 35 → 34). Two suite facts moved with the change:
+`test_exa.ml`'s query default was that file's own (`"write-ahead logging"`, not
+`"q"`), so the one case that asserts the text on the wire now passes it
+explicitly; and eight suites gained `seekwright.text` in `test/dune` because
+they now write `Utf8.count` against the pinned decoder instead of a
+hand-rolled lead-width walk. `test_mcp_client.ml` is untouched — its fixture is
+a scripted MCP endpoint, not a `Net` that answers one request.
 
 ### S-003 — three verbs, two dispatch sites each
 
@@ -588,7 +628,7 @@ in the same commit.
 |0|D-G formatting: pin `.ocamlformat`, reformat the tree — the maintainer's call, taken ahead of step 1|**landed** — one-shot reformat of 272 files, ~15,800 lines each way; `Test_support`'s source needles made whitespace-insensitive. The claim that no pin moved was wrong: five `should_not_compile` diagnostics quote the snippet's own source line, so the sweep re-pinned them, and `dune runtest` has been red on them since — three of the five stayed hidden behind a cached `.out` until a library change invalidated it. Re-pinned with step 2|
 |1|S-005 micro-duplication: the percent-encoder, `base64`/`grouped`, the `Utf8` re-export shim|**landed** — small, no golden, no re-pin|
 |2|S-001 adapter skeleton, `take` landing in `Provider`|**landed** — −511 lines in `lib/providers/`, +225 in `lib/provider.ml` and its interface (net −286, short of the estimate for the reasons in §2); 13 of 14 REST adapters on the shared tail, `parallel` onto the shared sentence with its per-bucket clauses kept word-for-word|
-|3|S-002 test harness|−~1,800 test lines, no production change|
+|3|S-002 test harness|**landed** — −659 in the sixteen adapter suites, −80 in the six journal suites that copied the JSON accessors, +242 in `test/support/` (net −497, short of the estimate for the reasons in §2); one harness for the `Net` mock, one for the accessors, four contract-duplicate cases deleted|
 |4|S-003 one dispatch per verb, answering Q-002|the 400/502 mapping has one owner; the `api_answer` pre-check asymmetry is decided|
 |5|S-004 field lists, then S-006, then S-007|the schemas read the decoders' key lists; the journal's answer fields gain one owner|
 |6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|

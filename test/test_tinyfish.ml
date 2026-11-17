@@ -21,22 +21,7 @@ module Provider = Seekwright.Provider
 module Tinyfish = Seekwright_providers.Tinyfish
 module A = Alcotest
 open Test_support
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent to anything real: the string a leak would carry. *)
-let test_key = "test-key"
+open Adapter_support
 
 (* The documented shape: [results[]] with [position], [site_name], [title],
    [snippet], [url] and [date]. The first two are the envelope the adapter drops:
@@ -63,34 +48,18 @@ let sample =
   ]
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let provider = Tinyfish.make ?cost_per_1k ~snippet_chars ~key:test_key ~net () in
-  (provider, fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  (Tinyfish.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Tinyfish.make ~key:test_key ~net ()
+let refusal kind ~message = Tinyfish.make ~key:test_key ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
     ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
+  drive provider sent query
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Tinyfish.parse ~snippet_chars data ~limit
 

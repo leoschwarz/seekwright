@@ -139,19 +139,6 @@ type captured = { event : string; fields : (string * Yojson.Safe.t) list }
 
 let sink lines : Engine.log = fun _level event fields -> lines := !lines @ [ { event; fields } ]
 
-let get key = function
-  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
-  | _ -> `Null
-
-let items = function `List xs -> xs | _ -> []
-let str = function `String s -> s | `Null -> "" | v -> Yojson.Safe.to_string v
-
-let number = function
-  | `Int n -> n
-  | `Float f -> int_of_float f
-  | v -> A.failf "not a count: %s" (Yojson.Safe.to_string v)
-
-let is_null = ( = ) `Null
 let say = function Some s -> s | None -> ""
 
 let field fields name = get name (`Assoc fields)
@@ -432,10 +419,11 @@ let a_cached_page_of_a_priced_rung_is_unbilled () =
               (str (get "fallback" first)))
       | many -> A.failf "expected two journal entries, got %d" (List.length many));
       let totals = get "totals" (Usage.snapshot board.usage) in
-      A.(check int "both reads are counted as fetches" 2 (number (get "fetches" totals)));
+      A.(
+        check int "both reads are counted as fetches" 2 (Test_support.int (get "fetches" totals)));
       A.(
         check int "and the money total covers one priced call" 1
-          (number (get "priced_fetches" totals))))
+          (Test_support.int (get "priced_fetches" totals))))
 
 let an_image_page_bypasses_the_store () =
   let local =

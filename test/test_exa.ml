@@ -38,31 +38,11 @@ module Provider = Seekwright.Provider
 module Exa = Seekwright_providers.Exa
 module A = Alcotest
 open Test_support
-
-let query ?(text = "write-ahead logging") ?(max_results = 5) ?(include_domains = [])
-    ?(exclude_domains = []) ?country ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent anywhere real: the string a leak would carry. *)
-let test_key = "test-key"
+open Adapter_support
 
 (* No real endpoint: this port's grants are built elsewhere and pinned elsewhere,
    and the fixture's net never dials. *)
 let fixture_uri = Uri.of_string "https://mcp.exa.invalid/mcp"
-
-let hd label = function x :: _ -> x | [] -> A.failf "%s was empty" label
-
-let nth label index xs =
-  match List.nth_opt xs index with Some x -> x | None -> A.failf "%s has no item %d" label index
 
 (* Copied from the oracle's suite, which captured them from
    [https://mcp.exa.ai/mcp]: plain formatted text, an empty [structuredContent],
@@ -304,11 +284,6 @@ let dial_methods ep = List.map (fun (meth, _, _) -> meth) (List.rev !(ep.dials))
 
 let count ?meth ?keyed ep = List.length (dials ep ?meth ?keyed ())
 
-let body_json (request : Caps.Authority.Net.request) =
-  match request.Caps.Authority.Net.body with
-  | Some text -> Yojson.Safe.from_string text
-  | None -> A.failf "the request carried no body"
-
 let header (request : Caps.Authority.Net.request) name =
   List.find_map
     (fun (key, value) -> if String.lowercase_ascii key = name then Some value else None)
@@ -337,9 +312,9 @@ let the_advertised_arguments_only () =
      this endpoint and why {!Provider.ignored_constraints} files a notice. *)
   let ep = endpoint ~free:[ Text sample ] () in
   let session = free_session ep in
-  ignore (search session (query ~max_results:3 ()));
+  ignore (search session (query ~text:"write-ahead logging" ~max_results:3 ()));
   let _meth, _keyed, request = hd "tools/call" (dials ep ~meth:"tools/call" ()) in
-  let message = body_json request in
+  let message = body_of request in
   let params = Provider.Json.field "params" message in
   check_string "the tool named is the advertised one" Exa.tool_name
     (Option.get (Provider.Json.string_field "name" params));

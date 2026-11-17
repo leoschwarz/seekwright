@@ -19,29 +19,9 @@ module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module Anysearch = Seekwright_providers.Anysearch
 module A = Alcotest
+module Utf8 = Seekwright_text.Utf8
 open Test_support
-
-let chars s =
-  let n = ref 0 and i = ref 0 in
-  while !i < String.length s do
-    let c = Char.code s.[!i] in
-    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
-    incr n
-  done;
-  !n
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
+open Adapter_support
 
 (* The envelope with three records: one well-formed, one whose [title] is
    documented as always present but empty (a drop), and one whose [snippet] is
@@ -76,29 +56,18 @@ let sample =
 
 (* [parse] is handed the whole envelope: the records sit under [data.results],
    so the fixture stays the body the vendor sends. *)
-let sample_data = Yojson.Safe.from_string sample
+let sample_data = json_object sample
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.) () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  (Anysearch.make ~cost_per_1k ~snippet_chars ~net (), fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  (Anysearch.make ~cost_per_1k ~snippet_chars ~net (), sent)
 
-let refusal kind ~message =
-  Anysearch.make ~net:{ Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } ()
+let refusal kind ~message = Anysearch.make ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.)
     ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ~cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
+  drive provider sent query
 
 let failed_search ?(status = 200) ?(body = sample) ?(query = query ()) () =
   let provider, _ = dial ~status ~body () in
@@ -109,13 +78,6 @@ let failed_search ?(status = 200) ?(body = sample) ?(query = query ()) () =
 
 (* The body that would have gone out, decoded: the assertions are about the
    documented request document, not about a serialization. *)
-(* [Policy_net] declares [body] and [headers] on both its request and its
-   response record, so a caller has to say which record it means. *)
-let body_of (request : Caps.Authority.Net.request) =
-  match request.Caps.Authority.Net.body with
-  | None -> A.failf "the request carried no body"
-  | Some text -> ( match Yojson.Safe.from_string text with json -> json)
-
 let body_fields request = Option.get (Provider.Json.members (body_of request))
 
 let has_field request name = List.exists (fun (key, _) -> key = name) (body_fields request)
@@ -172,7 +134,7 @@ let the_snippet_cap_clips () =
      a cap of 40 would keep the snippet whole and say nothing. *)
   let hits = parse ~snippet_chars:30 sample_data in
   let snippet = Option.get (List.hd hits).result.snippet in
-  check_int "the cap plus one character for the ellipsis" 31 (chars snippet);
+  check_int "the cap plus one character for the ellipsis" 31 (Utf8.count snippet);
   check_opt_int "the length the cap received" (Some 39) (List.hd hits).uncapped_chars
 
 let the_length_the_cap_discarded_is_recorded () =
@@ -180,7 +142,7 @@ let the_length_the_cap_discarded_is_recorded () =
   let hit = List.hd (parse ~snippet_chars:30 sample_data) in
   check_opt_int "the pre-cap length" (Some 39) hit.uncapped_chars;
   check_bool "more than was shipped" true
-    (hit.uncapped_chars > Option.map chars (Some (Option.get hit.result.snippet)));
+    (hit.uncapped_chars > Option.map Utf8.count (Some (Option.get hit.result.snippet)));
   (* Python's [Result._uncapped_chars] is private so it cannot reach the wire;
      here the measurement sits beside the result on the provider boundary, and
      the wire model has no field for it. *)

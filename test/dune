@@ -256,55 +256,68 @@
 ; and the request that would have gone out is asserted on instead.
 (test
  (name test_freeserp)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
+  test_support adapter_support))
 
 (test
  (name test_anysearch)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
+  test_support adapter_support))
 
 (test
  (name test_serper)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+  adapter_support))
 
 (test
  (name test_scrappa)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
+  test_support adapter_support))
 
 (test
  (name test_search1api)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
+  test_support adapter_support))
 
 (test
  (name test_serpapi)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
+  test_support adapter_support))
 
 (test
  (name test_querit)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
+  test_support adapter_support))
 
 (test
  (name test_deepseek)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
+  test_support adapter_support))
 
 (test
  (name test_searxng)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
+  test_support adapter_support))
 
 (test
  (name test_tavily)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+  adapter_support))
 
 (test
  (name test_tinyfish)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+  adapter_support))
 
 (test
  (name test_linkup)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+  adapter_support))
 
 (test
  (name test_algolia)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+  adapter_support))
 
 ; F5.1: the two Exa/Parallel adapter suites. The REST half is driven through a
 ; fake Provider.Net.t; the MCP halves run their real client over a scripted
@@ -312,11 +325,13 @@
 ; dialed.
 (test
  (name test_exa)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+  adapter_support))
 
 (test
  (name test_parallel)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+  adapter_support))
 
 ; The shared failure rows, driven over every adapter module on disk. The
 ; (deps) line is what lets the suite count those modules rather than trust the
@@ -367,7 +382,8 @@
 ; capability layer the fake speaks, and [uri] for its request records.
 (test
  (name test_engine)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support))
+ (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+  adapter_support))
 
 ; P5: the fetch engine. The page readers and the document grammars are P6, so the
 ; suite hands [Engine.Fetch] a stub [Readers] and drives the route, the notices,

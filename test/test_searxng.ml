@@ -17,29 +17,9 @@ module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module Searxng = Seekwright_providers.Searxng
 module A = Alcotest
+module Utf8 = Seekwright_text.Utf8
 open Test_support
-
-let chars s =
-  let n = ref 0 and i = ref 0 in
-  while !i < String.length s do
-    let c = Char.code s.[!i] in
-    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
-    incr n
-  done;
-  !n
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
+open Adapter_support
 
 (* The instance under test: a private host on a port, so the [search_uri] case
    pins the path join against a URL an operator would actually write. *)
@@ -71,10 +51,7 @@ let sample =
   "unresponsive_engines": []
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 (* [n] minimal well-formed results, distinct so slicing is observable. *)
 let n_results n =
@@ -95,46 +72,26 @@ let n_results n =
    paging is observable through the [pageno] the adapter sent — and answers
    with what the case's handler decides. *)
 let dial_pages ?(snippet_chars = 500) ?cost_per_1k ?(instance = instance) ~handler () =
-  let sent = ref [] in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := request :: !sent;
-          Ok (handler request));
-    }
-  in
-  let provider = Searxng.make ?cost_per_1k ~snippet_chars ~endpoint:instance ~net () in
-  (provider, fun () -> List.rev !sent)
+  let net, sent = recording (fun request -> Ok (handler request)) in
+  (Searxng.make ?cost_per_1k ~snippet_chars ~endpoint:instance ~net (), sent)
 
-let answering ?(status = 200) ?(body = sample) () =
-  { Caps.Authority.Net.status; headers = []; body }
+let answering ?(status = 200) ?(body = sample) () = response ~status ~body
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
   dial_pages ~snippet_chars ?cost_per_1k ~handler:(fun _ -> answering ~status ~body ()) ()
 
-let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Searxng.make ~endpoint:instance ~net ()
+let refusal kind ~message = Searxng.make ~endpoint:instance ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
     ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, List.hd (sent ()))
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
+  let outcome = ok_search provider query in
+  (outcome, List.hd (sent ()))
 
 let search_pages_of ?(handler = fun _ -> answering ()) ?(query = query ()) () =
   let provider, sent = dial_pages ~handler () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
-
-let params (request : Caps.Authority.Net.request) = Uri.query request.uri
-
-let param (request : Caps.Authority.Net.request) name = Uri.get_query_param request.uri name
-
-let has_param request name = List.exists (fun (key, _) -> key = name) (params request)
+  let outcome = ok_search provider query in
+  (outcome, sent ())
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Searxng.parse ~snippet_chars data ~limit
 
@@ -159,7 +116,8 @@ let content_becomes_the_snippet () =
 
 let the_snippet_is_truncated () =
   let hits = parse ~snippet_chars:40 sample_json in
-  check_int "cut at the cap plus the ellipsis" 41 (chars (Option.get (List.hd hits).result.snippet))
+  check_int "cut at the cap plus the ellipsis" 41
+    (Utf8.count (Option.get (List.hd hits).result.snippet))
 
 let the_engine_and_infobox_metadata_are_dropped () =
   let hits = parse sample_json in

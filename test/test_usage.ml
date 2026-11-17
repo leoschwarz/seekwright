@@ -27,18 +27,7 @@ let ts secs = Usage.iso_utc_full secs
 
 (* [snapshot] is the wire contract: a [Yojson.Safe.t]. The helpers below are the
    loose typing the Python suite gets from [cast("dict[str, Any]")]. *)
-let get key = function
-  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
-  | _ -> `Null
-
-let items = function `List xs -> xs | _ -> []
 let keys json = match json with `Assoc fields -> List.map fst fields | _ -> []
-let str = function `String s -> s | `Null -> "" | v -> Yojson.Safe.to_string v
-let int = function
-  | `Int n -> n
-  | `Float f -> int_of_float f
-  | v -> A.failf "not a count: %s" (Yojson.Safe.to_string v)
-let is_null = ( = ) `Null
 
 let opt_money = function `Int n -> Some (float_of_int n) | `Float f -> Some f | _ -> None
 

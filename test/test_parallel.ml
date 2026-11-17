@@ -32,31 +32,12 @@ module Provider = Seekwright.Provider
 module Parallel = Seekwright_providers.Parallel
 module A = Alcotest
 open Test_support
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent anywhere real: the string a leak would carry. *)
-let test_key = "test-key"
+open Adapter_support
 
 (* The instant every date assertion below is true of: 2023-11-14T22:13:20Z, the
    same frozen clock the differential uses. *)
+
 let fixed_now = 1_700_000_000.
-
-let hd label = function x :: _ -> x | [] -> A.failf "%s was empty" label
-
-let nth label index xs =
-  match List.nth_opt xs index with Some x -> x | None -> A.failf "%s has no item %d" label index
 
 (* Copied from the oracle's suite, which captured it from the Search API: the
    [search_id] and [session_id] are the vendor's bookkeeping and never reach the
@@ -85,36 +66,16 @@ let sample =
   "session_id": "session_8a911eb27c7a4afaa20d0d9dc98d07c0"
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 let dial ?(status = 200) ?(body = sample) ?text_chars ?cost_per_1k ?mode () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let adapter =
-    Parallel.make ?cost_per_1k ?text_chars ?mode ~key:test_key ~now:(fun () -> fixed_now) ~net ()
-  in
-  (adapter, fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  ( Parallel.make ?cost_per_1k ?text_chars ?mode ~key:test_key ~now:(fun () -> fixed_now) ~net (),
+    sent )
 
 let search_of ?status ?body ?text_chars ?cost_per_1k ?mode ?(query = query ()) () =
   let adapter, sent = dial ?status ?body ?text_chars ?cost_per_1k ?mode () in
-  match Provider.search adapter query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
-
-let body_of (request : Caps.Authority.Net.request) =
-  match request.Caps.Authority.Net.body with
-  | Some text -> Yojson.Safe.from_string text
-  | None -> A.failf "the request carried no body"
+  drive adapter sent query
 
 let field name json = Provider.Json.string_field name json
 
@@ -379,26 +340,17 @@ let payment_and_rate_limit_are_one_quota_row () =
     [ 402; 429 ]
 
 let a_network_failure_does_not_echo_the_request () =
-  let net =
-    {
-      Provider.Net.request =
-        (fun _ ->
-          Error
-            (Caps.Error.make Caps.Error.Denied ~message:"connection refused to x-api-key: test-key"));
-    }
+  let adapter =
+    Parallel.make ~key:test_key
+      ~now:(fun () -> fixed_now)
+      ~net:(refusing Caps.Error.Denied ~message:"connection refused to x-api-key: test-key")
+      ()
   in
-  let adapter = Parallel.make ~key:test_key ~now:(fun () -> fixed_now) ~net () in
   match Provider.search adapter (query ()) with
   | Ok _ -> A.failf "a refused grant was accepted"
   | Error failure ->
       check_string "the house row" "network error" failure.message;
       excludes "no echo of the header that holds the key" test_key (Provider.render_error failure)
-
-let malformed_json_is_the_adapters_own_sentence () =
-  let adapter, _sent = dial ~body:"not json" () in
-  match Provider.search adapter (query ()) with
-  | Ok _ -> A.failf "a body that is not JSON was accepted"
-  | Error failure -> includes "named as a malformed response" "malformed JSON" failure.message
 
 let the_price_tracks_the_preset_not_the_count () =
   let adapter, _sent = dial () in
@@ -601,8 +553,6 @@ let () =
               payment_and_rate_limit_are_one_quota_row;
             test_case "a network failure does not echo the request" `Quick
               a_network_failure_does_not_echo_the_request;
-            test_case "malformed JSON is the adapter's own sentence" `Quick
-              malformed_json_is_the_adapters_own_sentence;
           ] );
         ( "cost and endpoints",
           [

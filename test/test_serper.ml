@@ -25,22 +25,7 @@ module Provider = Seekwright.Provider
 module Serper = Seekwright_providers.Serper
 module A = Alcotest
 open Test_support
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent to anything real: the string a leak would carry. *)
-let test_key = "test-key"
+open Adapter_support
 
 (* The [organic[]] payload: the fields the mapping reads, and the [credits]
    counter it never touches. *)
@@ -62,58 +47,23 @@ let sample =
   "credits": 1
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with
    a canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let provider = Serper.make ?cost_per_1k ~snippet_chars ~key:test_key ~net () in
-  (provider, fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  (Serper.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Serper.make ~key:test_key ~net ()
+let refusal kind ~message = Serper.make ~key:test_key ~net:(refusing kind ~message) ()
 
 (* The adapter, driven: [search_of ()] answers with the fixture and hands back
    both the outcome and the request that was dialed. *)
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
     ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
-
-(* The body the adapter wrote, decoded: the request is a JSON document, so the
-   shape assertions read a document rather than a query string. *)
-let body_of (request : Caps.Authority.Net.request) =
-  match request.Caps.Authority.Net.body with
-  | Some text -> Yojson.Safe.from_string text
-  | None -> A.failf "the request carried no body"
-
-let body_field name request =
-  match Provider.Json.field name (body_of request) with
-  | `String value -> Some value
-  | `Int value -> Some (string_of_int value)
-  | `Null -> None
-  | other -> Some (Yojson.Safe.to_string other)
-
-let has_body_field name request =
-  match Provider.Json.members (body_of request) with
-  | Some fields -> List.mem_assoc name fields
-  | None -> false
+  drive provider sent query
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Serper.parse ~snippet_chars data ~limit
 

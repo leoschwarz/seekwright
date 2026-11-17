@@ -23,35 +23,12 @@ module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module Deepseek = Seekwright_providers.Deepseek
 module A = Alcotest
+module Utf8 = Seekwright_text.Utf8
 open Test_support
+open Adapter_support
 
 (* 2026-10-21T00:00:00Z: the day the Python fold cases stand in. *)
 let clock () = 1_792_540_800.
-
-let utf8_count s =
-  let n = ref 0 and i = ref 0 in
-  while !i < String.length s do
-    let c = Char.code s.[!i] in
-    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
-    incr n
-  done;
-  !n
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent to anything real: the string a leak would carry. *)
-let test_key = "test-key"
 
 (* The documented payload: [results[]] with the preview pair, the rerank score
    and the RFC 3339 date, the second record answering [null] to the optional
@@ -86,48 +63,23 @@ let sample =
   ]
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(text_chars = 2000) ?cost_per_1k
     () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let provider =
-    Deepseek.make ?cost_per_1k ~snippet_chars ~text_chars ~key:test_key ~now:clock ~net ()
-  in
-  (provider, fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  (Deepseek.make ?cost_per_1k ~snippet_chars ~text_chars ~key:test_key ~now:clock ~net (), sent)
 
-let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Deepseek.make ~key:test_key ~now:clock ~net ()
+let refusal kind ~message = Deepseek.make ~key:test_key ~now:clock ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(text_chars = 2000)
     ?cost_per_1k ?(query = query ~text:"deepseek v4" ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ~text_chars ?cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
+  drive provider sent query
 
-(* The request body as Yojson, read the way the Python suite reads
-   [json.loads(request.content)]. *)
-let body (request : Caps.Authority.Net.request) =
-  match Yojson.Safe.from_string (Option.get request.Caps.Authority.Net.body) with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the request body is not an object"
+let body_field request name = Provider.Json.string_field name (body_of request)
 
-let body_field request name = Provider.Json.string_field name (body request)
-
-let body_has request name = Provider.Json.field name (body request) <> `Null
+let body_has request name = Provider.Json.field name (body_of request) <> `Null
 
 let parse ?(snippet_chars = 500) ?(text_chars = 2000) ?(limit = 10) data =
   Deepseek.parse ~snippet_chars ~text_chars data ~limit
@@ -160,12 +112,12 @@ let a_long_summary_is_cut_at_the_text_cap () =
   let long_summary = String.concat " " (List.init 600 (fun _ -> "word")) in
   let payload = results [ record [ ("summary", `String long_summary) ] ] in
   let hit = List.hd (parse ~text_chars:50 ~limit:1 payload) in
-  check_bool "the extract is inside the cap" true (utf8_count (Option.get hit.result.text) <= 50);
+  check_bool "the extract is inside the cap" true (Utf8.count (Option.get hit.result.text) <= 50);
   A.(check (option bool) "and says it was cut" (Some true) hit.result.text_truncated);
   (* The cap happened inside the adapter, so the length it discarded only
      reaches an operator through this log-only field ([search.cap]). *)
   check_opt_int "measured at the whole summary's length"
-    (Some (utf8_count long_summary))
+    (Some (Utf8.count long_summary))
     hit.uncapped_chars
 
 let a_record_with_no_summary_reports_no_length () =
@@ -269,7 +221,7 @@ let post_with_the_bearer_key () =
 let the_query_and_count_are_sent () =
   let _, request = search_of ~query:(query ~text:"deepseek v4" ~max_results:3 ()) () in
   check_opt_string "the query" (Some "deepseek v4") (body_field request "query");
-  check_string "count" "3" (Yojson.Safe.to_string (Provider.Json.field "count" (body request)))
+  check_string "count" "3" (Yojson.Safe.to_string (Provider.Json.field "count" (body_of request)))
 
 let count_is_clamped_to_the_documented_range () =
   (* [count] is documented as 1..50, so the request never asks for more: the
@@ -281,7 +233,7 @@ let count_is_clamped_to_the_documented_range () =
       check_string
         (Printf.sprintf "count at max_results=%d" max_results)
         (string_of_int Deepseek.max_results)
-        (Yojson.Safe.to_string (Provider.Json.field "count" (body request)));
+        (Yojson.Safe.to_string (Provider.Json.field "count" (body_of request)));
       check_int "the range top is fifty" 50 Deepseek.max_results;
       check_opt_string "no notice over the clamp" None outcome.notice)
     [ 51; 100 ]
@@ -417,7 +369,7 @@ let operators_come_off_when_the_folded_query_would_not_fit () =
       ()
   in
   check_opt_string "the bare query went out" (Some bare) (body_field request "query");
-  check_bool "and it fits" true (utf8_count bare <= Deepseek.max_query_chars);
+  check_bool "and it fits" true (Utf8.count bare <= Deepseek.max_query_chars);
   check_opt_string "every dropped bucket is named"
     (Some "cannot filter by domain or dates or language; that constraint was ignored")
     outcome.notice

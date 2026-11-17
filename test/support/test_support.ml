@@ -126,3 +126,32 @@ let check_opt_int = Alcotest.(check (option int))
 let number = Alcotest.float 1e-9
 let check_number = Alcotest.(check number)
 let check_opt_number = Alcotest.(check (option number))
+
+(* The fixture readers, shared for the same reason the check helpers are: the
+   snapshot, the journal line and the REST body all arrive as a
+   [Yojson.Safe.t], and the loose "dict" typing the assertions want is the same
+   eight lines in every suite that reads one. A reader that cannot read the
+   value fails with the text it was given. *)
+let get key = function
+  | `Assoc fields -> ( try List.assoc key fields with Not_found -> `Null)
+  | _ -> `Null
+
+let items = function `List xs -> xs | _ -> []
+let str = function `String s -> s | `Null -> "" | v -> Yojson.Safe.to_string v
+
+let int = function
+  | `Int n -> n
+  | `Float f -> int_of_float f
+  | v -> Alcotest.failf "not a count: %s" (Yojson.Safe.to_string v)
+
+let bool = function `Bool b -> b | v -> Alcotest.failf "not a flag: %s" (Yojson.Safe.to_string v)
+let is_null = ( = ) `Null
+
+(* The list accessors, so a missing record fails with its label rather than
+   [Stdlib.Failure("hd")]. *)
+let hd label = function x :: _ -> x | [] -> Alcotest.failf "%s was empty" label
+
+let nth label index xs =
+  match List.nth_opt xs index with
+  | Some x -> x
+  | None -> Alcotest.failf "%s has no item %d" label index

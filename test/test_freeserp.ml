@@ -15,31 +15,9 @@ module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module Freeserp = Seekwright_providers.Freeserp
 module A = Alcotest
+module Utf8 = Seekwright_text.Utf8
 open Test_support
-
-(* UTF-8 codepoints, so a cap assertion says the same thing the Python [len]
-   said: the cap counts characters, and an ellipsis is one of them. *)
-let chars s =
-  let n = ref 0 and i = ref 0 in
-  while !i < String.length s do
-    let c = Char.code s.[!i] in
-    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
-    incr n
-  done;
-  !n
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
+open Adapter_support
 
 (* The clock [recency] is measured against, pinned so the date the adapter
    sends is a fact this suite asserts rather than one it recomputes: 2023-11-14
@@ -101,40 +79,19 @@ let sample =
   }
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with
    a canned response — the analogue of the Python suite's
    [httpx.MockTransport]. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.) () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let provider = Freeserp.make ~cost_per_1k ~snippet_chars ~now ~net () in
-  (provider, fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  (Freeserp.make ~cost_per_1k ~snippet_chars ~now ~net (), sent)
 
 (* A Net that answers with a transport failure instead of a response: the
    grant refusing the endpoint, the name not resolving, the bound expiring. *)
-let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Freeserp.make ~now ~net ()
-
-(* [Policy_net] declares [body] and [headers] on both its request and its
-   response record, so a caller has to say which record it means. *)
-let params (request : Caps.Authority.Net.request) = Uri.query request.uri
-let param (request : Caps.Authority.Net.request) name = Uri.get_query_param request.uri name
-
-let has_param request name = List.exists (fun (key, _) -> key = name) (params request)
+let refusal kind ~message = Freeserp.make ~now ~net:(refusing kind ~message) ()
 
 let record fields =
   `Assoc (("title", `String "t") :: ("url", `String "https://example.com/a") :: fields)
@@ -152,9 +109,7 @@ let hits_json hits =
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.)
     ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ~cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
+  drive provider sent query
 
 let engine_fallback_refusal body query =
   let provider, _ = dial ~body () in
@@ -186,7 +141,7 @@ let a_serp_record_fills_snippet_and_never_text () =
 let the_snippet_cap_clips_and_measures () =
   let hits = parse ~snippet_chars:40 sample_json in
   let snippet = Option.get (List.hd hits).result.snippet in
-  check_int "cut at the cap plus the ellipsis" 41 (chars snippet);
+  check_int "cut at the cap plus the ellipsis" 41 (Utf8.count snippet);
   check_string "the cut is a plain one" "In this Python asyncio tutorial, we will…" snippet;
   (* The length the cap received, which is what makes [max_snippet_chars]
      measurable from traffic: 132 characters upstream, 41 shipped. *)
@@ -494,23 +449,6 @@ let a_network_failure_does_not_echo_the_request () =
       check_bool "nothing about the request rides along" false
         (contains ~haystack:(Provider.render_error failure) ~needle:"secret-marker")
 
-let the_grants_bound_is_the_timeout_row () =
-  let provider = refusal Caps.Error.Timeout ~message:"operation bound of 10s exceeded" in
-  match Provider.search provider (query ()) with
-  | Ok _ -> A.failf "a timed-out grant was accepted"
-  | Error failure ->
-      check_string "the timeout row" "request timed out" failure.message;
-      check_bool "transient, so the walk may retry" true failure.retryable
-
-let a_body_that_is_not_json_is_malformed () =
-  List.iter
-    (fun (what, body) ->
-      let provider, _ = dial ~body () in
-      match Provider.search provider (query ()) with
-      | Ok _ -> A.failf "%s was accepted as a response" what
-      | Error failure -> check_string what "malformed JSON response" failure.message)
-    [ ("an HTML page", "<html>nope</html>"); ("an empty body", ""); ("an array", "[]") ]
-
 let it_cannot_bill () =
   let provider, _ = dial () in
   check_number "the reporting figure" 0. (Provider.cost_per_1k provider);
@@ -610,10 +548,6 @@ let () =
               the_status_row_carries_only_the_code;
             test_case "a network failure does not echo the request" `Quick
               a_network_failure_does_not_echo_the_request;
-            test_case "the grant's bound is the timeout row" `Quick
-              the_grants_bound_is_the_timeout_row;
-            test_case "a body that is not JSON is malformed" `Quick
-              a_body_that_is_not_json_is_malformed;
           ] );
         ( "cost and endpoint",
           [

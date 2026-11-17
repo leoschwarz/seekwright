@@ -31,29 +31,7 @@ module Provider = Seekwright.Provider
 module Linkup = Seekwright_providers.Linkup
 module A = Alcotest
 open Test_support
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent to anything real: the string a leak would carry. *)
-let test_key = "test-key"
-
-(* The list accessors, so a missing record fails with its label rather than
-   [Stdlib.Failure("hd")]. *)
-let hd label = function x :: _ -> x | [] -> A.failf "%s was empty" label
-
-let nth label index xs =
-  match List.nth_opt xs index with Some x -> x | None -> A.failf "%s has no item %d" label index
+open Adapter_support
 
 (* The instant every date assertion below is true of: 2023-11-14T22:13:20Z. The
    oracle reads the wall clock, so a ported date has to name its own. *)
@@ -79,48 +57,26 @@ let sample =
   ]
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response. Every request-shape case is
    [let provider, sent = dial () in …; let request = sent ()]. *)
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?(depth = "standard")
     ?(output = Linkup.Sourced_answer) () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let provider =
-    Linkup.make ?cost_per_1k ~snippet_chars ~depth ~output ~key:test_key
+  let net, sent = answered ~status ~body in
+  ( Linkup.make ?cost_per_1k ~snippet_chars ~depth ~output ~key:test_key
       ~now:(fun () -> fixed_now)
-      ~net ()
-  in
-  (provider, fun () -> Option.get !sent)
+      ~net (),
+    sent )
 
 let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Linkup.make ~key:test_key ~now:(fun () -> fixed_now) ~net ()
+  Linkup.make ~key:test_key ~now:(fun () -> fixed_now) ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k ?depth ?output
     ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k ?depth ?output () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
-
-(* The body the adapter wrote, decoded. *)
-let body_of (request : Caps.Authority.Net.request) =
-  match request.Caps.Authority.Net.body with
-  | Some text -> Yojson.Safe.from_string text
-  | None -> A.failf "the request carried no body"
+  drive provider sent query
 
 let body_field name request =
   match Provider.Json.field name (body_of request) with

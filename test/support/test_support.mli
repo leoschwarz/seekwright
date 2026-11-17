@@ -78,3 +78,31 @@ val number : float Alcotest.testable
 
 val check_number : string -> float -> float -> unit
 val check_opt_number : string -> float option -> float option -> unit
+
+val get : string -> Yojson.Safe.t -> Yojson.Safe.t
+(** [get key json] is [key]'s value in an object, or [ `Null] for a field that is absent or for a
+    json that is not an object. *)
+
+val items : Yojson.Safe.t -> Yojson.Safe.t list
+(** [items json] is the elements of an array, and [[]] for anything else. *)
+
+val str : Yojson.Safe.t -> string
+(** [str json] is a string field as text: [ `Null] reads as the empty string and any other value
+    renders, so a shape-drift case can still name it. *)
+
+val int : Yojson.Safe.t -> int
+(** [int json] is a count. A float is accepted because a JSON writer may render [3] as [3.0];
+    anything else fails the case with the text it was given. *)
+
+val bool : Yojson.Safe.t -> bool
+(** [bool json] is a flag, or a failed case. *)
+
+val is_null : Yojson.Safe.t -> bool
+(** [is_null json] is true of [ `Null] — the question a "the field was omitted" assertion asks. *)
+
+val hd : string -> 'a list -> 'a
+(** [hd label xs] is the first of [xs], failing with [label] rather than with
+    [Stdlib.Failure("hd")]. *)
+
+val nth : string -> int -> 'a list -> 'a
+(** [nth label index xs] is the [index]-th of [xs], failing with [label]. *)

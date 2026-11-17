@@ -32,22 +32,7 @@ module Provider = Seekwright.Provider
 module Tavily = Seekwright_providers.Tavily
 module A = Alcotest
 open Test_support
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent to anything real: the string a leak would carry. *)
-let test_key = "test-key"
+open Adapter_support
 
 (* The documented payload: [answer] prose, [results[]] with an inline extract,
    the vendor's [response_time] envelope, and the [usage] block whose credits this
@@ -73,36 +58,20 @@ let sample =
   "response_time": 1.2
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 (* A {!Seekwright.Provider.Net.t} that records what was dialed and answers with a
    canned response — the position [httpx.MockTransport] holds in Python. *)
 let dial ?(status = 200) ?(body = sample) ?(text_chars = 2000) ?cost_per_1k () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let provider = Tavily.make ?cost_per_1k ~text_chars ~key:test_key ~net () in
-  (provider, fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  (Tavily.make ?cost_per_1k ~text_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Tavily.make ~key:test_key ~net ()
+let refusal kind ~message = Tavily.make ~key:test_key ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(text_chars = 2000) ?cost_per_1k ?(query = query ())
     () =
   let provider, sent = dial ~status ~body ~text_chars ?cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
+  drive provider sent query
 
 let check_opt_bool label expected actual = A.(check (option bool)) label expected actual
 
@@ -110,13 +79,8 @@ let check_opt_bool label expected actual = A.(check (option bool)) label expecte
    [search.cap] figure the adapter reports can be asserted as a number. *)
 let long_content = String.concat " " (List.init 30 (fun _ -> "word"))
 
-(* The body the adapter wrote, decoded: the request is a JSON document, so the
-   shape assertions read a document rather than a query string. *)
-let body_of (request : Caps.Authority.Net.request) =
-  match request.Caps.Authority.Net.body with
-  | Some text -> Yojson.Safe.from_string text
-  | None -> A.failf "the request carried no body"
-
+(* The request is a JSON document, so the shape assertions read a document rather
+   than a query string. *)
 let body_field name request =
   match Provider.Json.field name (body_of request) with
   | `String value -> Some value

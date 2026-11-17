@@ -16,32 +16,9 @@ module Model = Seekwright.Model
 module Provider = Seekwright.Provider
 module Scrappa = Seekwright_providers.Scrappa
 module A = Alcotest
+module Utf8 = Seekwright_text.Utf8
 open Test_support
-
-let chars s =
-  let n = ref 0 and i = ref 0 in
-  while !i < String.length s do
-    let c = Char.code s.[!i] in
-    i := !i + if c < 0x80 then 1 else if c < 0xe0 then 2 else if c < 0xf0 then 3 else 4;
-    incr n
-  done;
-  !n
-
-let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_domains = []) ?country
-    ?language ?recency ?safe_search () : Model.search_query =
-  {
-    Model.query = text;
-    max_results;
-    include_domains;
-    exclude_domains;
-    country;
-    language;
-    recency;
-    safe_search;
-  }
-
-(* Never sent to anything real: the string a leak would carry. *)
-let test_key = "test-key"
+open Adapter_support
 
 (* The search-light payload: [organic_results[]] with the four fields the
    mapping reads, and the [search_information] and [pagination] blocks it never
@@ -66,42 +43,18 @@ let sample =
   "pagination": {"current": 1}
 }|}
 
-let sample_json =
-  match Yojson.Safe.from_string sample with
-  | `Assoc _ as json -> json
-  | _ -> A.failf "the fixture is not an object"
+let sample_json = json_object sample
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k () =
-  let sent = ref None in
-  let net =
-    {
-      Provider.Net.request =
-        (fun request ->
-          sent := Some request;
-          Ok { Caps.Authority.Net.status; headers = []; body });
-    }
-  in
-  let provider = Scrappa.make ?cost_per_1k ~snippet_chars ~key:test_key ~net () in
-  (provider, fun () -> Option.get !sent)
+  let net, sent = answered ~status ~body in
+  (Scrappa.make ?cost_per_1k ~snippet_chars ~key:test_key ~net (), sent)
 
-let refusal kind ~message =
-  let net = { Provider.Net.request = (fun _ -> Error (Caps.Error.make kind ~message)) } in
-  Scrappa.make ~key:test_key ~net ()
+let refusal kind ~message = Scrappa.make ~key:test_key ~net:(refusing kind ~message) ()
 
 let search_of ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?cost_per_1k
     ?(query = query ()) () =
   let provider, sent = dial ~status ~body ~snippet_chars ?cost_per_1k () in
-  match Provider.search provider query with
-  | Ok outcome -> (outcome, sent ())
-  | Error failure -> A.failf "the search failed: %s" (Provider.render_error failure)
-
-(* The request's query string, read the way the Python suite reads
-   [request.url.params]. *)
-let params (request : Caps.Authority.Net.request) = Uri.query request.uri
-
-let param (request : Caps.Authority.Net.request) name = Uri.get_query_param request.uri name
-
-let has_param request name = List.exists (fun (key, _) -> key = name) (params request)
+  drive provider sent query
 
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Scrappa.parse ~snippet_chars data ~limit
 
@@ -122,7 +75,7 @@ let the_limit_is_honoured () = check_int "one of two" 1 (List.length (parse ~lim
 let the_snippet_is_truncated () =
   let hits = parse ~snippet_chars:40 sample_json in
   let snippet = Option.get (List.hd hits).result.snippet in
-  check_int "cut at the cap plus the ellipsis" 41 (chars snippet);
+  check_int "cut at the cap plus the ellipsis" 41 (Utf8.count snippet);
   check_opt_int "the pre-cap length" (Some 140) (List.hd hits).uncapped_chars
 
 let the_length_the_cap_discarded_is_recorded () =
@@ -131,7 +84,8 @@ let the_length_the_cap_discarded_is_recorded () =
   let hit = List.hd hits in
   let uncapped = Option.get hit.uncapped_chars in
   check_int "the whole snippet was longer than the cap" 140 uncapped;
-  check_bool "and longer than what shipped" true (uncapped > chars (Option.get hit.result.snippet));
+  check_bool "and longer than what shipped" true
+    (uncapped > Utf8.count (Option.get hit.result.snippet));
   (* Private, so a caller can never see it: the response carries the clipped
      snippet, never a measurement of the clip. *)
   excludes "absent from the wire model" "uncapped"
@@ -142,7 +96,7 @@ let a_short_snippet_reports_its_own_length () =
   let hit = List.nth (parse sample_json) 1 in
   check_bool "the snippet is there" true (hit.result.snippet <> None);
   check_opt_int "measured at its own length"
-    (Some (chars (Option.get hit.result.snippet)))
+    (Some (Utf8.count (Option.get hit.result.snippet)))
     hit.uncapped_chars
 
 let no_published_date_is_invented () =
