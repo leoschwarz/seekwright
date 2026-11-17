@@ -1,5 +1,5 @@
 module E = Seekwright_fetch.Extractor
-module S = Seekwright_fetch.Extract_stdlib
+let extract = Seekwright_fetch.Extract_stdlib.backend.E.extract
 
 type case = {
   id : string;
@@ -145,7 +145,7 @@ let searchable text title = text ^ "\n" ^ Option.value ~default:"" title
 type outcome = Text of { text : string; title : string option; chars : int } | Refusal of string
 
 let run (c : case) =
-  match S.extract c.body c.content_type with
+  match extract c.body c.content_type with
   | r -> Text { text = r.E.text; title = r.E.title; chars = r.E.total_chars }
   | exception E.Extraction_failed msg -> Refusal msg
 

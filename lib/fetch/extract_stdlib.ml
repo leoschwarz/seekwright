@@ -714,3 +714,5 @@ let extract (body : string) (content_type : string option) : E.extract_result =
        refuses one before the body is downloaded, and reaching here means a
        caller built the backend by hand. *)
     raise (E.Extraction_failed (if kind = "" then "unknown content type" else kind))
+
+let backend : E.backend = E.{ name; supported_types; extract }

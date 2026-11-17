@@ -1,8 +1,8 @@
 (* Extraction identity check: digest of backend output for each corpus case. *)
 
-module S = Seekwright_fetch.Extract_stdlib
 module E = Seekwright_fetch.Extractor
 module M = Extract_metrics
+let extract = Seekwright_fetch.Extract_stdlib.backend.E.extract
 
 let digest s = Digest.to_hex (Digest.string s)
 
@@ -31,15 +31,15 @@ let phases path =
   let html = Some "text/html; charset=utf-8" in
   Printf.printf "bytes=%d\n" (String.length body);
   time ~name:"decode only" (fun () -> String.length (E.decode body html));
-  time ~name:"extract as plain text" (fun () -> chars_of (S.extract body plain));
+  time ~name:"extract as plain text" (fun () -> chars_of (extract body plain));
   time ~name:"normalise only (decoded, plain)" (fun () ->
       chars_of (E.normalise (E.decode body html) None));
-  time ~name:"extract as html" (fun () -> chars_of (S.extract body html))
+  time ~name:"extract as html" (fun () -> chars_of (extract body html))
 
 let digests dir =
   List.iter
     (fun (c : M.case) ->
-      match S.extract c.body c.content_type with
+      match extract c.body c.content_type with
       | r ->
           Printf.printf "%-26s text=%s chars=%d title=%s\n" c.M.id (digest r.E.text) r.E.total_chars
             (match r.E.title with Some t -> digest t | None -> "-")
@@ -62,7 +62,7 @@ let check_parity dir file =
     let lines = ref [] in
     List.iter
       (fun (c : M.case) ->
-        match S.extract c.body c.content_type with
+        match extract c.body c.content_type with
         | r ->
             lines :=
               Printf.sprintf "%-26s text=%s chars=%d title=%s" c.M.id (digest r.E.text)

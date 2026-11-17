@@ -1,5 +1,4 @@
-(** The standard library extraction backend. *)
+(** The standard library extraction backend: the one this build can construct, handed to the fetcher
+    as the record the fetcher holds. *)
 
-val name : string
-val supported_types : string list
-val extract : string -> string option -> Extractor.extract_result
+val backend : Extractor.backend

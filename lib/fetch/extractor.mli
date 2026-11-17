@@ -1,8 +1,8 @@
 (** The extraction-backend contract and the plumbing every backend shares.
 
-    A backend implements {!S}: a [name], the media types it can read, and an [extract] returning an
-    {!extract_result}. {!backend} is the first-class form the fetcher holds; {!of_module} packs a
-    {!S} module into one. *)
+    A backend is a {!backend} record: a [name], the media types its [extract] can read, and the
+    [extract] itself. The fetcher holds that record and receives it injected — nothing in this
+    library names a backend, so a second one is a value, not an import. *)
 
 type extract_result = {
   text : string;
@@ -13,19 +13,11 @@ type extract_result = {
 
 exception Extraction_failed of string
 
-module type S = sig
-  val name : string
-  val supported_types : string list
-  val extract : string -> string option -> extract_result
-end
-
 type backend = {
   name : string;
   supported_types : string list;
   extract : string -> string option -> extract_result;
 }
-
-val of_module : (module S) -> backend
 
 val known_extractors : string list
 (** Every fetch extraction backend this build knows how to construct, by name. Config validation
@@ -49,10 +41,6 @@ val json_types : string list
 
 val table_types : string list
 (** [Tabledoc.table_types]. *)
-
-val supported_types : string list
-(** The union every Python backend with its extra installed claimed — kept for the derived-phrase
-    tests, not for dispatch: the gate reads a backend's own [supported_types]. *)
 
 val media_type : string option -> string
 (** The bare media type, lowercased, with parameters stripped. *)

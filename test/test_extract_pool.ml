@@ -114,9 +114,9 @@ let open_fds () = Array.length (Sys.readdir "/proc/self/fd")
 (* A real extraction, answered across the socket, is the answer inline gives —
    and the bytes of the page crossed as data, not as a shared value. *)
 let test_answer_matches_inline () =
-  let inline = E.of_module (module S) in
+  let inline = S.backend in
   with_pool
-    (E.of_module (module S))
+    S.backend
     (fun _env pool ->
       match K.extract pool ~body:html ~content_type:(Some "text/html") with
       | Error e -> A.failf "extract: %s" (render e)
@@ -234,7 +234,7 @@ let test_backend_failure_is_a_value () =
   let backend =
     {
       E.name = "failing";
-      supported_types = E.supported_types;
+      supported_types = E.html_types;
       extract = (fun _body _content_type -> raise (E.Extraction_failed "the body cannot be read"));
     }
   in
@@ -251,7 +251,7 @@ let test_oversized_result_is_a_worker_failure () =
   let backend =
     {
       E.name = "voluble";
-      supported_types = E.supported_types;
+      supported_types = E.html_types;
       extract =
         (fun _body _content_type ->
           {
@@ -310,7 +310,7 @@ let test_make_refuses_an_empty_pool () =
       match
         K.make ~workers:0 ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env)
           ~dir:(Filename.get_temp_dir_name ())
-          ~extractor:(E.of_module (module S))
+          ~extractor:S.backend
           ()
       with
       | Error message -> A.(check bool "refusal names the cause" true (String.length message > 0))

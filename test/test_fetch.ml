@@ -10,7 +10,10 @@ module F = Seekwright_fetch.Fetcher
 module E = Seekwright_fetch.Extractor
 module J = Seekwright_fetch.Jsondoc
 module T = Seekwright_fetch.Tabledoc
-module S = Seekwright_fetch.Extract_stdlib
+let stdlib = Seekwright_fetch.Extract_stdlib.backend
+let extract = stdlib.E.extract
+let stdlib_name = stdlib.E.name
+let stdlib_types = stdlib.E.supported_types
 module A = Alcotest
 open Test_support
 
@@ -222,9 +225,9 @@ let test_is_supported_reads_the_json_suffix () =
 
 let test_describe_types_renders_the_families_in_order () =
   A.check A.string "full set" "HTML, plain text, JSON, CSV and PDF"
-    (E.describe_types E.supported_types);
+    (E.describe_types (E.html_types @ E.pdf_types @ E.text_types @ E.json_types @ E.table_types));
   A.check A.string "stdlib set" "HTML, plain text, JSON and CSV"
-    (E.describe_types S.supported_types);
+    (E.describe_types stdlib_types);
   A.check A.string "single family" "HTML" (E.describe_types [ "text/html" ]);
   A.check A.string "unknown type appended" "HTML and application/x-thing"
     (E.describe_types [ "application/x-thing"; "text/html" ]);
@@ -328,12 +331,12 @@ let article
      </body></html>"
 
 let test_it_names_itself_and_claims_no_pdf () =
-  A.check A.string "name" "stdlib" S.name;
-  A.check A.bool "no pdf" false (E.is_supported S.supported_types "application/pdf");
-  A.check A.string "phrase" "HTML, plain text, JSON and CSV" (E.describe_types S.supported_types)
+  A.check A.string "name" "stdlib" stdlib_name;
+  A.check A.bool "no pdf" false (E.is_supported stdlib_types "application/pdf");
+  A.check A.string "phrase" "HTML, plain text, JSON and CSV" (E.describe_types stdlib_types)
 
 let test_the_article_survives_and_its_chrome_does_not () =
-  let r = S.extract (article ()) (Some "text/html") in
+  let r = extract (article ()) (Some "text/html") in
   A.check A.bool "content kept" true
     (contains ~haystack:r.E.text ~needle:"real content of the page");
   A.check A.bool "nav dropped" false (contains ~haystack:r.E.text ~needle:"Home About Contact");
@@ -346,21 +349,21 @@ let test_the_article_survives_and_its_chrome_does_not () =
 
 let test_a_list_reads_as_items () =
   let body = "<html><body><ul><li>One</li><li>Two</li></ul></body></html>" in
-  A.check A.string "items" "- One\n- Two" (S.extract body (Some "text/html")).E.text
+  A.check A.string "items" "- One\n- Two" (extract body (Some "text/html")).E.text
 
 let test_an_empty_list_item_earns_no_bullet () =
   let body = "<html><body><ul><li><span></span></li><li>Real item</li></ul></body></html>" in
-  A.check A.string "no bullet" "- Real item" (S.extract body (Some "text/html")).E.text
+  A.check A.string "no bullet" "- Real item" (extract body (Some "text/html")).E.text
 
 let test_a_table_keeps_its_cells_apart () =
   let body = "<html><body><table><tr><td>one</td><td>two</td></tr></table></body></html>" in
-  A.check A.string "cells apart" "one two" (S.extract body (Some "text/html")).E.text
+  A.check A.string "cells apart" "one two" (extract body (Some "text/html")).E.text
 
 let test_a_row_begins_at_its_first_cell () =
   let body =
     "<html><body><table><tr><th>H1</th><th>H2</th></tr><tr><td>a</td><td>b</td></tr></table></body></html>"
   in
-  A.check A.string "row break" "H1 H2\n\na b" (S.extract body (Some "text/html")).E.text
+  A.check A.string "row break" "H1 H2\n\na b" (extract body (Some "text/html")).E.text
 
 let test_an_icon_sprite_does_not_rename_the_page () =
   let body =
@@ -368,7 +371,7 @@ let test_an_icon_sprite_does_not_rename_the_page () =
     ^ "<svg><symbol id='a'><title>Icon A</title><svg><path/></svg></symbol>"
     ^ "<symbol id='b'><title>Icon B</title></svg><p>body text</p></body></html>"
   in
-  let r = S.extract body (Some "text/html") in
+  let r = extract body (Some "text/html") in
   A.check (A.option A.string) "title" (Some "Real Page Title") r.E.title;
   A.check A.bool "icon A dropped" false (contains ~haystack:r.E.text ~needle:"Icon A");
   A.check A.bool "icon B dropped" false (contains ~haystack:r.E.text ~needle:"Icon B")
@@ -378,71 +381,71 @@ let test_a_title_inside_a_graphic_is_never_the_page_name () =
     "<html><body><svg><g><svg><title>Icon A</title></svg><title>Icon \
      B</title></svg><p>body</p></body></html>"
   in
-  A.check (A.option A.string) "no title" None (S.extract body (Some "text/html")).E.title
+  A.check (A.option A.string) "no title" None (extract body (Some "text/html")).E.title
 
 let test_both_ways_of_writing_a_break_mean_one_line () =
   let body = "<html><body><p>one<br/>two<br>three</p></body></html>" in
-  A.check A.string "one line each" "one\ntwo\nthree" (S.extract body (Some "text/html")).E.text
+  A.check A.string "one line each" "one\ntwo\nthree" (extract body (Some "text/html")).E.text
 
 let test_the_text_inside_a_form_goes_with_the_form () =
   let body = "<html><body><form><p>inside form text</p></form><p>outside</p></body></html>" in
-  A.check A.string "outside only" "outside" (S.extract body (Some "text/html")).E.text
+  A.check A.string "outside only" "outside" (extract body (Some "text/html")).E.text
 
 let test_a_block_left_open_does_not_swallow_the_rest_of_the_page () =
   let body = "<html><body><nav><div>Menu</nav><p>The article body.</p></body></html>" in
-  let r = S.extract body (Some "text/html") in
+  let r = extract body (Some "text/html") in
   A.check A.bool "article kept" true (contains ~haystack:r.E.text ~needle:"The article body.");
   A.check A.bool "menu dropped" false (contains ~haystack:r.E.text ~needle:"Menu")
 
 let test_missing_content_type_is_sniffed () =
-  let r = S.extract (article ()) None in
+  let r = extract (article ()) None in
   A.check A.bool "sniffed as html" true (contains ~haystack:r.E.text ~needle:"real content")
 
 let test_javascript_shell_yields_empty_text_not_an_error () =
   let shell = "<!DOCTYPE html><html><body><div id='root'></div></body></html>" in
-  A.check A.string "empty" "" (S.extract shell (Some "text/html")).E.text
+  A.check A.string "empty" "" (extract shell (Some "text/html")).E.text
 
 let test_a_pdf_is_a_refusal_naming_the_type () =
-  match S.extract "%PDF-1.4\n" (Some "application/pdf") with
+  match extract "%PDF-1.4\n" (Some "application/pdf") with
   | exception E.Extraction_failed msg ->
       A.check A.bool "names the type" true (contains ~haystack:msg ~needle:"application/pdf")
   | _ -> A.fail "expected Extraction_failed"
 
 let test_untagged_markup_is_read_as_text_not_as_a_failure () =
   let body = "<html><body><p>An unclosed paragraph<p>And another" in
-  let r = S.extract body (Some "text/html") in
+  let r = extract body (Some "text/html") in
   A.check A.bool "first" true (contains ~haystack:r.E.text ~needle:"An unclosed paragraph");
   A.check A.bool "second" true (contains ~haystack:r.E.text ~needle:"And another")
 
 let test_plain_text_passes_through () =
-  A.check A.string "plain" "hello world" (S.extract "hello world" (Some "text/plain")).E.text
+  A.check A.string "plain" "hello world" (extract "hello world" (Some "text/plain")).E.text
 
 let test_plain_text_whitespace_runs_are_collapsed () =
-  A.check A.string "collapsed" "a b c" (S.extract "a   b\t\tc" (Some "text/plain")).E.text
+  A.check A.string "collapsed" "a b c" (extract "a   b\t\tc" (Some "text/plain")).E.text
 
 let test_unextractable_types_raise () =
   List.iter
     (fun ctype ->
-      match S.extract "body" (Some ctype) with
+      match extract "body" (Some ctype) with
       | exception E.Extraction_failed _ -> ()
       | _ -> A.failf "expected Extraction_failed for %s" ctype)
     [ "application/pdf"; "image/png"; "application/octet-stream" ]
 
 let test_a_json_body_becomes_structure_a_path_can_address () =
   let r =
-    S.extract "{\"title\": \"A page\", \"lines\": [\"one\", \"two\"]}" (Some "application/json")
+    extract "{\"title\": \"A page\", \"lines\": [\"one\", \"two\"]}" (Some "application/json")
   in
   A.check A.bool "addressable" true r.E.path_addressable;
   A.check A.bool "path printed" true (contains ~haystack:r.E.text ~needle:"$.lines[0]")
 
 let test_a_body_that_is_not_one_json_document_comes_back_as_its_text () =
   let body = "{\"a\": 1}\n{\"a\": 2}\n" in
-  let r = S.extract body (Some "application/jsonl") in
+  let r = extract body (Some "application/jsonl") in
   A.check A.bool "not addressable" false r.E.path_addressable;
   A.check A.string "the bytes are the answer" body r.E.text
 
 let test_a_csv_document_arrives_as_row_paths () =
-  let r = S.extract "id,name\n1,Ada\n" (Some "text/csv") in
+  let r = extract "id,name\n1,Ada\n" (Some "text/csv") in
   A.check A.bool "addressable" true r.E.path_addressable;
   A.check A.bool "row path" true (contains ~haystack:r.E.text ~needle:"$.rows[0].name")
 

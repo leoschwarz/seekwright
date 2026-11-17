@@ -34,7 +34,7 @@ module Config = Seekwright.Config
 module Engine = Seekwright.Engine
 module Factory = Seekwright_factory.Factory
 
-let extractor = E.of_module (module S)
+let extractor = S.backend
 
 let marker = "PRIVATE-FIXTURE-MARKER"
 

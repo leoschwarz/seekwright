@@ -9,22 +9,11 @@ type extract_result = {
 
 exception Extraction_failed of string
 
-module type S = sig
-  val name : string
-  val supported_types : string list
-  val extract : string -> string option -> extract_result
-end
-
-(** The first-class form the fetcher holds, one field per {!S} member. *)
-
 type backend = {
   name : string;
   supported_types : string list;
   extract : string -> string option -> extract_result;
 }
-
-let of_module (module E : S) : backend =
-  { name = E.name; supported_types = E.supported_types; extract = E.extract }
 
 let ascii_lower (s : string) : string =
   String.map (fun c -> if c >= 'A' && c <= 'Z' then Char.chr (Char.code c + 32) else c) s
@@ -34,7 +23,6 @@ let pdf_types = [ "application/pdf"; "application/x-pdf" ]
 let text_types = [ "text/plain"; "text/markdown"; "text/xml"; "application/xml" ]
 let json_types = Jsondoc.json_document_types @ Jsondoc.jsonl_types
 let table_types = Tabledoc.table_types
-let supported_types = html_types @ pdf_types @ text_types @ json_types @ table_types
 let known_extractors = [ "stdlib" ]
 
 let member kind types = List.mem kind types

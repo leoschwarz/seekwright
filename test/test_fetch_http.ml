@@ -23,7 +23,7 @@ module Error = Caps.Error
 module A = Alcotest
 open Test_support
 
-let extractor = E.of_module (module S)
+let extractor = S.backend
 
 let html_body =
   "<!DOCTYPE html><html><head><title>Doc</title></head><body><article><p>"
