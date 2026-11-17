@@ -262,8 +262,8 @@ let exclude_is_sent_and_its_ignoring_is_noticed () =
   let policy = Option.get (nested [ "advanced_settings"; "source_policy" ] (body_of request)) in
   check_strings "the filter still went out" [ "spam.example" ]
     (Option.get (strings_of [ "exclude_domains" ] policy));
-  check_string "and the drop is named by the field the vendor ignores"
-    "parallel ignores exclude_domains while include_domains is set; that constraint was ignored"
+  check_string "and the drop is named in the shared report's words, naming both fields"
+    "cannot filter by exclude_domains while include_domains is set; that constraint was ignored"
     (Option.get outcome.notice)
 
 let language_is_noticed_while_country_is_honoured () =

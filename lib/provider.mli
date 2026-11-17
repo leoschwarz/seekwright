@@ -78,21 +78,27 @@ val ignored_constraints :
   geo:bool ->
   language:bool option ->
   safety:bool ->
+  drops_exclude_domains:bool ->
   string option
-(** [ignored_constraints q ~domains ~dates ~geo ~safety] names in one sentence the filters in [q]
-    that this adapter cannot send, or [None] when it can send them all. Nothing filters an incapable
-    provider out before dispatch, so this sentence — which goes in [notice] — is the only thing
-    between a caller that asked for a filter and the belief that it got one.
+(** [ignored_constraints q ~domains ~dates ~geo ~safety ~drops_exclude_domains] names in one
+    sentence the filters in [q] that this adapter cannot send, or [None] when it can send them all.
+    Nothing filters an incapable provider out before dispatch, so this sentence — which goes in
+    [notice] — is the only thing between a caller that asked for a filter and the belief that it got
+    one.
 
-    [domains], [dates], [geo] and [safety] are mandatory, so a new constraint is answered at every
-    adapter rather than defaulting to "honoured". [language] is [None] for the Python default: it
-    keeps the geo bucket joined as [country/language], which is right for an adapter with no geo
-    surface at all; [Some] splits the bucket so the sentence names only what really dropped. (Python
-    spells that default as an optional keyword; OCaml cannot erase an optional argument whose result
-    is itself an option, so "not answered" is written [~language:None] — the same visibility the
-    four mandatory buckets ask for.) [safety] fires whenever [safe_search] is set at all —
-    [Some false] is a request too, and a backend with no such parameter ignores it as completely as
-    it ignores [Some true]. *)
+    [domains], [dates], [geo], [safety] and [drops_exclude_domains] are mandatory, so a new
+    constraint is answered at every adapter rather than defaulting to "honoured". [language] is
+    [None] for the Python default: it keeps the geo bucket joined as [country/language], which is
+    right for an adapter with no geo surface at all; [Some] splits the bucket so the sentence names
+    only what really dropped. (Python spells that default as an optional keyword; OCaml cannot erase
+    an optional argument whose result is itself an option, so "not answered" is written
+    [~language:None] — the same visibility the mandatory buckets ask for.) [safety] fires whenever
+    [safe_search] is set at all — [Some false] is a request too, and a backend with no such
+    parameter ignores it as completely as it ignores [Some true]. [drops_exclude_domains] is a
+    vendor rule rather than this server's limit: some backends apply [include_domains] and quietly
+    drop [exclude_domains] when a caller sets both. The bucket then names the pair,
+    [exclude_domains while include_domains is set], because naming one field would describe a filter
+    that did arrive. *)
 
 val site_filtered_query : search_query -> string
 (** Folds the domain filters into the query string as [site:] / [-site:] operators, for the

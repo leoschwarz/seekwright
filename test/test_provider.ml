@@ -28,7 +28,7 @@ let query ?(text = "q") ?(max_results = 5) ?(include_domains = []) ?(exclude_dom
 (* An adapter that honours everything, as a call site writes it. *)
 let honoured q =
   Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some true)
-    ~safety:true
+    ~safety:true ~drops_exclude_domains:false
 
 (* The constraint report. *)
 
@@ -54,7 +54,7 @@ let each_bucket_names_its_token () =
          has to name exactly one drop. *)
       match
         Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:(Some false)
-          ~safety:false
+          ~safety:false ~drops_exclude_domains:false
       with
       | None -> A.failf "%s drew no notice" what
       | Some sentence ->
@@ -70,7 +70,7 @@ let the_geo_bucket_stays_joined_when_language_is_not_answered () =
   check_string "the joined bucket" "cannot filter by country/language; that constraint was ignored"
     (Option.value ~default:""
        (Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:None
-          ~safety:true))
+          ~safety:true ~drops_exclude_domains:false))
 
 let a_split_bucket_names_only_what_dropped () =
   (* The shape both keyless adapters call with: language rides the wire, the
@@ -80,7 +80,7 @@ let a_split_bucket_names_only_what_dropped () =
   check_string "the split bucket" "cannot filter by country; that constraint was ignored"
     (Option.value ~default:""
        (Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:(Some true)
-          ~safety:true))
+          ~safety:true ~drops_exclude_domains:false))
 
 let every_dropped_bucket_is_named_in_order () =
   let q =
@@ -92,14 +92,30 @@ let every_dropped_bucket_is_named_in_order () =
      ignored"
     (Option.value ~default:""
        (Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:(Some false)
-          ~safety:false))
+          ~safety:false ~drops_exclude_domains:false))
 
 let a_constraint_that_is_not_asked_for_draws_no_notice () =
   (* The buckets fire on what the caller asked for, not on what the adapter
      cannot do: an incapable adapter with nothing asked files nothing. *)
   check_opt_string "nothing asked" None
     (Provider.ignored_constraints (query ()) ~domains:false ~dates:false ~geo:false ~language:None
-       ~safety:false)
+       ~safety:false ~drops_exclude_domains:false)
+
+let the_vendor_pair_names_both_fields () =
+  (* A vendor that applies [include_domains] and quietly drops [exclude_domains] when
+     a caller sets both: the sentence names the pair, because naming one field would
+     describe a filter that did arrive. *)
+  let q = query ~include_domains:[ "go.dev" ] ~exclude_domains:[ "spam.example" ] () in
+  check_string "the pair, with domains otherwise honoured"
+    "cannot filter by exclude_domains while include_domains is set; that constraint was ignored"
+    (Option.value ~default:""
+       (Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some true)
+          ~safety:true ~drops_exclude_domains:true));
+  check_opt_string "one field alone is not the pair" None
+    (Provider.ignored_constraints
+       (query ~exclude_domains:[ "spam.example" ] ())
+       ~domains:true ~dates:true ~geo:true ~language:(Some true) ~safety:true
+       ~drops_exclude_domains:true)
 
 (* Folding domain filters into the query, for the backends where the operators
    are the interface. *)
@@ -428,6 +444,7 @@ let () =
               every_dropped_bucket_is_named_in_order;
             test_case "a constraint that is not asked for draws no notice" `Quick
               a_constraint_that_is_not_asked_for_draws_no_notice;
+            test_case "the vendor pair names both fields" `Quick the_vendor_pair_names_both_fields;
           ] );
         ( "folding domain filters into the query",
           [ test_case "the site: operators" `Quick site_operators ] );

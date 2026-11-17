@@ -102,7 +102,7 @@ let search ~cost_per_1k ~snippet_chars ~text_chars ~key ~(now : unit -> float)
         ~notice:(fun q _data ->
           Provider.ignored_constraints q ~domains:folded_fits ~dates:folded_fits ~geo:false
             ~language:(Some (folded_fits || q.Model.language = None))
-            ~safety:false)
+            ~safety:false ~drops_exclude_domains:false)
         q
     in
     (* A 200 that answers with no records is not billed upstream. *)

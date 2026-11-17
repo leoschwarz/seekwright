@@ -153,7 +153,7 @@ let search ~cost_per_1k ~snippet_chars ~depth ~output ~key ~(now : unit -> float
     ~cost_for:(cost_for ~cost_per_1k) ~parse ~answer:(answer ~output)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:None
-        ~safety:false)
+        ~safety:false ~drops_exclude_domains:false)
     q
 
 let make ?(cost_per_1k = 6.00) ?(snippet_chars = 500) ?(depth = "standard")

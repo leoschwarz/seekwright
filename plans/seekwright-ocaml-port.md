@@ -3209,14 +3209,27 @@ where the row says so.
 | D-G follow-through — the gate runs the formatter | `dune build @fmt` is clean over the tree — ocamlformat over the three sources it still disagreed with, dune's own formatter over every stanza — and `ci-ocaml.yml` runs it as the first step; `AGENTS.md`, `CONTRIBUTING.md`, `ocaml-docs/testing.md` and the `ocaml` skill now describe a four-target gate | this change |
 | §3 — adapter interfaces, first cut | the six `request_body` vals are gone from `lib/providers/`: no suite, tool or live case called a request builder, and the body a keyed name would send is pinned where it is already pinned — the scripted `Provider.Net` capture | `fd66405` |
 | §3 — the derived endpoint grant | twelve `policy_endpoint` vals are gone, with the 34 host/scheme/port assertions that restated them; each adapter suite keeps its endpoint literal and the "the adapter dials that host" check, now taken against its own `endpoint`, because the row→adapter→grant chain is pinned once in `test_provider_registry`'s `the_grant_is_the_endpoint_read_once` and `a_fixed_endpoint_is_the_adapters_own` | this change |
+| D-F's safe half — the constraint sentence | Parallel's REST-half notices go through `Provider.ignored_constraints`, which gained the mandatory `~drops_exclude_domains` bucket every adapter answers; the adapter's private sentence is gone and the differential case that pinned it is now a registered divergence | this change |
 
 Two corrections to the plan's own predictions, recorded where they were wrong rather
 than left for a reader to find: D2's resolver (above, in §40), and S-010's line-count
 claim — the five readers lost 19 lines while `fallback.ml` gained 31, so the gain is the
 single owner of the status reading, not a smaller tree.
 
-Still open on this pass: the §3 weight rows (`Registry.row`'s `cost_model`,
-the `Factory` façade, the extractor's double representation, the adapter interfaces) and
-D-C … D-F. The `context` row closed with D-B rather than on its own: its one reader was the
-`providers.tsv` row the validator cross-checked, so `context_cap`, the field and the six
-`~context:` rows went with the table that consumed them.
+Still open on this pass: the two contested §3 weight rows (`Registry.row`'s
+`cost_model`, the `Factory` façade) and D-C, D-D and D-E — all three decided
+2026-11-17, each landing in its own commit. The `context` row closed with D-B rather
+than on its own: its one reader was the `providers.tsv` row the validator
+cross-checked, so `context_cap`, the field and the six `~context:` rows went with the
+table that consumed them.
+
+One design point was settled rather than changed. `Exa.make_tiered` keeps its own
+cooldown clock, deliberately: its escalation happens inside one in-flight call — the
+free half has already been dialled and the keyed half is tried before the caller sees an
+error — while `Health`'s breaker and `Router`'s free walk decide which name a *later*
+call starts with. Folding the two would make a billed retry depend on breaker state the
+failing call has no way to read. What did move is the constraint vocabulary:
+`Provider.ignored_constraints` gained the mandatory `~drops_exclude_domains` bucket,
+every adapter answers it, and the one sentence Parallel used to own went with it —
+model-facing, so `provider/141-parallel-constraints` is now a registered divergence
+with its reason in `test/differential/divergences.tsv`.

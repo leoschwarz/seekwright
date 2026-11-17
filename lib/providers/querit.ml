@@ -128,7 +128,7 @@ let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider
     ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:geo_honoured
-        ~language:(Some language_honoured) ~safety:false)
+        ~language:(Some language_honoured) ~safety:false ~drops_exclude_domains:false)
     q
 
 let make ?(cost_per_1k = 0.0) ?(snippet_chars = 500) ~key ~net () : Provider.t =

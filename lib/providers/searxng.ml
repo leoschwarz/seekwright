@@ -104,7 +104,7 @@ let search ~cost_per_1k ~snippet_chars ~endpoint (net : Provider.Net.t) (q : Pro
       cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
       notice =
         Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:(Some true)
-          ~safety:true;
+          ~safety:true ~drops_exclude_domains:false;
     }
 
 let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~endpoint ~net () : Provider.t =

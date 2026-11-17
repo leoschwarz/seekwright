@@ -105,28 +105,29 @@ let request_body ~(mode : string) ~(now : unit -> float) (q : Provider.search_qu
       ("advanced_settings", `Assoc advanced);
     ]
 
-(* Three clauses, two owners — and one owner for every sentence. The language
-   and safe-search buckets are the shared constraint report's wording: this
-   adapter sends domains, dates and location, so those are the only buckets
-   left to name. Parallel names each dropped bucket in its own clause rather
-   than one joined sentence, so the shared report is asked twice, once with
-   each bucket left unanswered. The include/exclude interaction is Parallel's
-   own: upstream drops [exclude_domains] when [include_domains] is set, and no
-   shared bucket says that. The warnings ride a successful body, so only the
-   payload can report them. *)
+(* Three clauses, one owner for every sentence. The language, safe-search and
+   exclude_domains buckets all come from the shared constraint report's wording:
+   this adapter sends domains, dates and location, so those are the buckets left
+   to name. Parallel names each dropped bucket in its own clause rather than one
+   joined sentence, so the report is asked three times, once with each bucket
+   left unanswered — one of them the vendor's own rule, that upstream drops
+   [exclude_domains] when [include_domains] is set. The warnings ride a
+   successful body, so only the payload can report them. *)
 let compose_notices (q : Provider.search_query) data =
   let parts =
     let p = [] in
     let p =
-      if q.Model.include_domains <> [] && q.Model.exclude_domains <> [] then
-        "parallel ignores exclude_domains while include_domains is set; that constraint was ignored"
-        :: p
-      else p
+      match
+        Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some true)
+          ~safety:true ~drops_exclude_domains:true
+      with
+      | Some report -> report :: p
+      | None -> p
     in
     let p =
       match
         Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some false)
-          ~safety:true
+          ~safety:true ~drops_exclude_domains:false
       with
       | Some report -> report :: p
       | None -> p
@@ -134,7 +135,7 @@ let compose_notices (q : Provider.search_query) data =
     let p =
       match
         Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some true)
-          ~safety:false
+          ~safety:false ~drops_exclude_domains:false
       with
       | Some report -> report :: p
       | None -> p
@@ -223,7 +224,7 @@ let make_mcp ?(cost_per_1k = 0.0) ?(text_chars = 2000) ~name ~uri ~net () =
                 cost_usd = Some (cost_for q.Model.max_results);
                 notice =
                   Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false
-                    ~language:None ~safety:false;
+                    ~language:None ~safety:false ~drops_exclude_domains:false;
               }
 
       let aclose () = Mcp.aclose client

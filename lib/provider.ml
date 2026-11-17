@@ -75,11 +75,14 @@ let truncate_text text limit =
         let clipped = clip normal limit in
         (Some clipped, clipped <> normal, Some (Utf8.count normal))
 
-let ignored_constraints (q : search_query) ~domains ~dates ~geo ~language ~safety =
+let ignored_constraints (q : search_query) ~domains ~dates ~geo ~language ~safety
+    ~drops_exclude_domains =
   let missing = ref [] in
   let add token = missing := token :: !missing in
   if (not domains) && (q.Model.include_domains <> [] || q.Model.exclude_domains <> []) then
     add "domain";
+  if drops_exclude_domains && q.Model.include_domains <> [] && q.Model.exclude_domains <> [] then
+    add "exclude_domains while include_domains is set";
   if (not dates) && q.Model.recency <> None then add "dates";
   (match language with
   | None ->

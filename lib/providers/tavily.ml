@@ -283,7 +283,7 @@ let search ~cost_per_1k ~text_chars ~key (net : Provider.Net.t) (q : Provider.se
     ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~text_chars) ~answer
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:true ~dates:true ~geo:(country <> None)
-        ~language:(Some true) ~safety:true)
+        ~language:(Some true) ~safety:true ~drops_exclude_domains:false)
     q
 
 let make ?(cost_per_1k = 8.00) ?(text_chars = 2000) ~key ~net () : Provider.t =

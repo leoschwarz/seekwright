@@ -129,7 +129,7 @@ let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_cha
     ~parse:(parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr)
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:None
-        ~safety:false)
+        ~safety:false ~drops_exclude_domains:false)
     q
 
 let make ?(cost_per_1k = 0.50) ?(snippet_chars = 500) ?title_attr ?url_attr ?snippet_attr ~app_id

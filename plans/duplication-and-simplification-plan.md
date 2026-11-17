@@ -763,8 +763,9 @@ D-B — and land only if those decisions do. The last row is a keep, not a remov
 
 ## 4. Decisions the maintainer owns
 
-Each carries a recommendation. D-A, D-B and D-G are decided (2026-11-17, the maintainer);
-D-C … D-F stay open.
+Each carries a recommendation. Every decision on this page is the maintainer's, taken
+2026-11-17: D-A, D-B and D-G are landed, D-F is landed with this pass, and D-C, D-D and
+D-E land in their own commits, recorded where the decision is written.
 
 **D-A — the differential harness's posture.** Keep the 413 goldens and the
 properties, delete `drive.exe` and the oracle README, and rename the suite's own
@@ -862,6 +863,22 @@ route Parallel's REST-half constraint clauses through
 privately is the escalation reason, the ladder's own notice, not a constraint
 report — and write down in the port plan that the per-adapter cooldown is a
 deliberate second ladder and why the router's does not serve it.
+
+**Decided: keep both ladders, and take the two halves.** Parallel's REST-half
+constraint clauses now go through `Provider.ignored_constraints`: the report gained a
+mandatory `~drops_exclude_domains` bucket, every adapter answers it, and the sentence
+Parallel owned — `parallel ignores exclude_domains while include_domains is set; that
+constraint was ignored` — is now the report's shape with the pair named: `cannot filter
+by exclude_domains while include_domains is set; that constraint was ignored`. That
+changes a model-facing notice, so the difference is registered rather than smoothed:
+`provider/141-parallel-constraints` became an `explicit-divergence` golden, with its
+reason in `test/differential/divergences.tsv`. The ladder itself stays inside the
+adapter, deliberately. `Exa.make_tiered`'s cooldown escalates *within one in-flight
+call*: the free half has already been dialled and the keyed half is tried before the
+caller sees an error, so no call can wait on a board it has no way to consult.
+`Health`'s breaker and `Router`'s free walk govern *which name a later call starts
+with*. Two questions, two owners; folding them would make a billed retry depend on
+breaker state that the failing call cannot read.
 
 **D-G — formatting.** There is no `.ocamlformat` and no formatter step in CI, and
 the styles have drifted: `lib/engine.ml` and `lib/router.ml` carry leading-`;`

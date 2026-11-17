@@ -148,7 +148,7 @@ let mcp_search ~name ~cost_per_1k ~text_chars ~tool client q =
       cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
       notice =
         Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:None
-          ~safety:false;
+          ~safety:false ~drops_exclude_domains:false;
     }
 
 let make_mcp ?(cost_per_1k = 0.0) ?(text_chars = 2000) ~name ?auth ~uri ~net () =

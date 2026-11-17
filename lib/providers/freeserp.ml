@@ -78,7 +78,7 @@ let search ~cost_per_1k ~snippet_chars ~(now : unit -> float) (net : Provider.Ne
     ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars) ~check:check_engine
     ~notice:(fun q _data ->
       Provider.ignored_constraints q ~domains:false ~dates:true ~geo:false ~language:(Some true)
-        ~safety:false)
+        ~safety:false ~drops_exclude_domains:false)
     q
 
 let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~(now : unit -> float) ~net () : Provider.t =
