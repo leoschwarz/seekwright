@@ -286,8 +286,10 @@ capability layer's own contract, and `ocaml-docs/` is the operator's map.
   `test/should_not_compile/` compiles each snippet under
   `with-accepted-exit-codes (not (or 0))` and diffs the diagnostic against its
   `.expected`: a snippet that starts compiling fails the build. The diagnostics
-  pin exact line numbers, so editing a snippet — even its comment — re-promotes
-  its `.expected` in the same change.
+  quote the snippet's own source line, so editing a snippet — even its comment,
+  even a whole-tree formatting sweep — re-promotes its `.expected` in the same
+  change, and a plain `runtest` can hide a stale one behind a cached `.out`:
+  `runtest --force` is the check.
 - **Logs go to stderr or stdio breaks**, and stdout is the JSON-RPC channel.
   `test/log_guard/` walks the AST (`field_sets.ml` for the per-event field sets,
   `source_discipline.ml` for which module may write a stream), and

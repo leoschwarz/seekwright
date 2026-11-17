@@ -202,6 +202,12 @@ Each entry cost a build; one or two lines, dated. Group by the tool that bit.
   dir/x.mli` writes the `.cmi` **next to the input**, so copy interfaces into the
   rule's directory first, in dependency order (arguments compile left to right).
   (2026-11-10)
+- A `should_not_compile` `.expected` quotes the snippet's own source line, so
+  reformatting a snippet re-pins its diagnostic: the 2026-11-17 formatting sweep
+  moved five of the fourteen and left the tree red on them. `dune runtest
+  --force` is what exposes that — a plain run reuses a cached `.out` for a rule
+  whose inputs dune considers unchanged, so three of the five stayed hidden until
+  a library change invalidated them. (2026-11-17)
 - In a transcript rule, `with-outputs-to` merges stdout and stderr; a stdio
   fixture's startup notes then land in the protocol. Split with
   `with-stdout-to` + `with-stderr-to` and pin both. (2026-11-11)

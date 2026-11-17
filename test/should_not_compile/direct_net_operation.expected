@@ -1,5 +1,5 @@
-File "direct_net_operation.ml", line 10, characters 40-42:
-10 |   Mcp_caps.Policy_net.request ~controls:() decision request
-                                             ^^
+File "direct_net_operation.ml", line 9, characters 69-71:
+9 | let request decision request = Mcp_caps.Policy_net.request ~controls:() decision request
+                                                                         ^^
 Error: This expression should not be a unit literal, the expected type is
        "Controls_raw.t"
