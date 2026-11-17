@@ -1,7 +1,8 @@
 # Plan: the money path — what is left to simplify
 
-Status: **C-002 is landed** (`config: the ladder's tier is the row's declared
-price`); the rest of the page is proposals. Tree read at `4de7fe2`, after the
+Status: **C-002 and C-001 are landed** (`config: the ladder's tier is the row's
+declared price`, `usage: one money record over the lines that carry a figure`); the
+rest of the page is proposals. Tree read at `4de7fe2`, after the
 structural pass closed: `plans/duplication-and-simplification-plan.md` §2 S-001–S-010,
 its §3 weight rows and decisions D-A … D-G are all in the code,
 including the cost rows — `Adapter.cost_for` injection (S-011), the row that
@@ -79,7 +80,7 @@ rule. That is the cheapest real removal in the tree: C-002.
 
 ## 3. The cuts
 
-### C-001 — `Usage` writes the money pattern four times
+### C-001 — `Usage` writes the money pattern four times · **landed**
 
 **Evidence (`read`).** Five records carry money: `day_totals`
 (`cost_usd`, `model_cost_usd` + `priced_answers`, `fetch_cost_usd` +
@@ -115,15 +116,26 @@ let roll (a : money) (b : money) : unit             (* fold_days, one call per k
 let json (m : money) : Yojson.Safe.t = if m.priced = 0 then `Null else round6 m.total
 ```
 
-`day_totals` then holds `search`/`model`/`fetch : money`; `answer_totals` holds
-`model : money` and keeps `token_calls` beside the token totals (that pair is the
-same idea over integers and is **not** folded into `money` — it is not money, and
-`nearest_rank`/`latency_samples` stay as they are for the same reason). The
-snapshot's published sample-size keys (`priced_fetches`, `priced_calls`) are
-rendered from the record, so `json` plus a two-field helper is the only place the
-"null when the sample is empty" rule lives. Expected: 12 fields → 8 fields in 3
-records, four fold blocks → four one-line calls, twelve render expressions → one
-helper and its call sites; roughly −40 lines net in `lib/usage.ml`.
+`day_totals` then holds `model` and `fetch : money`, and `answer_totals` and the
+lifetime row the same; `answer_totals` keeps `token_calls` beside the token totals
+(that pair is the same idea over integers and is **not** folded into `money` — it
+is not money, and `nearest_rank`/`latency_samples` stay as they are for the same
+reason). The snapshot's published sample-size keys (`priced_fetches`,
+`priced_calls`) are rendered from the record, so `money_json` is the only place the
+"null when the sample is empty" rule lives.
+
+**Landed, with two corrections to the sketch.** Search money stayed a plain
+`cost_usd` float: a quiet day must render `0.0` because the chart's axis is the
+whole window, where `money_json` would render `null` — so folding it in would have
+moved a published figure. That is also why `bump` was never written (nothing calls
+it) and why `roll` is absent: `fold_days` merges `provider_day`, whose money is
+that same plain float. The landed set is `figure` (the JSON reader, renamed so the
+record can own the name `money`), `money ()`, `add_money` and `money_json`. **The
+−40 estimate was wrong: `lib/usage.ml` went 1073 → 1075 lines.** What the cut buys
+is shape, not count — 12 money fields over five records become eight over four,
+four hand-written fold blocks become two `add_money` calls apiece, five render
+conditionals become one function, and one of the two meanings of the word `money`
+(a parser and a total) is gone.
 
 **Gate.** No snapshot key, journal field or byte moves: `test_usage.ml`'s money
 and `no_money` assertions, `test_fetch_engine.ml`'s `fetch_cost_usd`/
@@ -298,7 +310,7 @@ step, which is what `test_agent.ml`'s existing ceiling case pins. Keep.
 |Order|Step|Expected effect|
 |---|---|---|
 |1|C-002 `billable`|**landed** — the field is gone, `validate_fetch_fallbacks` asks `row.default_cost <> None`, the frozen-vocabulary case derives the priced subset from the registry, and `configuration.md` and `AGENTS.md` say "declared price"|
-|2|C-001 `money`|the big one; accepted only if the existing money assertions pass unmodified, plus the new priced/unpriced pairing case|
+|2|C-001 `money`|**landed** — `figure` / `money ()` / `add_money` / `money_json`, search money deliberately left a plain float; every pre-existing money assertion passed unmodified, and the served path was run: a loopback fixture, one local `fetch` and one `searxng` search through `POST /api/v1/…`, then the journal appended with one priced and one unpriced line of each kind, restart, and `/dashboard/data` reporting `fetch_cost_usd 0.0003` with `priced_fetches 1` of `fetches 2` and `model_cost_usd 0.0012` with `priced_calls 1` of `calls 2`. New case: a day bucket pairing both kinds. 1073 → 1075 lines|
 |3|C-003 the rung's amount|`Engine` loses its last money arithmetic|
 |4|C-004 the agent price and the widened ceiling|the only behaviour change in the set, so it lands last and alone|
 |5|C-005 `cost_of`|optional, last|

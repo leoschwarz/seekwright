@@ -126,7 +126,7 @@ let truthy (value : Yojson.Safe.t) : bool =
 
 let counted (value : Yojson.Safe.t) : int option = match value with `Int n -> Some n | _ -> None
 
-let money (value : Yojson.Safe.t) : float option =
+let figure (value : Yojson.Safe.t) : float option =
   match value with `Int n -> Some (float_of_int n) | `Float f -> Some f | _ -> None
 
 let cost_field (value : Yojson.Safe.t) : float =
@@ -143,19 +143,37 @@ let round6 (x : float) : Yojson.Safe.t = `Float (float_of_string (Printf.sprintf
 
 let trunc_int (x : float) : int = Float.to_int x
 
+(* Money in the aggregates: a total over the lines of a kind that carried a
+   figure, and how many lines those were — the sample size the snapshot renders
+   beside the total, and the reason an unpriced window is [null] and not [0.0].
+   Search money is a plain float instead: every [search] line carries [cost_usd],
+   so a search total is never unknown. *)
+type money = { mutable total : float; mutable priced : int }
+
+let money () : money = { total = 0.; priced = 0 }
+
+(* A line that carries a figure adds to the total and to the sample; one that
+   carries none adds to neither, which is what keeps [priced] a sample size. *)
+let add_money (m : money) (value : float option) : unit =
+  match value with
+  | Some cost ->
+      m.total <- m.total +. cost;
+      m.priced <- m.priced + 1
+  | None -> ()
+
+let money_json (m : money) : Yojson.Safe.t = if m.priced = 0 then `Null else round6 m.total
+
 type day_totals = {
   mutable searches : int;
   mutable fetches : int;
   mutable answers : int;
   mutable errors : int;
   mutable cost_usd : float;
-  (* Summed only over the answers that carried a price, so [priced_answers] at
-     zero means the day's model spend is unknown, not free. *)
-  mutable model_cost_usd : float;
-  mutable priced_answers : int;
-  (* The same shape one section over, with [priced_fetches] as the sample size. *)
-  mutable fetch_cost_usd : float;
-  mutable priced_fetches : int;
+  (* The two that can be unknown: a total over the lines of that kind that carried
+     a figure, with its sample size inside. No priced line means the day's model or
+     fetch spend is unknown, not free. *)
+  model : money;
+  fetch : money;
 }
 
 (* One search provider's totals; searches only — a fetch has no provider.
@@ -199,8 +217,8 @@ type provider_day = {
 
 (* The model's own figures, one home each, attributed to the model.
    [cited_invalid] is here and in no provider row: an invented citation is a
-   property of the prose, not of the result set. [token_calls]/[priced_calls] are
-   the sample sizes under the token and money totals, so a partial total is
+   property of the prose, not of the result set. [token_calls] is the sample size
+   under the token totals and [model] carries its own, so a partial total stays
    visible as partial. *)
 type answer_totals = {
   mutable calls : int;
@@ -212,8 +230,7 @@ type answer_totals = {
   mutable prompt_tokens : int;
   mutable completion_tokens : int;
   mutable token_calls : int;
-  mutable model_cost_usd : float;
-  mutable priced_calls : int;
+  model : money;
   mutable ms_sum : int;
   mutable models : string list;
 }
@@ -253,8 +270,7 @@ type t = {
   mutable fallbacks : int;
   mutable search_cost_usd : float;
   mutable fetch_pages_via_fallback : int;
-  mutable fetch_cost_usd : float;
-  mutable priced_fetches : int;
+  fetch : money;
   answers : answer_totals;
   mutable runs : (string * (string * int) list) list;
 }
@@ -266,10 +282,8 @@ let day_totals () : day_totals =
     answers = 0;
     errors = 0;
     cost_usd = 0.;
-    model_cost_usd = 0.;
-    priced_answers = 0;
-    fetch_cost_usd = 0.;
-    priced_fetches = 0;
+    model = money ();
+    fetch = money ();
   }
 
 let provider_totals () : provider_totals =
@@ -299,8 +313,7 @@ let answer_totals () : answer_totals =
     prompt_tokens = 0;
     completion_tokens = 0;
     token_calls = 0;
-    model_cost_usd = 0.;
-    priced_calls = 0;
+    model = money ();
     ms_sum = 0;
     models = [];
   }
@@ -545,9 +558,9 @@ let apply_search (t : t) (entry : Yojson.Safe.t) (bucket : day_totals) (day : st
 let apply_answer (t : t) (entry : Yojson.Safe.t) (bucket : day_totals) (ms : int)
     (error : string option) : unit =
   (* Read by key and tolerant of a key the writer did not send: a missing figure is
-     {b absent} from the aggregate rather than zero in it, and
-     [priced_calls]/[token_calls] carry the sample size so a partial total is
-     visible as partial. *)
+     {b absent} from the aggregate rather than zero in it, and [token_calls] and
+     [model]'s own count carry the sample sizes, so a partial total stays visible
+     as partial. *)
   let totals = t.answers in
   totals.calls <- totals.calls + 1;
   bucket.answers <- bucket.answers + 1;
@@ -572,16 +585,12 @@ let apply_answer (t : t) (entry : Yojson.Safe.t) (bucket : day_totals) (ms : int
       totals.token_calls <- totals.token_calls + 1;
       totals.prompt_tokens <- totals.prompt_tokens + Option.value ~default:0 prompt;
       totals.completion_tokens <- totals.completion_tokens + Option.value ~default:0 completion);
-  (* Absent here means the prices were unset when the line was written: summed as
-     nothing, counted as unpriced, so the snapshot reports the cost as unknown
-     rather than free. *)
-  (match money (get "model_cost_usd" entry) with
-  | Some cost ->
-      totals.model_cost_usd <- totals.model_cost_usd +. cost;
-      totals.priced_calls <- totals.priced_calls + 1;
-      bucket.model_cost_usd <- bucket.model_cost_usd +. cost;
-      bucket.priced_answers <- bucket.priced_answers + 1
-  | None -> ());
+  (* A line written while the rates were unset carries no figure: it adds nothing
+     to the total and nothing to the sample, so the snapshot reports the model's
+     cost as unknown rather than free. *)
+  let priced = figure (get "model_cost_usd" entry) in
+  add_money totals.model priced;
+  add_money bucket.model priced;
   (* Every provider that contributed results to this run is credited with the
      run's citation count, once per run. *)
   match get "run" entry with
@@ -609,15 +618,12 @@ let apply_fetch (t : t) (entry : Yojson.Safe.t) (bucket : day_totals) (error : s
   | None, `String _ -> t.fetch_pages_via_fallback <- t.fetch_pages_via_fallback + 1
   | _ -> ());
   (* Read the way every optional figure is: a line without the key contributes
-     nothing and counts nothing, so [priced_fetches] separates a total over every
-     page from one over some. [money] maps a missing key to [None], never to 0.0. *)
-  match money (get "cost_usd" entry) with
-  | Some cost ->
-      t.fetch_cost_usd <- t.fetch_cost_usd +. cost;
-      t.priced_fetches <- t.priced_fetches + 1;
-      bucket.fetch_cost_usd <- bucket.fetch_cost_usd +. cost;
-      bucket.priced_fetches <- bucket.priced_fetches + 1
-  | None -> ()
+     nothing and counts nothing, so the money record's own count separates a total
+     over every page from one over some. [figure] maps a missing key to [None],
+     never to 0.0. *)
+  let priced = figure (get "cost_usd" entry) in
+  add_money t.fetch priced;
+  add_money bucket.fetch priced
 
 (* Prune day buckets older than [keep_days] when the UTC date changes. Only
    meaningful across a long-lived process; a restart rebuilds the window from the
@@ -760,8 +766,7 @@ let create ~now ?log ?history_path ?(recent = recent_default) ?(keep_days = keep
       fallbacks = 0;
       search_cost_usd = 0.;
       fetch_pages_via_fallback = 0;
-      fetch_cost_usd = 0.;
-      priced_fetches = 0;
+      fetch = money ();
       answers = answer_totals ();
       runs = [];
     }
@@ -971,8 +976,8 @@ let snapshot_unlocked (t : t) : Yojson.Safe.t =
                 ("answers", `Int 0);
                 ("errors", `Int 0);
                 ("cost_usd", `Float 0.);
-                ("model_cost_usd", `Null);
-                ("fetch_cost_usd", `Null);
+                ("model_cost_usd", money_json (money ()));
+                ("fetch_cost_usd", money_json (money ()));
               ]
         | Some totals ->
             `Assoc
@@ -983,10 +988,8 @@ let snapshot_unlocked (t : t) : Yojson.Safe.t =
                 ("answers", `Int totals.answers);
                 ("errors", `Int totals.errors);
                 ("cost_usd", round6 totals.cost_usd);
-                ( "model_cost_usd",
-                  if totals.priced_answers = 0 then `Null else round6 totals.model_cost_usd );
-                ( "fetch_cost_usd",
-                  if totals.priced_fetches = 0 then `Null else round6 totals.fetch_cost_usd );
+                ("model_cost_usd", money_json totals.model);
+                ("fetch_cost_usd", money_json totals.fetch);
               ])
       (window_dates today)
   in
@@ -1009,8 +1012,8 @@ let snapshot_unlocked (t : t) : Yojson.Safe.t =
             ("fetch_pages_via_fallback", `Int t.fetch_pages_via_fallback);
             (* The fetch ladder's money, from the fallbacks' own declared prices;
                null when no page came from a fallback that declares one. *)
-            ("fetch_cost_usd", if t.priced_fetches = 0 then `Null else round6 t.fetch_cost_usd);
-            ("priced_fetches", `Int t.priced_fetches);
+            ("fetch_cost_usd", money_json t.fetch);
+            ("priced_fetches", `Int t.fetch.priced);
           ] );
       ("days", `List days);
       ( "providers",
@@ -1045,9 +1048,8 @@ let snapshot_unlocked (t : t) : Yojson.Safe.t =
             ( "completion_tokens",
               if answers.token_calls = 0 then `Null else `Int answers.completion_tokens );
             ("token_calls", `Int answers.token_calls);
-            ( "model_cost_usd",
-              if answers.priced_calls = 0 then `Null else round6 answers.model_cost_usd );
-            ("priced_calls", `Int answers.priced_calls);
+            ("model_cost_usd", money_json answers.model);
+            ("priced_calls", `Int answers.model.priced);
             ( "mean_ms",
               if answers.calls = 0 then `Null
               else `Int (trunc_int (float_of_int answers.ms_sum /. float_of_int answers.calls)) );

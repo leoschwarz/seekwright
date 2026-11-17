@@ -371,6 +371,22 @@ let a_partial_price_sum_says_how_much_it_covers () =
   A.(check int) "priced_fetches" 1 (int (get "priced_fetches" totals));
   money "fetch_cost_usd" 0.0003 (get "fetch_cost_usd" totals)
 
+(* The pairing one level down: the day bucket, not the lifetime total. Priced and
+   unpriced lines of both money kinds share one day, and each figure is the sum
+   over the priced lines of its own kind. A fold that counted an unpriced line at
+   one level moves the day and leaves the lifetime row to hide it. *)
+let a_day_bucket_prices_only_the_lines_that_carry_a_figure () =
+  let rec_ = recorder () in
+  fetch ~fallback:(Some "scrappa") ?cost_usd:(Some 0.0003) rec_;
+  fetch ~fallback:(Some "jina") rec_;
+  answer rec_;
+  answer ~model_cost_usd:None rec_;
+  let day = List.nth (items (get "days" (Usage.snapshot rec_))) 13 in
+  money "the fetch figure covers one of two pages" 0.0003 (get "fetch_cost_usd" day);
+  A.(check int) "the day counts both pages" 2 (int (get "fetches" day));
+  money "the model figure covers one of two calls" 0.0012 (get "model_cost_usd" day);
+  A.(check int) "and both answers" 2 (int (get "answers" day))
+
 let a_journal_without_the_key_still_folds () =
   (* An older writer's fetch line has no cost_usd: no migration needed. *)
   with_journal
@@ -1385,6 +1401,8 @@ let tests =
         check "a declared zero is a real zero" a_declared_zero_is_a_real_zero;
         check "a partial price sum says how much of the whole it covers"
           a_partial_price_sum_says_how_much_it_covers;
+        check "a day bucket prices only the lines that carry a figure"
+          a_day_bucket_prices_only_the_lines_that_carry_a_figure;
         check "a journal without the key still folds" a_journal_without_the_key_still_folds;
         check "a malformed price is absent rather than a zero"
           a_malformed_price_is_absent_rather_than_a_zero;

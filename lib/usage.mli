@@ -7,7 +7,8 @@
     name, never query text, URLs, hosts, titles or extracted text.
 
     - Unknown is absent, never 0.0. A money total covers only the lines that carried a price, and
-      the count of those travels beside it.
+      the count of those travels beside it. A [search] line always carries its figure, so search
+      spend is a plain total and not a sample.
     - Per-provider, per-day latency samples stay in RAM.
     - Agent mode's ranking data folds onto the same lines, and invalid citations are attributed to
       the model, never to a provider.
