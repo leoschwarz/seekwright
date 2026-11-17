@@ -167,6 +167,22 @@ val provider_result_of_yojson : Yojson.Safe.t -> (provider_result, string) Stdli
 (** Decoders. A wire model refuses an unknown key; [search_query] and [provider_result] ignore one.
 *)
 
+val result_allowed : string list
+(** The key list each decoder refuses anything outside of, in the order the wire model declares
+    them. [Server] builds the MCP input and output schemas from these, so a wire field is named once
+    — here — and a schema that does not describe it fails by name rather than staying quietly short
+    of it. *)
+
+val search_response_allowed : string list
+val fetch_match_allowed : string list
+val fetch_image_allowed : string list
+val fetch_response_allowed : string list
+val answer_source_allowed : string list
+val search_request_allowed : string list
+val fetch_request_allowed : string list
+val answer_request_allowed : string list
+val answer_response_allowed : string list
+
 val sanitize_result : result -> result * int
 val sanitize_results : result list -> result list * int
 val sanitize_search_response : search_response -> search_response * int

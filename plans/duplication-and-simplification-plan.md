@@ -340,7 +340,7 @@ in-vocabulary-but-unbuilt name is exactly what reaches the run.
 a status change — the refusal journals nothing, so no retrieval step and no
 model call ran.
 
-### S-004 — the wire field vocabulary spelled four times per model
+### S-004 — the wire field vocabulary spelled four times per model · **landed**
 
 **Evidence (window scan, `read`).** The named `*_allowed` lists already exist for
 every request and response decoder (`Model.result_allowed`, `fetch_response_allowed`,
@@ -364,6 +364,43 @@ build from set fields only, so they remain the one hand-spelled half.
 
 **Gate.** `bin/smoke.expected` pins the schemas. Key order must not change; a
 schema derived from a list has to order the list as the golden already does.
+
+**Landed.** The six named lists are now ten: the four `reject_extra` calls that
+spelled their list inline (`search_response`, `fetch_match`, `fetch_image`,
+`answer_source`) name theirs too, so every wire model has exactly one key list
+and it is exported from `Model`. `Server`'s three request tables and seven
+response tables are built by one `properties` over those lists, which owns both
+the vocabulary and the key order — `Model.fetch_request_allowed` was put in the
+order the schema declares (the decoder only asks membership), and
+`bin/smoke.expected`, the stdio transcript and `surface.expected` came out
+byte-identical, which is the evidence the schemas did not move.
+
+What is left per field is the schema itself: one name→schema pair per field is
+not a second vocabulary, it is the schema. So the drift this section is about is
+caught where it is created — `Server.untabled_wire_fields` returns every name a
+model's list has and its table lacks, as `"model.field"`, and
+`test_p8_server`'s "every wire field has a property schema" fails the build over
+a non-empty answer, naming it. That is a suite and not a raise: the first
+version failed at module initialisation with `invalid_arg`, and
+`test/log_guard/source_discipline.ml` forbids `invalid_arg` and `failwith` in
+`lib/server.ml` — the guard refusing it is the guard working. Probed, not
+assumed: putting an extra name in `Model.fetch_image_allowed` made that case
+fail with `["fetch_image.probe_field"]`.
+
+In `Model` the absent-field rule is also one spelling now
+(`field_str`/`field_esc`/`field_bool`/`field_int`/`field_float`/`field_words`/
+`field_list`/`field_value`) instead of a hand-written
+`match … with None -> [] | Some v -> [ … ]` per field. The section said the
+encoders stay the hand-spelled half; they are, but the *rule* is spelled once and
+the per-field choice of escaping stays with the field. The two nulls-carrying
+projections (`search_query_to_yojson`, `provider_result_to_yojson`) keep their own
+shape on purpose: there null is the contract, not an omission.
+
+Net +82 lines across `lib/model.ml`, `lib/model.mli`, `lib/server.ml`,
+`lib/server.mli` and the suite: the audit and the named tables cost more than the
+encoder boilerplate saved. The gain is not line count — it is that a field name
+now exists once as a vocabulary entry, and a schema that does not know it fails
+by name instead of only widening the transcript golden.
 
 ### S-005 — micro-duplication with existing owners · **landed**
 
@@ -653,7 +690,7 @@ in the same commit.
 |2|S-001 adapter skeleton, `take` landing in `Provider`|**landed** — −511 lines in `lib/providers/`, +225 in `lib/provider.ml` and its interface (net −286, short of the estimate for the reasons in §2); 13 of 14 REST adapters on the shared tail, `parallel` onto the shared sentence with its per-bucket clauses kept word-for-word|
 |3|S-002 test harness|**landed** — −659 in the sixteen adapter suites, −80 in the six journal suites that copied the JSON accessors, +242 in `test/support/` (net −497, short of the estimate for the reasons in §2); one harness for the `Net` mock, one for the accessors, four contract-duplicate cases deleted|
 |4|S-003 one dispatch per verb, answering Q-002|**landed** — three dispatch functions, six call sites collapsed; Q-002 answered (the types stay, the call is shared); the `api_answer` pre-check asymmetry resolved by pre-checking on both surfaces, so an unbuilt `answer` pin is `invalid:` on the tool call and 400 on REST|
-|5|S-004 field lists, then S-006, then S-007|the schemas read the decoders' key lists; the journal's answer fields gain one owner|
+|5|S-004 field lists, then S-006, then S-007|S-004 **landed** — ten key lists, one per wire model, read by `reject_extra` and by the schema builder; the schema mismatch is reported by name through `Server.untabled_wire_fields` and failed by a suite, because `lib/server.ml` may not raise; net +82 lines, all three pins byte-stable. S-006 and S-007 to go|
 |6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|
 |7|S-010 fallback readers, lifting D2|the `'tag` goes, one `Fallback.run` owns the tail, and the factory builds the host check once|
 |8|§3 table + D-A/D-B docs|`context`, `settings`, `cost_model`, the façade and the extractor duality go; the driver and the two matrix tables only if D-A/D-B decide so; `AGENTS.md`, `ocaml-docs/testing.md`, `test/differential/README.md` and the port plan move in the same commit|

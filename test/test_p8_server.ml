@@ -724,6 +724,15 @@ let test_header_lines_fold_into_the_header_type () =
   A.(
     check (option string) "a second header survives" (Some "*/*") (Http.Header.get headers "accept"))
 
+(* [Model]'s key list is the owner of the wire vocabulary, and the property tables
+   in [Server] are the only thing standing between a new wire field and a tool
+   schema that does not mention it. A field the encoder emits and the schema
+   omits is a lie to the model that reads the schema before calling, so the
+   difference is asserted by name here. *)
+let every_wire_field_has_a_property_schema _ =
+  A.(
+    check (list string) "no wire field is missing a property schema" [] Server.untabled_wire_fields)
+
 let () =
   A.run "seekwright/p8-server"
     [
@@ -735,6 +744,8 @@ let () =
             the_surface_data_matches_the_freeze;
           A.test_case "a search call answers over the registry" `Quick
             a_search_call_answers_over_the_registry;
+          A.test_case "every wire field has a property schema" `Quick
+            every_wire_field_has_a_property_schema;
           A.test_case "a refused search is a tool result" `Quick a_refused_search_is_a_tool_result;
           A.test_case "a failed search is a tool result" `Quick a_failed_search_is_a_tool_result;
           A.test_case "fetch disabled refuses cleanly" `Quick fetch_disabled_refuses_cleanly;

@@ -49,52 +49,67 @@ let string_list ?max_items () =
 let provider_enum = enum Config.known_providers
 let recency_enum = enum [ "day"; "week"; "month"; "year" ]
 
-(* The parameter tables, in the frozen declaration order. Each entry is the
-   name plus the property schema the wire carries; [tools_surface] reads the
-   names off these tables, so the manifest and the schema cannot drift. *)
+(* The property tables. Each name comes from the wire model's own key list and
+   the schema for it from the table beside the list, so a wire field is spelled
+   once - in [Model] - and [tools_surface] and the tool declaration read that one
+   list. [required] stays written out per model: it is the set the encoder always
+   emits, which only the encoder knows.
+
+   [properties] drops a name no table covers rather than raising, because
+   [lib/server.ml] keeps its hands off the exception path; [untabled_wire_fields]
+   reports the difference by name and the suite fails the build over it. *)
+let properties allowed table =
+  List.filter_map
+    (fun name ->
+      match List.assoc_opt name table with None -> None | Some property -> Some (name, property))
+    allowed
+
 let search_properties =
-  [
-    ("query", str ~min:2 ~max:400 ());
-    ("provider", provider_enum);
-    ("mode", enum [ "free" ]);
-    ("max_results", int ~min:1 ~max:20 ~default:5 ());
-    ("include_domains", string_list ~max_items:20 ());
-    ("exclude_domains", string_list ~max_items:20 ());
-    ("recency", recency_enum);
-    ("language", str ~min:2 ~max:2 ());
-    ("safe_search", bool ());
-  ]
+  properties Model.search_request_allowed
+    [
+      ("query", str ~min:2 ~max:400 ());
+      ("provider", provider_enum);
+      ("mode", enum [ "free" ]);
+      ("max_results", int ~min:1 ~max:20 ~default:5 ());
+      ("include_domains", string_list ~max_items:20 ());
+      ("exclude_domains", string_list ~max_items:20 ());
+      ("recency", recency_enum);
+      ("language", str ~min:2 ~max:2 ());
+      ("safe_search", bool ());
+    ]
 
 let fetch_properties =
-  [
-    ("url", str ~min:8 ~max:2048 ());
-    ("offset", int ~min:0 ());
-    ("query", str ~min:2 ~max:400 ());
-    ("path", str ~min:1 ~max:400 ());
-    ("provider", str ());
-    ("structure", bool ~default:false ());
-  ]
+  properties Model.fetch_request_allowed
+    [
+      ("url", str ~min:8 ~max:2048 ());
+      ("offset", int ~min:0 ());
+      ("query", str ~min:2 ~max:400 ());
+      ("path", str ~min:1 ~max:400 ());
+      ("provider", str ());
+      ("structure", bool ~default:false ());
+    ]
 
 let answer_properties =
-  [
-    ("query", str ~min:2 ~max:400 ());
-    ( "extra_queries",
-      `Assoc [ ("type", `String "array"); ("items", str ~min:2 ~max:400 ()); ("maxItems", `Int 2) ]
-    );
-    ("depth", enum [ "brief"; "report" ]);
-    ("provider", provider_enum);
-    ("include_domains", string_list ~max_items:20 ());
-    ("exclude_domains", string_list ~max_items:20 ());
-    ("recency", recency_enum);
-    ("language", str ~min:2 ~max:2 ());
-    ("safe_search", bool ());
-  ]
+  properties Model.answer_request_allowed
+    [
+      ("query", str ~min:2 ~max:400 ());
+      ( "extra_queries",
+        `Assoc
+          [ ("type", `String "array"); ("items", str ~min:2 ~max:400 ()); ("maxItems", `Int 2) ] );
+      ("depth", enum [ "brief"; "report" ]);
+      ("provider", provider_enum);
+      ("include_domains", string_list ~max_items:20 ());
+      ("exclude_domains", string_list ~max_items:20 ());
+      ("recency", recency_enum);
+      ("language", str ~min:2 ~max:2 ());
+      ("safe_search", bool ());
+    ]
 
 (* The response schemas: the wire models as objects. Only the fields the
    encoders always emit are [required]; an absent optional field is omitted,
    never null, so the schema never contradicts the encoder. *)
-let result_schema =
-  obj ~additional:false
+let result_properties =
+  properties Model.result_allowed
     [
       ("title", str ());
       ("url", str ());
@@ -104,10 +119,11 @@ let result_schema =
       ("published_date", str ());
       ("score", `Assoc [ ("type", `String "number") ]);
     ]
-    [ "title"; "url" ]
 
-let search_response_schema =
-  obj ~additional:false
+let result_schema = obj ~additional:false result_properties [ "title"; "url" ]
+
+let search_response_properties =
+  properties Model.search_response_allowed
     [
       ("query", str ());
       ("provider", str ());
@@ -116,10 +132,18 @@ let search_response_schema =
       ("retrieved_at", str ());
       ("notice", str ());
     ]
-    [ "query"; "provider"; "results" ]
 
-let fetch_response_schema =
-  obj ~additional:false
+let search_response_schema =
+  obj ~additional:false search_response_properties [ "query"; "provider"; "results" ]
+
+let fetch_match_properties =
+  properties Model.fetch_match_allowed [ ("offset", int ()); ("text", str ()) ]
+
+let fetch_image_properties =
+  properties Model.fetch_image_allowed [ ("byte_count", int ()); ("base64", str ()) ]
+
+let fetch_response_properties =
+  properties Model.fetch_response_allowed
     [
       ("url", str ());
       ("requested_url", str ());
@@ -135,19 +159,21 @@ let fetch_response_schema =
         `Assoc
           [
             ("type", `String "array");
-            ( "items",
-              obj ~additional:false [ ("offset", int ()); ("text", str ()) ] [ "offset"; "text" ] );
+            ("items", obj ~additional:false fetch_match_properties [ "offset"; "text" ]);
           ] );
-      ( "image",
-        obj ~additional:false
-          [ ("byte_count", int ()); ("base64", str ()) ]
-          [ "byte_count"; "base64" ] );
+      ("image", obj ~additional:false fetch_image_properties [ "byte_count"; "base64" ]);
       ("notice", str ());
     ]
-    [ "url"; "requested_url"; "truncated" ]
 
-let answer_response_schema =
-  obj ~additional:false
+let fetch_response_schema =
+  obj ~additional:false fetch_response_properties [ "url"; "requested_url"; "truncated" ]
+
+let answer_source_properties =
+  properties Model.answer_source_allowed
+    [ ("title", str ()); ("url", str ()); ("provider", str ()) ]
+
+let answer_response_properties =
+  properties Model.answer_response_allowed
     [
       ("query", str ());
       ("answer", str ());
@@ -155,10 +181,7 @@ let answer_response_schema =
         `Assoc
           [
             ("type", `String "array");
-            ( "items",
-              obj ~additional:false
-                [ ("title", str ()); ("url", str ()); ("provider", str ()) ]
-                [ "title"; "url"; "provider" ] );
+            ("items", obj ~additional:false answer_source_properties [ "title"; "url"; "provider" ]);
           ] );
       ("model", str ());
       ("depth", enum [ "brief"; "report" ]);
@@ -168,7 +191,33 @@ let answer_response_schema =
       ("truncated", bool ());
       ("notice", str ());
     ]
+
+let answer_response_schema =
+  obj ~additional:false answer_response_properties
     [ "query"; "answer"; "sources"; "model"; "depth"; "searches"; "fetched" ]
+
+(* The completeness audit's domain: every wire model, its key list, and the table
+   that gives each key a schema. A name in the list and not in the table is a tool
+   schema short of what the encoder emits - a lie to the model reading it - so it
+   is reported by name here and the suite fails the build over it. *)
+let untabled_wire_fields =
+  List.concat_map
+    (fun (model, allowed, table) ->
+      List.filter_map
+        (fun name -> if List.mem_assoc name table then None else Some (model ^ "." ^ name))
+        allowed)
+    [
+      ("search_request", Model.search_request_allowed, search_properties);
+      ("fetch_request", Model.fetch_request_allowed, fetch_properties);
+      ("answer_request", Model.answer_request_allowed, answer_properties);
+      ("result", Model.result_allowed, result_properties);
+      ("search_response", Model.search_response_allowed, search_response_properties);
+      ("fetch_match", Model.fetch_match_allowed, fetch_match_properties);
+      ("fetch_image", Model.fetch_image_allowed, fetch_image_properties);
+      ("fetch_response", Model.fetch_response_allowed, fetch_response_properties);
+      ("answer_source", Model.answer_source_allowed, answer_source_properties);
+      ("answer_response", Model.answer_response_allowed, answer_response_properties);
+    ]
 
 type health = {
   board : Health.t;

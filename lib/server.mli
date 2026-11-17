@@ -157,6 +157,11 @@ val operational_routes : (string * string) list
 val cli_verbs : string list
 val server_flags : string list
 
+val untabled_wire_fields : string list
+(** Each wire field that has no property schema, as ["model.field"]. Empty while the tool schemas
+    describe everything the encoders emit; a suite fails the build over a non-empty answer, because
+    the schema is what a model reads. *)
+
 type flag_arity = Boolean | Value
 
 type server_flag = { name : string; arity : flag_arity; repeats : bool; key : string }
