@@ -45,9 +45,6 @@ val parse :
 val cost_for : cost_per_1k:float -> int -> float
 (** Per-query cost in USD. Flat per request. *)
 
-val request_body : Seekwright.Provider.search_query -> string
-(** Request body containing [query] and [hitsPerPage]. *)
-
 val make :
   ?cost_per_1k:float ->
   ?snippet_chars:int ->

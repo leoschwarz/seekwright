@@ -36,13 +36,6 @@ val language_param : string -> string option
 val country_param : string -> string option
 (** The same lookup for countries. *)
 
-val request_body :
-  country:string option -> language:string option -> Seekwright.Provider.search_query -> string
-(** The request document. [country] and [language] are the {b resolved} enum values rather than the
-    raw codes, because the lookup decides whether the filter rides at all; taking the resolved
-    values here is what lets a suite pin a whole unmappable search's body without reaching the clock
-    or the network. [count] is clamped to {!max_results}. *)
-
 val parse : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** [results.result[]] (title, url, snippet, page_age) — [results] is an object and the hits live
     under its [result] key, the wire's shape. [sentence] (body text) arrives only behind

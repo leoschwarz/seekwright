@@ -26,8 +26,5 @@ val make :
 val cost_for : cost_per_1k:float -> int -> float
 (** Per-query cost in USD. Flat per request. *)
 
-val request_body : Seekwright.Provider.search_query -> string
-(** Serialises the request JSON with filters. *)
-
 val parse : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** Parses hits from [results[]]. *)

@@ -40,9 +40,6 @@ val after_date : now:(unit -> float) -> Seekwright.Model.recency -> string
 val fold_operators : now:(unit -> float) -> Seekwright.Provider.search_query -> string
 (** Compose the query with this API's operators folded in: term, [site:], [lang:], [after:]. *)
 
-val request_body : query:string -> Seekwright.Provider.search_query -> string
-(** Encodes the request JSON with decided [query] and clamped [count]. *)
-
 val parse :
   snippet_chars:int -> text_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** [results[]] (title, url, snippet, summary, date, rerank_score). [results] is documented as an

@@ -28,14 +28,6 @@ val age_days : Seekwright.Model.recency -> int
 val format_utc : float -> string
 (** Formats timestamp as [%Y-%m-%dT%H:%M:%SZ]. *)
 
-val request_body :
-  depth:string ->
-  output:output ->
-  from_date:string option ->
-  Seekwright.Provider.search_query ->
-  string
-(** Serialises request JSON with filters and options. *)
-
 val parse_sources : snippet_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** Parses [sources[]] citations for [Sourced_answer]. *)
 

@@ -22,9 +22,6 @@ val country_by_code : (string * string) list
 val country_param : string -> string option
 (** Resolves a country code or name to the vendor's enum value. *)
 
-val request_body : country:string option -> Seekwright.Provider.search_query -> string
-(** Serialises the request JSON with filters. *)
-
 val parse : text_chars:int -> Yojson.Safe.t -> limit:int -> Seekwright.Provider.hit list
 (** Parses hits from [results[]] into hits with extracts in [text]. *)
 
