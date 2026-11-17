@@ -1,8 +1,9 @@
 # Plan: the money path — what is left to simplify
 
-Status: **C-002 and C-001 are landed** (`config: the ladder's tier is the row's
-declared price`, `usage: one money record over the lines that carry a figure`); the
-rest of the page is proposals. Tree read at `4de7fe2`, after the
+Status: **C-002, C-001 and C-003 are landed** (`config: the ladder's tier is the row's
+declared price`, `usage: one money record over the lines that carry a figure`, `fetch:
+a rung carries the amount, not the rate`); the rest of the page is proposals. Tree
+read at `4de7fe2`, after the
 structural pass closed: `plans/duplication-and-simplification-plan.md` §2 S-001–S-010,
 its §3 weight rows and decisions D-A … D-G are all in the code,
 including the cost rows — `Adapter.cost_for` injection (S-011), the row that
@@ -173,7 +174,7 @@ the same fact with one fewer place to be wrong; `AGENTS.md`'s frozen-surface row
 `ocaml-docs/egress.md`'s "which three bill" line move in the same commit.
 Expected: −9 lines in `lib/config.ml`, one fewer field in a public record.
 
-### C-003 — a fetch rung carries a rate; a search result carries an amount
+### C-003 — a fetch rung carries a rate; a search result carries an amount · **landed**
 
 **Evidence.** The search side settles money in the factory:
 `Providers_build` hands the adapter `Registry.price row pc`, the adapter reports
@@ -194,14 +195,27 @@ amount instead of the rate would be read by the engine with no arithmetic; a
 future price that is not per-1k (a per-page or per-byte reader) has to be hunted
 for in `Engine`.
 
-**Fix.** Divide once, where the rate is known: `Fetch_stack.fallback_cost` returns
-the per-read amount (`Option.map (fun rate -> rate /. 1000.)`), the rung field is
-`cost_usd : float option`, and `Engine.fallback_cost_usd` is deleted — the engine
-passes `rung.cost_usd` to `Usage.record_fetch` and knows nothing about money
-units. `test_fetch_ladder.ml` asserts the resolved *amounts*, which is the fact
-the operator's correction actually controls. Journal bytes are identical (same
-division, same key), so no golden moves. Expected: −9 in `lib/engine.ml`, +3 in
-`lib/factory/fetch_stack.ml`, seven construction sites renamed.
+**Fix.** Divide once, where the rate is known: `Fetch_stack.fallback_cost` returns the
+per-read amount (`… cost_per_1k /. 1000.` applied to the declared-or-corrected rate),
+the rung field is `cost_usd : float option`, and the engine passes the rung's amount
+to `Usage.record_fetch` with no arithmetic of its own. `test_fetch_ladder.ml` asserts
+the resolved *amounts*, which is the fact the operator's correction actually controls.
+Journal bytes are identical (same division, same key), so no golden moves.
+
+**Landed, with one correction to the sketch and one find.** The engine's helper is not
+deleted: `finish_served_call` is handed the *name* of the rung that answered, so the
+lookup survives as `Engine.Fetch.rung_price` — what goes is the `/. 1000.` and with it
+the unit knowledge. The find: the local `http` rung carried `cost_per_1k =
+fetch.cost_per_1k` and nothing could ever read it, because a local read is journalled
+with `fallback = None` — the journal's "nothing was spent" — so that value was dead
+weight and the rung now states `cost_usd = None`. Ten construction sites renamed, not
+seven: `Fetch_stack`'s two rungs, the stubs in `test_fetch_engine.ml`,
+`test_fetch_cache.ml`, `test_concurrency.ml`, `test_agent.ml`, `test_p8_server.ml` and
+`log_guard/field_sets.ml`, and `test_fetch_ladder.ml`'s accessor. `lib/engine.ml` went
+999 → 1000 and `fetch_stack.ml` 381 → 387 — the unit rule moved into a comment in the
+one file allowed to know it. The behaviour proof is that the four walk-billing
+assertions in `test_fetch_engine.ml` kept their exact figures (`0.0016`, `0.0003`)
+while only the stub inputs were restated as amounts.
 
 ### C-004 — the agent prices a model call twice, and its ceiling sees half the spend
 
@@ -311,7 +325,7 @@ step, which is what `test_agent.ml`'s existing ceiling case pins. Keep.
 |---|---|---|
 |1|C-002 `billable`|**landed** — the field is gone, `validate_fetch_fallbacks` asks `row.default_cost <> None`, the frozen-vocabulary case derives the priced subset from the registry, and `configuration.md` and `AGENTS.md` say "declared price"|
 |2|C-001 `money`|**landed** — `figure` / `money ()` / `add_money` / `money_json`, search money deliberately left a plain float; every pre-existing money assertion passed unmodified, and the served path was run: a loopback fixture, one local `fetch` and one `searxng` search through `POST /api/v1/…`, then the journal appended with one priced and one unpriced line of each kind, restart, and `/dashboard/data` reporting `fetch_cost_usd 0.0003` with `priced_fetches 1` of `fetches 2` and `model_cost_usd 0.0012` with `priced_calls 1` of `calls 2`. New case: a day bucket pairing both kinds. 1073 → 1075 lines|
-|3|C-003 the rung's amount|`Engine` loses its last money arithmetic|
+|3|C-003 the rung's amount|**landed** — `Fetch_stack.fallback_price` divides, the rung field is `cost_usd`, `Engine.Fetch.rung_price` keeps only the name→rung lookup, and the local `http` rung's never-readable price is gone; ten construction sites renamed and the four walk-billing assertions kept their exact figures|
 |4|C-004 the agent price and the widened ceiling|the only behaviour change in the set, so it lands last and alone|
 |5|C-005 `cost_of`|optional, last|
 

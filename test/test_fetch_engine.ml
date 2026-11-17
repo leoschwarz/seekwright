@@ -69,7 +69,7 @@ type fetcher_stub = {
   name : string;
   calls : int ref;
   kwargs : (int * Engine.Fetch.cap) list ref;
-  cost_per_1k : float option;
+  cost_usd : float option;
   text : string;
   landed : string option;
   title : string option;
@@ -79,14 +79,14 @@ type fetcher_stub = {
   fail : Engine.Fetch.fetch_error option;
 }
 
-let stub ?(name = "fetch") ?fail ?(cost_per_1k = None) ?(text = page_text) ?landed
+let stub ?(name = "fetch") ?fail ?(cost_usd = None) ?(text = page_text) ?landed
     ?(title = Some "A Page") ?(content_type = Some "text/html") ?(path_addressable = false) ?image
     () =
   {
     name;
     calls = ref 0;
     kwargs = ref [];
-    cost_per_1k;
+    cost_usd;
     text;
     landed;
     title;
@@ -99,7 +99,7 @@ let stub ?(name = "fetch") ?fail ?(cost_per_1k = None) ?(text = page_text) ?land
 let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
   {
     Engine.Fetch.name = s.name;
-    cost_per_1k = s.cost_per_1k;
+    cost_usd = s.cost_usd;
     fetch =
       (fun ~url:target ~offset ~max_chars ->
         incr s.calls;
@@ -1393,11 +1393,11 @@ let a_walk_bills_the_fallback_that_answered () =
   (* Two priced fallbacks, two different figures: the line carries the second
      one. *)
   let tried =
-    stub ~name:"scrappa" ~cost_per_1k:(Some 0.30)
+    stub ~name:"scrappa" ~cost_usd:(Some 0.0003)
       ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403"))
       ()
   in
-  let answered = stub ~name:"priced-two" ~cost_per_1k:(Some 1.60) () in
+  let answered = stub ~name:"priced-two" ~cost_usd:(Some 0.0016) () in
   let board = walk_board (recorder ()) [ tried; answered ] in
   ignore (served board url);
   let json = Usage.snapshot (Option.value ~default:(recorder ()) board.usage) in
@@ -1415,7 +1415,7 @@ let a_walk_past_a_free_fallback_bills_the_priced_one () =
       ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403"))
       ()
   in
-  let answered = stub ~name:"scrappa" ~cost_per_1k:(Some 0.30) () in
+  let answered = stub ~name:"scrappa" ~cost_usd:(Some 0.0003) () in
   let board = walk_board (recorder ()) [ tried; answered ] in
   ignore (served board url);
   let entry = one_recent board in
@@ -1425,7 +1425,7 @@ let a_walk_past_a_free_fallback_bills_the_priced_one () =
 let a_walk_answered_by_a_free_fallback_bills_nothing () =
   (* The priced fallback that was tried and failed is not the one that billed. *)
   let tried =
-    stub ~name:"scrappa" ~cost_per_1k:(Some 0.30)
+    stub ~name:"scrappa" ~cost_usd:(Some 0.0003)
       ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "HTTP 403"))
       ()
   in

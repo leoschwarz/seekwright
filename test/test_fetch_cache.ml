@@ -70,22 +70,22 @@ type fetcher_stub = {
   name : string;
   calls : int ref;
   asked : (int * Engine.Fetch.cap) list ref;
-  cost_per_1k : float option;
+  cost_usd : float option;
   text : string;
   image : Engine.Fetch.image option;
   fails : int ref;
   park : unit -> unit;
 }
 
-let stub ?(name = "http") ?(fails = 0) ?(park = fun () -> ()) ?(cost_per_1k = None)
-    ?(text = page_text) ?image () =
-  { name; calls = ref 0; asked = ref []; cost_per_1k; text; image; fails = ref fails; park }
+let stub ?(name = "http") ?(fails = 0) ?(park = fun () -> ()) ?(cost_usd = None) ?(text = page_text)
+    ?image () =
+  { name; calls = ref 0; asked = ref []; cost_usd; text; image; fails = ref fails; park }
 
 let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
   let unavailable = Engine.Fetch.Provider (Provider.provider_error ~provider:s.name "HTTP 503") in
   {
     Engine.Fetch.name = s.name;
-    cost_per_1k = s.cost_per_1k;
+    cost_usd = s.cost_usd;
     fetch =
       (fun ~url:target ~offset ~max_chars ->
         s.park ();
@@ -393,7 +393,7 @@ let a_cached_page_of_a_priced_rung_is_unbilled () =
      spent", so a cached read of a paid route carries no cost whatever that route
      charges, and the total stays at the one call that was made. *)
   let local = stub () in
-  let paid = stub ~name:"scrappa" ~cost_per_1k:(Some 0.30) () in
+  let paid = stub ~name:"scrappa" ~cost_usd:(Some 0.0003) () in
   with_board ~fallbacks:[ paid ] local (fun board ->
       ignore (served board ~provider:"scrappa" url);
       (match recent board with

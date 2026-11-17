@@ -222,7 +222,7 @@ let fetch_stub ~name ~net ~port = { name; net; port; calls = Atomic.make 0 }
 let fetcher_of_stub (s : fetch_stub) : Engine.Fetch.fetcher =
   {
     Engine.Fetch.name = s.name;
-    cost_per_1k = None;
+    cost_usd = None;
     fetch =
       (fun ~url ~offset:_ ~max_chars:_ ->
         ignore (Atomic.fetch_and_add s.calls 1);

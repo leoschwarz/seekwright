@@ -439,7 +439,7 @@ module Fetch = struct
 
   type fetcher = {
     name : Config.name;
-    cost_per_1k : float option;
+    cost_usd : float option;
     fetch : url:string -> offset:int -> max_chars:cap -> (page, fetch_error) result;
     aclose : unit -> unit;
   }
@@ -583,14 +583,15 @@ module Fetch = struct
     in
     emit (bind base fields) Config.Log_info "fetch.ok" []
 
-  (* [None] is unbilled, not free: the journal then carries no [cost_usd]. *)
-  let fallback_cost_usd t (fallback : Config.name option) : float option =
+  (* What the rung that answered charges for one read, settled by the factory: the
+     engine never learns that fetch prices are quoted per thousand. [None] is
+     unbilled, not free — the journal then carries no [cost_usd]. *)
+  let rung_price t (fallback : Config.name option) : float option =
     match fallback with
     | None -> None
     | Some name -> (
         match List.find_opt (fun (candidate : fetcher) -> candidate.name = name) t.fallbacks with
-        | Some candidate -> (
-            match candidate.cost_per_1k with None -> None | Some rate -> Some (rate /. 1000.))
+        | Some candidate -> candidate.cost_usd
         | None -> None)
 
   let finish_served_call base t (page : page) ~(fallback : Config.name option) ~(started : float)
@@ -604,7 +605,7 @@ module Fetch = struct
         (* A dispatch-free read is unbilled: the absent [cost_usd] is the journal's
          "nothing was spent". *)
         Usage.record_fetch usage ~ms ~chars:(Utf8.count page.text) ~fallback
-          ?cost_usd:(if cached then None else fallback_cost_usd t fallback)
+          ?cost_usd:(if cached then None else rung_price t fallback)
           ?run ?step ()
 
   let raise_failure base t (exc : fetch_error) ~(started : float) ?(also_failed = "") ?(choice = "")

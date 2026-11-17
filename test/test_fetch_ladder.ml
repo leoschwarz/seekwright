@@ -64,7 +64,7 @@ let built config env sw =
           List.iter (fun (f : Engine.Fetch.fetcher) -> f.aclose ()) fallbacks)
         (fun () ->
           ( List.map (fun (f : Engine.Fetch.fetcher) -> f.Engine.Fetch.name) fallbacks,
-            List.map (fun (f : Engine.Fetch.fetcher) -> f.cost_per_1k) fallbacks ))
+            List.map (fun (f : Engine.Fetch.fetcher) -> f.cost_usd) fallbacks ))
 
 let names config env sw = fst (built config env sw)
 
@@ -174,11 +174,12 @@ let prices () =
   clear_keys ();
   Unix.putenv (Config.api_key_env_var "scrappa") "k";
   let _names, costs = built (stack_config (ladder [ "scrappa" ])) env sw in
-  A.(check (list (option (float 1e-9)))) "the price the fallback declares" costs [ Some 0.30 ];
-  (* [fetch.cost_per_1k] is the operator's correction of that figure. *)
+  A.(check (list (option (float 1e-9)))) "the price the fallback declares" costs [ Some 0.0003 ];
+  (* [fetch.cost_per_1k] is the operator's correction of that rate, and a rung
+     carries the amount for one read: 0.20 per thousand is 0.0002 per page. *)
   let corrected = { (ladder [ "scrappa" ]) with Config.cost_per_1k = Some 0.20 } in
   let _names, costs = built (stack_config corrected) env sw in
-  A.(check (list (option (float 1e-9)))) "the correction" costs [ Some 0.20 ];
+  A.(check (list (option (float 1e-9)))) "the correction" costs [ Some 0.0002 ];
   (* And it corrects only the priced rows: a free fallback carries no figure,
      so a ladder-wide key cannot put one on it. *)
   let free =

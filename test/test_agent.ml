@@ -241,7 +241,7 @@ let fetcher_stub ?(name = "fetch") ?(text = page_text) ?fail () =
 let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
   {
     Engine.Fetch.name = s.name;
-    cost_per_1k = None;
+    cost_usd = None;
     fetch =
       (fun ~url ~offset:_ ~max_chars:_ ->
         incr s.calls;

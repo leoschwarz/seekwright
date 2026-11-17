@@ -93,7 +93,7 @@ module Fetch : sig
 
   type fetcher = {
     name : Config.name;
-    cost_per_1k : float option;  (** [None] is "no price to record", not "free" *)
+    cost_usd : float option;  (** what one read costs; [None] is "no price to record", not "free" *)
     fetch : url:string -> offset:int -> max_chars:cap -> (page, fetch_error) result;
     aclose : unit -> unit;
   }

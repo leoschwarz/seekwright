@@ -200,7 +200,7 @@ let body = body_sentinel ^ " " ^ String.make 260 'x'
 let fetch_fixture : Engine.Fetch.fetcher =
   {
     Engine.Fetch.name = "http";
-    cost_per_1k = None;
+    cost_usd = None;
     fetch =
       (fun ~url ~offset:_ ~max_chars:_ ->
         Ok

@@ -83,7 +83,7 @@ let fetch_engine config =
   let fetcher =
     {
       Engine.Fetch.name = "http";
-      cost_per_1k = None;
+      cost_usd = None;
       fetch =
         (fun ~url ~offset:_ ~max_chars:_ ->
           Ok

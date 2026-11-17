@@ -43,11 +43,14 @@ let cap_of (cap : Engine.Fetch.cap) : int option =
   | Engine.Fetch.Uncapped -> Some Fetcher.uncapped
 
 (* The row's declared price is the default; the operator's override applies only
-   where a price exists, so an unbilled rung still records [None]. *)
-let fallback_cost config (row : Config.fetch_fallback) =
+   where a price exists, so an unbilled rung still records [None]. A page is one
+   read, so the per-thousand rate becomes the per-read amount here and nothing
+   downstream of this file has to know the unit. *)
+let fallback_price config (row : Config.fetch_fallback) =
   match row.Config.default_cost with
   | None -> None
-  | Some declared -> Some (Option.value ~default:declared config.Config.fetch.Config.cost_per_1k)
+  | Some declared ->
+      Some (Option.value ~default:declared config.Config.fetch.Config.cost_per_1k /. 1000.)
 
 let fallback_error_of (name : Config.name) error =
   match error with
@@ -59,10 +62,10 @@ let fallback_error_of (name : Config.name) error =
   | Fallback.Failed message ->
       Engine.Fetch.Provider (Provider.provider_error ~provider:name message)
 
-let wrap_fallback (name : Config.name) cost fetch =
+let wrap_fallback (name : Config.name) cost_usd fetch =
   {
     Engine.Fetch.name;
-    cost_per_1k = cost;
+    cost_usd;
     fetch =
       (fun ~url ~offset ~max_chars ->
         match fetch url ~offset ~max_chars:(cap_of max_chars) with
@@ -126,7 +129,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
             let* grant, check = grant_and_check ~sw ~net ~mono_clock ?audit config row in
             Ok
               (Some
-                 (wrap_fallback name (fallback_cost config row)
+                 (wrap_fallback name (fallback_price config row)
                     (Seekwright_fetch.Fallback_jina.fetch
                        {
                          net = Fallback.of_grant grant;
@@ -149,7 +152,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
               let check = Remote_target.make_check ~net ~private_web_allowed:false in
               Ok
                 (Some
-                   (wrap_fallback name (fallback_cost config row)
+                   (wrap_fallback name (fallback_price config row)
                       (Seekwright_fetch.Fallback_crawl4ai.fetch
                          {
                            net = Fallback.of_grant grant;
@@ -194,7 +197,7 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                                 Float.max fetch.Config.timeout_seconds tavily_body_floor;
                             }
                     in
-                    Ok (Some (wrap_fallback name (fallback_cost config row) rung)))))
+                    Ok (Some (wrap_fallback name (fallback_price config row) rung)))))
 
 (* [error_of] is a translation, not a copy, and stays one: [Fetcher.refusal] and
    [Engine.Fetch.fetch_error] are different vocabularies on purpose — a
@@ -247,7 +250,10 @@ let build_fetch_stack ~sw ~net ~mono_clock ?audit config =
                 let local =
                   {
                     Engine.Fetch.name = "http";
-                    cost_per_1k = fetch.Config.cost_per_1k;
+                    (* A local read is journalled with [fallback = None], which is the
+                       journal's "nothing was spent"; no figure on this rung is ever
+                       reachable, so [fetch.cost_per_1k] prices the dispatch rungs. *)
+                    cost_usd = None;
                     fetch =
                       (fun ~url ~offset ~max_chars ->
                         match
