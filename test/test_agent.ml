@@ -232,16 +232,17 @@ type fetcher_stub = {
   name : string;
   calls : int ref;
   text : string;
+  cost_usd : float option;
   fail : Engine.Fetch.fetch_error option;
 }
 
-let fetcher_stub ?(name = "fetch") ?(text = page_text) ?fail () =
-  { name; calls = ref 0; text; fail }
+let fetcher_stub ?(name = "fetch") ?(text = page_text) ?(cost_usd = None) ?fail () =
+  { name; calls = ref 0; text; cost_usd; fail }
 
 let make_fetcher (s : fetcher_stub) : Engine.Fetch.fetcher =
   {
     Engine.Fetch.name = s.name;
-    cost_usd = None;
+    cost_usd = s.cost_usd;
     fetch =
       (fun ~url ~offset:_ ~max_chars:_ ->
         incr s.calls;
@@ -832,6 +833,38 @@ let a_retrieval_spend_past_the_money_ceiling_aborts_the_call () =
   check_int "one step ran" 1 !(rig.provider.calls);
   includes "error" "per-call ceiling" message
 
+let a_billed_fetch_rung_counts_against_the_money_ceiling () =
+  (* The widened bound: the searches are free (the provider stub's default price is
+     explicitly off) and the reader that answered the page is not. The model call's
+     own worst case at these rates is $0.0015, under the $0.003 ceiling, so the step
+     checks pass and it is the journal's $0.005 of fetch money that stops the call. *)
+  let results = [ result ~snippet:"s" ~url:"https://example.com/1" "r1" ] in
+  let local =
+    fetcher_stub
+      ~fail:(Engine.Fetch.Provider (Provider.provider_error ~provider:"fetch" "connection reset"))
+      ()
+  in
+  let priced = fetcher_stub ~name:"scrappa" ~cost_usd:(Some 0.005) () in
+  let m = stub_model () in
+  let rig =
+    build
+      ~tweak_agent:(fun a ->
+        {
+          a with
+          Config.max_cost_usd = Some 0.003;
+          cost_per_1k_in = Some 0.00014;
+          cost_per_1k_out = Some 0.00028;
+        })
+      ~provider:(stub ~results:(`List results) ~cost_usd:None ())
+      ~model:m ~fetcher:local ~fallbacks:[ priced ] ()
+  in
+  let message = failed rig ~depth:Model.Report () in
+  check_int "no model call" 0 !(m.calls);
+  let rung_calls = match rig.fallbacks with [ f ] -> !(f.calls) | _ -> -1 in
+  check_int "the priced rung read the page" 1 rung_calls;
+  includes "the refusal says where the spend came from" "after reading the material" message;
+  includes "the ceiling is the one the operator set" "per-call ceiling" message
+
 let an_unconfigured_agent_names_what_is_missing () =
   let m = stub_model () in
   let rig =
@@ -926,6 +959,21 @@ let an_endpoint_with_no_usage_reports_null_never_zero () =
   let line = one_answer_line rig in
   check_bool "prompt_tokens is null" true (is_null (get "prompt_tokens" line));
   check_bool "completion_tokens is null" true (is_null (get "completion_tokens" line));
+  check_bool "model_cost_usd is null" true (is_null (get "model_cost_usd" line))
+
+let one_unset_rate_prices_the_model_call_as_unknown () =
+  (* [token_cost] is the one formula, and the ceiling's [Option.value ~default:0.0]
+     must not leak a zero into the answer line: counted, still unpriced. *)
+  let rig =
+    build
+      ~tweak_agent:(fun a ->
+        { a with Config.cost_per_1k_in = Some 0.00014; cost_per_1k_out = None })
+      ~model:(stub_model ~usage:(Some (1000, 500)) ())
+      ()
+  in
+  ignore (answered rig ());
+  let line = one_answer_line rig in
+  check_int "the tokens are still counted" 1000 (int (get "prompt_tokens" line));
   check_bool "model_cost_usd is null" true (is_null (get "model_cost_usd" line))
 
 let unset_prices_record_the_cost_as_unknown () =
@@ -1109,6 +1157,8 @@ let failure_cases =
       the_whole_call_is_bounded_by_timeout_seconds;
     A.test_case "a retrieval spend past the money ceiling aborts the call" `Quick
       a_retrieval_spend_past_the_money_ceiling_aborts_the_call;
+    A.test_case "a billed fetch rung counts against the money ceiling" `Quick
+      a_billed_fetch_rung_counts_against_the_money_ceiling;
     A.test_case "an unconfigured agent names what is missing" `Quick
       an_unconfigured_agent_names_what_is_missing;
   ]
@@ -1127,6 +1177,8 @@ let usage_cases =
       an_endpoint_with_no_usage_reports_null_never_zero;
     A.test_case "unset prices record the cost as unknown" `Quick
       unset_prices_record_the_cost_as_unknown;
+    A.test_case "one unset rate prices the model call as unknown" `Quick
+      one_unset_rate_prices_the_model_call_as_unknown;
     A.test_case "finish_reason length sets truncated" `Quick finish_reason_length_sets_truncated;
     A.test_case "a complete answer does not serialise truncated" `Quick
       a_complete_answer_does_not_serialise_truncated;

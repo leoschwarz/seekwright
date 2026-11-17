@@ -197,7 +197,12 @@ discarded rides its own `search.cap` log event rather than the response.
 `base_url` and `model` in config and `SEEKWRIGHT_AGENT_API_KEY` in the
 environment; the retrieval plan is fixed and the model never chooses what gets
 searched, so the per-call ceiling (`max_cost_usd`, the `max_output_tokens_*` and
-`max_material_chars` figures) is arithmetic, not accounting. Its contract is
+`max_material_chars` figures) is arithmetic, not accounting. It counts every priced
+figure the journal holds for the process — search money and the money a fetch
+fallback charged for a page — and it is checked after each retrieval step and again
+once the material has been read, which is the last point where a billed page can
+still stop the model call. A model call whose `cost_per_1k_in`/`cost_per_1k_out`
+rates are unset bounds as nothing rather than as zero spend. Its contract is
 agent mode's own rules — the fixed plan, the citation requirement and the budget
 arithmetic above — all of which this port implements.
 

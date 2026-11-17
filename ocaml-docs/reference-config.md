@@ -159,9 +159,12 @@ model_timeout_seconds = 30.0  # the model request alone, inside the whole call
 max_material_chars = 24000    # total retrieved characters handed to the model (~6k tokens)
 max_output_tokens_brief = 500    # the `brief` output ceiling, sent as the endpoint's cap
 max_output_tokens_report = 2500  # the `report` output ceiling
-max_cost_usd = 0.25           # per-call abort, checked after each retrieval step
-# cost_per_1k_in = 0.00014    # dollars per 1k tokens, reporting only; unset records the
-# cost_per_1k_out = 0.00028   # model cost as unknown, never as 0.0
+max_cost_usd = 0.25           # per-call abort: this call's priced search money plus its
+                              # priced fetch money, checked after each retrieval step and
+                              # again once the material has been read
+# cost_per_1k_in = 0.00014    # dollars per 1k tokens: the answer line's price and the
+# cost_per_1k_out = 0.00028   # ceiling's bound for the model call; unset records the model
+                              # cost as unknown, never as 0.0, and bounds the call as nothing
 ```
 
 ## Secrets

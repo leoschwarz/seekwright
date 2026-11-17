@@ -1,8 +1,9 @@
 # Plan: the money path — what is left to simplify
 
-Status: **C-002, C-001 and C-003 are landed** (`config: the ladder's tier is the row's
-declared price`, `usage: one money record over the lines that carry a figure`, `fetch:
-a rung carries the amount, not the rate`); the rest of the page is proposals. Tree
+Status: **C-002, C-001, C-003 and C-004 are landed** (`config: the ladder's tier is the
+row's declared price`, `usage: one money record over the lines that carry a figure`,
+`fetch: a rung carries the amount, not the rate`, `agent: one token price and a ceiling
+that counts fetch money`); C-005 and the §4 decisions are the maintainer's. Tree
 read at `4de7fe2`, after the
 structural pass closed: `plans/duplication-and-simplification-plan.md` §2 S-001–S-010,
 its §3 weight rows and decisions D-A … D-G are all in the code,
@@ -217,7 +218,7 @@ one file allowed to know it. The behaviour proof is that the four walk-billing
 assertions in `test_fetch_engine.ml` kept their exact figures (`0.0016`, `0.0003`)
 while only the stub inputs were restated as amounts.
 
-### C-004 — the agent prices a model call twice, and its ceiling sees half the spend
+### C-004 — the agent prices a model call twice, and its ceiling sees half the spend · **landed**
 
 **Evidence.** `worst_case_model_cost` computes
 `max_material_chars / chars_per_token / 1000 * cost_per_1k_in + output_cap / 1000 * cost_per_1k_out`
@@ -236,27 +237,40 @@ pair: change `cost_per_1k_in` handling in one and the ceiling stops meaning the
 thing the answer line reports. And the operator-facing promise — `max_cost_usd` is
 the per-call spend bound — is narrower than it reads.
 
-**Fix.** `token_cost settings ~prompt ~completion : float option` is the one
+**Fix.** `token_cost … ~prompt_tokens ~completion_tokens : float option` is the one
 formula: the worst case calls it with the caps as the token counts and the ceiling
 site adds `Option.value ~default:0.0`; `model_cost` goes, and the answer line takes
 `token_cost` over the reported `prompt_tokens`/`completion_tokens`. Then
-`Usage.search_cost_usd` becomes `Usage.spend t` — search money plus priced fetch
-money, both already accumulated — so the bound covers every off-proxy figure the
-journal holds. That is a rename, not a new name: the snapshot keeps its
-`search_cost_usd` key (the dashboard reads the JSON, not the accessor) and the
-accessor count stays at one. `Agent`'s refusal sentence stays the sentence; the
-condition it fires on widens. Expected: −8 lines, and a widened bound documented
-as a behaviour change.
+`Usage.search_cost_usd` becomes `Usage.spend t` — search money plus priced fetch money,
+both already accumulated — so the bound covers every off-proxy figure the journal
+holds. The snapshot keeps its `search_cost_usd` key (the dashboard reads the JSON, not
+the accessor) and the accessor count stays at one.
+
+**Landed, and the rename alone would not have closed it.** The pages are read *after*
+the retrieval walk — search, then read, then the one model call — so at each step check
+the fetch money is not in the journal yet and widening what `spent` reads changes
+nothing there. The bound needed a second check point, and the only useful one is after
+the material is read and before the model is dialed. That is `Agent.over_ceiling`,
+called from both places with a phase phrase and one sentence. And because `Usage.spend`
+is the process window rather than the call, `answer` captures `spend_at_start` and every
+check compares against the delta: a concurrent call's spend rides the bound too, which
+errs in the direction the ceiling exists for. `lib/agent.ml` went 660 → 685 —
+`model_cost` and the `spent_total`/`before` bookkeeping left, a shared check and its
+comment arrived — and the refusal sentence is the same sentence with a phase in it,
+pinned by no golden.
 
 **Gate.** New permanent case in `test/test_agent.ml`: a retrieval whose searches
 are free and whose billed fetch rung pushes the running spend past
 `max_cost_usd` is refused with the ceiling sentence — the case today passes
 through. Plus one case pinning that a model call with one rate unset still prices
 as unknown (`Null` in the answer line), which is what keeps the `Option.value`
-default from leaking into the journal. `ocaml-docs/configuration.md`'s
-`max_cost_usd` line and `ocaml-docs/privacy.md`'s money wording get one clause
-each; `matrix/behaviours.tsv`'s agent row keeps its evidence pointer to the new
-case.
+default from leaking into the journal; `test_usage.ml`'s accessor case now pins that
+`spend` carries a priced rung's money as well as the searches', and that an unpriced
+read adds nothing. `ocaml-docs/configuration.md`'s ceiling paragraph and
+`ocaml-docs/reference-config.md`'s `max_cost_usd`/`cost_per_1k_*` comments carry the
+widened promise; `privacy.md` needed no clause — it names the journal's fields, not the
+bound. `matrix/behaviours.tsv`'s agent row already points at `test_agent.ml`, and both
+new cases live there. All four gate targets green.
 
 ### C-005 — `Registry.cost_of` is public for one suite (optional)
 
@@ -326,7 +340,7 @@ step, which is what `test_agent.ml`'s existing ceiling case pins. Keep.
 |1|C-002 `billable`|**landed** — the field is gone, `validate_fetch_fallbacks` asks `row.default_cost <> None`, the frozen-vocabulary case derives the priced subset from the registry, and `configuration.md` and `AGENTS.md` say "declared price"|
 |2|C-001 `money`|**landed** — `figure` / `money ()` / `add_money` / `money_json`, search money deliberately left a plain float; every pre-existing money assertion passed unmodified, and the served path was run: a loopback fixture, one local `fetch` and one `searxng` search through `POST /api/v1/…`, then the journal appended with one priced and one unpriced line of each kind, restart, and `/dashboard/data` reporting `fetch_cost_usd 0.0003` with `priced_fetches 1` of `fetches 2` and `model_cost_usd 0.0012` with `priced_calls 1` of `calls 2`. New case: a day bucket pairing both kinds. 1073 → 1075 lines|
 |3|C-003 the rung's amount|**landed** — `Fetch_stack.fallback_price` divides, the rung field is `cost_usd`, `Engine.Fetch.rung_price` keeps only the name→rung lookup, and the local `http` rung's never-readable price is gone; ten construction sites renamed and the four walk-billing assertions kept their exact figures|
-|4|C-004 the agent price and the widened ceiling|the only behaviour change in the set, so it lands last and alone|
+|4|C-004 the agent price and the widened ceiling|**landed** — `Agent.token_cost` is the one formula and the answer line takes it; `Usage.spend` covers priced search *and* fetch money, and `Agent.over_ceiling` judges the ceiling at each retrieval step **and** once the material has been read, the only point where a billed page can still stop the model call. Two new `test_agent.ml` cases, the `test_usage.ml` accessor case widened to the priced rung, and both config pages carry the widened promise. `lib/agent.ml` 660 → 685|
 |5|C-005 `cost_of`|optional, last|
 
 Every step ends on the four gate targets — `dune build @fmt`,

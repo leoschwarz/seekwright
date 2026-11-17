@@ -1366,15 +1366,20 @@ let the_snapshot_fields_keep_their_names_and_meanings () =
   A.(check bool) "answers.mean_ms" true (is_null (get "mean_ms" a));
   A.(check (list string)) "answers.models" [] (List.map str (items (get "models" a)))
 
-let search_cost_is_the_serving_paths_figure () =
+let the_spend_the_ceiling_reads_is_unrounded () =
   (* agent mode's ceiling adds every step's spend, so this figure is unrounded:
      six decimals would let the ceiling fire late. *)
   let rec_ = recorder () in
   List.iter (fun _n -> search ~ms:1 ~cost:0.0000004 ~results:0 rec_) [ 1; 2; 3 ];
-  A.(check (float 1e-12) "unrounded" 0.0000012 (Usage.search_cost_usd rec_));
+  A.(check (float 1e-12) "unrounded" 0.0000012 (Usage.spend rec_));
   A.(check json)
     "and the snapshot is the rounded one" (`Float 0.000001)
-    (get "search_cost_usd" (get "totals" (Usage.snapshot rec_)))
+    (get "search_cost_usd" (get "totals" (Usage.snapshot rec_)));
+  (* And it is every priced figure the journal holds, not only the searches: the
+     unpriced read adds nothing, the priced rung adds its amount. *)
+  fetch ~ms:1 ~fallback:(Some "scrappa") rec_;
+  fetch ~ms:1 ~fallback:(Some "scrappa") ~cost_usd:0.0003 rec_;
+  A.(check (float 1e-12) "search money plus the priced rung" 0.0003012 (Usage.spend rec_))
 
 let tests =
   [
@@ -1510,8 +1515,8 @@ let tests =
       ] );
     ( "cost",
       [
-        check "search_cost_usd is unrounded, for the serving path"
-          search_cost_is_the_serving_paths_figure;
+        check "spend is unrounded, and it is the search money plus the fetch money"
+          the_spend_the_ceiling_reads_is_unrounded;
       ] );
   ]
 

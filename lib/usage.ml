@@ -820,7 +820,11 @@ let record_answer (t : t) ~(run : string) (m : answer_metrics) ?error () : unit 
       ignore (apply t entry);
       append t entry)
 
-let search_cost_usd (t : t) : float = t.search_cost_usd
+(* The two figures an off-proxy bound has to see: what the search providers charged
+   this process, and what the fetch rungs charged for the pages they read. An
+   unpriced call contributes nothing, so this is a lower bound and never an
+   estimate. *)
+let spend (t : t) : float = t.search_cost_usd +. t.fetch.total
 
 (* The last [window_days] UTC day names, oldest first. *)
 let window_dates (today : string) : string list =

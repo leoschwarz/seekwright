@@ -129,31 +129,48 @@ let failure_message (settings : Config.agent_config) = function
       Printf.sprintf "The answer call exceeded %gs while %s; no answer was produced."
         settings.Config.timeout_seconds phase
 
-let spent t = match t.usage with None -> 0.0 | Some usage -> Usage.search_cost_usd usage
+let spent t = match t.usage with None -> 0.0 | Some usage -> Usage.spend usage
 
 let output_cap (settings : Config.agent_config) depth =
   match depth with
   | Model.Report -> settings.Config.max_output_tokens_report
   | Model.Brief -> settings.Config.max_output_tokens_brief
 
-let worst_case_model_cost (settings : Config.agent_config) depth =
+(* One formula for what a model call costs. Either rate unset makes the call
+   unpriced, never free. *)
+let token_cost (settings : Config.agent_config) ~(prompt_tokens : float)
+    ~(completion_tokens : float) : float option =
   match (settings.Config.cost_per_1k_in, settings.Config.cost_per_1k_out) with
   | Some cost_in, Some cost_out ->
-      (float_of_int settings.Config.max_material_chars /. chars_per_token /. 1000. *. cost_in)
-      +. (float_of_int (output_cap settings depth) /. 1000. *. cost_out)
-  | _ -> 0.0
-
-let model_cost (settings : Config.agent_config) (tally : tally) =
-  match
-    ( tally.prompt_tokens,
-      tally.completion_tokens,
-      settings.Config.cost_per_1k_in,
-      settings.Config.cost_per_1k_out )
-  with
-  | Some prompt, Some completion, Some cost_in, Some cost_out ->
-      Some
-        ((float_of_int prompt /. 1000. *. cost_in) +. (float_of_int completion /. 1000. *. cost_out))
+      Some ((prompt_tokens /. 1000. *. cost_in) +. (completion_tokens /. 1000. *. cost_out))
   | _ -> None
+
+(* The upper bound on the one model call: the material cap read as tokens and the
+   depth's output cap. Where no rate is declared the bound is nothing, which is
+   what keeps [max_cost_usd] from refusing every call on an unpriced deployment. *)
+let worst_case_model_cost settings depth =
+  Option.value ~default:0.0
+    (token_cost settings
+       ~prompt_tokens:(float_of_int settings.Config.max_material_chars /. chars_per_token)
+       ~completion_tokens:(float_of_int (output_cap settings depth)))
+
+(* The per-call ceiling over everything this call has already been billed for:
+   [Usage.spend] is the journal's priced search money *and* its priced fetch money,
+   so a keyed fetch rung's bills count against [max_cost_usd] and not only the
+   searches. The bound is the window aggregate, so a concurrent call's spend rides
+   it too — conservative in the direction the ceiling exists for. *)
+let over_ceiling (settings : Config.agent_config) ~(spent : float) ~(phase : string) depth =
+  match settings.Config.max_cost_usd with
+  | None -> None
+  | Some ceiling ->
+      if spent +. worst_case_model_cost settings depth > ceiling then
+        Some
+          (Agent_failed
+             (Printf.sprintf
+                "Retrieval spend reached $%.4f %s and the model call could push the total past the \
+                 $%.2f per-call ceiling (agent.max_cost_usd); the call was aborted."
+                spent phase ceiling))
+      else None
 
 let timeout_failure t (settings : Config.agent_config) ~started phase =
   if t.clock () -. started > settings.Config.timeout_seconds then Some (Timed_out phase) else None
@@ -260,8 +277,8 @@ let assemble t hits texts =
   go hits texts;
   { items = List.rev !items; rendered = String.concat "\n\n" (List.rev !blocks); notices = [] }
 
-let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~include_domains
-    ~exclude_domains ~recency ~language ~safe_search : (plan, failure) result =
+let retrieve t ~run ~tally ~started ~spend_at_start ~depth ~query ~extra_queries ~provider
+    ~include_domains ~exclude_domains ~recency ~language ~safe_search : (plan, failure) result =
   let settings = t.config.Config.agent in
   let queries =
     match depth with
@@ -273,14 +290,12 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
   let failed = ref [] in
   let first_failure = ref None in
   let empty = ref [] in
-  let spent_total = ref 0.0 in
   let rec walk step = function
     | [] -> Ok ()
     | text :: rest -> (
         match timeout_failure t settings ~started "retrieving" with
         | Some failure -> Error failure
         | None -> (
-            let before = spent t in
             tally.searches <- tally.searches + 1;
             let search_query : Model.search_query =
               {
@@ -304,18 +319,14 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
             | Ok response -> (
                 responses := response :: !responses;
                 if response.Model.results = [] then empty := step :: !empty;
-                spent_total := !spent_total +. (spent t -. before);
-                match settings.Config.max_cost_usd with
-                | Some ceiling when !spent_total +. worst_case_model_cost settings depth > ceiling
-                  ->
-                    Error
-                      (Agent_failed
-                         (Printf.sprintf
-                            "Retrieval spend reached $%.4f after step %d and the model call could \
-                             push the total past the $%.2f per-call ceiling (agent.max_cost_usd); \
-                             the call was aborted."
-                            !spent_total step ceiling))
-                | _ -> walk (step + 1) rest)))
+                match
+                  over_ceiling settings
+                    ~spent:(spent t -. spend_at_start)
+                    ~phase:(Printf.sprintf "after step %d" step)
+                    depth
+                with
+                | Some failure -> Error failure
+                | None -> walk (step + 1) rest)))
   in
   match walk 1 queries with
   | Error failure -> Error failure
@@ -362,10 +373,18 @@ let retrieve t ~run ~tally ~started ~depth ~query ~extra_queries ~provider ~incl
             (Agent_failed
                "The retrieval returned nothing usable to ground an answer in; retry, or rephrase \
                 the question.")
-        else begin
-          tally.material_chars <- Utf8.count plan.rendered;
-          Ok plan
-        end
+        else
+          (* The pages are read, and priced, before the model is dialed: this is the
+             last point where a run whose fetch rungs billed can still be stopped. *)
+          match
+            over_ceiling settings
+              ~spent:(spent t -. spend_at_start)
+              ~phase:"after reading the material" depth
+          with
+          | Some failure -> Error failure
+          | None ->
+              tally.material_chars <- Utf8.count plan.rendered;
+              Ok plan
       end
 
 let user_message material query depth =
@@ -545,7 +564,12 @@ let record t ~(tally : tally) ~run ~depth ~started ?error ?notice ?sanitized () 
         cited = tally.cited;
         cited_invalid = tally.cited_invalid;
         sources = tally.sources;
-        model_cost_usd = model_cost settings tally;
+        model_cost_usd =
+          (match (tally.prompt_tokens, tally.completion_tokens) with
+          | Some prompt, Some completion ->
+              token_cost settings ~prompt_tokens:(float_of_int prompt)
+                ~completion_tokens:(float_of_int completion)
+          | _ -> None);
         ms;
       }
   in
@@ -584,6 +608,7 @@ let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_do
       let selected = match depth with None -> Model.Brief | Some depth -> depth in
       let run = new_run () in
       let started = t.clock () in
+      let spend_at_start = spent t in
       let tally =
         {
           searches = 0;
@@ -603,8 +628,8 @@ let answer t ~query ?extra_queries ?depth ?provider ?include_domains ?exclude_do
         Error (failure_message settings failure)
       in
       match
-        retrieve t ~run ~tally ~started ~depth:selected ~query ~extra_queries ~provider
-          ~include_domains ~exclude_domains ~recency ~language ~safe_search
+        retrieve t ~run ~tally ~started ~spend_at_start ~depth:selected ~query ~extra_queries
+          ~provider ~include_domains ~exclude_domains ~recency ~language ~safe_search
       with
       | Error failure -> abort failure
       | Ok plan -> (

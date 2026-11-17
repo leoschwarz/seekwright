@@ -99,8 +99,10 @@ val answer_metric_keys : string list
 val record_answer : t -> run:string -> answer_metrics -> ?error:string -> unit -> unit
 (** One terminal [answer] call: one line per call, content-free. *)
 
-val search_cost_usd : t -> float
-(** Search spend so far, unrounded, from the in-memory aggregate. *)
+val spend : t -> float
+(** Everything this process has been billed for and the journal recorded: priced search money plus
+    the money the fetch rungs charged, unrounded. An unpriced call adds nothing, which is why
+    [Agent] reads it as a lower bound on a call's spend. *)
 
 val snapshot : t -> Yojson.Safe.t
 (** The whole dashboard state, as the JSON the page reads. Costs are rounded to six decimal places.
