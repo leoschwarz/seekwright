@@ -65,34 +65,21 @@ let known_extractors = [ "stdlib" ]
 
 type fetch_fallback = {
   name : name;
-  billable : bool;
   endpoint : string option;
   fetch_key : string option;
   default_cost : float option;
 }
 
-(* Fallback registry: billable fallbacks must come last in the ladder. *)
+(* Fallback registry: a row that declares a price can bill, and a billable name
+   must come last in the ladder. *)
 let known_fetch_fallbacks =
   [
-    {
-      name = "crawl4ai";
-      billable = false;
-      endpoint = None;
-      fetch_key = Some "crawl4ai_url";
-      default_cost = None;
-    };
-    {
-      name = "jina";
-      billable = false;
-      endpoint = Some "https://r.jina.ai/";
-      fetch_key = None;
-      default_cost = None;
-    };
+    { name = "crawl4ai"; endpoint = None; fetch_key = Some "crawl4ai_url"; default_cost = None };
+    { name = "jina"; endpoint = Some "https://r.jina.ai/"; fetch_key = None; default_cost = None };
     (* The [v1/fetch] rate, not the [linkup] search row's higher one — the two
        are different vendor products. *)
     {
       name = "linkup";
-      billable = true;
       endpoint = Some "https://api.linkup.so/v1/fetch";
       fetch_key = None;
       default_cost = Some 5.00;
@@ -100,7 +87,6 @@ let known_fetch_fallbacks =
     (* One credit per page, which is the [scrappa] search row's rate too. *)
     {
       name = "scrappa";
-      billable = true;
       endpoint = Some "https://scrappa.co/api/web-scraper";
       fetch_key = None;
       default_cost = Some 0.30;
@@ -108,7 +94,6 @@ let known_fetch_fallbacks =
     (* The extract endpoint's rate, a fifth of the [tavily] search row's. *)
     {
       name = "tavily";
-      billable = true;
       endpoint = Some "https://api.tavily.com/extract";
       fetch_key = None;
       default_cost = Some 1.60;
@@ -440,9 +425,9 @@ let validate_provider_names names =
    priced fallback is refused here rather than reordered at fetch time. *)
 let validate_fetch_fallbacks registry fallbacks =
   let registry_names = List.map (fun (row : fetch_fallback) -> row.name) registry in
-  let billable name =
+  let can_bill name =
     match List.find_opt (fun (row : fetch_fallback) -> row.name = name) registry with
-    | Some row -> row.billable
+    | Some row -> row.default_cost <> None
     | None -> false
   in
   if fallbacks = [] then Ok ()
@@ -455,7 +440,7 @@ let validate_fetch_fallbacks registry fallbacks =
           (Printf.sprintf "fetch.fallback names unknown fallback(s) %s; supported: %s"
              (join unknown) (join registry_names))
     | _ -> (
-        let priced = fallbacks |> List.filter billable |> List.sort String.compare in
+        let priced = fallbacks |> List.filter can_bill |> List.sort String.compare in
         (* At most one billable rung, and it must be the ladder's last name. *)
         let priced_too_late =
           Printf.sprintf

@@ -1,8 +1,9 @@
 # Plan: the money path — what is left to simplify
 
-Status: **proposals only; nothing here is landed.** Tree read at `4de7fe2`
-(2026-11-17), after the structural pass closed: `plans/duplication-and-simplification-plan.md`
-§2 S-001–S-010, its §3 weight rows and decisions D-A … D-G are all in the code,
+Status: **C-002 is landed** (`config: the ladder's tier is the row's declared
+price`); the rest of the page is proposals. Tree read at `4de7fe2`, after the
+structural pass closed: `plans/duplication-and-simplification-plan.md` §2 S-001–S-010,
+its §3 weight rows and decisions D-A … D-G are all in the code,
 including the cost rows — `Adapter.cost_for` injection (S-011), the row that
 prices everything instead of mirroring the adapter's rule, and `provider_set`
 folded into `Providers_build`. This page asks the narrower question the maintainer
@@ -133,7 +134,7 @@ same day and check the day renders the figure with its count, and check an
 unpriced-only day renders `Null` — the case the four hand-written folds can get
 apart.
 
-### C-002 — `Config.fetch_fallback.billable` restates `default_cost`
+### C-002 — `Config.fetch_fallback.billable` restates `default_cost` · **landed**
 
 **Evidence.** `known_fetch_fallbacks` carries both fields for all five rows, and
 they agree everywhere: `crawl4ai` `false`/`None`, `jina` `false`/`None`, `linkup`
@@ -296,7 +297,7 @@ step, which is what `test_agent.ml`'s existing ceiling case pins. Keep.
 
 |Order|Step|Expected effect|
 |---|---|---|
-|1|C-002 `billable`|smallest, and it removes a field a public record advertises. Two doc sentences and the frozen-vocabulary case move with it|
+|1|C-002 `billable`|**landed** — the field is gone, `validate_fetch_fallbacks` asks `row.default_cost <> None`, the frozen-vocabulary case derives the priced subset from the registry, and `configuration.md` and `AGENTS.md` say "declared price"|
 |2|C-001 `money`|the big one; accepted only if the existing money assertions pass unmodified, plus the new priced/unpriced pairing case|
 |3|C-003 the rung's amount|`Engine` loses its last money arithmetic|
 |4|C-004 the agent price and the widened ceiling|the only behaviour change in the set, so it lands last and alone|

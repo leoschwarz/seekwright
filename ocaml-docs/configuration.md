@@ -108,7 +108,7 @@ Nothing infers a provider from the query.
 `[fetch] primary` and `[fetch] fallback` choose the read route and its walk.
 `[fetch] fallback` may name only rows in `KNOWN_FALLBACKS` (`crawl4ai`, `jina`,
 `scrappa`, `tavily`, `linkup`), each at most once, and at most one billable
-name, last — the validator reads each row's `billable` flag rather than a
+name, last — the validator reads each row's declared price rather than a
 hard-coded name. `[fetch] auto_fallback` is **off** by default: the primary's
 refusal names the ladder rather than spending a second vendor. Agent mode passes
 `auto_fallback = true` for the pages it reads.

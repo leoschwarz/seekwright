@@ -816,15 +816,15 @@ let test_the_fetch_role_cannot_dispatch_a_provider () =
 
 let fallback_names rows = List.map (fun (row : Config.fetch_fallback) -> row.name) rows
 
-(* A fallback this build has never heard of, which can bill: the tier rule asks
-   each row's flag, never a name, so an unknown priced fallback falls under it. *)
+(* A fallback this build has never heard of, which can bill: the tier rule asks each
+   row whether it declares a price, never a name, so an unknown priced fallback falls
+   under it. *)
 let priced_elsewhere : Config.fetch_fallback =
   {
     Config.name = "pricedelsewhere";
-    billable = true;
     endpoint = Some "https://priced-elsewhere.example/";
     fetch_key = None;
-    default_cost = None;
+    default_cost = Some 0.42;
   }
 
 let registry_with_extra = Config.known_fetch_fallbacks @ [ priced_elsewhere ]
@@ -1605,7 +1605,7 @@ let test_the_frozen_vocabularies () =
     check strings "which of them bill" [ "linkup"; "scrappa"; "tavily" ]
       (fallback_names
          (List.filter
-            (fun (row : Config.fetch_fallback) -> row.billable)
+            (fun (row : Config.fetch_fallback) -> row.default_cost <> None)
             Config.known_fetch_fallbacks));
     check string "the install's user agent"
       "seekwright/0.1.1 (+https://github.com/leoschwarz/seekwright)" Config.default_user_agent)
