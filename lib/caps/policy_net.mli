@@ -16,9 +16,20 @@ type response = { status : int; headers : (string * string) list; body : string 
 
 type endpoint = { scheme : [ `Http | `Https ]; host : string; port : int option }
 
+val endpoint_of_uri : Uri.t -> (endpoint, Error.t) result
+(** [endpoint_of_uri uri] turns an absolute URI into the one-endpoint list a grant may be built for,
+    using the scheme, host and port rules [with_endpoints] will later apply to a request. A URI that
+    is not http(s) or names no host is an [Error], which is how a caller refuses a destination
+    before it builds a grant for it rather than at the first request. *)
+
 type t
 
 val default_max_response_bytes : int
+
+val max_configurable_response_bytes : int
+(** The widest [max_response_bytes] a grant constructor accepts; a caller that must choose a ceiling
+    larger than the default reads this rather than inventing a number. *)
+
 val default_operation_timeout_seconds : float
 
 val with_endpoints :

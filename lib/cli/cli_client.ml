@@ -2,6 +2,10 @@ module Model = Seekwright.Model
 
 type post = path:string -> string -> (int * string, string) result
 
+(* One dial per run, asked for by origin: whoever builds the transport decides what
+   that origin may reach, which is why this module does not. *)
+type dial = string -> (post, string) result
+
 type rendered =
   | R_search of Model.search_response
   | R_fetch of Model.fetch_response
@@ -157,8 +161,8 @@ let model_name = function
 
 let route_of_verb = function Search -> "search" | Fetch -> "fetch" | Answer -> "answer"
 
-let run : post:post -> verb:verb -> argv:string list -> (string option, string * int) result =
- fun ~post ~verb ~argv ->
+let run : dial:dial -> verb:verb -> argv:string list -> (string option, string * int) result =
+ fun ~dial ~verb ~argv ->
   match Cli_extract.scan_args argv with
   | Error sentence -> Error (sentence, 2)
   | Ok scanned -> (
@@ -177,14 +181,17 @@ let run : post:post -> verb:verb -> argv:string list -> (string option, string *
             | Some url -> strip_trailing_slash url
             | None -> "http://127.0.0.1:8000"
           in
-          match
-            post ~path:(server ^ "/api/v1/" ^ route_of_verb verb) (Yojson.Safe.to_string body)
-          with
+          match dial server with
           | Error sentence -> Error (sentence, 1)
-          | Ok (status, text) -> (
-              if status <> 200 then Error (error_message status text, 1)
-              else if json then Ok (Some text)
-              else
-                match decode verb text with
-                | None -> Error ("the response is not a " ^ model_name verb, 1)
-                | Some response -> Ok (Some (String.concat "\n" (human_lines response))))))
+          | Ok post -> (
+              match
+                post ~path:(server ^ "/api/v1/" ^ route_of_verb verb) (Yojson.Safe.to_string body)
+              with
+              | Error sentence -> Error (sentence, 1)
+              | Ok (status, text) -> (
+                  if status <> 200 then Error (error_message status text, 1)
+                  else if json then Ok (Some text)
+                  else
+                    match decode verb text with
+                    | None -> Error ("the response is not a " ^ model_name verb, 1)
+                    | Some response -> Ok (Some (String.concat "\n" (human_lines response)))))))

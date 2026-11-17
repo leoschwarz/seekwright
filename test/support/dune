@@ -2,14 +2,20 @@
 ; each helper with one argument order. No [public_name], so nothing here is
 ; installed and [dune build @install] does not see it.
 ;
-; Two libraries, split by link closure: [test_support] is strings, files and
+; Three libraries, split by link closure: [test_support] is strings, files and
 ; Alcotest, and the [mcp-caps] suites link it without the server;
 ; [adapter_support] drives a [Seekwright.Provider.Net.t], so only the suites that
-; already link [seekwright] link it.
+; already link [seekwright] link it; [binary_harness] runs [../bin/main.exe] as a
+; child over a loopback socket, so only the black-box suites take stdlib [unix].
 (library
  (name test_support)
  (modules test_support)
  (libraries alcotest yojson))
+
+(library
+ (name binary_harness)
+ (modules binary_harness)
+ (libraries unix alcotest))
 
 (library
  (name adapter_support)

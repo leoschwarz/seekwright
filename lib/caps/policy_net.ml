@@ -169,6 +169,19 @@ let port_of_uri uri scheme =
       Error (Error.make Error.Invalid ~message:"the URI names a port outside 1..65535")
   | Some port -> Ok port
 
+(* The URI a caller already has in hand, turned into the destination shape a grant is
+   built from — by the same three rules a request is checked against later, so a
+   caller that builds a grant from this cannot be surprised at the first request. *)
+let endpoint_of_uri uri =
+  let* scheme = scheme_of_uri uri in
+  let* host =
+    match Uri.host uri with
+    | None | Some "" -> Error (Error.make Error.Invalid ~message:"the URI names no host")
+    | Some host -> normalise_host host
+  in
+  let* port = port_of_uri uri scheme in
+  Ok { scheme; host; port = Some port }
+
 (* Where a request is allowed to go, as a decision about {b this} grant. Nothing
    here touches DNS: an unlisted host is refused before a single query leaves, so
    a grant cannot be probed by resolver traffic and a denial costs nothing. *)

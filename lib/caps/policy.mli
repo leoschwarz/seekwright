@@ -4,6 +4,7 @@
 val default_max_read_bytes : int
 val default_max_entries : int
 val default_max_response_bytes : int
+val max_configurable_response_bytes : int
 
 val with_root :
   sw:Eio.Switch.t ->
@@ -33,6 +34,10 @@ type endpoint = Policy_net.endpoint = {
   host : string;
   port : int option;
 }
+
+val endpoint_of_uri : Uri.t -> (endpoint, Error.t) result
+(** See {!Policy_net.endpoint_of_uri}: the scheme, host and port rules a request is checked against,
+    applied to a URI a caller wants to build a grant for. *)
 
 val with_endpoints :
   sw:Eio.Switch.t ->

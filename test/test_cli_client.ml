@@ -18,19 +18,23 @@ let result_t =
     ( = )
 
 (* A fake transport: it records what it was asked to post and answers with a
-   canned [(status, text)]. *)
+   canned [(status, text)]. The [dial] around it stands for the caller's grant: the
+   client hands over the origin and gets back a transport, so the origin the client
+   settled on is visible in the path it posts to. *)
 type tape = { mutable calls : (string * string) list; answer : (int * string, string) result }
 
 let post_of tape ~path body =
   tape.calls <- (path, body) :: tape.calls;
   tape.answer
 
+let dial_of tape _server = Ok (post_of tape)
+
 let run ?(answer = Ok (200, "{}")) ~json ~argv verb =
   (* [--json] is the verb's flag, so it rides in [argv]: [Cli_client.run] reads
      it from the scan, exactly as the binary's caller does. *)
   let argv = if json then argv @ [ "--json" ] else argv in
   let tape = { calls = []; answer } in
-  let result = Client.run ~post:(post_of tape) ~verb ~argv in
+  let result = Client.run ~dial:(dial_of tape) ~verb ~argv in
   (result, List.rev tape.calls)
 
 let body_for route =
@@ -55,7 +59,7 @@ let test_routes () =
          route under test. *)
       let argv = match verb with Client.Fetch -> [ "http://x.example/a" ] | _ -> [ "qq" ] in
       let tape = { calls = []; answer = Ok (200, body) } in
-      let result = Client.run ~post:(post_of tape) ~verb ~argv:(argv @ [ "--json" ]) in
+      let result = Client.run ~dial:(dial_of tape) ~verb ~argv:(argv @ [ "--json" ]) in
       Alcotest.(check result_t) ("verb " ^ route) (Ok (Some body)) result;
       match tape.calls with
       | [ (path, _) ] ->
@@ -68,7 +72,7 @@ let test_server_flag_sets_origin () =
     (fun _i (server, want) ->
       let tape = { calls = []; answer = Ok (200, body_for "search") } in
       let _ =
-        Client.run ~post:(post_of tape) ~verb:Client.Search ~argv:[ "qq"; "--server"; server ]
+        Client.run ~dial:(dial_of tape) ~verb:Client.Search ~argv:[ "qq"; "--server"; server ]
       in
       match tape.calls with
       | [ (path, _) ] -> Alcotest.(check string) server (want ^ "/api/v1/search") path
@@ -101,6 +105,35 @@ let test_transport_failure_exit_1 () =
   let answer = Error "connection refused" in
   let result, _ = run ~answer ~json:false ~argv:[ "qq" ] Client.Search in
   Alcotest.(check result_t) "connection refused" (Error ("connection refused", 1)) result
+
+(* The caller owns what the [--server] origin may be dialled as — the grant and its
+   confinement are built there, not here — so a URL that cannot be dialled arrives as
+   the caller's own sentence, with the exit code a transport failure has always had. *)
+let test_refused_origin_exits_1 () =
+  let result =
+    Client.run
+      ~dial:(fun _ -> Error "ftp://box is not a scheme this grant speaks; only http and https")
+      ~verb:Client.Search ~argv:[ "qq"; "--server"; "ftp://box" ]
+  in
+  Alcotest.(check result_t)
+    "the caller's refusal travels"
+    (Error ("ftp://box is not a scheme this grant speaks; only http and https", 1))
+    result
+
+let test_body_validated_before_the_origin_is_asked_for () =
+  (* The order matters at the exit code: a malformed command is a usage error (2)
+     whatever the [--server] value says, so the dial is never built for it. *)
+  let asked = ref 0 in
+  let result =
+    Client.run
+      ~dial:(fun _ ->
+        incr asked;
+        Error "refused")
+      ~verb:Client.Search
+      ~argv:[ "q"; "extra"; "--server"; "ftp://box" ]
+  in
+  Alcotest.(check result_t) "usage error" (Error ("search takes exactly one QUERY", 2)) result;
+  Alcotest.(check int) "the origin was never asked for" 0 !asked
 
 let test_usage_error_exits_2 () =
   (* a malformed command never reaches the socket: exit 2, and no call. *)
@@ -228,6 +261,9 @@ let () =
           Alcotest.test_case "empty error body" `Quick test_empty_error_body;
           Alcotest.test_case "transport failure exits 1" `Quick test_transport_failure_exit_1;
           Alcotest.test_case "usage error exits 2 without dialling" `Quick test_usage_error_exits_2;
+          Alcotest.test_case "a refused origin exits 1" `Quick test_refused_origin_exits_1;
+          Alcotest.test_case "the body is validated before the dial" `Quick
+            test_body_validated_before_the_origin_is_asked_for;
         ] );
       ( "rendering",
         [

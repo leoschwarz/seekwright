@@ -7,7 +7,7 @@
  (name main)
  (public_name seekwright)
  (package seekwright)
- (libraries
+(libraries
   seekwright
   seekwright.cli
   seekwright.factory
@@ -17,18 +17,10 @@
   mcp-caps
   mcp-kit
   mcp-kit.stdio
-  mcp-kit-cohttp-eio
-  cohttp-eio
-  http
   eio
   eio_main
   uri
   yojson
-  cstruct
-  ipaddr
-  tls
-  tls-eio
-  ca-certs
   mirage-crypto-rng.unix
   unix))
 

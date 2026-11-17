@@ -199,6 +199,19 @@ seekwright fetch https://example.com --query "status code"
 seekwright answer "what changed in Dune 3.21" --depth quick
 ```
 
+The dial is not a hand-rolled socket. The verb builds one endpoint-scoped `Net`
+grant for the `--server` origin through `Factory.grant_of_endpoint` — the same
+funnel every other outbound call in this process goes through — which is where
+the TLS configuration, the system trust anchors and the response ceiling come
+from. An endpoint list pins a name rather than an address class, which is why
+the CLI can dial `127.0.0.1` while `fetch` still refuses loopback. An origin the
+policy layer will not take — a scheme that is not `http` or `https`, or a URL
+with no host — is refused before a socket opens, with a sentence naming the rule
+and exit 1; an origin that is dialable but unreachable is a transport failure,
+also exit 1. Because these verbs read no config, their own time bound is not one
+of the configured timeouts: it sits above what a served call can take, so a slow
+deployment is cut short by its own shutdown or by you, not by the client.
+
 Their flags are the tool parameters one-for-one (`--recency`,
 `--include-domain`, `--exclude-domain`, `--language`,
 `--safe-search`/`--no-safe-search`, `--offset`, `--path`, `--structure`,

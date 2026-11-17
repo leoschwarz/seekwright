@@ -202,8 +202,16 @@
 ; not a library call's.
 (test
  (name test_binary_drain)
- (libraries unix alcotest test_support)
+ (libraries unix alcotest test_support binary_harness)
  (deps ../bin/main.exe drain.toml))
+
+; The client verbs dialed by the real binary: [bin/main.exe] runs [search] against
+; this suite's own loopback responder, so the endpoint grant, the request that
+; leaves, and the exit status are all the process's. No billed host is contacted.
+(test
+ (name test_cli_dial)
+ (libraries unix alcotest test_support binary_harness)
+ (deps ../bin/main.exe))
 
 
 ; P8: boots the shipped default configuration through the real construction

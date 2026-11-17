@@ -21,12 +21,14 @@ val grant_of_endpoint :
   net:_ Eio.Net.t ->
   mono_clock:_ Eio.Time.Mono.t ->
   timeout_seconds:float ->
+  ?max_response_bytes:int ->
   ?audit:(Mcp_caps.Event.t -> unit) ->
   Mcp_caps.Policy.endpoint ->
   (Mcp_caps.Authority.Net.t, string) result
 (** One endpoint-scoped [Net] grant, wrapped once in [?audit], with its per-operation bound set from
-    config. The public contract, including which config key bounds which route, is on
-    [Factory.grant_of_endpoint] in [factory.mli]. *)
+    config and its response ceiling at [Policy.default_max_response_bytes] unless the caller names
+    one. The public contract, including which config key bounds which route and who is allowed to
+    widen the ceiling, is on [Factory.grant_of_endpoint] in [factory.mli]. *)
 
 val probe_net :
   sw:Eio.Switch.t ->

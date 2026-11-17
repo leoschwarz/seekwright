@@ -30,11 +30,12 @@ let grant_of_decision ~mono_clock ~timeout_seconds ?audit decision =
        (Eio.Time.Timeout.seconds mono_clock timeout_seconds)
        (Authority.Net.of_confinement ~mono_clock decision))
 
-let grant_of_endpoint ~sw ~net ~mono_clock ~timeout_seconds ?audit (endpoint : Policy.endpoint) =
-  match
-    Policy.with_endpoints ~sw ~net ~max_response_bytes:Policy.default_max_response_bytes
-      [ endpoint ]
-  with
+(* The ceiling is the layer's own unless the caller names one, and the only caller
+   that does is the CLI dialling its own server: a REST response is a projection of
+   the operator's [fetch] caps, which the client process reads no config to know. *)
+let grant_of_endpoint ~sw ~net ~mono_clock ~timeout_seconds
+    ?(max_response_bytes = Policy.default_max_response_bytes) ?audit (endpoint : Policy.endpoint) =
+  match Policy.with_endpoints ~sw ~net ~max_response_bytes [ endpoint ] with
   | Ok decision -> Ok (grant_of_decision ~mono_clock ~timeout_seconds ?audit decision)
   | Error error -> Error (Caps.Error.render error)
 

@@ -1,7 +1,7 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 steps 0–5 and S-008 are landed; S-009 and everything after it, and the
-§4 decisions, are proposals.** Tree read at `6e4ad90`;
+Status: **§5 steps 0–5, S-008 and S-009 are landed; S-010 and everything after it, and
+the §4 decisions, are proposals.** Tree read at `6e4ad90`;
 reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
 unchanged between the two commits — the diff is plans only). The corrections are
 recorded in §8; the §4 decisions remain the maintainer's.
@@ -600,7 +600,7 @@ and the foreign-shape arm beside them is what refuses an unknown shape. The othe
 concurrency cases read a directory a previous writer process left, and they go
 through the current writer, so they pin the new sidecar's round trip too.
 
-### S-009 — `bin/main.ml` carries a second HTTP and TLS stack
+### S-009 — `bin/main.ml` carries a second HTTP and TLS stack · **landed**
 
 **Evidence (`read`).** `Main.make_post` builds a `Cohttp_eio` client, force-loads
 `Ca_certs.authenticator`, builds `Tls.Config.client` and wraps the host through
@@ -620,6 +620,61 @@ grant's own response ceiling replaces the 64 MiB one, and the TLS half of
 
 **Gate.** `bin/smoke*.expected` and the `test_cli_client.ml` cases; the exit
 codes and the sentence `seekwright: …` must not change.
+
+**Landed.** `Main.make_post` and `Main.tls_client_config` are gone, and with them
+`cohttp-eio`, `http`, `tls`, `tls-eio`, `ca-certs`, `cstruct`, `ipaddr` and
+`mcp-kit-cohttp-eio` as direct libraries of the executable — `bin/main.ml` now
+touches `uri`, `eio` and `yojson` and nothing else on the HTTP side. The dial is
+`Factory.grant_of_endpoint` over one endpoint, and the endpoint comes from
+`Policy_net.endpoint_of_uri` (re-exported as `Policy.endpoint_of_uri`), which is
+the same `scheme_of_uri`/`normalise_host`/`port_of_uri` trio `decide_destination`
+applies to a request — so the refusal a caller gets for `--server ftp://…` is the
+sentence it would have got at the first request, and the grant cannot be built for
+a destination the request would then refuse. The RNG ordering the section flagged
+is now construction rather than sequence: `tls_config` runs `ensure_rng`, and
+`run_client` installs the generator before the grant is built.
+
+Two numbers moved, and both are named rather than invented. The response ceiling
+is `Policy.max_configurable_response_bytes` (16 MiB, the widest a grant
+constructor accepts) instead of the hand-rolled 64 MiB `Buf_read` limit, so the
+ceiling is a grant property the layer enforces rather than a read the caller
+remembers to bound; `Factory.grant_of_endpoint` took `?max_response_bytes` for it,
+defaulting to `Policy.default_max_response_bytes`, so the funnel is still the only
+place a ceiling is set. The CLI is the one consumer that raises it: the response
+is this server's own REST projection and its size belongs to `[fetch]` config the
+client does not load. That is also the one direction the change tightens — a REST
+body above 16 MiB, reachable only by pushing `[fetch] max_text_chars` into the
+megabytes, was readable and is now refused.
+
+The per-operation bound is 300 s, where the old client had none. It is not a
+config key, because these verbs read no config and loading one would make a
+broken config fatal for a verb that never touches it; it is set above what a
+served call can take — a ladder walk or an agent run outlasts every single-outbound
+timeout this process could name — so the operator's interrupt or the server's own
+shutdown stays the thing that stops a CLI request, and the bound exists for a
+socket that would otherwise hang forever.
+
+`Cli_client` no longer receives a transport, it receives a `dial`: the origin the
+`--server` flag settled on is handed over and the caller answers with the
+transport, which is where the confinement belongs. `Cli_client` still names no
+config, no key and no provider — the source pin in `test_cli_client` still covers
+that — and the argument-before-dial order is pinned, so a malformed command stays
+exit 2 whatever `--server` says. `Printexc.to_string` left the path: a failure
+sentence is now `Caps.Error.render`, still exit 1.
+
+The gate the section asked for, plus the half it did not name. `bin/smoke*.expected`
+and the exit codes are unmoved; `test_cli_client.ml` gained the two seam cases (a
+refused origin carries the caller's sentence at exit 1, and the body is validated
+before a dial is built). The gap was that nothing ever drove a client verb over a
+socket — the suite comment claimed `[bin/]` did, and it does not — so
+`test_cli_dial.ml` runs `bin/main.exe search` against a loopback responder owned by
+the suite: it pins that the endpoint grant dials loopback at all (which `fetch`
+refuses), the `POST /api/v1/search` with both JSON headers and the flags' body, the
+rendered line and exit 0 with `SEEKWRIGHT_CONFIG` naming a file that is not there,
+and the two failure shapes — an undialable scheme that never opens a socket, and an
+unreachable origin that is a transport failure with no policy sentence. Its
+port/spawn/wait helpers went into `test/support/binary_harness.ml` and
+`test_binary_drain.ml` now uses them, rather than the suite carrying a second copy.
 
 ### S-010 — the fallback readers, after R-005
 

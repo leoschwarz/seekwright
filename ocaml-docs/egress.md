@@ -71,6 +71,17 @@ One HTTPS call to `[agent] base_url` — an OpenAI-compatible chat endpoint you
 configure, on any host. Nothing else in agent mode reaches the network: the
 retrieval plan runs through the same provider and fetch paths above.
 
+## Client verbs
+
+`search`, `fetch` and `answer` run as client verbs dial the origin `--server`
+names (default `http://127.0.0.1:8000`) — your own deployment, so that host is
+yours and not the port's. The dial goes through one endpoint-scoped grant built
+from that URL (`Policy_net.endpoint_of_uri`, then `Factory.grant_of_endpoint`),
+the one place this build pins a destination by name instead of by address class:
+loopback is dialable there and still refused for `fetch`. The dial carries no key
+and reads no config, and an `https://` origin verifies against the same trust
+anchors as the rows above.
+
 ## No proxy, and what to do about that
 
 This process has **no outbound proxy support**: it reads no `HTTPS_PROXY`,

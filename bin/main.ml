@@ -16,46 +16,48 @@ let usage_error message =
   prerr_endline ("seekwright: " ^ message);
   exit 2
 
-let tls_client_config =
-  lazy
-    (match Ca_certs.authenticator () with
-    | Error _ -> None
-    | Ok authenticator -> (
-        match Tls.Config.client ~authenticator () with Ok config -> Some config | Error _ -> None))
+(* The CLI verbs dial the operator's own server, and they dial it through a grant: one
+   endpoint-scoped [Net] authority out of the factory funnel, which is where the TLS
+   configuration, the system trust anchors, the random-generator check and the response
+   ceiling of every other outbound call in this build come from.
+   [Mirage_crypto_rng_unix.use_default] runs before the grant is built, so the generator
+   the TLS configuration needs is present by construction rather than by call sequence.
 
-let make_post ~env ~sw ~path body =
-  let uri = Uri.of_string path in
-  let client =
-    match Uri.scheme uri with
-    | Some "https" -> (
-        match Lazy.force tls_client_config with
-        | Some config ->
-            let host_of uri =
-              Domain_name.host_exn
-                (Domain_name.of_string_exn (Option.value ~default:"" (Uri.host uri)))
-            in
-            Ok
-              (Cohttp_eio.Client.make
-                 ~https:
-                   (Some (fun uri flow -> Tls_eio.client_of_flow config ~host:(host_of uri) flow))
-                 env#net)
-        | None -> Error "https needs the system trust store, which is missing")
-    | _ -> Ok (Cohttp_eio.Client.make ~https:None env#net)
+   Neither bound below comes from config, because these verbs read none: [seekwright
+   search] against a remote server needs no local config file, and loading one here would
+   make a broken config fatal for a verb that never touches it. The ceiling is the widest
+   this build's capability layer accepts at all, since the response is the server's own
+   REST projection and its size belongs to [fetch] config this process does not load. The
+   bound is set above what a served call can take — a ladder walk or an agent run is
+   longer than any single outbound timeout this process could name — so what stops a CLI
+   request is the server's shutdown or the operator's own interrupt, not this file; the
+   bound exists for a socket that would otherwise hang forever. *)
+let cli_ceiling_bytes = Caps.Policy.max_configurable_response_bytes
+let cli_bound_seconds = 300.
+
+let post_of_grant (grant : Caps.Authority.Net.t) ~path body =
+  let request =
+    {
+      Caps.Authority.Net.meth = `POST;
+      uri = Uri.of_string path;
+      headers = [ ("content-type", "application/json"); ("accept", "application/json") ];
+      body = Some body;
+    }
   in
-  match client with
-  | Error message -> Error message
-  | Ok client -> (
-      let headers =
-        Http.Header.of_list [ ("content-type", "application/json"); ("accept", "application/json") ]
-      in
+  match Caps.Authority.Net.request grant request with
+  | Ok response -> Ok (response.status, response.body)
+  | Error error -> Error (Caps.Error.render error)
+
+let dial ~sw ~env server =
+  match Caps.Policy.endpoint_of_uri (Uri.of_string server) with
+  | Error error -> Error (Caps.Error.render error)
+  | Ok endpoint -> (
       match
-        Cohttp_eio.Client.call client ~sw ~headers ~body:(Cohttp_eio.Body.of_string body) `POST uri
+        Factory.grant_of_endpoint ~sw ~net:env#net ~mono_clock:env#mono_clock
+          ~timeout_seconds:cli_bound_seconds ~max_response_bytes:cli_ceiling_bytes endpoint
       with
-      | exception exn -> Error (Printexc.to_string exn)
-      | response, response_body ->
-          let status = Http.Status.to_int (Http.Response.status response) in
-          let text = Eio.Buf_read.(take_all (of_flow response_body ~max_size:(64 * 1024 * 1024))) in
-          Ok (status, text))
+      | Error sentence -> Error sentence
+      | Ok grant -> Ok (post_of_grant grant))
 
 let run_client ~env verb argv =
   Mirage_crypto_rng_unix.use_default ();
@@ -63,8 +65,7 @@ let run_client ~env verb argv =
   | None -> usage_error ("unknown verb " ^ verb)
   | Some verb -> (
       Eio.Switch.run @@ fun sw ->
-      let post = make_post ~env ~sw in
-      match Cli_client.run ~post ~verb ~argv with
+      match Cli_client.run ~dial:(dial ~sw ~env) ~verb ~argv with
       | Ok (Some line) ->
           print_line line;
           0

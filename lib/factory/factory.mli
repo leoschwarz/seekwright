@@ -113,13 +113,20 @@ val grant_of_endpoint :
   net:_ Eio.Net.t ->
   mono_clock:_ Eio.Time.Mono.t ->
   timeout_seconds:float ->
+  ?max_response_bytes:int ->
   ?audit:(Mcp_caps.Event.t -> unit) ->
   Mcp_caps.Policy.endpoint ->
   (Mcp_caps.Authority.Net.t, string) result
 (** One endpoint-scoped [Net] grant, wrapped once in [?audit], with its per-operation bound set from
     config — [policy.provider_timeout_seconds] for a provider or a probe, [fetch.timeout_seconds]
-    for the fetch grant, [agent.model_timeout_seconds] for the model request. Exposed so the
-    timeout's behaviour can be pinned against a stalling loopback server. *)
+    for the fetch grant, [agent.model_timeout_seconds] for the model request, and no configured key
+    at all for the CLI verb that dials its own server, which reads no config and so names a bound
+    above what a served call can take rather than borrowing one that would cut it short.
+    [?max_response_bytes] defaults to [Policy.default_max_response_bytes]; the CLI dial is the one
+    consumer that raises it, to [Policy.max_configurable_response_bytes], because the response it
+    reads is this server's own REST projection and its size belongs to [fetch] config the client
+    does not load. Exposed so the timeout's behaviour can be pinned against a stalling loopback
+    server. *)
 
 val probe_net :
   sw:Eio.Switch.t ->

@@ -11,7 +11,9 @@ type endpoint = Policy_net.endpoint = {
   port : int option;
 }
 
+let endpoint_of_uri = Policy_net.endpoint_of_uri
 let default_max_response_bytes = Policy_net.default_max_response_bytes
+let max_configurable_response_bytes = Policy_net.max_configurable_response_bytes
 
 type port_policy = Policy_net.port_policy = Default_ports | Any_port
 
