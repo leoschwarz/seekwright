@@ -48,6 +48,6 @@ val reset_key_environment : unit -> unit
     [Config.api_key_env_var] names, the agent key, and [SEEKWRIGHT_CONFIG].
 
     The stdlib has no [unsetenv], and [Config.api_key] reads an empty value as absent exactly as
-    Python's [os.environ.get(...) or None] does, so writing [""] is the clear. The Python side pops
-    the same names. Both trees therefore resolve the same [missing_keys] list whatever the shell
-    that runs [dune runtest] or the generator happens to export. *)
+    Python's [os.environ.get(...) or None] did, so writing [""] is the clear. The Python side popped
+    the same names, which is why both trees resolved the same [missing_keys] list whatever the shell
+    that runs [dune runtest] happened to export. *)

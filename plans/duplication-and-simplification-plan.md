@@ -749,8 +749,8 @@ D-B — and land only if those decisions do. The last row is a keep, not a remov
 
 |Item|Evidence|Action|
 |---|---|---|
-|The regeneration driver `test/differential/drive.exe`|It prints the **OCaml** projection of every corpus case. It is not run by `dune runtest`. Run by hand and followed by a promote, it replaces the 413 frozen goldens with the output of the code under test — the parity gate becomes a rubber stamp and the `explicit-divergence` goldens then fail for the wrong reason|Delete the executable and its stanza; the goldens stay, labelled for what they now are: snapshot pins of this tree's behaviour|
-|Pages that describe generators that no longer exist|`ocaml-tools/oracle/` holds only `README.md`; `test/differential/dune`'s comment sends a reader to `../../ocaml-tools/oracle/` for regeneration; `AGENTS.md`'s module map still advertises "`oracle/` … plus the `DIVERGENCES` table", and its Gotchas still says the table is in `ocaml-tools/oracle/`; `test/differential/README.md`'s layout rows and "Regeneration is closed" command block still describe `drive.exe`|Correct all four to the 12-row `test/differential/divergences.tsv` that §39 recorded, and state the freeze as the reason a golden cannot be regenerated|
+|The regeneration driver `test/differential/drive.exe` · **deleted (D-A)**|It prints the **OCaml** projection of every corpus case. It is not run by `dune runtest`. Run by hand and followed by a promote, it replaces the 413 frozen goldens with the output of the code under test — the parity gate becomes a rubber stamp and the `explicit-divergence` goldens then fail for the wrong reason|Delete the executable and its stanza; the goldens stay, labelled for what they now are: snapshot pins of this tree's behaviour|
+|Pages that describe generators that no longer exist · **corrected (with D-A)**|`ocaml-tools/oracle/` held only `README.md`; `test/differential/dune`'s comment sent a reader to `../../ocaml-tools/oracle/` for regeneration; `AGENTS.md`'s module map advertised "`oracle/` … plus the `DIVERGENCES` table" and its Gotchas still said the table is in `ocaml-tools/oracle/`; `test/differential/README.md`'s layout row and "Regeneration is closed" block still described `drive.exe`|Correct all four to the 12-row `test/differential/divergences.tsv` that §39 recorded, and state the freeze as the reason a golden cannot be regenerated|
 |`test/differential/matrix/config-fields.tsv` (63 rows) and `matrix/providers.tsv` (17 rows)|Both re-type facts two other artifacts own: the config-key vocabulary is printed mechanically by `ocaml-tools/surface.ml` from `lib/config.ml`'s records, and the per-provider endpoint / auth / cost / live-status facts live in `Factory.Registry.rows` — which is also what `ocaml-tools/egress_lists.ml` renders the deployment's host lists from. 597 lines of `test_differential_matrix.ml` exist to police the hand-typed copies|Drop both tables and the validator's arms for them; keep `matrix/behaviours.tsv` and `matrix/surface.tsv` if the owner wants a per-behaviour evidence pointer. Update `AGENTS.md`'s frozen-surface row and `ocaml-docs/testing.md` in the same commit|
 |`Factory` façade|`factory.ml` is 41 lines of `let x = Mod.x` over five private submodules whose own interfaces total 169 lines (`app`, `fetch_stack`, `grants`, `providers_build`, `verdict`), restated by a 238-line `factory.mli` and re-exporting `provider_set`'s two records (21 more lines): three places to edit per entry. `provider_set` is two records and no code, public only because a `private_modules` name in a public signature dangles|Either expose the submodules and delete the façade, or derive `factory.mli` from them; fold `provider_set` into `providers_build`|
 |`Registry.row`'s `context : context_cap`|Three constructors, one field, one default, six write sites, **zero readers** in the tree|Delete|
@@ -763,8 +763,8 @@ D-B — and land only if those decisions do. The last row is a keep, not a remov
 
 ## 4. Decisions the maintainer owns
 
-Each carries a recommendation. D-G is decided and applied, below; D-A … D-F stay
-the maintainer's.
+Each carries a recommendation. D-A, D-B and D-G are decided (2026-11-17, the maintainer);
+D-C … D-F stay open.
 
 **D-A — the differential harness's posture.** Keep the 413 goldens and the
 properties, delete `drive.exe` and the oracle README, and rename the suite's own
@@ -772,6 +772,13 @@ claim from "does the port answer this the way the baseline did" to "does this
 behaviour still hold". *Recommend: do it.* The alternative — keeping a driver
 whose only effect is to re-pin goldens from the code under test — is a
 foot-gun guarded only by nobody running it.
+
+**Decided: do it.** Landed with the four page corrections the §3 rows name, plus the
+corpus claim renamed in `ocaml-docs/testing.md`, `test/differential/README.md` and
+`test/differential/dune`. `ocaml-tools/oracle/` is gone, so `ocaml-tools/` is now the
+three tree-reading instruments and the bench; the recorded history in
+`plans/seekwright-ocaml-port.md` §9 keeps its wording, because it records what landed
+then, and §41 records the deletion.
 
 **D-B — the parity matrix.** Options: keep all four tables; drop
 `config-fields.tsv` + `providers.tsv` (the two hand-typed vocabularies, 80 rows

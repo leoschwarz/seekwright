@@ -3166,9 +3166,12 @@ The three decisions taken while landing them:
   `Remote_target.check` can reach `Policy_net.vet_public_host`, because an Eio flow
   record is parameterised by the backend's resource tag and cannot carry an
   existential. Erasing that tag — handing each fallback an injected guard built
-  once by the factory — makes the vendor records tag-free, lets the table sit with
-  the row, and deletes `fallback_fixtures.ml`'s scripted resolver, which exists
-  only because the fixture must answer a DNS lookup the guard performs.
+  once by the factory — makes the vendor records tag-free and lets the table sit with
+  the row. It was also expected to delete `fallback_fixtures.ml`'s scripted resolver,
+  which exists because the fixture must answer a DNS lookup the guard performs; §41
+  erased the tag and the resolver stayed, because five vendor suites assert that a
+  private target is refused *and* that the vendor saw no request, which is evidence
+  about the vet only while the vet is the real one.
 - **D3 — stdio closes providers. Yes.** `run_stdio` now runs `close_providers` at
   EOF while the switch and env are still live, so a warmed remote MCP session gets
   its `DELETE`; the local adapters' `aclose` is `()`, so the call is cheap.
@@ -3177,3 +3180,34 @@ What the wave did **not** cover is the shape of the adapters and their suites: i
 read four adapter files and the `Fallback_*` bodies only as far as R-005 needed,
 and the ledger's coverage table says so. The structural pass that does cover them
 is `plans/duplication-and-simplification-plan.md`.
+
+## 41. The structural pass — what landed, and what it settled (2026-11-17)
+
+`plans/duplication-and-simplification-plan.md` carries the measurements and the argument
+per item; this section is the pass's history. Every step left `dune build @install`,
+`dune runtest --force` and `dune build @doc` green, and no step promoted a golden except
+where the row says so.
+
+| Step | What moved | Commit |
+|---|---|---|
+| D-G — formatting | ocamlformat pinned at 0.29.0 in `dune-project` and the tree reformatted, before any structural edit, so a later diff shows the change and not the reflow | `eec2e7a` |
+| S-005 | one percent-encoder and one codepoint walk on the `Provider`/`Seekwright_text` floor; `base64` moved next to the projection that prints it; `grouped` deleted; the `Seekwright_fetch.Utf8` re-export and its tautological case deleted | `f113f95` |
+| S-001 | the adapter skeleton (`Provider.request`, the shared outcome tail) and `take`; thirteen adapters off their own copies, and `Provider.take` replaced the fifteen hand-rolled list takes | `dd699df`, `c49aa93` |
+| S-002 | one adapter test harness (`adapter_support`) replacing the per-suite request-log and scripted-`Net` copies | `5b6abae` |
+| S-003 | one dispatch per verb across the stdio tools, the REST projection and the CLI, and the answer-pin pre-check answered for both surfaces (Q-002) | `bdd300f` |
+| S-004 | one key list per wire model; the tool schema reads the model's own list instead of re-typing it | `6a1fd9d` |
+| S-006 | one answer-field vocabulary shared by the `answer.ok` log line and `Usage.answer_line`, so the two sinks cannot drift | `2c0cdd0` |
+| S-007 | the civil-time residue after R-009: `Civil` owns the fraction-keeping clock split, and `Usage.iso_utc_full` / `iso_utc_seconds` are built on it; the two timestamp spellings are pinned to one instant | `4548740` |
+| S-008 | the page cache holds one `Seekwright_wire.Page` record and one sidecar codec, replacing four copies of the page shape | `ff7cf44` |
+| S-009 | `bin/main.ml`'s private cohttp-eio + TLS stack deleted: the client verbs dial through `Factory.grant_of_endpoint` over a `Policy_net.endpoint_of_uri` endpoint, with the response ceiling and the operation bound now grant properties | `b98a460` |
+| S-010 | the `'tag` erased from every `Fallback_*.config` (D2 lifted): `Remote_target.make_check` is a value the factory builds once per rung, and `Fallback.status_rule` / `status_error` / `send` / `send_json` own the tail the five readers shared | `423ee5b` |
+| D-A | `test/differential/drive.exe` and `ocaml-tools/oracle/README.md` deleted; the corpus claim renamed to "does this behaviour still hold"; `AGENTS.md`, `ocaml-docs/testing.md` and `test/differential/README.md` corrected to `test/differential/divergences.tsv` and the freeze | this change |
+
+Two corrections to the plan's own predictions, recorded where they were wrong rather
+than left for a reader to find: D2's resolver (above, in §40), and S-010's line-count
+claim — the five readers lost 19 lines while `fallback.ml` gained 31, so the gain is the
+single owner of the status reading, not a smaller tree.
+
+Still open on this pass: the §3 weight rows (`Registry.row`'s `context`, `settings` and
+`cost_model`, the `Factory` façade, the extractor's double representation, the adapter
+interfaces), the D-B matrix decision, and D-C … D-F.

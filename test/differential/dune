@@ -5,14 +5,13 @@
 ; per-module ported suites; this stanza file deliberately touches neither.
 ;
 ; The shape of the harness, and why each part is where it is, is in [README.md].
-; The short version: [corpus/] holds the inputs, [golden/] holds what the Python
-; oracle answered for them (pinned, no clock, no secrets), and a plain
-; [dune runtest] runs the OCaml projection of each input and diffs it against the
-; pinned answer — so the gate never needs a Python interpreter, a provider
-; endpoint, or a network. Regenerating the goldens is
-; [../../ocaml-tools/oracle/]'s job, and that tool needs a checkout that still
-; carries the Python tree; this branch does not, so the baseline is frozen (see
-; [README.md]).
+; The short version: [corpus/] holds the inputs, [golden/] holds the pinned answer
+; (pinned, no clock, no secrets), and a plain [dune runtest] runs the OCaml projection
+; of each input and diffs it against the pin — so the gate never needs a Python
+; interpreter, a provider endpoint, or a network. The pin was taken from the Python
+; implementation's answer once, and there is no regeneration path on this branch: the
+; tree the answers came from is deleted, so a golden is a snapshot of a decision, and
+; moving one is a deliberate act in the change that moves it (see [README.md]).
 
 ; The shared machinery: the canonical rendering the corpus is written in, and the
 ; projection of each area. [unix] is here for one thing — clearing the key
@@ -23,15 +22,8 @@
  (modules canon projection)
  (libraries mcp-caps seekwright seekwright.fetch seekwright.providers seekwright.text unix uri yojson))
 
-; The regeneration driver. Not a test: it is how a human re-pins a golden after
-; changing the oracle or the corpus, and [dune runtest] never runs it.
-(executable
- (name drive)
- (modules drive)
- (libraries seekwright_diff))
-
-; The property runs. [corpus/] answers "does the port answer this case the way
-; Python did"; this answers "does it hold for every input a generator can make",
+; The property runs. [corpus/] answers "does this behaviour still hold against the
+; pinned answer"; this answers "does it hold for every input a generator can make",
 ; with a fixed seed so the gate is reproducible and no fixture, Python or network
 ; in sight. [qcheck-core] is the generator engine, [qcheck-alcotest] the
 ; adapter that makes a property an alcotest case; both are [:with-test] in

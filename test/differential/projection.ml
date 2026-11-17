@@ -10,7 +10,7 @@
     reproducible from its input alone:
 
     - no clock and no environment: {!Seekwright_diff.Canon.reset_key_environment} runs once in the
-      driver, and any value a golden would have to re-read from the machine ([retrieved_at], [ms])
+      golden runner, and any value a golden would have to re-read from the machine ([retrieved_at], [ms])
       is left out of the projection rather than pinned at an invented instant;
     - free text is escaped, never embedded: a sentence or a page goes through
       {!Seekwright_diff.Canon.escape_text}, so a projection line stays one line and a golden stays

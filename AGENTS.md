@@ -238,9 +238,9 @@ capability layer's own contract, and `ocaml-docs/` is the operator's map.
 | `lib/cli/` | package `seekwright.cli` (`Cli_flags`, `Cli_check`, `Cli_client`, `Cli_extract`, `Cli_metrics`, `Cli_serve`): the decisions and reports, each taking its input and its network as arguments — no module here writes a stream or calls `exit` |
 | `lib/log.ml`, `lib/prompts.ml`, `lib/dashboard_html.ml`, `lib/http_head.ml`, `lib/version.ml` | dotted event names on stderr; the embedded model-facing prose; the one self-contained dashboard page; the request/response byte ceilings; the generated version module |
 | `bin/main.ml` | the audit surface: one `Registry.add` per tool with its grant named, the loop the grants are opened on, the CLI verbs' own endpoint grant for `--server`, the transport dispatch and the exit status. Its `dune` also carries the stdio smoke and the `--check` report pins |
-| `test/` | the suites, one per module it exercises; `support/` (`Test_support`, `Binary_harness` — the one copy of each helper), `differential/` (corpus, goldens, properties, matrix, `drive.exe`), `should_not_compile/`, `log_guard/`, `conformance/`, `corpus_html/`, `fetch_support/` |
+| `test/` | the suites, one per module it exercises; `support/` (`Test_support`, `Binary_harness` — the one copy of each helper), `differential/` (corpus, goldens, `divergences.tsv`, properties, matrix), `should_not_compile/`, `log_guard/`, `conformance/`, `corpus_html/`, `fetch_support/` |
 | `live/` | `seekwright-live`: the explicit live runner, its case inventory (`Cases`), its per-case assertions (`Checks`) and its own hermetic suite |
-| `ocaml-tools/` | tree-reading instruments: `surface.ml` (the frozen manifest), `resources.ml` (the prose and dashboard pins), `egress_lists.ml` (the deployment's host lists), `oracle/` (the frozen corpus, golden and matrix generators plus the `DIVERGENCES` table), `extract_bench/` (the extraction corpus bench and its digests) |
+| `ocaml-tools/` | tree-reading instruments: `surface.ml` (the frozen manifest), `resources.ml` (the prose and dashboard pins), `egress_lists.ml` (the deployment's host lists), `extract_bench/` (the extraction corpus bench and its digests) |
 | `ocaml-docs/` | the operator's pages; see the last section |
 | `deploy/compose/` | the two-role unit set: `compose.yaml`, one config per role, the egress inputs under `egress/`, the rendered lists under `generated/`, reference Squid ACLs under `squid/` |
 | `plans/` | the planning area and the decision record — read before changing a frozen fact, write on the same commit |
@@ -326,13 +326,16 @@ capability layer's own contract, and `ocaml-docs/` is the operator's map.
   `ocaml-tools/resources.ml`, and `runtest` diffs the literal against it. A
   reworded sentence or a reformatted dashboard page fails the gate; a deliberate
   change re-promotes the golden in the same commit.
-- **Divergences are registered, never smoothed over.** `DIVERGENCES` in
-  `ocaml-tools/oracle/` gives each accepted difference a reason, and the reason
-  lands in the golden's header as `explicit-divergence`. Such a golden fails if
-  the port changes shape *or* if the difference closes on its own — closing one
-  is a decision that edits the registration, not a drive-by fix. Corpus
-  regeneration is frozen; the differential suite is a behaviour baseline, and
-  `plans/evidence-tiers.md` says what that is evidence of.
+- **Divergences are registered, never smoothed over.** `test/differential/divergences.tsv`
+  gives each accepted difference a reason, and the reason lands in the golden's header as
+  `explicit-divergence`. Such a golden fails if the port changes shape *or* if the
+  difference closes on its own — closing one is a decision that edits the registration, not
+  a drive-by fix. The matrix suite holds the rows and the goldens to each other in both
+  directions. Corpus and golden regeneration is closed: the corpus is frozen input, the
+  goldens are snapshot pins taken once from the Python tree's answers, and the tooling that
+  took them (and the port's `drive.exe` that used to print the other half) is deleted, so a
+  golden moves only by an edit in the change that moves it. The differential suite is a
+  behaviour baseline, and `plans/evidence-tiers.md` says what that is evidence of.
 - **A live run is evidence only once it is recorded.** `dune runtest` dials
   nothing, by construction. The live half is `seekwright-live` behind
   `SEEKWRIGHT_LIVE_TESTS=1`: exactly one named case per invocation, no `all`, no

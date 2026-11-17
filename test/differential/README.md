@@ -7,17 +7,17 @@ Three artefacts live here, and they answer three different questions.
   evidence this tree keeps, and the kind of verification that backs the claim. It
   is the inventory the finalisation plan asks for, and
   `test_differential_matrix.ml` keeps it honest.
-- `corpus/` + `golden/` — *does the port answer the way the Python
-  implementation answered?*
-  A case in, a pinned answer out, diffed by a plain `dune runtest`.
+- `corpus/` + `golden/` — *does this behaviour still hold, case by case?* A pinned
+  answer in, the port's rendering out, diffed by a plain `dune runtest`.
 - `divergences.tsv` — *why is each accepted difference accepted?* One row per
   registered divergence, and the reason in the row is the record; nothing else
   keeps it.
 
 Nothing here reaches the network, a provider endpoint, an API key, or a Python
-interpreter. The Python answers are pinned in `golden/`; the tooling that
-produced them lived in `../../ocaml-tools/oracle/`, and that generation is
-frozen — the corpus and the goldens are committed baseline data. The accepted
+interpreter. The answers in `golden/` are pinned baseline data: they were taken from
+the Python implementation's answers once, the tooling that took them is deleted, and
+nothing on this branch re-derives them. That is why the gate can be green without ever
+claiming a vendor answers this way — see `plans/evidence-tiers.md`. The accepted
 divergences are the record in `divergences.tsv`, read by
 `test_differential_matrix.ml`.
 
@@ -25,9 +25,8 @@ divergences are the record in `divergences.tsv`, read by
 
 | Path | Role |
 | --- | --- |
-| `canon.ml` | The canonical rendering the corpus and goldens are written in: escaping, float formatting, sorted JSON, byte-as-hex. Shared by the driver and the runner, and the form the retired oracle projection mirrored. |
+| `canon.ml` | The canonical rendering the corpus and goldens are written in: escaping, float formatting, sorted JSON, byte-as-hex. Shared by the projections and the golden runner, and the form the retired oracle projection mirrored. |
 | `projection.ml` | One projection per area: reads a corpus input, calls the port, renders answer lines. |
-| `drive.ml` | `drive.exe <area> <corpus-dir>` — prints `case<TAB>line` for every input. Regeneration only; `dune runtest` never runs it. |
 | `test_differential_golden.ml` | The golden runner. One test per golden, plus coverage and floor checks per area. |
 | `test_differential_properties.ml` | The property runner: deterministic QCheck properties over the same port surfaces the corpus pins. |
 | `test_differential_matrix.ml` | The matrix validator. One test per table, cross-checks against `Config.known_providers` and the corpus areas, and one check holding `divergences.tsv` to the `explicit-divergence` goldens. |
@@ -195,14 +194,20 @@ gone. Re-deriving the baseline would need a checkout of the implementation the
 baseline was taken from, and what it produced would be a new baseline rather
 than a correction — see `ocaml-docs/testing.md`, "The differential harness".
 
-The port's half stays buildable and runnable:
+The gate is the whole of it:
 
 ```bash
-dune build test/differential/drive.exe        # the port half
-dune runtest test/differential --force        # the gate, with no Python involved
+dune runtest test/differential --force        # the port's projection against every pin
 ```
 
-The generator ran the Python projection and `drive.exe` over the same directory
+There is no port-side driver either. A program that prints the projection of the code
+under test is only ever a way to re-pin a golden from the thing that golden constrains,
+and the sole guard on it was nobody running it — so it is deleted, and the goldens are
+labelled for what they always were in this checkout: snapshot pins of this tree's
+behaviour, taken once from the Python implementation's answers. Moving one is a
+deliberate edit in the change that moves it.
+
+The generator ran the Python projection and the port's over the same directory
 and wrote one golden per case, aborting on an unregistered mismatch: accepting a
 divergence was a decision made in the open, and it landed in the golden's
 `reason` line. Those decisions are now rows in `divergences.tsv`, and the matrix

@@ -46,18 +46,20 @@ from the repo root fails exactly those cases.
 
 ## The differential harness — a pinned behaviour baseline
 
-`test/differential/` answers one question: for the same input, does the port answer
-the way the Python implementation answered? Ten areas — `config`, `engine`, `fetch`,
+`test/differential/` answers one question: for the same input, does this behaviour still
+hold against the answer pinned for it? Ten areas — `config`, `engine`, `fetch`,
 `jsondoc`, `model`, `provider`, `router`, `sanitize`, `tabledoc`, `text` — 413
-goldens, each written from the Python modules' own answers and, where this port
+goldens, each taken once from the Python modules' own answers and, where this port
 deliberately disagrees, pinning **both** answers. The corpus and the goldens are
 committed data, and `dune runtest` re-runs only the port's projection, so the gate
 needs no Python, no network and no keys.
 
 **Regeneration is frozen** (2026-11-16): no new corpus case, no re-pinned golden, no
-closing a registered divergence. `plans/retiring-the-python-tree.md` holds the
-decision and the steps that end in deleting the Python tree; `plans/evidence-tiers.md`
-says what a green differential suite is evidence *about* — and what it has never been
+closing a registered divergence. `plans/retiring-the-python-tree.md` holds the decision
+and the steps that end in deleting the Python tree; the port's half of that generator,
+`test/differential/drive.exe`, is deleted as well, so nothing in this checkout can print
+a candidate golden and a golden moves only by an edit. `plans/evidence-tiers.md` says
+what a green differential suite is evidence *about* — and what it has never been
 evidence of, which is a provider answering the way a fixture once said it did.
 
 Two suites consume the pinned data: `test_differential_golden` (the projection must
