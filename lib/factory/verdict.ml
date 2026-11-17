@@ -1,6 +1,6 @@
 module Config = Seekwright.Config
 
-open Provider_set
+open Providers_build
 
 let classify config (built : providers) =
   let built_names = List.sort String.compare (List.map fst built.built) in

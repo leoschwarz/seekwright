@@ -160,6 +160,17 @@ the docs. (If the brief's shape is preferred anyway, the only cost is
 `verdict.ml` moving from private to public in the same commit that adds it, and
 `Provider_set`/`Verdict` both described in `@doc`.)
 
+**Superseded in shape, not in argument (2026-11-17, the structural pass).**
+`provider_set.ml{,i}` is gone: its two records moved to `providers_build.ml{,i}`,
+which fills them, and `Factory`'s signature is now `include module type of` over
+`providers_build`, `verdict`, `fetch_stack` and `app`. The equation this section
+defended still decides the shape — a façade can only derive from modules that stay
+nameable — so the count of public modules beside `Factory` went from one to four
+rather than to zero, and `verdict`, which the brief wanted public, is. What changed
+is that those four now expose no name `Factory` did not already export: `adapter`
+and `adapter_of_row` had no caller outside `providers_build` and left its interface
+with the re-typed façade.
+
 ### 2.3 Line budget
 
 "Moved" counts the verbatim span plus the comments that belong to it.

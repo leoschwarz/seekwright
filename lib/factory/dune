@@ -9,14 +9,19 @@
 (library
  (name seekwright_factory)
  (public_name seekwright.factory)
- ; The five construction modules are behind the facade: what a caller may name
- ; is [Factory] and [Registry]. [provider_set] stays public because [factory.mli]
- ; re-exports its two records with their field labels, and a private module named
- ; from a public signature leaves a dangling path (plans/seekwright-ocaml-port.md,
- ; §11). The seal keeps installed consumers and odoc away from these five; a
- ; stanza inside this workspace can still reach them through dune's alias module,
- ; so the check-path boundary is pinned by source in [test/test_caps_audit.ml].
- (private_modules app fetch_stack grants providers_build verdict)
+ ; The facade's signature is derived from [Providers_build], [Verdict],
+ ; [Fetch_stack] and [App] by [include], so those four must stay nameable: a
+ ; public signature that names a [private_modules] member installs a dangling
+ ; path (plans/seekwright-ocaml-port.md §11, and the probe recorded in
+ ; plans/factory-split-proposal.md §2.2). Naming them adds nothing to the
+ ; surface — each of their interface names is already re-exported by [Factory].
+ ; [grants] is the one seal: its [grant_of_decision] and
+ ; [fs_grant_of_written_root] build a grant from a confinement decision, and a
+ ; consumer that could reach them could build one outside the funnel. The seal
+ ; keeps installed consumers and odoc away from it; a stanza inside this
+ ; workspace can still reach it through dune's alias module, so the check-path
+ ; boundary is pinned by source in [test/test_caps_audit.ml].
+ (private_modules grants)
  (libraries
   seekwright
   seekwright.providers

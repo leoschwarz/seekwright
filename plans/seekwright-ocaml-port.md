@@ -3214,21 +3214,26 @@ where the row says so.
 | D-C — the operation-budget seam | `Budget`, `Authority.with_operation_budget` and the `budget` field of the bounds record go, and with them `test_caps_budget.ml` (431 lines), the two budget rows in `test_authority_net.ml`, `test_caps_audit`'s needle case that counted mentions of the decorator, `--max-calls` on `examples/gated_search.ml`, and `budget.cmi` in the interface-mirror rule the negative fixtures compile against. `grant_path.ml` still compiles without it, which is the proof the seal never needed the seam; `controls_record_forge.ml`'s diagnostic re-promotes over a record one field shorter. `lib/caps/README.md` now states that the layer enforces no operation ceiling, and the capability plan's §6 carries the reason and the condition for a counter coming back | this change |
 | D-D — the extraction pool | measured, not moved. An inline-vs-pool A/B over the frozen corpus on this host (medians of seven alternating runs per case, seven sweeps) puts the socket hop at +0.06…+0.24 ms on a ≤ 5 KB page and inside run-to-run noise on the two big fixtures, while the loop starvation it prevents is two orders of magnitude: with eight 187 KB parses running inline, a probe fiber asking the Eio loop for 50 ms is not even scheduled for 259–323 ms; pooled, for 0.0–0.4 ms. The `Domain` plus admission-semaphore rewrite could recover only the socket hop and would re-home the `Timed_out` rendering, the bounded queue's named refusal and the result ceiling, so it is declined and `Extract_pool` stands as written | no code change |
 | D-E — the scalar coercion grammar | `Config`'s Python numeric-coercion grammar is deleted: `trim`, `drop_separators`, `int_from_string`, `float_from_string`, `bool_words`, `bool_from_string`, `bool_from_number` (net −101 in `lib/config.ml`). A TOML scalar is read at its own type, with one widening — an integer for a float, or a fractionless float for an integer, because TOML spells one number two ways. `test_config.ml`'s new "the scalar types" group pins the refusals by name; seven `explicit-divergence` config goldens re-pin to the refusal sentence, and `94-float-inf` goes the other way: its `inf` is *bare*, the port reads it, so it returns to the extractor-only registration and loses its `divergences.tsv` row. The literal-rewrite pass could not survive the cut untouched — it turned TOML's `inf` and `nan` into quoted strings precisely so the deleted readers could turn them back into numbers. Measured against `toml` 7.1.0: the lexer rejects `inf`, `+inf`, `-inf`, `nan` and `NaN` outright, and `1e1000` parses to `inf`. So an infinity is rewritten to `±1e1000`, the same value through the lexer's own float grammar, while a bare `nan` is refused naming the key — no bound in this file can be satisfied by a NaN. `ocaml-docs/configuration.md` states the rule for operators, `ocaml-docs/divergences.md` gains the section, `matrix/behaviours.tsv`'s config row names the divergence kind, and the `ocaml` skill's TOML line records what pydantic used to take | this change |
+| §3 — the `Factory` façade | `provider_set.ml{,i}` is deleted and the façade re-types nothing: `factory.mli` is `include module type of` over `providers_build`, `verdict`, `fetch_stack` and `app` plus the three grant names the layer exports, and `factory.ml` is the same four includes with `build_app` and the grant trio bound by hand. The two build-report records move to `Providers_build`, which fills them and whose interface now carries their per-field contracts; `grants.mli` loses the prose `factory.mli` already owned for `audit_sink`, `grant_of_endpoint` and `probe_net`. `private_modules` shrinks to `grants` alone — the seal that matters, because `grant_of_decision` and `fs_grant_of_written_root` turn a confinement decision into a grant — and naming the other four adds no installed name `Factory` did not already export: `adapter` and `adapter_of_row` had no caller outside `providers_build` and left its interface with them. Net −114 lines in `lib/factory`, and an entry is two edits instead of three. The record equation still resolves through `Factory` — `test_routing_sets`' `{ Factory.built = … }` literals and `test_provider_registry`'s `providers.Factory.endpoints` are the proof — and odoc resolves the re-homed cross-references | this change |
 
 Two corrections to the plan's own predictions, recorded where they were wrong rather
 than left for a reader to find: D2's resolver (above, in §40), and S-010's line-count
 claim — the five readers lost 19 lines while `fallback.ml` gained 31, so the gain is the
 single owner of the status reading, not a smaller tree.
 
-Still open on this pass: the last contested §3 weight row (the `Factory` façade).
-D-D closed without a change: the A/B it asked for was run and is recorded in §4 of
-the structural plan, and the numbers decline the rewrite. D-E closed by deleting the
-grammar: what remains of the difference is an operator-facing rule in
-`ocaml-docs/configuration.md`, a section in `ocaml-docs/divergences.md` and seven
-registered config divergences, not a compatibility layer. The `context` row closed
-with D-B rather than on its own: its one reader was the `providers.tsv` row the
-validator cross-checked, so `context_cap`, the field and the six `~context:` rows
-went with the table that consumed them.
+Nothing is open on this pass. D-D closed without a change: the A/B it asked for was
+run and is recorded in §4 of the structural plan, and the numbers decline the
+rewrite. D-E closed by deleting the grammar: what remains of the difference is an
+operator-facing rule in `ocaml-docs/configuration.md`, a section in
+`ocaml-docs/divergences.md` and seven registered config divergences, not a
+compatibility layer. The `context` row closed with D-B rather than on its own: its
+one reader was the `providers.tsv` row the validator cross-checked, so
+`context_cap`, the field and the six `~context:` rows went with the table that
+consumed them. The §3 façade row closed last, and it is the one row whose fix the
+older page argued against: `plans/factory-split-proposal.md` §2.2 required
+`provider_set` to stay public because the record equation must spell the owning
+module's path — that argument still holds, and it is why the façade derives from
+four modules instead of hiding them.
 
 One design point was settled rather than changed. `Exa.make_tiered` keeps its own
 cooldown clock, deliberately: its escalation happens inside one in-flight call — the

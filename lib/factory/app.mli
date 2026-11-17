@@ -1,4 +1,5 @@
-(** Constructs the application runtime context ([Server.app]) and providers. *)
+(** The application runtime context: everything the served process holds, built in the one order
+    that refuses an unusable config before constructing anything around it. *)
 
 val build_app :
   sw:Eio.Switch.t ->
@@ -11,7 +12,11 @@ val build_app :
   log:Seekwright.Engine.log ->
   allowed_hosts:string list ->
   Seekwright.Config.t ->
-  (Seekwright.Server.app * Provider_set.providers, string) result
-(** [build_app ~sw ~env ~now ~log ~allowed_hosts config] builds runtime components: usage recorder,
-    provider set, health board, search engine, fetch engine, and agent engine. Returns [Error msg]
-    on startup refusal. *)
+  (Seekwright.Server.app * Providers_build.providers, string) result
+(** Build the process-wide {!Seekwright.Server.app}: {!Factory.startup_verdict} first (an unusable
+    config is refused before anything is constructed around it), then the usage recorder (a bad
+    [dashboard.history_path] is a config problem and reads as one), the shared health board, the
+    search engine over the built providers, the fetch engine when enabled, and the agent engine when
+    enabled (its model endpoint gets its own endpoint-scoped grant over [[agent] base_url]). The
+    {!Providers_build.providers} pass travels back with the app so the startup line can bind the
+    names this build skipped, and so [/healthz] and the engines all read one built set. *)

@@ -1,9 +1,10 @@
 (** The grant funnel: where confinement decisions become running grants and receive their audit
-    sinks. *)
+    sinks. This module is the library's only [Authority.Net.of_confinement] and its only
+    [Authority.with_log]; the seal is recorded in the stanza beside it. *)
 
 val audit_sink : Seekwright.Engine.log -> Mcp_caps.Event.t -> unit
-(** The audit sink: the one [caps.operation] line per authority operation, with the field dictionary
-    [test_caps_audit] pins. [Factory.audit_sink] is the public spelling of the same function. *)
+(** The audit sink: the one [caps.operation] line per authority operation. The field dictionary is
+    documented on [Factory.audit_sink], which is where [test_caps_audit] pins it. *)
 
 val grant_of_decision :
   mono_clock:_ Eio.Time.Mono.t ->
@@ -25,10 +26,8 @@ val grant_of_endpoint :
   ?audit:(Mcp_caps.Event.t -> unit) ->
   Mcp_caps.Policy.endpoint ->
   (Mcp_caps.Authority.Net.t, string) result
-(** One endpoint-scoped [Net] grant, wrapped once in [?audit], with its per-operation bound set from
-    config and its response ceiling at [Policy.default_max_response_bytes] unless the caller names
-    one. The public contract, including which config key bounds which route and who is allowed to
-    widen the ceiling, is on [Factory.grant_of_endpoint] in [factory.mli]. *)
+(** One endpoint-scoped [Net] grant through the funnel. Which config key bounds which route, and who
+    may widen the response ceiling, is [Factory.grant_of_endpoint]'s contract. *)
 
 val probe_net :
   sw:Eio.Switch.t ->
@@ -39,7 +38,7 @@ val probe_net :
   Mcp_caps.Policy.endpoint list ->
   Seekwright.Provider.Net.t
 (** The shared network seam for the readiness probes: one grant over the union of the given
-    endpoints. The public contract is on [Factory.probe_net] in [factory.mli]. *)
+    endpoints. [Factory.probe_net] carries the contract, including the empty-list answer. *)
 
 val fs_grant_of_written_root :
   sw:Eio.Switch.t ->
