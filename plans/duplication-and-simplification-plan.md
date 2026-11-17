@@ -1,7 +1,7 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 steps 0–5, S-008 and S-009 are landed; S-010 and everything after it, and
-the §4 decisions, are proposals.** Tree read at `6e4ad90`;
+Status: **§5 steps 0–7 are landed; §3, the §4 decisions and the D-C … D-F steps are
+proposals.** Tree read at `6e4ad90`;
 reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
 unchanged between the two commits — the diff is plans only). The corrections are
 recorded in §8; the §4 decisions remain the maintainer's.
@@ -92,11 +92,12 @@ Carried forward from the wave, because the same walls bind every item below.
   change. D-C touches two of the fourteen programs: `grant_path.ml` (the
   positive half, which calls `Budget.make`) and `controls_record_forge.ml`
   (which forges a `Controls.t` with a `budget` field).
-- **D2, deferred by the wave.** A per-name fetch-fallback builder table cannot
-  exist while every `Fallback_*.config` carries a `'tag` parameter that exists
-  only so `Remote_target.check` can reach `Policy_net.vet_public_host`. S-010's
-  step 0 proposes to erase the tag and lift the deferral; until it lands, the
-  `'tag` stays.
+- **D2, lifted.** Every `Fallback_*.config` used to carry a `'tag` parameter that existed
+  only so `Remote_target.check` could reach `Policy_net.vet_public_host`, which is what
+  made a per-name fetch-fallback builder table untypeable. S-010 erased it: the gate is a
+  value (`Remote_target.make_check`) the factory builds once per rung, so the table is now
+  expressible. It is not built — what `build_fallback`'s arms differ in is their gates (the
+  permission set, the key, `fetch.crawl4ai_url`), which is what the match still owns.
 - **The no-line-number rule.** This page names files and symbols only.
 
 ## 2. Duplication
@@ -676,7 +677,7 @@ unreachable origin that is a transport failure with no policy sentence. Its
 port/spawn/wait helpers went into `test/support/binary_harness.ml` and
 `test_binary_drain.ml` now uses them, rather than the suite carrying a second copy.
 
-### S-010 — the fallback readers, after R-005
+### S-010 — the fallback readers, after R-005 · **landed**
 
 **Evidence (`diff`, window scan).** R-005 removed the duplicated gates and grant
 prologue. What remains is the request tail: `Fallback_tavily` and
@@ -698,6 +699,47 @@ its request and its field map.
 **Gate.** `test_fetch_ladder`, `test_fetch_grant`, `test_grant_timeouts` and the
 five `test_fallback_*` suites, plus the `fetch` differential goldens that carry
 the refusal sentences.
+
+**Landed.** `Remote_target` is a value now: `make_check ~net ~private_web_allowed` returns
+`check : string -> (string, string) result`, and `type 'tag t`, `make` and `check` are
+gone. `fetch_stack` builds one per rung (`grant_and_check`, and the crawl4ai arm, whose
+endpoint is the operator's own config) and one for the local route's preflight, so the
+decision about who may resolve a name is made at build time and a reader's config carries
+no switch, no address family and no type parameter. All five `Fallback_*.config` records
+and all five interfaces lost the `'tag`.
+
+The tail went the same way `Provider.request` did for the search adapters. `Fallback`
+owns: `status_rule`, a `(int list * error) list` — the codes a vendor answers and the fact
+each means, in the order it wants them tested; `status_error`, which adds the
+`Failed "HTTP n"` catch-all every reader had anyway, so a rule supplies only the sentence a
+named code earns; `send`, the seam plus the one transport sentence, with the response
+ceiling left where the grant puts it; and `send_json`, which runs send → classify →
+`Json.decode_object` in that order, so an error page is answered with its status sentence
+and never with a JSON parse error. Each vendor's module now states its codes as data at the
+top of the file (`tavily` 401/403 and 429/432; `scrappa` 401/403 and 402/429; `linkup`
+401/403 and 429; `crawl4ai` 401/403 naming the operator's own key; `jina` 402/429 and
+deliberately nothing that reads as an auth failure, because it sends no credential). `jina`
+uses `send` and `status_error` rather than `send_json` — its body is `text/plain` — which
+is why the two are separate functions and not one. The inconsistent
+`response.Caps.Authority.Net.status` / `response.status` qualification the section flagged
+went with the fifteen branches it was written in, and `Fallback.transport_error` left the
+public interface because only `send` reads it.
+
+The correction the proposal got wrong: `fallback_fixtures.ml`'s scripted resolver does
+**not** go away, and deleting it would have cost the suite its best assertion. Five of the
+vendor suites pin that a private target is refused *and* that the vendor saw no request
+(`check_no_request`), which is only evidence about the vet if the vet is the real one. What
+went is the `'tag` on `Remote_target.make`; the fixture now exposes `scripted_net` (for the
+suite that pins the gate itself, `test_remote_target`) and `check` (for the five that
+inject it), which is the same seam the factory uses.
+
+Line-wise this is close to a wash — the five readers lost 19 lines and `fallback.ml` gained
+31, with the interfaces losing the type parameters — so the claim is the ownership, not the
+count: one place decides what a status means, one place turns a grant failure into a
+sentence, one place orders classification before decoding, and a vendor that adds no rule
+row gains no pass. Behaviour did not move: `dune runtest --force` was green with no
+promote, and the `fetch` differential goldens that carry these refusal sentences are
+unmodified.
 
 ## 3. Weight
 

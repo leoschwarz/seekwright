@@ -1,5 +1,5 @@
-(** The shared half of a remote fetch fallback: failure types, the network seam, and JSON response
-    parsing. *)
+(** The shared half of a remote fetch fallback: failure types, the network seam, the request tail
+    every vendor reader shares, and JSON response parsing. *)
 
 type error = Url_blocked of string | Rejected of string | Quota of string | Failed of string
 
@@ -14,7 +14,22 @@ type net = {
 
 val of_grant : Mcp_caps.Authority.Net.t -> net
 
-val transport_error : Mcp_caps.Error.t -> error
+type status_rule = (int list * error) list
+(** What a vendor's status line means, in the order it wants the codes tested: the codes it answers
+    and the fact each one means. *)
+
+val status_error : Mcp_caps.Authority.Net.response -> status_rule -> error option
+(** [None] when the response may be read. A code the rule does not name is still refused, as
+    [Failed "HTTP n"] — a vendor that adds no row gains no pass. *)
+
+val send : net -> Mcp_caps.Authority.Net.request -> (Mcp_caps.Authority.Net.response, error) result
+(** One request on the seam with the grant failure already turned into [Failed], and the response
+    ceiling left to the grant. *)
+
+val send_json :
+  net -> status_rule -> Mcp_caps.Authority.Net.request -> (Yojson.Safe.t, error) result
+(** [send], then {!status_error}, then {!Json.decode_object} on the body — the order that keeps an
+    error page's status sentence ahead of a JSON parse failure. *)
 
 val malformed : unit -> error
 

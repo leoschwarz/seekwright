@@ -1,12 +1,12 @@
-(* [Remote_target.check] is the composition the oracle writes inside every
-   remote fallback: [validate_url] first, then the public-address vet. The
-   address sentences themselves are pinned in [test_authority_net] beside the
-   vet; what this suite owns is the composition — the order, and which error
-   type each arm arrives as to the callers. *)
+(* [Remote_target.make_check] is the gate the factory builds once and hands every remote
+   fallback: [validate_url] first, then the public-address vet. The address sentences
+   themselves are pinned in [test_authority_net] beside the vet; what this suite owns is
+   the composition — the order, and which sentence each arm arrives with. *)
 
 module Fix = Fallback_fixtures
 
-let check url = Seekwright_fetch.Remote_target.check (Fix.remote_target ()) url
+let check =
+  Seekwright_fetch.Remote_target.make_check ~private_web_allowed:false ~net:(Fix.scripted_net ())
 
 let cases () =
   (* Both guards pass: the caller gets the normalised target back. *)

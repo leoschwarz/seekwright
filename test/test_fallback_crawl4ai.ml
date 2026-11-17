@@ -9,7 +9,7 @@ module Fix = Fallback_fixtures
 let cfg ?(token = None) fixture =
   {
     Crawl.net = Fix.net fixture;
-    target = Fix.remote_target ();
+    check = Fix.check ();
     max_text_chars = 40_000;
     base_url = "http://renderer.test:11235/";
     token;

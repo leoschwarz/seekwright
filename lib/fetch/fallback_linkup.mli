@@ -1,8 +1,8 @@
 (** Linkup fetch — keyed rendering fallback. *)
 
-type 'tag config = {
+type config = {
   net : Fallback.net;
-  target : 'tag Remote_target.t;
+  check : Remote_target.check;
   max_text_chars : int;
   api_key : string;
 }
@@ -10,8 +10,4 @@ type 'tag config = {
 val linkup_fetch_endpoint : string
 
 val fetch :
-  'tag config ->
-  string ->
-  offset:int ->
-  max_chars:int option ->
-  (Fallback.page, Fallback.error) result
+  config -> string -> offset:int -> max_chars:int option -> (Fallback.page, Fallback.error) result

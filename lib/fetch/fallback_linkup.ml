@@ -2,12 +2,20 @@ module Caps = Mcp_caps
 
 let linkup_fetch_endpoint = "https://api.linkup.so/v1/fetch"
 
-type 'tag config = {
+type config = {
   net : Fallback.net;
-  target : 'tag Remote_target.t;
+  check : Remote_target.check;
   max_text_chars : int;
   api_key : string;
 }
+
+(* A spent account and a burst share 429 here, as the search adapter on this key reads
+   it; Linkup's 402 belongs to the keyless x402 lane this tree never enters. *)
+let rule : Fallback.status_rule =
+  [
+    ([ 401; 403 ], Fallback.Rejected "authentication rejected (check API key)");
+    ([ 429 ], Fallback.Quota "rate limited or out of credits");
+  ]
 
 let to_page cfg target body ~offset ~max_chars =
   (* [markdown] is the field the service always returns, and an empty one is
@@ -22,7 +30,7 @@ let to_page cfg target body ~offset ~max_chars =
        ~title:None ~status_code:200)
 
 let fetch cfg raw ~offset ~max_chars =
-  match Remote_target.check cfg.target raw with
+  match cfg.check raw with
   | Error message -> Error (Fallback.Url_blocked message)
   | Ok target -> (
       let body =
@@ -51,18 +59,6 @@ let fetch cfg raw ~offset ~max_chars =
           body = Some body;
         }
       in
-      match cfg.net.request ~max_response_bytes:None request with
-      | Error caps_error -> Error (Fallback.transport_error caps_error)
-      | Ok response -> (
-          if response.Caps.Authority.Net.status = 401 || response.Caps.Authority.Net.status = 403
-          then Error (Fallback.Rejected "authentication rejected (check API key)")
-            (* A spent account and a burst share 429 here, as the search
-               adapter on this key reads it; Linkup's 402 belongs to the
-               keyless x402 lane this tree never enters. *)
-          else if response.status = 429 then Error (Fallback.Quota "rate limited or out of credits")
-          else if response.status >= 400 then
-            Error (Fallback.Failed (Printf.sprintf "HTTP %d" response.status))
-          else
-            match Fallback.Json.decode_object response.Caps.Authority.Net.body with
-            | Error error -> Error error
-            | Ok body -> to_page cfg target body ~offset ~max_chars))
+      match Fallback.send_json cfg.net rule request with
+      | Error error -> Error error
+      | Ok body -> to_page cfg target body ~offset ~max_chars)

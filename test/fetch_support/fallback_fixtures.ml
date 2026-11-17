@@ -84,8 +84,13 @@ module Scripted_resolver = struct
   let getnameinfo _t _address = ("scripted.test", "0")
 end
 
-let remote_target () =
-  Remote_target.make (Eio.Resource.T ((), Eio.Net.Pi.network (module Scripted_resolver)))
+(* The scripted network itself, for the suite that pins the gate rather than a reader. *)
+let scripted_net () = Eio.Resource.T ((), Eio.Net.Pi.network (module Scripted_resolver))
+
+(* The gate a vendor suite hands its reader: [public_url] resolves to a public address,
+   so a case can assert both the gate refusing a private target and what the reader sent
+   when it did not. *)
+let check () = Remote_target.make_check ~net:(scripted_net ()) ~private_web_allowed:false
 
 let public_url = "https://public.test/page"
 

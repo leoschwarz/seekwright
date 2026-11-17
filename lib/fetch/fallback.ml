@@ -27,6 +27,26 @@ let transport_error error =
 
 let malformed () = Failed "malformed JSON response"
 
+(* Each vendor's own status reading, in the order it wants the codes tested: the codes
+   it answers and the fact each one means. The [Failed "HTTP n"] catch-all is not a
+   vendor fact — every reader refuses a 4xx or 5xx it has not named — so it lives here
+   once, and a rule only supplies the sentence a named code earns. *)
+type status_rule = (int list * error) list
+
+let status_error (response : Caps.Authority.Net.response) rule =
+  let status = response.Caps.Authority.Net.status in
+  match List.find_opt (fun (codes, _) -> List.mem status codes) rule with
+  | Some (_, error) -> Some error
+  | None when status >= 400 -> Some (Failed (Printf.sprintf "HTTP %d" status))
+  | None -> None
+
+(* The ceiling is the grant's: every fallback reads a vendor API body, and none has a
+   reason to raise what the deployment configured. *)
+let send net request =
+  match net.request ~max_response_bytes:None request with
+  | Error caps_error -> Error (transport_error caps_error)
+  | Ok response -> Ok response
+
 module Json = struct
   let decode_object body =
     match Yojson.Safe.from_string body with
@@ -46,6 +66,17 @@ module Json = struct
 
   let is_false = ( = ) (`Bool false)
 end
+
+(* Send, classify, decode — the tail the JSON readers repeated. The body is parsed only
+   for a response the rule accepted, so a vendor's HTML error page is answered with its
+   status sentence and not with a JSON error. *)
+let send_json net rule request =
+  match send net request with
+  | Error error -> Error error
+  | Ok response -> (
+      match status_error response rule with
+      | Some error -> Error error
+      | None -> Json.decode_object response.Caps.Authority.Net.body)
 
 let or_string a b =
   match a with

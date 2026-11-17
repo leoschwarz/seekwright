@@ -2,12 +2,20 @@ module Caps = Mcp_caps
 
 let scrappa_scraper_endpoint = "https://scrappa.co/api/web-scraper"
 
-type 'tag config = {
+type config = {
   net : Fallback.net;
-  target : 'tag Remote_target.t;
+  check : Remote_target.check;
   max_text_chars : int;
   api_key : string;
 }
+
+(* 401/403 is the key; 402 and 429 are the credit line and the burst, read the same
+   way, because this vendor bills by scrape. *)
+let rule : Fallback.status_rule =
+  [
+    ([ 401; 403 ], Fallback.Rejected "authentication rejected (check API key)");
+    ([ 402; 429 ], Fallback.Quota "rate limited or out of credits");
+  ]
 
 let to_page cfg target body ~offset ~max_chars =
   (* [site_status_code] is the {i origin's} status, distinct from Scrappa's
@@ -45,7 +53,7 @@ let to_page cfg target body ~offset ~max_chars =
            ~status_code)
 
 let fetch cfg raw ~offset ~max_chars =
-  match Remote_target.check cfg.target raw with
+  match cfg.check raw with
   | Error message -> Error (Fallback.Url_blocked message)
   | Ok target -> (
       let uri =
@@ -56,16 +64,6 @@ let fetch cfg raw ~offset ~max_chars =
       let request : Caps.Authority.Net.request =
         { meth = `GET; uri; headers = [ ("x-api-key", cfg.api_key) ]; body = None }
       in
-      match cfg.net.request ~max_response_bytes:None request with
-      | Error caps_error -> Error (Fallback.transport_error caps_error)
-      | Ok response -> (
-          if response.Caps.Authority.Net.status = 401 || response.Caps.Authority.Net.status = 403
-          then Error (Fallback.Rejected "authentication rejected (check API key)")
-          else if response.status = 402 || response.status = 429 then
-            Error (Fallback.Quota "rate limited or out of credits")
-          else if response.status >= 400 then
-            Error (Fallback.Failed (Printf.sprintf "HTTP %d" response.status))
-          else
-            match Fallback.Json.decode_object response.Caps.Authority.Net.body with
-            | Error error -> Error error
-            | Ok body -> to_page cfg target body ~offset ~max_chars))
+      match Fallback.send_json cfg.net rule request with
+      | Error error -> Error error
+      | Ok body -> to_page cfg target body ~offset ~max_chars)

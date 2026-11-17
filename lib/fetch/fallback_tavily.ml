@@ -2,13 +2,21 @@ module Caps = Mcp_caps
 
 let tavily_extract_endpoint = "https://api.tavily.com/extract"
 
-type 'tag config = {
+type config = {
   net : Fallback.net;
-  target : 'tag Remote_target.t;
+  check : Remote_target.check;
   max_text_chars : int;
   api_key : string;
   timeout_seconds : float;
 }
+
+(* 401/403 is the key. 432 is this vendor's monthly-credits-exhausted code and 429 its
+   short-term limit, the same reading the search adapter on this key takes. *)
+let rule : Fallback.status_rule =
+  [
+    ([ 401; 403 ], Fallback.Rejected "authentication rejected (check API key)");
+    ([ 429; 432 ], Fallback.Quota "rate limited or out of credits");
+  ]
 
 let to_page cfg target body ~offset ~max_chars =
   (* [results[]] holds one entry per URL that succeeded; an HTTP 200 with an
@@ -35,7 +43,7 @@ let to_page cfg target body ~offset ~max_chars =
        ~title:None ~status_code:200)
 
 let fetch cfg raw ~offset ~max_chars =
-  match Remote_target.check cfg.target raw with
+  match cfg.check raw with
   | Error message -> Error (Fallback.Url_blocked message)
   | Ok target -> (
       let body =
@@ -62,19 +70,6 @@ let fetch cfg raw ~offset ~max_chars =
           body = Some body;
         }
       in
-      match cfg.net.request ~max_response_bytes:None request with
-      | Error caps_error -> Error (Fallback.transport_error caps_error)
-      | Ok response -> (
-          if response.Caps.Authority.Net.status = 401 || response.Caps.Authority.Net.status = 403
-          then Error (Fallback.Rejected "authentication rejected (check API key)")
-            (* 432 is this vendor's monthly-credits-exhausted code and 429
-               its short-term limit, the same reading the search adapter on
-               this key takes. *)
-          else if response.status = 429 || response.status = 432 then
-            Error (Fallback.Quota "rate limited or out of credits")
-          else if response.status >= 400 then
-            Error (Fallback.Failed (Printf.sprintf "HTTP %d" response.status))
-          else
-            match Fallback.Json.decode_object response.Caps.Authority.Net.body with
-            | Error error -> Error error
-            | Ok body -> to_page cfg target body ~offset ~max_chars))
+      match Fallback.send_json cfg.net rule request with
+      | Error error -> Error error
+      | Ok body -> to_page cfg target body ~offset ~max_chars)

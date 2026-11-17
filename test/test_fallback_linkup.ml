@@ -8,7 +8,7 @@ module Fix = Fallback_fixtures
 let cfg fixture =
   {
     Linkup.net = Fix.net fixture;
-    target = Fix.remote_target ();
+    check = Fix.check ();
     max_text_chars = 40_000;
     api_key = "lk-test";
   }

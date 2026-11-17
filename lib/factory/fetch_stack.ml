@@ -89,9 +89,9 @@ let grant_floor = 30.0
    alike. *)
 let tavily_body_floor = 30.0
 
-(* The remote prologue every vendor rung shares: the row's constant endpoint, the
-   grant on it, and the target the rung re-vets on each call. *)
-let grant_and_target ~sw ~net ~mono_clock ?audit config row =
+(* The remote prologue every vendor rung shares: the row's constant endpoint, the grant
+   on it, and the gate the rung runs on its target for every call. *)
+let grant_and_check ~sw ~net ~mono_clock ?audit config row =
   let endpoint =
     Provider.policy_of_uri (Uri.of_string (Option.value ~default:"" row.Config.endpoint))
   in
@@ -100,7 +100,7 @@ let grant_and_target ~sw ~net ~mono_clock ?audit config row =
       ~timeout_seconds:(Float.max config.Config.fetch.Config.timeout_seconds grant_floor)
       ?audit endpoint
   in
-  Ok (grant, Remote_target.make net)
+  Ok (grant, Remote_target.make_check ~net ~private_web_allowed:false)
 
 let build_fallback ~sw ~net ~mono_clock ?audit config name =
   let fetch = config.Config.fetch in
@@ -123,14 +123,14 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
       | "jina" ->
           if not (Config.is_permitted config name) then Ok None
           else
-            let* grant, target = grant_and_target ~sw ~net ~mono_clock ?audit config row in
+            let* grant, check = grant_and_check ~sw ~net ~mono_clock ?audit config row in
             Ok
               (Some
                  (wrap_fallback name (fallback_cost config row)
                     (Seekwright_fetch.Fallback_jina.fetch
                        {
                          net = Fallback.of_grant grant;
-                         target;
+                         check;
                          max_text_chars = fetch.Config.max_text_chars;
                          user_agent = fetch.Config.user_agent;
                        })))
@@ -146,14 +146,14 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                   ~timeout_seconds:fetch.Config.crawl4ai_timeout_seconds ?audit
                   (Provider.policy_of_uri (Uri.of_string base_url))
               in
-              let target = Remote_target.make net in
+              let check = Remote_target.make_check ~net ~private_web_allowed:false in
               Ok
                 (Some
                    (wrap_fallback name (fallback_cost config row)
                       (Seekwright_fetch.Fallback_crawl4ai.fetch
                          {
                            net = Fallback.of_grant grant;
-                           target;
+                           check;
                            max_text_chars = fetch.Config.max_text_chars;
                            base_url;
                            token = fetch.Config.crawl4ai_token;
@@ -172,22 +172,22 @@ let build_fallback ~sw ~net ~mono_clock ?audit config name =
                 match keyed_vendor name with
                 | None -> Ok None
                 | Some vendor ->
-                    let* grant, target = grant_and_target ~sw ~net ~mono_clock ?audit config row in
+                    let* grant, check = grant_and_check ~sw ~net ~mono_clock ?audit config row in
                     let vendor_net = Fallback.of_grant grant in
                     let max_text_chars = fetch.Config.max_text_chars in
                     let rung =
                       match vendor with
                       | `Scrappa ->
                           Seekwright_fetch.Fallback_scrappa.fetch
-                            { net = vendor_net; target; max_text_chars; api_key }
+                            { net = vendor_net; check; max_text_chars; api_key }
                       | `Linkup ->
                           Seekwright_fetch.Fallback_linkup.fetch
-                            { net = vendor_net; target; max_text_chars; api_key }
+                            { net = vendor_net; check; max_text_chars; api_key }
                       | `Tavily ->
                           Seekwright_fetch.Fallback_tavily.fetch
                             {
                               net = vendor_net;
-                              target;
+                              check;
                               max_text_chars;
                               api_key;
                               timeout_seconds =
@@ -284,8 +284,11 @@ let cache_max_entries = 10_000
 
 let preflight_of ~(net : _ Eio.Net.t) config =
   let fetch = config.Config.fetch in
+  let check =
+    Remote_target.make_check ~net ~private_web_allowed:fetch.Config.allow_private_addresses
+  in
   fun (raw : string) ->
-    match Remote_target.vet ~net ~private_web_allowed:fetch.Config.allow_private_addresses raw with
+    match check raw with
     | Ok validated -> Ok validated
     | Error message -> Error (Engine.Fetch.Url_blocked message)
 

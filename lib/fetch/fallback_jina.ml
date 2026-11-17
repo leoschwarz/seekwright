@@ -66,15 +66,21 @@ let split_reader_body body =
       in
       (headers, String.concat "\n" (first @ after))
 
-type 'tag config = {
+type config = {
   net : Fallback.net;
-  target : 'tag Remote_target.t;
+  check : Remote_target.check;
   max_text_chars : int;
   user_agent : string;
 }
 
+(* Free, but metered by IP: a burst shares one window with every other caller behind
+   this address. 401 and 403 are deliberately not read as an auth failure — this
+   fallback sends no credential, so a rejection is the service refusing this address
+   or target, which is the [Failed "HTTP n"] row either way. *)
+let rule : Fallback.status_rule = [ ([ 402; 429 ], Fallback.Quota "rate limited") ]
+
 let fetch cfg raw ~offset ~max_chars =
-  match Remote_target.check cfg.target raw with
+  match cfg.check raw with
   | Error message -> Error (Fallback.Url_blocked message)
   | Ok target -> (
       (* The endpoint and the target concatenate as plain text in the oracle;
@@ -89,39 +95,31 @@ let fetch cfg raw ~offset ~max_chars =
           body = None;
         }
       in
-      match cfg.net.request ~max_response_bytes:None request with
-      | Error caps_error -> Error (Fallback.transport_error caps_error)
-      | Ok response ->
-          if
-            (* Free, but metered by IP: a burst shares one window with every
-             other caller behind this address. *)
-            response.Caps.Authority.Net.status = 402 || response.Caps.Authority.Net.status = 429
-          then Error (Fallback.Quota "rate limited")
-            (* 401/403 included, and not read as an auth failure: this
-               fallback sends no credential, so a rejection is the service
-               refusing this address or target. *)
-          else if response.status >= 400 then
-            Error (Fallback.Failed (Printf.sprintf "HTTP %d" response.status))
-          else
-            let header_block, text = split_reader_body response.body in
-            (* The two placeholder bodies the service returns when it has
-               no page for us are read as *found nothing* — the same fact
-               an extraction under [fetch.min_text_chars] means, which is
-               what lets the next fallback fire. They are a statement
-               about the read, not a length, and the title survives. *)
-            let stripped = Utf8.strip text in
-            let text =
-              if
-                String.starts_with ~prefix:"Loading..." stripped
-                || String.starts_with ~prefix:"Please enable JavaScript" stripped
-              then ""
-              else text
-            in
-            let find key = List.assoc_opt key header_block in
-            (* Python's [source or url] and [title or None]: an empty string
-               from the reader is no value at all. *)
-            let source = match find "url source" with Some s when s <> "" -> s | _ -> target in
-            let title = match find "title" with Some t when t <> "" -> Some t | _ -> None in
-            Ok
-              (Fallback.windowed text ~url:source ~max_text_chars:cfg.max_text_chars ~offset
-                 ~max_chars ~title ~status_code:200))
+      match Fallback.send cfg.net request with
+      | Error error -> Error error
+      | Ok response -> (
+          match Fallback.status_error response rule with
+          | Some error -> Error error
+          | None ->
+              let header_block, text = split_reader_body response.Caps.Authority.Net.body in
+              (* The two placeholder bodies the service returns when it has
+                 no page for us are read as *found nothing* — the same fact
+                 an extraction under [fetch.min_text_chars] means, which is
+                 what lets the next fallback fire. They are a statement
+                 about the read, not a length, and the title survives. *)
+              let stripped = Utf8.strip text in
+              let text =
+                if
+                  String.starts_with ~prefix:"Loading..." stripped
+                  || String.starts_with ~prefix:"Please enable JavaScript" stripped
+                then ""
+                else text
+              in
+              let find key = List.assoc_opt key header_block in
+              (* Python's [source or url] and [title or None]: an empty string
+                 from the reader is no value at all. *)
+              let source = match find "url source" with Some s when s <> "" -> s | _ -> target in
+              let title = match find "title" with Some t when t <> "" -> Some t | _ -> None in
+              Ok
+                (Fallback.windowed text ~url:source ~max_text_chars:cfg.max_text_chars ~offset
+                   ~max_chars ~title ~status_code:200)))

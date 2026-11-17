@@ -2,13 +2,18 @@ module Caps = Mcp_caps
 
 let crawl4ai_crawl_path = "/crawl"
 
-type 'tag config = {
+type config = {
   net : Fallback.net;
-  target : 'tag Remote_target.t;
+  check : Remote_target.check;
   max_text_chars : int;
   base_url : string;
   token : string option;
 }
+
+(* The operator's own service refusing the token this deployment configured is a
+   different fix than a vendor key, so the sentence names the key. *)
+let rule : Fallback.status_rule =
+  [ ([ 401; 403 ], Fallback.Rejected "authentication rejected (check fetch.crawl4ai_token)") ]
 
 (* Built per request rather than parked on the client: a credential that only
    exists at the call site cannot ride along on any other request this client
@@ -87,7 +92,7 @@ let rstrip_slashes url =
   else url
 
 let fetch cfg raw ~offset ~max_chars =
-  match Remote_target.check cfg.target raw with
+  match cfg.check raw with
   | Error message -> Error (Fallback.Url_blocked message)
   | Ok target -> (
       let uri = Uri.of_string (rstrip_slashes cfg.base_url ^ crawl4ai_crawl_path) in
@@ -103,17 +108,6 @@ let fetch cfg raw ~offset ~max_chars =
       let request : Caps.Authority.Net.request =
         { meth = `POST; uri; headers = headers cfg.token; body = Some body }
       in
-      match cfg.net.request ~max_response_bytes:None request with
-      | Error caps_error -> Error (Fallback.transport_error caps_error)
-      | Ok response -> (
-          if response.Caps.Authority.Net.status = 401 || response.Caps.Authority.Net.status = 403
-          then
-            (* The operator's own service refused the token this deployment
-               configured — which is a different fix than a vendor key. *)
-            Error (Fallback.Rejected "authentication rejected (check fetch.crawl4ai_token)")
-          else if response.status >= 400 then
-            Error (Fallback.Failed (Printf.sprintf "HTTP %d" response.status))
-          else
-            match Fallback.Json.decode_object response.Caps.Authority.Net.body with
-            | Error error -> Error error
-            | Ok body -> to_page cfg target body ~offset ~max_chars))
+      match Fallback.send_json cfg.net rule request with
+      | Error error -> Error error
+      | Ok body -> to_page cfg target body ~offset ~max_chars)

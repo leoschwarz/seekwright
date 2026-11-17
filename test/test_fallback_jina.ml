@@ -9,7 +9,7 @@ module Fix = Fallback_fixtures
 let cfg fixture =
   {
     Jina.net = Fix.net fixture;
-    target = Fix.remote_target ();
+    check = Fix.check ();
     max_text_chars = 40_000;
     user_agent = "seekwright-test/1.0";
   }

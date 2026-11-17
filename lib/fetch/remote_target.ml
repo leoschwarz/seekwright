@@ -1,6 +1,4 @@
-type 'tag t = 'tag Eio.Net.t
-
-let make (net : 'tag Eio.Net.t) : 'tag t = net
+type check = string -> (string, string) result
 
 let host_of url =
   (* [validate_url] has already refused the shapes whose host a parser could
@@ -9,7 +7,7 @@ let host_of url =
      dropped — is the same hostname [urlsplit] hands the oracle. *)
   Uri.host (Uri.of_string url)
 
-let vet ~net ~private_web_allowed raw =
+let make_check ~net ~private_web_allowed raw =
   match Fetcher.validate_url raw with
   | Error message -> Error message
   | Ok target -> (
@@ -29,5 +27,3 @@ let vet ~net ~private_web_allowed raw =
                the caller has no use for — [Url_blocked] already says what
                kind this is. *)
             | Error error -> Error (Mcp_caps.Error.message error)))
-
-let check net raw = vet ~net ~private_web_allowed:false raw

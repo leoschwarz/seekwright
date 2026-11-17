@@ -1,12 +1,10 @@
-(** Target validation and public address verification for remote fallbacks. *)
+(** The URL gate a remote route runs on its target, as a value. *)
 
-type 'tag t = 'tag Eio.Net.t
+type check = string -> (string, string) result
 
-val make : 'tag Eio.Net.t -> 'tag t
-
-val vet : net:_ Eio.Net.t -> private_web_allowed:bool -> string -> (string, string) result
-(** [vet ~net ~private_web_allowed raw] is the whole URL gate: shape validation, the host, then the
+val make_check : net:_ Eio.Net.t -> private_web_allowed:bool -> check
+(** [make_check ~net ~private_web_allowed] is the whole gate: shape validation, the host, then the
     public-address vet — the vet and the host check together skipped only when
-    [private_web_allowed], which no remote route passes. *)
-
-val check : 'tag t -> string -> (string, string) result
+    [private_web_allowed], which no remote route passes. It is handed to a reader as a function
+    rather than a switch, so who may resolve a name is decided once by the factory and a reader's
+    config carries no address family of its own. *)
