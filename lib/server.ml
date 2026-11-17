@@ -210,16 +210,32 @@ let search_query_of (req : Model.search_request) : Model.search_query =
 
 let output_of json = Tool.Output.text ~structured_content:json (Yojson.Safe.pretty_to_string json)
 
+(* One dispatch per verb. The argument list each engine is called with is
+   spelled here and nowhere else, so the two surfaces cannot drift in what they
+   pass. What stays per-surface is the mapping, because it differs: a refusal is
+   [Error.Invalid] on the tool call and 400 on REST, a failure is [Error.Failed]
+   and 502, and a disabled verb is 404 on REST only. *)
+let dispatch_search app (req : Model.search_request) =
+  Engine.Search.search app.search ?provider:req.Model.provider ?mode:(mode_of req.Model.mode)
+    (search_query_of req)
+
+let dispatch_fetch engine (req : Model.fetch_request) =
+  Engine.Fetch.fetch engine ?offset:req.Model.offset ?query:req.Model.query ?path:req.Model.path
+    ~structure:req.Model.structure ?provider:req.Model.provider req.Model.url
+
+let dispatch_answer agent (req : Model.answer_request) =
+  Agent.answer agent ~query:req.Model.query ?extra_queries:req.Model.extra_queries
+    ?depth:req.Model.depth ?provider:req.Model.provider ?include_domains:req.Model.include_domains
+    ?exclude_domains:req.Model.exclude_domains ?recency:req.Model.recency
+    ?language:req.Model.language ?safe_search:req.Model.safe_search ()
+
 let search_tool =
   Tool.make ~title:"Web Search" ~description:Prompts.search_description
     ~output_schema:search_response_schema
     ~input_schema:(obj ~additional:false search_properties [ "query" ])
     ~decode:Model.search_request_of_yojson
     ~run:(fun app req ->
-      match
-        Engine.Search.search app.search ?provider:req.Model.provider ?mode:(mode_of req.Model.mode)
-          (search_query_of req)
-      with
+      match dispatch_search app req with
       | Ok response -> Ok (output_of (Model.search_response_to_yojson response))
       | Error (Engine.Search.Refused message) -> Error (Error.make Error.Invalid ~message)
       | Error (Engine.Search.Failed message) -> Error (Error.make Error.Failed ~message))
@@ -234,11 +250,7 @@ let fetch_tool =
       match app.fetch with
       | None -> Error (Error.make Error.Invalid ~message:fetch_disabled)
       | Some engine -> (
-          match
-            Engine.Fetch.fetch engine ?offset:req.Model.offset ?query:req.Model.query
-              ?path:req.Model.path ~structure:req.Model.structure ?provider:req.Model.provider
-              req.Model.url
-          with
+          match dispatch_fetch engine req with
           | Ok response ->
               (* The caps layer's [Tool.Output] has no image block (a declared
                  v1 gap), so an image answer rides inside the JSON projection,
@@ -257,15 +269,15 @@ let answer_tool =
       match app.agent with
       | None -> Error (Error.make Error.Invalid ~message:agent_disabled)
       | Some agent -> (
-          match
-            Agent.answer agent ~query:req.Model.query ?extra_queries:req.Model.extra_queries
-              ?depth:req.Model.depth ?provider:req.Model.provider
-              ?include_domains:req.Model.include_domains ?exclude_domains:req.Model.exclude_domains
-              ?recency:req.Model.recency ?language:req.Model.language
-              ?safe_search:req.Model.safe_search ()
-          with
-          | Ok response -> Ok (output_of (Model.answer_response_to_yojson response))
-          | Error message -> Error (Error.make Error.Failed ~message)))
+          (* The provider pin is refused before any retrieval, on this surface
+             as on REST: behind an [answer] the walk would turn "this build has
+             no such provider" into a model failure the caller cannot act on. *)
+          match Engine.Search.resolve app.search req.Model.provider with
+          | Error message -> Error (Error.make Error.Invalid ~message)
+          | Ok _ -> (
+              match dispatch_answer agent req with
+              | Ok response -> Ok (output_of (Model.answer_response_to_yojson response))
+              | Error message -> Error (Error.make Error.Failed ~message))))
     "answer"
 
 let registry app =
@@ -369,10 +381,7 @@ let api_search app ~stopping body =
         match Model.search_request_of_yojson json with
         | Error message -> error_response 400 ("Invalid request: " ^ message ^ ".")
         | Ok req -> (
-            match
-              Engine.Search.search app.search ?provider:req.Model.provider
-                ?mode:(mode_of req.Model.mode) (search_query_of req)
-            with
+            match dispatch_search app req with
             | Ok response -> json_response 200 (Model.search_response_to_yojson response)
             | Error (Engine.Search.Refused message) -> error_response 400 message
             | Error (Engine.Search.Failed message) -> error_response 502 message))
@@ -389,11 +398,7 @@ let api_fetch app ~stopping body =
             match Model.fetch_request_of_yojson json with
             | Error message -> error_response 400 ("Invalid request: " ^ message ^ ".")
             | Ok req -> (
-                match
-                  Engine.Fetch.fetch engine ?offset:req.Model.offset ?query:req.Model.query
-                    ?path:req.Model.path ~structure:req.Model.structure ?provider:req.Model.provider
-                    req.Model.url
-                with
+                match dispatch_fetch engine req with
                 | Ok response -> json_response 200 (Model.fetch_response_to_yojson response)
                 | Error (Engine.Fetch.Refused message) -> error_response 400 message
                 | Error (Engine.Fetch.Failed message) -> error_response 502 message)))
@@ -415,13 +420,7 @@ let api_answer app ~stopping body =
                 match Engine.Search.resolve app.search req.Model.provider with
                 | Error message -> error_response 400 message
                 | Ok _ -> (
-                    match
-                      Agent.answer agent ~query:req.Model.query
-                        ?extra_queries:req.Model.extra_queries ?depth:req.Model.depth
-                        ?provider:req.Model.provider ?include_domains:req.Model.include_domains
-                        ?exclude_domains:req.Model.exclude_domains ?recency:req.Model.recency
-                        ?language:req.Model.language ?safe_search:req.Model.safe_search ()
-                    with
+                    match dispatch_answer agent req with
                     | Ok response -> json_response 200 (Model.answer_response_to_yojson response)
                     | Error message -> error_response 502 message))))
 

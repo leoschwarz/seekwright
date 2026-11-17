@@ -545,6 +545,25 @@ let an_answer_failure_projects_the_typed_failure _ =
     | entry :: _ -> ( match field "error" entry with `String e -> e | _ -> "")
     | [] -> "")
 
+(* The [provider] enum on the tool schema is the vocabulary, not the enabled
+   set, so a registered name this build carries no adapter for does reach the
+   run. The 400 REST gives it has to have its counterpart here: the same request
+   must not be a refusal on one surface and a model failure on the other. And it
+   has to be refused before anything runs — behind an [answer] the retrieval walk
+   would swallow the bad pin and bill a search for it. *)
+let an_answer_pinned_to_an_unbuilt_name_is_refused_on_the_tool_call_too _ =
+  let app = make_app ~agent:true [ "serper" ] in
+  let called =
+    dispatch (mcp app)
+      {|{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"answer","arguments":{"query":"what is eio?","provider":"tavily"}}}|}
+  in
+  check_bool "the tool call is an error" true (is_error called);
+  includes "refused, not failed" "invalid: " (text_of called);
+  includes "the sentence names the name this build does not serve" "tavily" (text_of called);
+  match field "recent" (Usage.snapshot app.Server.usage) with
+  | `List [] -> ()
+  | other -> A.failf "the refusal left a journal line: %s" (Yojson.Safe.to_string other)
+
 let dashboard_routes _ =
   let off = default_app () in
   let get app path =
@@ -738,6 +757,8 @@ let () =
           A.test_case "fetch and answer statuses" `Quick api_fetch_and_answer_statuses;
           A.test_case "an answer failure projects the typed failure" `Quick
             an_answer_failure_projects_the_typed_failure;
+          A.test_case "an answer pinned to an unbuilt name is refused on the tool call too" `Quick
+            an_answer_pinned_to_an_unbuilt_name_is_refused_on_the_tool_call_too;
           A.test_case "the dashboard routes" `Quick dashboard_routes;
         ] );
       ( "flags and framing",

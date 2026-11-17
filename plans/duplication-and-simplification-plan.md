@@ -1,6 +1,6 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 steps 0–3 (D-G formatting, S-005, S-001, S-002) are landed; everything
+Status: **§5 steps 0–4 (D-G formatting, S-005, S-001, S-002, S-003) are landed; everything
 else on this page is a proposal.** Tree read at `6e4ad90`;
 reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
 unchanged between the two commits — the diff is plans only). The corrections are
@@ -317,6 +317,29 @@ the `/healthz` shape; the `api_answer` pre-check has to be decided — either bo
 surfaces pre-check or neither does — and that decision is the visible part of
 this change.
 
+**Landed.** `dispatch_search`, `dispatch_fetch` and `dispatch_answer` now sit
+above the three tools and the three REST routes, so the argument list each
+engine is called with is spelled once; what stays per-surface is the mapping,
+which is the half that genuinely differs — a refusal is `Error.Invalid` on a
+tool call and 400 on REST, a failure is `Error.Failed` and 502, and a disabled
+verb is 404 on REST only, because a tool call has no status to answer with. The
+file does not shrink (973 → 971): the six call sites collapsed into three
+functions and the saved lines went to the decision below.
+
+Q-002's open question is answered as this page proposed — the two error types
+per engine stay, the call is shared. The visible decision: **both surfaces
+pre-check**. `answer_tool` runs `Engine.Search.resolve` before retrieval, so an
+`answer` pinned to a name this build carries no adapter for is refused with an
+`invalid:` tool error, and 400 on REST, instead of reaching `Agent.answer`,
+where the retrieval walk turned it into a model failure (502 / `failed:`) and
+billed a search step on the way. This is reachable rather than theoretical
+because the `provider` enum on the tool schema is the vocabulary, not the
+enabled set: the schema refuses only names outside the seventeen, so an
+in-vocabulary-but-unbuilt name is exactly what reaches the run.
+`test_p8_server.ml` pins the new half with the invariant that makes it more than
+a status change — the refusal journals nothing, so no retrieval step and no
+model call ran.
+
 ### S-004 — the wire field vocabulary spelled four times per model
 
 **Evidence (window scan, `read`).** The named `*_allowed` lists already exist for
@@ -629,7 +652,7 @@ in the same commit.
 |1|S-005 micro-duplication: the percent-encoder, `base64`/`grouped`, the `Utf8` re-export shim|**landed** — small, no golden, no re-pin|
 |2|S-001 adapter skeleton, `take` landing in `Provider`|**landed** — −511 lines in `lib/providers/`, +225 in `lib/provider.ml` and its interface (net −286, short of the estimate for the reasons in §2); 13 of 14 REST adapters on the shared tail, `parallel` onto the shared sentence with its per-bucket clauses kept word-for-word|
 |3|S-002 test harness|**landed** — −659 in the sixteen adapter suites, −80 in the six journal suites that copied the JSON accessors, +242 in `test/support/` (net −497, short of the estimate for the reasons in §2); one harness for the `Net` mock, one for the accessors, four contract-duplicate cases deleted|
-|4|S-003 one dispatch per verb, answering Q-002|the 400/502 mapping has one owner; the `api_answer` pre-check asymmetry is decided|
+|4|S-003 one dispatch per verb, answering Q-002|**landed** — three dispatch functions, six call sites collapsed; Q-002 answered (the types stay, the call is shared); the `api_answer` pre-check asymmetry resolved by pre-checking on both surfaces, so an unbuilt `answer` pin is `invalid:` on the tool call and 400 on REST|
 |5|S-004 field lists, then S-006, then S-007|the schemas read the decoders' key lists; the journal's answer fields gain one owner|
 |6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|
 |7|S-010 fallback readers, lifting D2|the `'tag` goes, one `Fallback.run` owns the tail, and the factory builds the host check once|
