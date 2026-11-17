@@ -371,10 +371,12 @@
 ; P5: the usage recorder. The journal is a real file, so each case owns a
 ; directory under a scratch root and the suite holds an Eio loop (the recorder's
 ; appends go through Eio.Path) and Unix (the fixture, and the chmod that stands
-; in for a broken volume).
+; in for a broken volume). [seekwright.time] is named because the clock cases
+; compare the journal's stamp with the floor's [Z] stamp, which the suite would
+; otherwise only see through [Usage].
 (test
  (name test_usage)
- (libraries seekwright alcotest test_support eio eio_main unix yojson))
+ (libraries seekwright seekwright.time alcotest test_support eio eio_main unix yojson))
 
 ; P5: the search engine. The stub providers are [Provider.S] modules closing over
 ; mutable state, the log is an injected sink, and one case drives a real adapter

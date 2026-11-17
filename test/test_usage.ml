@@ -9,6 +9,7 @@
    Python suite reaches into [r._days], and the two "no content" cases read the
    signatures as the [Usage] interface's shape rather than through [inspect]. *)
 
+module Civil = Seekwright_time.Civil
 module Config = Seekwright.Config
 module Usage = Seekwright.Usage
 module A = Alcotest
@@ -227,6 +228,33 @@ let iso_spans_the_calendar () =
     "the day rolls at midnight UTC, not before" "2024-03-01" (Usage.utc_date 1709251200.);
   A.(check string)
     "a pre-epoch instant buckets to its own UTC day" "1969-12-31" (Usage.utc_date (-1.))
+
+(* Both spellings of one instant are live, and deliberately different: [Usage]'s
+   [+00:00] is the usage journal's [ts] key — compared, backfilled and pruned
+   exactly as written, and a deployed journal already holds that spelling — while
+   [Civil]'s [Z] is the model-facing stamp the adapters and [Cli_metrics] print.
+   Suffix and precision may differ; the calendar moment may not. Nothing else in
+   the tree reads both, so the agreement is pinned here. *)
+let the_two_stamp_spellings_name_one_instant () =
+  (* Whole seconds, a half second, the epoch, the instant below it where a
+     truncating split would land the wrong day, and a leap-day end. *)
+  let instants = [ 0.; 1_700_000_000.; 1_700_000_000.5; -0.5; -1.; 1_709_251_199. ] in
+  List.iter
+    (fun instant ->
+      let label = "the instant " ^ string_of_float instant in
+      let civil = Civil.iso_utc_seconds instant in
+      let calendar = String.sub civil 0 (String.length civil - 1) in
+      A.(
+        check string
+          (label ^ " gets the journal suffix, nothing else")
+          (calendar ^ "+00:00") (Usage.iso_utc_seconds instant));
+      let full = Usage.iso_utc_full instant in
+      A.(
+        check string
+          (label ^ " truncates to the same second under the microsecond field")
+          calendar
+          (String.sub full 0 (String.length calendar))))
+    instants
 
 let totals_and_providers_add_up () =
   let rec_ = recorder () in
@@ -1338,6 +1366,8 @@ let tests =
       [
         check "the three formatters spell one instant three ways" iso_formats_the_instant;
         check "the day maths spans a leap day and the epoch" iso_spans_the_calendar;
+        check "the journal stamp and the model-facing stamp name one instant"
+          the_two_stamp_spellings_name_one_instant;
       ] );
     ( "aggregation",
       [

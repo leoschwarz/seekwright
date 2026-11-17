@@ -14,23 +14,26 @@ let recent_default = 100
 let utc_date (secs : float) : string =
   Civil.date_of_days (Civil.days_of_secs (Civil.whole_seconds secs))
 
-let civil_of (secs : float) : int * int * int * int * int * int * float =
-  let secs_int = Civil.whole_seconds secs in
-  let days = Civil.days_of_secs secs_int in
-  let sod = secs -. (float_of_int days *. 86400.) in
-  let y, m, d = Civil.civil_from_days days in
-  let whole = Float.to_int sod in
-  (y, m, d, whole / 3600, whole / 60 mod 60, whole mod 60, sod -. Float.of_int whole)
+(* The calendar half is [Civil]'s day arithmetic and the clock half is its
+   fraction-keeping split: the day bucket is the one [days_of_secs] names, so no
+   floored division is re-derived here, and the microsecond field is whole
+   microseconds rather than a float a caller has to floor. The [+00:00] suffix is
+   the journal's own: [ts] is compared, backfilled and pruned as written, and a
+   deployed journal already holds that spelling — see [Civil.iso_utc_seconds] for
+   why the model-facing [Z] form stays separate. *)
+let stamp (secs : float) : int * int * int * int * int * int * int =
+  let y, m, d = Civil.civil_from_days (Civil.days_of_secs (Civil.whole_seconds secs)) in
+  let hh, mm, ss, frac = Civil.clock_of_instant secs in
+  (y, m, d, hh, mm, ss, Int.of_float (Float.floor (frac *. 1_000_000.)))
 
-(* Microsecond field is omitted when zero. *)
+(* The microsecond field is omitted when it is zero. *)
 let iso_utc_full (secs : float) : string =
-  let y, m, d, hh, mm, ss, frac = civil_of secs in
-  let micros = Float.to_int (Float.floor (frac *. 1_000_000.)) in
+  let y, m, d, hh, mm, ss, us = stamp secs in
   Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d%s+00:00" y m d hh mm ss
-    (if micros = 0 then "" else Printf.sprintf ".%06d" micros)
+    (if us = 0 then "" else Printf.sprintf ".%06d" us)
 
 let iso_utc_seconds (secs : float) : string =
-  let y, m, d, hh, mm, ss, _ = civil_of secs in
+  let y, m, d, hh, mm, ss, _ = stamp secs in
   Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02d+00:00" y m d hh mm ss
 
 let digits (s : string) (i : int) (n : int) : int option =

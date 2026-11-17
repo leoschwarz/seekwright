@@ -496,7 +496,7 @@ by keyword (a 16-label call becomes a record literal). The step is not a
 reduction; it is the removal of a third spelling and of the manifest's freedom to
 drift from the writer.
 
-### S-007 — the civil-time residue after R-009
+### S-007 — the civil-time residue after R-009 · **landed**
 
 **Evidence (`read`).** R-009 put Hinnant's arithmetic on the stdlib floor, and six
 copies went away. Two things remain: `Usage.civil_of` already calls
@@ -516,6 +516,32 @@ mean the same moment, and a hand-rolled floored division beside the checked one.
 on `Civil`'s day arithmetic and that split; state in `Civil`'s interface why the
 journal suffix and the `Z` suffix differ (one is the journal's key, one is a
 model-facing stamp).
+
+**Landed.** `Civil.clock_of_instant : float -> int * int * int * float` is the
+fraction-keeping split — hour, minute, whole second, leftover fraction — computed
+from `whole_seconds` and `seconds_of_day`, so its day bucket is the one
+`days_of_secs` names and its fraction is in 0 .. below 1 for a pre-epoch instant
+too. `Usage`'s `civil_of` is gone: `stamp` calls `Civil.civil_from_days` over
+`Civil.days_of_secs` and `Civil.clock_of_instant`, and returns whole microseconds
+rather than a float for a caller to floor. `seconds_of_day` stays `int -> int` as
+proposed.
+
+The two spellings stay, and `Civil`'s interface now says why: `…+00:00` is the
+journal's `ts` key — read back, backfilled and pruned by `Usage.parse_offset`, and
+a deployed journal already holds that spelling — while `Civil.iso_utc_seconds`'s
+`Z` is what `Cli_metrics` and `Linkup.format_utc` print. What the section said was
+missing is pinned: a `test_usage` clock case asserts, over six instants (whole
+seconds, a half second, the epoch, the instant below it, and a leap-day end), that
+the two render the same calendar moment and that `iso_utc_full`'s microsecond
+field truncates to it. No observable output changed: the hand-rolled subtraction
+and `Civil`'s floor agree on every instant measured.
+
+The case needs `seekwright.time` in the suite's libraries, because the whole point
+is to see both renderers. One unrelated odoc defect surfaced in the same
+`@doc` run and is fixed here: `lib/sanitize.mli`'s comment quoted
+`Text without '<' or '[' …`, and odoc parses a bracket as the start of a code
+span — the warning was pre-existing, hidden by caching until the library was
+recompiled.
 
 ### S-008 — the page cache holds four copies of the page shape
 
@@ -726,7 +752,7 @@ in the same commit.
 |2|S-001 adapter skeleton, `take` landing in `Provider`|**landed** — −511 lines in `lib/providers/`, +225 in `lib/provider.ml` and its interface (net −286, short of the estimate for the reasons in §2); 13 of 14 REST adapters on the shared tail, `parallel` onto the shared sentence with its per-bucket clauses kept word-for-word|
 |3|S-002 test harness|**landed** — −659 in the sixteen adapter suites, −80 in the six journal suites that copied the JSON accessors, +242 in `test/support/` (net −497, short of the estimate for the reasons in §2); one harness for the `Net` mock, one for the accessors, four contract-duplicate cases deleted|
 |4|S-003 one dispatch per verb, answering Q-002|**landed** — three dispatch functions, six call sites collapsed; Q-002 answered (the types stay, the call is shared); the `api_answer` pre-check asymmetry resolved by pre-checking on both surfaces, so an unbuilt `answer` pin is `invalid:` on the tool call and 400 on REST|
-|5|S-004 field lists, then S-006, then S-007|S-004 **landed** — ten key lists, one per wire model, read by `reject_extra` and by the schema builder; the schema mismatch is reported by name through `Server.untabled_wire_fields` and failed by a suite, because `lib/server.ml` may not raise; net +82 lines, all three pins byte-stable. S-006 **landed** — one `answer_metrics` record and one `(key, getter)` vocabulary feeding the journal line, `Agent`'s log line and the manifest's `[answer]` row, which was a third hand-typed spelling; +10 in `lib/`, +48 in the two suites, `surface.expected` unmoved at 37. S-007 to go|
+|5|S-004 field lists, then S-006, then S-007|**landed** — S-004: ten key lists, one per wire model, read by `reject_extra` and by the schema builder, with the schema mismatch reported by name through `Server.untabled_wire_fields` and failed by a suite because `lib/server.ml` may not raise (net +82, all three pins byte-stable). S-006: one `answer_metrics` record and one `(key, getter)` vocabulary feeding the journal line, `Agent`'s log line and the manifest's `[answer]` row, which was a third hand-typed spelling (+10 in `lib/`, +48 in the two suites, `surface.expected` unmoved at 37). S-007: `Civil.clock_of_instant` keeps the fraction, `Usage.civil_of`'s hand-rolled floored division is gone, and the journal's `+00:00` key and the model-facing `Z` are documented apart and pinned equal by a clock case|
 |6|S-008 page cache, S-009 the CLI grant|the cache stops hand-rolling a codec; `bin/main.ml` stops owning a TLS stack|
 |7|S-010 fallback readers, lifting D2|the `'tag` goes, one `Fallback.run` owns the tail, and the factory builds the host check once|
 |8|§3 table + D-A/D-B docs|`context`, `settings`, `cost_model`, the façade and the extractor duality go; the driver and the two matrix tables only if D-A/D-B decide so; `AGENTS.md`, `ocaml-docs/testing.md`, `test/differential/README.md` and the port plan move in the same commit|

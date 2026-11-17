@@ -33,6 +33,15 @@ let whole_seconds instant = int_of_float (Float.floor instant)
 let days_of_secs secs = if secs >= 0 then secs / 86_400 else (secs - 86_399) / 86_400
 let seconds_of_day secs = secs - (days_of_secs secs * 86_400)
 
+(* The same bucket as [seconds_of_day], fraction kept: [whole_seconds] floors, so
+   [frac] is in [[0, 1)] for every instant, pre-epoch included. The microsecond
+   stamp is the only thing that needs it, which is why [seconds_of_day] stays an
+   [int -> int]. *)
+let clock_of_instant instant =
+  let secs = whole_seconds instant in
+  let sod = seconds_of_day secs in
+  (sod / 3600, sod / 60 mod 60, sod mod 60, instant -. Float.of_int secs)
+
 let date_of_days days =
   let y, m, d = civil_from_days days in
   Printf.sprintf "%04d-%02d-%02d" y m d
@@ -57,9 +66,6 @@ let date_of_string date =
          (int_of_string (String.sub date 8 2)))
 
 let iso_utc_seconds instant =
-  let secs = whole_seconds instant in
-  let y, m, d = civil_from_days (days_of_secs secs) in
-  let clock = seconds_of_day secs in
-  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ" y m d (clock / 3600)
-    (clock / 60 mod 60)
-    (clock mod 60)
+  let y, m, d = civil_from_days (days_of_secs (whole_seconds instant)) in
+  let hh, mm, ss, _ = clock_of_instant instant in
+  Printf.sprintf "%04d-%02d-%02dT%02d:%02d:%02dZ" y m d hh mm ss

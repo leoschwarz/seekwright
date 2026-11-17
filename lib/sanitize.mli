@@ -11,8 +11,8 @@ val is_text_field : string -> bool
 (** [is_text_field name] is [true] when [name] is in {!text_fields}. *)
 
 val sanitize_text : string -> string * int
-(** [sanitize_text text] escapes special-token literals in [text] and returns
-    the escaped string with the count of escaped occurrences.
+(** [sanitize_text text] escapes special-token literals in [text] and returns the escaped string
+    with the count of escaped occurrences.
 
-    Reversible (stripping U+200B restores source), idempotent, and deterministic.
-    Text without '<' or '[' returns unchanged with count 0. *)
+    Reversible (stripping U+200B restores source), idempotent, and deterministic. Text with neither
+    a less-than sign nor an opening bracket returns unchanged with count 0. *)
