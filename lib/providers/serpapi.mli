@@ -12,9 +12,6 @@ val name : string
 val endpoint : Uri.t
 (** [https://serpapi.com/search]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 val make :
   ?cost_per_1k:float ->
   ?snippet_chars:int ->

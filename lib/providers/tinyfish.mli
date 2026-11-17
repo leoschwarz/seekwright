@@ -14,9 +14,6 @@ val name : string
 val endpoint : Uri.t
 (** [https://api.search.tinyfish.ai]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 val recency_minutes : Seekwright.Model.recency -> int
 (** Window length in minutes: Day (1440), Week (10080), Month (43200), Year (525600). *)
 

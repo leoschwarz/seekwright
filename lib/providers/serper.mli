@@ -13,9 +13,6 @@ val name : string
 val endpoint : Uri.t
 (** [https://google.serper.dev/search]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 val credit_over : int
 (** Result threshold above which 2 credits are charged (10). *)
 

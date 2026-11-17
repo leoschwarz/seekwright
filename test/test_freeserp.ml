@@ -463,17 +463,13 @@ let an_operator_corrected_cost_reaches_the_adapter () =
   check_number "the corrected figure" 0.25 (Provider.cost_per_1k provider);
   check_number "and its per-query reading" 0.00025 (Provider.cost_for provider 5)
 
-let the_endpoint_is_the_one_the_grant_allows () =
+let the_adapter_dials_the_endpoint_it_declares () =
   (* The URL the adapter dials and the entry the factory must allowlist are one
-     fact: the adapter sends [https] to [freeserp.ai] on the default port, which
-     is what the policy row says. *)
+     fact: the endpoint literal, and the host the recorded request went to. *)
   check_string "the endpoint" "https://freeserp.ai/api.php" (Uri.to_string Freeserp.endpoint);
-  check_string "the policy host" "freeserp.ai" Freeserp.policy_endpoint.Caps.Policy.host;
-  check_bool "https" true (Freeserp.policy_endpoint.Caps.Policy.scheme = `Https);
-  check_bool "the default port" true (Freeserp.policy_endpoint.Caps.Policy.port = None);
   let _, request = search_of () in
   check_bool "and the adapter dials that host" true
-    (Uri.host request.uri = Some Freeserp.policy_endpoint.Caps.Policy.host)
+    (Uri.host request.uri = Uri.host Freeserp.endpoint)
 
 let () =
   A.(
@@ -554,7 +550,7 @@ let () =
             test_case "it cannot bill" `Quick it_cannot_bill;
             test_case "an operator-corrected cost reaches the adapter" `Quick
               an_operator_corrected_cost_reaches_the_adapter;
-            test_case "the endpoint is the one the grant allows" `Quick
-              the_endpoint_is_the_one_the_grant_allows;
+            test_case "the adapter dials the endpoint it declares" `Quick
+              the_adapter_dials_the_endpoint_it_declares;
           ] );
       ])

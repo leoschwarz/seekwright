@@ -9,8 +9,6 @@ let name = "deepseek"
 
 let endpoint = Uri.of_string "https://api.deepseek.com/v1/tools/search"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 (* Documented count range is 1..50. *)
 let max_results = 50
 

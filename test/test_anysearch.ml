@@ -420,15 +420,12 @@ let an_operator_corrected_cost_reaches_the_adapter () =
   check_number "the corrected figure" 0.5 (Provider.cost_per_1k provider);
   check_number "and its per-query reading" 0.0005 (Provider.cost_for provider 5)
 
-let the_endpoint_is_the_one_the_grant_allows () =
+let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.anysearch.com/v1/search"
     (Uri.to_string Anysearch.endpoint);
-  check_string "the policy host" "api.anysearch.com" Anysearch.policy_endpoint.Caps.Policy.host;
-  check_bool "https" true (Anysearch.policy_endpoint.Caps.Policy.scheme = `Https);
-  check_bool "the default port" true (Anysearch.policy_endpoint.Caps.Policy.port = None);
   let _, request = search_of () in
   check_bool "and the adapter dials that host" true
-    (Uri.host request.uri = Some Anysearch.policy_endpoint.Caps.Policy.host)
+    (Uri.host request.uri = Uri.host Anysearch.endpoint)
 
 let () =
   A.(
@@ -501,7 +498,7 @@ let () =
             test_case "the result reports its flat cost" `Quick the_result_reports_its_flat_cost;
             test_case "an operator-corrected cost reaches the adapter" `Quick
               an_operator_corrected_cost_reaches_the_adapter;
-            test_case "the endpoint is the one the grant allows" `Quick
-              the_endpoint_is_the_one_the_grant_allows;
+            test_case "the adapter dials the endpoint it declares" `Quick
+              the_adapter_dials_the_endpoint_it_declares;
           ] );
       ])

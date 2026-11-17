@@ -6,8 +6,6 @@ let name = "scrappa"
 
 let endpoint = Uri.of_string "https://scrappa.co/api/search-light"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 (* Documented ceiling: max 20 results. *)
 let max_num = 20
 

@@ -17,9 +17,6 @@ val name : string
 val endpoint : Uri.t
 (** [https://api.anysearch.com/v1/search]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 val max_results : int
 (** Documented maximum result count (10). *)
 

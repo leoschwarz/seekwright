@@ -19,10 +19,6 @@ val name : string
 val endpoint : Uri.t
 (** What is dialed: [https://api.deepseek.com/v1/tools/search]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** The same destination as a grant entry, so the factory builds the one allowlist entry this
-    adapter can satisfy. *)
-
 val max_results : int
 (** The documented [count] range is 1..50 (not a plan limit), so a hand-built [SearchQuery] stays
     inside it whatever [max_results] asks. *)

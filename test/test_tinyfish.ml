@@ -332,14 +332,11 @@ let zero_is_the_default_and_a_correction_reaches_the_adapter () =
   check_number "an operator-corrected figure" 2.00 (Provider.cost_per_1k provider);
   check_number "and its per-query reading" 0.002 (Provider.cost_for provider 5)
 
-let the_endpoint_is_the_one_the_grant_allows () =
+let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.search.tinyfish.ai" (Uri.to_string Tinyfish.endpoint);
-  check_string "the policy host" "api.search.tinyfish.ai" Tinyfish.policy_endpoint.Caps.Policy.host;
-  check_bool "https" true (Tinyfish.policy_endpoint.Caps.Policy.scheme = `Https);
-  check_bool "the default port" true (Tinyfish.policy_endpoint.Caps.Policy.port = None);
   let _, request = search_of () in
   check_bool "and the adapter dials that host" true
-    (Uri.host request.Caps.Authority.Net.uri = Some Tinyfish.policy_endpoint.Caps.Policy.host)
+    (Uri.host request.Caps.Authority.Net.uri = Uri.host Tinyfish.endpoint)
 
 let () =
   A.(
@@ -410,7 +407,7 @@ let () =
             test_case "the result carries the zero" `Quick the_result_carries_the_zero;
             test_case "zero is the default and a correction reaches the adapter" `Quick
               zero_is_the_default_and_a_correction_reaches_the_adapter;
-            test_case "the endpoint is the one the grant allows" `Quick
-              the_endpoint_is_the_one_the_grant_allows;
+            test_case "the adapter dials the endpoint it declares" `Quick
+              the_adapter_dials_the_endpoint_it_declares;
           ] );
       ])

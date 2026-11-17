@@ -6,8 +6,6 @@ let name = "tavily"
 
 let endpoint = Uri.of_string "https://api.tavily.com/search"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 (* Closed enum of lowercase English country names for general search. *)
 let country_by_code =
   [

@@ -13,9 +13,6 @@ val name : string
 val endpoint : Uri.t
 (** [https://api.tavily.com/search]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 val country_by_code : (string * string) list
 (** Supported country enum mapping ISO alpha-2 codes and aliases to country names. *)
 

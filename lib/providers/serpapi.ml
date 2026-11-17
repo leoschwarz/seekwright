@@ -6,8 +6,6 @@ let name = "serpapi"
 
 let endpoint = Uri.of_string "https://serpapi.com/search"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 let tbs = function
   | Model.Day -> "qdr:d"
   | Model.Week -> "qdr:w"

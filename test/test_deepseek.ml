@@ -455,15 +455,12 @@ let the_default_price_is_the_rows_figure () =
   let provider, _ = dial ~cost_per_1k:1.0 () in
   check_number "different terms can correct it" 1.0 (Provider.cost_per_1k provider)
 
-let the_endpoint_is_the_one_the_grant_allows () =
+let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.deepseek.com/v1/tools/search"
     (Uri.to_string Deepseek.endpoint);
-  check_string "the policy host" "api.deepseek.com" Deepseek.policy_endpoint.Caps.Policy.host;
-  check_bool "https" true (Deepseek.policy_endpoint.Caps.Policy.scheme = `Https);
-  check_bool "the default port" true (Deepseek.policy_endpoint.Caps.Policy.port = None);
   let _, request = search_of () in
   check_bool "and the adapter dials that host" true
-    (Uri.host request.Caps.Authority.Net.uri = Some Deepseek.policy_endpoint.Caps.Policy.host);
+    (Uri.host request.Caps.Authority.Net.uri = Uri.host Deepseek.endpoint);
   (* The key rides a header, so the URL the grant confines never carries it. *)
   check_bool "no key in the URL" false
     (contains ~haystack:(Uri.to_string request.Caps.Authority.Net.uri) ~needle:test_key)
@@ -553,7 +550,7 @@ let () =
               a_search_with_no_results_is_not_billed;
             test_case "the default price is the row's figure" `Quick
               the_default_price_is_the_rows_figure;
-            test_case "the endpoint is the one the grant allows" `Quick
-              the_endpoint_is_the_one_the_grant_allows;
+            test_case "the adapter dials the endpoint it declares" `Quick
+              the_adapter_dials_the_endpoint_it_declares;
           ] );
       ])

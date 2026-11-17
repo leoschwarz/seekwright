@@ -310,14 +310,11 @@ let an_operator_corrected_cost_reaches_the_adapter () =
   check_number "and its per-query reading at one credit" 0.0005 (Provider.cost_for provider 10);
   check_number "and at two" 0.001 (Provider.cost_for provider 11)
 
-let the_endpoint_is_the_one_the_grant_allows () =
+let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://google.serper.dev/search" (Uri.to_string Serper.endpoint);
-  check_string "the policy host" "google.serper.dev" Serper.policy_endpoint.Caps.Policy.host;
-  check_bool "https" true (Serper.policy_endpoint.Caps.Policy.scheme = `Https);
-  check_bool "the default port" true (Serper.policy_endpoint.Caps.Policy.port = None);
   let _, request = search_of () in
   check_bool "and the adapter dials that host" true
-    (Uri.host request.Caps.Authority.Net.uri = Some Serper.policy_endpoint.Caps.Policy.host)
+    (Uri.host request.Caps.Authority.Net.uri = Uri.host Serper.endpoint)
 
 let () =
   A.(
@@ -391,7 +388,7 @@ let () =
               the_default_price_is_the_rows_figure;
             test_case "an operator-corrected cost reaches the adapter" `Quick
               an_operator_corrected_cost_reaches_the_adapter;
-            test_case "the endpoint is the one the grant allows" `Quick
-              the_endpoint_is_the_one_the_grant_allows;
+            test_case "the adapter dials the endpoint it declares" `Quick
+              the_adapter_dials_the_endpoint_it_declares;
           ] );
       ])

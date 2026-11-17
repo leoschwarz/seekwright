@@ -6,8 +6,6 @@ let name = "search1api"
 
 let endpoint = Uri.of_string "https://api.search1api.com/search"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 (* time_range takes "day", "week", "month", "year". *)
 let request_body (q : Provider.search_query) =
   let fields = [ ("query", `String q.Model.query); ("max_results", `Int q.Model.max_results) ] in

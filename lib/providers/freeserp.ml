@@ -8,8 +8,6 @@ let name = "freeserp"
 
 let endpoint = Uri.of_string "https://freeserp.ai/api.php"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 let agent = "seekwright"
 let max_size = 100
 

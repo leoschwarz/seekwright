@@ -297,14 +297,11 @@ let the_default_price_is_the_rows_figure () =
   let provider, _ = dial ~cost_per_1k:0.15 () in
   check_number "an operator on another tier can correct it" 0.15 (Provider.cost_per_1k provider)
 
-let the_endpoint_is_the_one_the_grant_allows () =
+let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://scrappa.co/api/search-light" (Uri.to_string Scrappa.endpoint);
-  check_string "the policy host" "scrappa.co" Scrappa.policy_endpoint.Caps.Policy.host;
-  check_bool "https" true (Scrappa.policy_endpoint.Caps.Policy.scheme = `Https);
-  check_bool "the default port" true (Scrappa.policy_endpoint.Caps.Policy.port = None);
   let _, request = search_of () in
   check_bool "and the adapter dials that host" true
-    (Uri.host request.Caps.Authority.Net.uri = Some Scrappa.policy_endpoint.Caps.Policy.host);
+    (Uri.host request.Caps.Authority.Net.uri = Uri.host Scrappa.endpoint);
   (* The key rides a header, so the URL the grant confines never carries it. *)
   check_bool "no key in the URL" false
     (contains ~haystack:(Uri.to_string request.Caps.Authority.Net.uri) ~needle:test_key)
@@ -369,7 +366,7 @@ let () =
             test_case "it is cheaper than serper" `Quick it_is_cheaper_than_serper;
             test_case "the default price is the row's figure" `Quick
               the_default_price_is_the_rows_figure;
-            test_case "the endpoint is the one the grant allows" `Quick
-              the_endpoint_is_the_one_the_grant_allows;
+            test_case "the adapter dials the endpoint it declares" `Quick
+              the_adapter_dials_the_endpoint_it_declares;
           ] );
       ])

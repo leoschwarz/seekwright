@@ -13,9 +13,6 @@ val name : string
 val endpoint : Uri.t
 (** [https://scrappa.co/api/search-light]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 val max_num : int
 (** Documented maximum result count (20). *)
 

@@ -13,8 +13,6 @@ let endpoint = Uri.of_string "https://api.parallel.ai/v1/search"
 
 let mcp_uri = Uri.of_string "https://search.parallel.ai/mcp"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 (* Coarse freshness to day count: Day (1), Week (7), Month (30), Year (365). *)
 let recency_days = function
   | Model.Day -> 1

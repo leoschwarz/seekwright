@@ -7,9 +7,6 @@
 val endpoint : Uri.t
 (** [https://api.parallel.ai/v1/search], the REST API endpoint. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 val mcp_uri : Uri.t
 (** [https://search.parallel.ai/mcp], the hosted MCP endpoint. *)
 

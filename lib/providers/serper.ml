@@ -6,8 +6,6 @@ let name = "serper"
 
 let endpoint = Uri.of_string "https://google.serper.dev/search"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 let tbs_of = function
   | Model.Day -> "qdr:d"
   | Model.Week -> "qdr:w"

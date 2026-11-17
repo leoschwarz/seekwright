@@ -13,10 +13,6 @@ val name : string
 val endpoint : Uri.t
 (** What is dialed: [https://api.querit.ai/v1/search]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** The same destination as a grant entry, so the factory builds the one allowlist entry this
-    adapter can satisfy. *)
-
 val max_results : int
 (** The free plan's documented result cap: a caller asking for more is clamped, because the request
     never asks a plan for what it cannot give. *)

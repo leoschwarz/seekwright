@@ -367,7 +367,6 @@ let the_result_carries_the_flat_figure () =
 let the_endpoints_are_the_two_halves () =
   check_string "the billed REST endpoint" "https://api.parallel.ai/v1/search"
     (Uri.to_string Parallel.endpoint);
-  check_string "the policy host" "api.parallel.ai" Parallel.policy_endpoint.Caps.Policy.host;
   check_string "the free half's hosted MCP" "https://search.parallel.ai/mcp"
     (Uri.to_string Parallel.mcp_uri);
   check_string "and its tool" "web_search" Parallel.mcp_tool

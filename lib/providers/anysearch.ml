@@ -6,8 +6,6 @@ let name = "anysearch"
 
 let endpoint = Uri.of_string "https://api.anysearch.com/v1/search"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 let max_results = 10
 
 let clamp_results n = min (max n 1) max_results

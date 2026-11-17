@@ -6,8 +6,6 @@ let name = "tinyfish"
 
 let endpoint = Uri.of_string "https://api.search.tinyfish.ai"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 (* recency_minutes: day (1440), week (10080), month (43200), year (525600). *)
 let recency_minutes = function
   | Model.Day -> 1440

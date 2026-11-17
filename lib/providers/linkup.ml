@@ -8,8 +8,6 @@ let name = "linkup"
 
 let endpoint = Uri.of_string "https://api.linkup.so/v1/search"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 (* Output format: Sourced_answer returns prose answer and citations;
    Search_results returns structured hits. *)
 type output = Sourced_answer | Search_results

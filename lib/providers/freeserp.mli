@@ -13,9 +13,6 @@ val name : string
 val endpoint : Uri.t
 (** [https://freeserp.ai/api.php]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 val agent : string
 (** Attributable client identifier sent upstream. *)
 

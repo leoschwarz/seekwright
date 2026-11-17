@@ -386,14 +386,11 @@ let the_default_price_is_the_rows_figure () =
   let provider, _ = dial ~cost_per_1k:1.0 () in
   check_number "an operator on a paid plan can correct it" 1.0 (Provider.cost_per_1k provider)
 
-let the_endpoint_is_the_one_the_grant_allows () =
+let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://serpapi.com/search" (Uri.to_string Serpapi.endpoint);
-  check_string "the policy host" "serpapi.com" Serpapi.policy_endpoint.Caps.Policy.host;
-  check_bool "https" true (Serpapi.policy_endpoint.Caps.Policy.scheme = `Https);
-  check_bool "the default port" true (Serpapi.policy_endpoint.Caps.Policy.port = None);
   let _, request = search_of () in
   check_bool "and the adapter dials that host" true
-    (Uri.host request.Caps.Authority.Net.uri = Some Serpapi.policy_endpoint.Caps.Policy.host);
+    (Uri.host request.Caps.Authority.Net.uri = Uri.host Serpapi.endpoint);
   (* This name is the exception: the credential rides the URL, so the grant's
      confinement cannot redact it — {!Seekwright.Provider.redact_url} is what
      every line naming one of these URLs passes through, and the row's probe
@@ -469,7 +466,7 @@ let () =
             test_case "a paid plan corrects the cost" `Quick a_paid_plan_corrects_the_cost;
             test_case "the default price is the row's figure" `Quick
               the_default_price_is_the_rows_figure;
-            test_case "the endpoint is the one the grant allows" `Quick
-              the_endpoint_is_the_one_the_grant_allows;
+            test_case "the adapter dials the endpoint it declares" `Quick
+              the_adapter_dials_the_endpoint_it_declares;
           ] );
       ])

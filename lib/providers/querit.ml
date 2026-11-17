@@ -6,8 +6,6 @@ let name = "querit"
 
 let endpoint = Uri.of_string "https://api.querit.ai/v1/search"
 
-let policy_endpoint = Provider.policy_of_uri endpoint
-
 (* Documented maximum result count (10). *)
 let max_results = 10
 

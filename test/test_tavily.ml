@@ -452,14 +452,11 @@ let the_text_cap_follows_the_value_the_factory_passes () =
   let loose, _ = search_of ~text_chars:2000 ~query:(query ~max_results:1 ()) () in
   check_opt_bool "whole at two thousand" None (List.hd loose.results).result.text_truncated
 
-let the_endpoint_is_the_one_the_grant_allows () =
+let the_adapter_dials_the_endpoint_it_declares () =
   check_string "the endpoint" "https://api.tavily.com/search" (Uri.to_string Tavily.endpoint);
-  check_string "the policy host" "api.tavily.com" Tavily.policy_endpoint.Caps.Policy.host;
-  check_bool "https" true (Tavily.policy_endpoint.Caps.Policy.scheme = `Https);
-  check_bool "the default port" true (Tavily.policy_endpoint.Caps.Policy.port = None);
   let _, request = search_of () in
   check_bool "and the adapter dials that host" true
-    (Uri.host request.Caps.Authority.Net.uri = Some Tavily.policy_endpoint.Caps.Policy.host)
+    (Uri.host request.Caps.Authority.Net.uri = Uri.host Tavily.endpoint)
 
 let () =
   A.(
@@ -556,7 +553,7 @@ let () =
               an_operator_corrected_cost_reaches_the_adapter;
             test_case "the text cap follows the value the factory passes" `Quick
               the_text_cap_follows_the_value_the_factory_passes;
-            test_case "the endpoint is the one the grant allows" `Quick
-              the_endpoint_is_the_one_the_grant_allows;
+            test_case "the adapter dials the endpoint it declares" `Quick
+              the_adapter_dials_the_endpoint_it_declares;
           ] );
       ])

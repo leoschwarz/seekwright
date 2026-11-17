@@ -14,9 +14,6 @@ val name : string
 val endpoint : Uri.t
 (** [https://api.linkup.so/v1/search]. *)
 
-val policy_endpoint : Mcp_caps.Policy.endpoint
-(** Policy grant destination matching {!endpoint}. *)
-
 type output = Sourced_answer | Search_results
 
 val show_output : output -> string
