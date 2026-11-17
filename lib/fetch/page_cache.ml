@@ -28,15 +28,22 @@ let default_ttl_seconds = 300.0
 
 let entry_name ~rung ~url = Digestif.SHA256.(to_hex (digest_string (rung ^ "\000" ^ url)))
 
-type cached_page = {
+(* The sidecar is the cache's own record: the page's fields the body file does not
+   carry — [text] is the body, [image] is never stored and [truncated] is never
+   stored because a stored page is whole and a windowed read reports the truncation
+   of the window it cut — plus the three cache-only keys. It is one record with one
+   encoder and one decoder; the field names used to be spelled in the entry type,
+   in both conversions, in the writer and in the reader. *)
+type sidecar = {
   url : string;
   title : string option;
-  text : string;
   content_type : string option;
   status_code : int;
   path_addressable : bool;
   total_chars : int;
-  truncated : bool;
+  created : float;
+  body_bytes : int;
+  accessed : float;
 }
 
 type t = {
@@ -52,28 +59,37 @@ let create ~fs ?(max_bytes = default_max_bytes) ?(max_entry_bytes = default_max_
     ?(ttl_seconds = default_ttl_seconds) ~(now : unit -> float) () =
   { fs; max_bytes; max_entry_bytes; ttl_seconds; now; evictions = Eio.Mutex.create () }
 
-let of_page (page : Seekwright_wire.Page.page) : cached_page =
+(* What a caller hands the cache is the shape the fetch path already speaks. The
+   sidecar drops that page's [text] (the body file's whole content), its [image]
+   and its [truncated]; [body_bytes] is the length the entry was written with,
+   which no read path consumes — it is there for an operator reading the directory,
+   and it is required, so a body edited out of band does not read as a
+   well-formed entry. *)
+let sidecar_of_page (page : Seekwright_wire.Page.page) ~(created : float) : sidecar =
   {
     url = page.url;
     title = page.title;
-    text = page.text;
     content_type = page.content_type;
     status_code = page.status_code;
     path_addressable = page.path_addressable;
     total_chars = page.total_chars;
-    truncated = false;
+    created;
+    body_bytes = String.length page.text;
+    accessed = created;
   }
 
-let to_page (entry : cached_page) : Seekwright_wire.Page.page =
+(* The entry a read hands back: the sidecar's fields, the text this read produced,
+   and the truncation of the window that produced it. [image] is always [None]. *)
+let entry_of_sidecar (s : sidecar) ~text ~truncated : Seekwright_wire.Page.page =
   {
-    url = entry.url;
-    title = entry.title;
-    text = entry.text;
-    content_type = entry.content_type;
-    status_code = entry.status_code;
-    truncated = entry.truncated;
-    total_chars = entry.total_chars;
-    path_addressable = entry.path_addressable;
+    url = s.url;
+    title = s.title;
+    text;
+    content_type = s.content_type;
+    status_code = s.status_code;
+    truncated;
+    total_chars = s.total_chars;
+    path_addressable = s.path_addressable;
     image = None;
   }
 
@@ -138,32 +154,66 @@ let walk (text : string) (limit : int) :
    mid-sequence, and [Invalid] is the corrupt one. *)
 let is_valid_utf8 text = match walk text max_int with `Complete _ -> true | _ -> false
 
-(* The sidecar is this module's own record, written by [put] and read back by the
-   two read paths; the only foreign file it has to survive is a half write from an
-   older build, which reads as a miss. *)
-let meta_of (page : cached_page) ~(created : float) =
+(* The sidecar's null-for-absent convention is the cache's own, not the wire
+   boundary's: the absent-field rule of [lib/wire] does not reach a file this
+   module both writes and reads, and a reader has to tell "this page has no title"
+   from "this sidecar is not one". The decoder refuses a shape it does not know —
+   a missing or mistyped key is a miss, never a default — which is what makes a
+   half write from an older build heal by re-fetching. *)
+let sidecar_to_yojson (s : sidecar) : Yojson.Safe.t =
   `Assoc
     [
-      ("url", `String page.url);
-      ("title", match page.title with None -> `Null | Some title -> `String title);
-      ("content_type", match page.content_type with None -> `Null | Some t -> `String t);
-      ("status_code", `Int page.status_code);
-      ("path_addressable", `Bool page.path_addressable);
-      ("total_chars", `Int page.total_chars);
-      ("created", `Float created);
-      ("body_bytes", `Int (String.length page.text));
-      ("accessed", `Float created);
+      ("url", `String s.url);
+      ("title", match s.title with None -> `Null | Some title -> `String title);
+      ("content_type", match s.content_type with None -> `Null | Some t -> `String t);
+      ("status_code", `Int s.status_code);
+      ("path_addressable", `Bool s.path_addressable);
+      ("total_chars", `Int s.total_chars);
+      ("created", `Float s.created);
+      ("body_bytes", `Int s.body_bytes);
+      ("accessed", `Float s.accessed);
     ]
 
-let meta_str fields key =
-  match List.assoc_opt key fields with Some (`String v) -> Some v | _ -> None
+let req_str fields key =
+  match List.assoc_opt key fields with Some (`String v) -> Ok v | _ -> Error ()
 
-let meta_int fields key = match List.assoc_opt key fields with Some (`Int v) -> v | _ -> 0
+let req_int fields key =
+  match List.assoc_opt key fields with Some (`Int v) -> Ok v | _ -> Error ()
 
-let meta_float fields key default =
-  match List.assoc_opt key fields with Some (`Float v) -> v | _ -> default
+let req_float fields key =
+  match List.assoc_opt key fields with Some (`Float v) -> Ok v | _ -> Error ()
 
-let meta_bool fields key = List.assoc_opt key fields = Some (`Bool true)
+let req_bool fields key =
+  match List.assoc_opt key fields with Some (`Bool v) -> Ok v | _ -> Error ()
+
+let opt_str fields key =
+  match List.assoc_opt key fields with Some (`String v) -> Ok (Some v) | _ -> Ok None
+
+let sidecar_of_fields (fields : (string * Yojson.Safe.t) list) : sidecar option =
+  let found =
+    let* url = req_str fields "url" in
+    let* title = opt_str fields "title" in
+    let* content_type = opt_str fields "content_type" in
+    let* status_code = req_int fields "status_code" in
+    let* path_addressable = req_bool fields "path_addressable" in
+    let* total_chars = req_int fields "total_chars" in
+    let* created = req_float fields "created" in
+    let* body_bytes = req_int fields "body_bytes" in
+    let* accessed = req_float fields "accessed" in
+    Ok
+      {
+        url;
+        title;
+        content_type;
+        status_code;
+        path_addressable;
+        total_chars;
+        created;
+        body_bytes;
+        accessed;
+      }
+  in
+  Result.to_option found
 
 (* One entry's sidecar, with expired entries removed: the pre-body check.
 
@@ -177,55 +227,36 @@ let read_meta t name =
       match try Ok (Yojson.Safe.from_string text) with _ -> Error () with
       | Error () -> None
       | Ok (`Assoc fields) -> (
-          match List.assoc_opt "created" fields with
-          | Some (`Float created) ->
-              if t.now () -. created > t.ttl_seconds then begin
+          match sidecar_of_fields fields with
+          | None -> None
+          | Some entry ->
+              if t.now () -. entry.created > t.ttl_seconds then begin
                 ignore (Fs.unlink t.fs (body_name name));
                 ignore (Fs.unlink t.fs (meta_name name));
                 None
               end
-              else Some fields
-          | _ -> None)
+              else Some entry)
       | Ok _ -> None)
 
 (* LRU currency: the divergence the interface states. A hit refreshes the
    sidecar's [accessed] and never rewrites the body, which is the half eviction
    measures and the half a rewrite would cost. *)
-let touch t name fields =
-  let set key value fields =
-    let rec go = function
-      | [] -> [ (key, value) ]
-      | ((k, _) as row) :: rest -> if k = key then (k, value) :: rest else row :: go rest
-    in
-    go fields
-  in
-  let fields = set "accessed" (`Float (t.now ())) fields in
+let touch t name (entry : sidecar) =
   ignore
-    (Fs.atomic_write t.fs ~path:(meta_name name) ~contents:(Yojson.Safe.to_string (`Assoc fields)))
-
-let page_of_fields fields ~url ~text ~truncated =
-  {
-    url = (match meta_str fields "url" with Some u -> u | None -> url);
-    title = meta_str fields "title";
-    text;
-    content_type = meta_str fields "content_type";
-    status_code = meta_int fields "status_code";
-    path_addressable = meta_bool fields "path_addressable";
-    total_chars = meta_int fields "total_chars";
-    truncated;
-  }
+    (Fs.atomic_write t.fs ~path:(meta_name name)
+       ~contents:(Yojson.Safe.to_string (sidecar_to_yojson { entry with accessed = t.now () })))
 
 let get t ~rung ~url =
   let name = entry_name ~rung ~url in
   match read_meta t name with
   | None -> None
-  | Some fields -> (
+  | Some entry -> (
       match Fs.read_file ~max_bytes:t.max_entry_bytes t.fs (body_name name) with
       | Error _ -> None
       | Ok text when not (is_valid_utf8 text) -> None
       | Ok text ->
-          touch t name fields;
-          Some (page_of_fields fields ~url ~text ~truncated:false))
+          touch t name entry;
+          Some (entry_of_sidecar entry ~text ~truncated:false))
 
 (* The head a windowed read needs: the first [want] codepoints of the body, or the
    body entire when it is shorter, read a chunk at a time. Each chunk is walked once
@@ -268,7 +299,7 @@ let get_window t ~rung ~url ~offset ~max_chars =
   let name = entry_name ~rung ~url in
   match read_meta t name with
   | None -> None
-  | Some fields -> (
+  | Some entry -> (
       (* The load-bearing part of the streaming promise: the bytes read are the
          bytes allocated, so looking at the middle of a large document costs the
          window. [want] is the oracle's [offset + max_chars + _WINDOW_LOOKAHEAD]
@@ -285,8 +316,8 @@ let get_window t ~rung ~url ~offset ~max_chars =
              its [_cut] mirror, and what [test/test_page_cache.ml] pins over a sweep of
              bodies, offsets and caps. *)
           let window, truncated = Fetcher.window_text head ~offset ~max_chars in
-          touch t name fields;
-          Some (page_of_fields fields ~url ~text:window ~truncated))
+          touch t name entry;
+          Some (entry_of_sidecar entry ~text:window ~truncated))
 
 (* The directory's entry stems — the name without [.body], which is what
    [body_name] and [meta_name] build a path from. The cap is measured over bodies,
@@ -312,9 +343,7 @@ let entry_rank t name =
   | Error _ -> None
   | Ok info ->
       let accessed =
-        match read_meta t name with
-        | Some fields -> meta_float fields "accessed" info.Fs.accessed_at
-        | None -> info.Fs.accessed_at
+        match read_meta t name with Some entry -> entry.accessed | None -> info.Fs.accessed_at
       in
       Some (accessed, info.Fs.size_bytes, name)
 
@@ -345,7 +374,7 @@ let evict_to_cap t =
         end)
       sorted
 
-let put t ~rung ~url ~(page : cached_page) =
+let put t ~rung ~url ~(page : Seekwright_wire.Page.page) =
   let body = page.text in
   if String.length body > t.max_entry_bytes then false
   else
@@ -361,7 +390,7 @@ let put t ~rung ~url ~(page : cached_page) =
         Fs.atomic_write t.fs ~max_bytes:t.max_entry_bytes ~path:(body_name name) ~contents:body
       in
       Fs.atomic_write t.fs ~path:(meta_name name)
-        ~contents:(Yojson.Safe.to_string (meta_of page ~created))
+        ~contents:(Yojson.Safe.to_string (sidecar_to_yojson (sidecar_of_page page ~created)))
     in
     match writes with
     | Error _ -> false

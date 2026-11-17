@@ -302,7 +302,7 @@ let cache_seam ~(net : _ Eio.Net.t) config (cache : Page_cache.t) =
       | _ -> Page_cache.get_window cache ~rung ~url ~offset ~max_chars:cap
     in
     match lookup () with
-    | Some entry -> Ok (Page_cache.to_page entry, true)
+    | Some entry -> Ok (entry, true)
     | None -> (
         let key = Page_cache.entry_name ~rung ~url in
         match Hashtbl.find_opt fills key with
@@ -311,7 +311,7 @@ let cache_seam ~(net : _ Eio.Net.t) config (cache : Page_cache.t) =
             | Error exc -> Error exc
             | Ok () -> (
                 match lookup () with
-                | Some entry -> Ok (Page_cache.to_page entry, true)
+                | Some entry -> Ok (entry, true)
                 | None -> Result.map (fun page -> (page, false)) (dispatch ~offset ~max_chars)))
         | None ->
             let waiting, resolve = Eio.Promise.create () in
@@ -332,11 +332,10 @@ let cache_seam ~(net : _ Eio.Net.t) config (cache : Page_cache.t) =
                     Eio.Promise.resolve resolve (Error exc);
                     Error exc
                 | Ok full -> (
-                    if full.image = None then
-                      ignore (Page_cache.put cache ~rung ~url ~page:(Page_cache.of_page full));
+                    if full.image = None then ignore (Page_cache.put cache ~rung ~url ~page:full);
                     Eio.Promise.resolve resolve (Ok ());
                     match lookup () with
-                    | Some entry -> Ok (Page_cache.to_page entry, false)
+                    | Some entry -> Ok (entry, false)
                     | None ->
                         if max_chars = Engine.Fetch.Uncapped then Ok (full, false)
                         else

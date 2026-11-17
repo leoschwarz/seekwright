@@ -1,7 +1,7 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 steps 0–4 (D-G formatting, S-005, S-001, S-002, S-003) are landed; everything
-else on this page is a proposal.** Tree read at `6e4ad90`;
+Status: **§5 steps 0–5 and S-008 are landed; S-009 and everything after it, and the
+§4 decisions, are proposals.** Tree read at `6e4ad90`;
 reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
 unchanged between the two commits — the diff is plans only). The corrections are
 recorded in §8; the §4 decisions remain the maintainer's.
@@ -543,7 +543,7 @@ is to see both renderers. One unrelated odoc defect surfaced in the same
 span — the warning was pre-existing, hidden by caching until the library was
 recompiled.
 
-### S-008 — the page cache holds four copies of the page shape
+### S-008 — the page cache holds four copies of the page shape · **landed**
 
 **Evidence (`read`).** `Page_cache.cached_page` is `Wire.Page.page` minus the
 image, and its eight fields are written out in the record, in `of_page`, in
@@ -563,6 +563,42 @@ rank and the truncated-sidecar path; a format change needs a compatibility
 answer, and the honest one is "the cache is off by default and entries are
 bounded by `cache_ttl_seconds`, so an old sidecar is simply a miss" — which the
 decoder should implement by refusing an unknown shape rather than half-reading it.
+
+**Landed.** `cached_page`, `of_page` and `to_page` are gone. `get`, `get_window`
+and `put` speak `Seekwright_wire.Page.page`, and the store's seam in
+`lib/factory/fetch_stack.ml` lost both conversions: the rung dispatch hands the
+cache the page it just built and reads one back. What is on disk is one record
+with one encoder and one decoder — the page's fields except `text` and `image`,
+plus the three cache-only keys `created`, `body_bytes` and `accessed`. `truncated`
+is not stored: a stored page is whole, so the entry a read returns is the sidecar
+plus the text that read produced, and a windowed read reports the truncation of
+the window it cut. `meta_str`/`meta_int`/`meta_float`/`meta_bool` went with the
+half-read they made possible (`meta_int` defaulted a missing `status_code` to 200,
+`meta_bool` a missing `path_addressable` to false); the decoder now requires every
+key the writer emits — `req_str`/`req_int`/`req_float`/`req_bool`, with the two
+genuinely optional strings read by `opt_str` — and a missing or mistyped key is a
+miss, not a default.
+
+No format version key, because none is needed: the keys and their JSON types are
+the ones the previous writer emitted, so an entry on disk from before this change
+decodes exactly as it did before, and only a shape this tree never wrote (a hand
+edited or truncated file) is newly refused. The null-for-absent convention stays,
+and `Page_cache.mli` now says why it is not the wire rule: `lib/wire`'s
+absent-field rule governs what leaves the proxy, while a sidecar is a file this
+module both writes and reads, where "this page has no title" and "this is not a
+sidecar this build knows" have to be tellable apart — the second is what the strict
+decoder refuses.
+
+One fixture moved, and it is the interesting diff: the undecodable-body arm of
+`a_corrupt_sidecar_is_a_miss` wrote a three-key sidecar, which under a strict
+decoder is a miss *for the sidecar's reason*, so the case would have gone on
+passing vacuously while pinning nothing about the body. The suite now writes a
+well-formed sidecar there (`valid_sidecar`), which doubles as the format pin — a
+required key the writer gains turns those arms into misses for the wrong reason,
+and the foreign-shape arm beside them is what refuses an unknown shape. The other
+17 cases needed only the type annotation changing; the crash-restart, eviction and
+concurrency cases read a directory a previous writer process left, and they go
+through the current writer, so they pin the new sidecar's round trip too.
 
 ### S-009 — `bin/main.ml` carries a second HTTP and TLS stack
 

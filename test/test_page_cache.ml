@@ -21,6 +21,7 @@ module Authority = Mcp_caps.Authority
 module Error = Mcp_caps.Error
 module Policy = Mcp_caps.Policy
 module Fetcher = Seekwright_fetch.Fetcher
+module Page = Seekwright_wire.Page
 module Page_cache = Seekwright_fetch.Page_cache
 
 (* The oracle's per-entry cap, also the grant ceiling these cases open with: a
@@ -37,9 +38,9 @@ let now () = !clock
 let url path = "https://example.com" ^ path
 
 let page ?(title = Some "a title") ?(content_type = Some "text/html") ?(status_code = 200)
-    ?(path_addressable = false) ?(url = url "/a") text : Page_cache.cached_page =
+    ?(path_addressable = false) ?(url = url "/a") text : Page.page =
   {
-    Page_cache.url;
+    Page.url;
     title;
     text;
     content_type;
@@ -47,9 +48,10 @@ let page ?(title = Some "a title") ?(content_type = Some "text/html") ?(status_c
     path_addressable;
     total_chars = String.length text;
     truncated = false;
+    image = None;
   }
 
-let entry_text = function Some (e : Page_cache.cached_page) -> Some e.text | None -> None
+let entry_text = function Some (e : Page.page) -> Some e.text | None -> None
 
 type harness = { cache : Page_cache.t; fs : Authority.Fs.t; dir : string }
 
@@ -94,6 +96,18 @@ let remove_through h name =
   match Authority.Fs.unlink h.fs name with
   | Error error -> Alcotest.failf "unlinking %s: %s" name (Error.render error)
   | Ok () -> ()
+
+(* A sidecar spelled by hand, in the shape the cache's writer emits. A case that
+   needs a valid sidecar and a broken body has no other way to get one, so this is
+   also the format pin: a required key the writer gains turns these cases into
+   misses for the wrong reason, and the arm beside it in
+   [a_corrupt_sidecar_is_a_miss] is what refuses a shape the build does not know. *)
+let valid_sidecar ~url ~text =
+  Printf.sprintf
+    "{\"url\": %S, \"title\": null, \"content_type\": null, \"status_code\": 200, \
+     \"path_addressable\": false, \"total_chars\": %d, \"created\": 1000.0, \"body_bytes\": %d, \
+     \"accessed\": 1000.0}"
+    url (String.length text) (String.length text)
 
 (* One number out of the sidecar, read the way the cache's own eviction pass
    reads it: a field name, then the JSON number until the next comma or brace.
@@ -148,7 +162,7 @@ let a_stored_page_reads_back_whole () =
                 ~status_code:201 ~path_addressable:true "{\"a\":1}\n"));
       match Page_cache.get h.cache ~rung:"http" ~url:(url "/a") with
       | None -> Alcotest.fail "the entry is a miss"
-      | Some (entry : Page_cache.cached_page) ->
+      | Some (entry : Page.page) ->
           Alcotest.(check string) "url" (url "/a") entry.url;
           Alcotest.(check (option string)) "title" (Some "Ünicode tıtle") entry.title;
           Alcotest.(check string) "text" "{\"a\":1}\n" entry.text;
@@ -198,8 +212,9 @@ let a_corrupt_sidecar_is_a_miss () =
         "a foreign shape is a miss too" false
         (Page_cache.get h.cache ~rung:"http" ~url:(url "/a") <> None);
       (* And a body that is not UTF-8 at all is a miss, whatever its sidecar
-         says — the fault that reads as [UnicodeDecodeError] in the oracle. *)
-      write_through h (meta_name name) "{\"created\": 1000, \"total_chars\": 3, \"url\": \"x\"}";
+         says — the fault that reads as [UnicodeDecodeError] in the oracle. This
+         sidecar is a well-formed one, so the miss can only come from the body. *)
+      write_through h (meta_name name) (valid_sidecar ~url:(url "/a") ~text:"some text");
       write_through h (body_name name) "\xff\xfe broken bytes";
       Alcotest.(check bool)
         "an undecodable body is a miss" false
@@ -383,7 +398,7 @@ let window_parity () =
                   | None ->
                       Alcotest.failf "a window of a stored page is a miss (offset %d, %d chars)"
                         offset max_chars
-                  | Some (entry : Page_cache.cached_page) ->
+                  | Some (entry : Page.page) ->
                       Alcotest.(check window_text)
                         (Printf.sprintf "the window at offset %d, %d chars" offset max_chars)
                         expected (entry.text, entry.truncated);
@@ -395,7 +410,7 @@ let window_parity () =
              finding: that is the path a [query] or [path] selection takes. *)
           match Page_cache.get h.cache ~rung:"http" ~url:(url "/a") with
           | None -> Alcotest.fail "the full entry is a miss"
-          | Some (entry : Page_cache.cached_page) ->
+          | Some (entry : Page.page) ->
               Alcotest.(check string) "the whole extraction" text entry.text;
               Alcotest.(check bool) "a full entry is not truncated" false entry.truncated))
     [ ""; "one short line"; "a ¶ b ☃ c ö d é"; build 400 0; build 5_000 7 ]
@@ -448,7 +463,7 @@ let a_windowed_read_never_loads_the_whole_body () =
         let read offset max_chars =
           match Page_cache.get_window h.cache ~rung:"http" ~url:(url "/a") ~offset ~max_chars with
           | None -> Alcotest.failf "the window at offset %d is a miss" offset
-          | Some (entry : Page_cache.cached_page) -> (entry.text, entry.truncated)
+          | Some (entry : Page.page) -> (entry.text, entry.truncated)
         in
         let live_cut window =
           words (fun () -> Fetcher.window_text body ~offset:window ~max_chars:200)
@@ -456,9 +471,7 @@ let a_windowed_read_never_loads_the_whole_body () =
         let front, w_front = words (fun () -> read 0 200) in
         let deep, w_deep = words (fun () -> read 200_000 200) in
         let whole, w_full = words (fun () -> Page_cache.get h.cache ~rung:"http" ~url:(url "/a")) in
-        let whole =
-          match whole with Some (entry : Page_cache.cached_page) -> entry.text | None -> ""
-        in
+        let whole = match whole with Some (entry : Page.page) -> entry.text | None -> "" in
         let live_front, _ = if live then live_cut 0 else (("", false), 0.) in
         let live_deep, w_live = if live then live_cut 200_000 else (("", false), 0.) in
         ( String.length body,
@@ -558,7 +571,7 @@ let a_window_across_a_chunk_boundary_is_still_the_live_window () =
                   with
                   | None ->
                       Alcotest.failf "the window at offset %d, %d chars is a miss" offset max_chars
-                  | Some (entry : Page_cache.cached_page) ->
+                  | Some (entry : Page.page) ->
                       Alcotest.(check window_text)
                         (Printf.sprintf "the %d-byte window at offset %d, %d chars" width offset
                            max_chars)
@@ -601,7 +614,7 @@ let concurrent_reads_writes_and_evictions_agree () =
            readers make the eviction pass run while it is being read. *)
         let cache = Page_cache.create ~max_bytes:cap ~fs ~now () in
         let raced = ref 0 and partials = ref 0 in
-        let check i (found : Page_cache.cached_page) =
+        let check i (found : Page.page) =
           (* A whole entry, or nothing: a read that saw half a page, or the bytes of
              two generations, would disagree with the cut a live read makes. *)
           if found.text <> window_of i then incr partials
@@ -621,7 +634,7 @@ let concurrent_reads_writes_and_evictions_agree () =
                      Page_cache.get_window cache ~rung:"http" ~url:key ~offset:0 ~max_chars:4_000
                    with
                    | None -> ()
-                   | Some (found : Page_cache.cached_page) ->
+                   | Some (found : Page.page) ->
                        incr raced;
                        check i found);
                ])
@@ -636,7 +649,7 @@ let concurrent_reads_writes_and_evictions_agree () =
                 ~url:(url ("/" ^ string_of_int i))
                 ~offset:0 ~max_chars:4_000
             with
-            | Some (found : Page_cache.cached_page) ->
+            | Some (found : Page.page) ->
                 check i found;
                 incr whole
             | None -> incr gone)
