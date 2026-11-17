@@ -24,47 +24,16 @@ let request_body (q : Provider.search_query) =
   in
   Yojson.Safe.to_string (`Assoc fields)
 
+(* Records sit under [data.results]; the top-level [code] says whether the call
+   succeeded at all. *)
 let parse ~snippet_chars data ~limit =
-  let records =
-    match Provider.Json.list (Provider.Json.field "results" data) with
-    | Some items -> items
-    | None -> []
-  in
-  let rec take n items acc =
-    if n <= 0 then List.rev acc
-    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
-  in
-  List.filter_map
-    (fun item ->
-      match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
-      | Some url, Some title when url <> "" && title <> "" ->
-          let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
-          in
-          Some
-            {
-              Provider.result =
-                {
-                  Model.title;
-                  url;
-                  snippet;
-                  text = None;
-                  text_truncated = None;
-                  published_date = None;
-                  score = None;
-                };
-              uncapped_chars;
-            }
-      | _ -> None)
-    (take limit records [])
+  Provider.map_records ~list_path:[ "data"; "results" ] ~url_field:"url" ~title_field:"title"
+    ~snippet_field:"snippet" ~snippet_chars ~limit data
 
-let check_status status =
-  if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
-  else if status = 402 || status = 429 then
-    (* 402 indicates quota exhaustion. Fixed message avoids leaking generated credentials. *)
-    Error (Provider.quota_exhausted ~provider:name ~message:"out of credits or rate limited" ())
-  else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
-  else Ok ()
+(* 402 indicates quota exhaustion. The message is fixed wording rather than the
+   body's, because a generated credential can sit in that body. *)
+let check_status =
+  Provider.check_status ~provider:name ~quota_message:"out of credits or rate limited"
 
 (* Upstream success requires code 0. Body error message is not echoed for security. *)
 let check_business_code data =
@@ -72,36 +41,23 @@ let check_business_code data =
   | `Int 0 | `Float 0. -> Ok ()
   | _ -> Error (Provider.provider_error ~provider:name "search failed (business error)")
 
-let search ~cost_per_1k ~snippet_chars (net : Provider.Net.t) (q : Provider.search_query) =
-  let ( let* ) = Result.bind in
-  let request =
-    {
-      Caps.Authority.Net.meth = `POST;
-      uri = endpoint;
-      headers = [ ("content-type", "application/json") ];
-      body = Some (request_body q);
-    }
-  in
-  match net.request request with
-  | Error failure -> Error (Provider.transport_error ~provider:name failure)
-  | Ok response ->
-      let* () = check_status response.status in
-      let* data = Provider.decode_json_object ~provider:name response.body in
-      let* () = check_business_code data in
-      Ok
-        {
-          Provider.provider = name;
-          results =
-            parse ~snippet_chars (Provider.Json.field "data" data) ~limit:q.Model.max_results;
-          answer = None;
-          cost_usd = Some (cost_per_1k /. 1000.);
-          notice =
-            Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false
-              ~language:(Some true) ~safety:false;
-        }
-
 (* Keyless; zero cost. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
+
+let search ~cost_per_1k ~snippet_chars (net : Provider.Net.t) (q : Provider.search_query) =
+  Provider.http_search ~provider:name ~net ~status:check_status
+    ~request:
+      {
+        Caps.Authority.Net.meth = `POST;
+        uri = endpoint;
+        headers = [ ("content-type", "application/json") ];
+        body = Some (request_body q);
+      }
+    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars) ~check:check_business_code
+    ~notice:(fun q _data ->
+      Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:(Some true)
+        ~safety:false)
+    q
 
 let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~net () : Provider.t =
   (module struct

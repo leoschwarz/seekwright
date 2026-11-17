@@ -48,73 +48,32 @@ let request_uri (q : Provider.search_query) =
   Uri.with_query endpoint params
 
 let parse ~snippet_chars data ~limit =
-  let records =
-    match Provider.Json.list (Provider.Json.field "organic_results" data) with
-    | Some items -> items
-    | None -> []
-  in
-  let rec take n items acc =
-    if n <= 0 then List.rev acc
-    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
-  in
-  List.filter_map
-    (fun item ->
-      match (Provider.Json.string_field "link" item, Provider.Json.string_field "title" item) with
-      | Some url, Some title when url <> "" && title <> "" ->
-          let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
-          in
-          Some
-            {
-              Provider.result =
-                {
-                  Model.title;
-                  url;
-                  snippet;
-                  text = None;
-                  text_truncated = None;
-                  published_date = None;
-                  score = None;
-                };
-              uncapped_chars;
-            }
-      | _ -> None)
-    (take limit records [])
-
-let check_status status =
-  if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
-  else if status = 402 || status = 429 then
-    (* 402 is credit exhaustion; 429 is rate limit. *)
-    Error (Provider.quota_exhausted ~provider:name ~message:"rate limited or out of credits" ())
-  else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
-  else Ok ()
+  Provider.map_records ~list_path:[ "organic_results" ] ~url_field:"link" ~title_field:"title"
+    ~snippet_field:"snippet" ~snippet_chars ~limit data
 
 (* Flat rate per request. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
+(* 402 is credit exhaustion; 429 is rate limit. *)
+let check_status =
+  Provider.check_status ~provider:name ~quota_message:"rate limited or out of credits"
+
+(* Every constraint in the request has a parameter here — site operators, [gl],
+   [hl], [dateRestrict], [safe] — so the constraint report is always [None]. *)
 let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
-  let ( let* ) = Result.bind in
-  let request =
-    {
-      Caps.Authority.Net.meth = `GET;
-      uri = request_uri q;
-      headers = [ ("x-api-key", key) ];
-      body = None;
-    }
-  in
-  match net.request request with
-  | Error failure -> Error (Provider.transport_error ~provider:name failure)
-  | Ok response ->
-      let* () = check_status response.status in
-      let* data = Provider.decode_json_object ~provider:name response.body in
-      Ok
-        {
-          Provider.provider = name;
-          results = parse ~snippet_chars data ~limit:q.Model.max_results;
-          answer = None;
-          cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          notice = None;
-        }
+  Provider.http_search ~provider:name ~net ~status:check_status
+    ~request:
+      {
+        Caps.Authority.Net.meth = `GET;
+        uri = request_uri q;
+        headers = [ ("x-api-key", key) ];
+        body = None;
+      }
+    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars)
+    ~notice:(fun q _data ->
+      Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:(Some true)
+        ~safety:true)
+    q
 
 let make ?(cost_per_1k = 0.30) ?(snippet_chars = 500) ~key ~net () : Provider.t =
   (module struct

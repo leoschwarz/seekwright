@@ -180,6 +180,101 @@ type outcome = {
 
 val to_provider_result : outcome -> Model.provider_result
 
+(** {1 The adapter skeleton} *)
+
+val take : int -> 'a list -> 'a list
+(** [take n xs] is the first [n] of [xs], whole, in order, and [] for a non-positive [n]. Adapters
+    slice the {i upstream} list before validating a record, so a record that fails to parse still
+    spends one of the caller's [max_results] slots — that is what the caller asked the provider for.
+*)
+
+val check_status :
+  provider:name ->
+  ?quota:int list ->
+  ?quota_message:string ->
+  ?named:(int * error) list ->
+  int ->
+  (unit, error) result
+(** The status mapping every REST adapter spells: a status in [named] is that pair's own error,
+    checked first; otherwise 401/403 is the {!auth_error} row, a status in [quota] (default
+    [[402; 429]]) is the {!quota_exhausted} row with the vendor's own sentence, any other [>= 400]
+    is {!http_status_error}, and anything else is [Ok ()].
+
+    The two arguments exist because the row boundaries are not the same everywhere: Tavily answers
+    432 for a spent month, Linkup has no 402 at all, DeepSeek's 408 is its own request-body timeout
+    rather than the [HTTP 408] a caller would read as a server fault, and a SearXNG instance that
+    answers 401 is usually saying [format=json] is not enabled — a sentence an API key cannot act
+    on. Naming those statuses is an argument, not a re-derivation of the branch order, which is
+    where the [retryable] advice the engine branches on gets decided. *)
+
+val map_records :
+  list_path:string list ->
+  url_field:string ->
+  title_field:string ->
+  snippet_field:string ->
+  snippet_chars:int ->
+  ?date:(Yojson.Safe.t -> string option) ->
+  ?score:(Yojson.Safe.t -> float option) ->
+  limit:int ->
+  Yojson.Safe.t ->
+  hit list
+(** The search-backend record shape: [{ title; url; snippet }] with no [text], the snippet clipped
+    to [snippet_chars]. [list_path] is the key path to the record list, because a vendor that nests
+    ([data.results], [results.result]) is an argument and not another parse. [url_field] is [link]
+    for the Google-backed vendors and [url] for the rest; [snippet_field] is [snippet], [content] or
+    [description]. A record with no usable url or title is dropped — {!Json}'s readers answer [None]
+    for a field the vendor documented as a string and did not enforce, and a hit with no url cannot
+    be cited.
+
+    [date] and [score] read the record rather than naming a field because the reading itself varies:
+    Freeserp takes the first non-empty of [published_at] and [crawled_at], Serper takes [date] as it
+    comes, and most vendors have neither. *)
+
+val map_content_records :
+  list_path:string list ->
+  url_field:string ->
+  title_field:string ->
+  content_field:string ->
+  content_chars:int ->
+  ?snippet:string * int ->
+  ?date:(Yojson.Safe.t -> string option) ->
+  ?score:(Yojson.Safe.t -> float option) ->
+  limit:int ->
+  Yojson.Safe.t ->
+  hit list
+(** The content-backend record shape: [{ title; url; text }] with [snippet] [None], because filling
+    both ships the same prose twice, and [text_truncated] set only when something was cut.
+    [~snippet:(field, chars)] adds a second, separately-capped snippet beside the extract for a
+    vendor that sends both. *)
+
+val http_search :
+  provider:name ->
+  net:Net.t ->
+  request:Mcp_caps.Authority.Net.request ->
+  cost_for:(int -> float) ->
+  parse:(Yojson.Safe.t -> limit:int -> hit list) ->
+  notice:(search_query -> Yojson.Safe.t -> string option) ->
+  ?status:(int -> (unit, error) result) ->
+  ?check:(Yojson.Safe.t -> (unit, error) result) ->
+  ?answer:(Yojson.Safe.t -> string option) ->
+  ?decode:(string -> (Yojson.Safe.t, error) result) ->
+  search_query ->
+  (outcome, error) result
+(** One request and the tail every REST adapter repeats: the {!Net.t} call, {!transport_error} on a
+    grant failure, [~status] on the status line, {!decode_json_object} on the body, [~check] for a
+    vendor that reports failure {i inside} a 200 (Anysearch's [code], Freeserp's [engine_fallback]),
+    then the {!outcome} record with [parse]'s hits, [~answer]'s extract, [cost_for] applied to the
+    caller's [max_results] and [notice]'s constraint report.
+
+    [~status] defaults to {!check_status} with the provider's name; an adapter passes its own
+    partial application when its statuses or its sentence differ, which is also how an adapter with
+    a paged walk reports the same rows. [parse] and [notice] both take the decoded object: a report
+    about upstream warnings can only be written from the body, and where the records sit is vendor
+    shape. An adapter whose own logic sits {i before} the call — a query length ceiling, a folded
+    query — keeps its [search] and calls this for the part that is not its own. [~decode] replaces
+    {!decode_json_object} for a vendor that tolerates a 200 whose body is valid JSON but not an
+    object. *)
+
 (** The search provider module signature. *)
 module type S = sig
   val name : string

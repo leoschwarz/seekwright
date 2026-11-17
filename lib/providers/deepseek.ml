@@ -58,55 +58,21 @@ let request_body ~(query : string) (q : Provider.search_query) =
 
 let score item = Provider.Json.number_field "rerank_score" item
 
-(* Snippet capped at snippet_chars; summary capped at text_chars. *)
+(* [snippet] and the [summary] extract are capped separately; the reported
+   uncapped length is the summary's, because that is the longer prose. *)
 let parse ~snippet_chars ~text_chars data ~limit =
-  let records =
-    match Provider.Json.list (Provider.Json.field "results" data) with
-    | Some items -> items
-    | None -> []
-  in
-  let rec take n items acc =
-    if n <= 0 then List.rev acc
-    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
-  in
-  List.filter_map
-    (fun item ->
-      match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
-      | Some url, Some title when url <> "" && title <> "" ->
-          let snippet, _snippet_uncapped =
-            Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
-          in
-          let text, truncated, uncapped_chars =
-            Provider.truncate_text (Provider.Json.string_field "summary" item) text_chars
-          in
-          Some
-            {
-              Provider.result =
-                {
-                  Model.title;
-                  url;
-                  snippet;
-                  text;
-                  text_truncated = (if truncated then Some true else None);
-                  published_date = Provider.Json.string_field "date" item;
-                  score = score item;
-                };
-              uncapped_chars;
-            }
-      | _ -> None)
-    (take limit records [])
+  Provider.map_content_records ~list_path:[ "results" ] ~url_field:"url" ~title_field:"title"
+    ~content_field:"summary" ~content_chars:text_chars ~snippet:("snippet", snippet_chars)
+    ~date:(Provider.Json.string_field "date")
+    ~score ~limit data
 
-let check_status status =
-  if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
-  else if status = 402 || status = 429 then
-    (* 402 is insufficient balance; 429 is QPS breach. *)
-    Error
-      (Provider.quota_exhausted ~provider:name ~message:"rate limited or out of account balance" ())
-  else if status = 408 then
-    (* Upstream request-body timeout is transient and retryable. *)
-    Error (Provider.provider_error ~provider:name "upstream timed out reading the request")
-  else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
-  else Ok ()
+(* 402 is insufficient balance; 429 is a QPS breach. A 408 is upstream's own
+   timeout reading the request body: transient and retryable, and not the
+   server-fault reading an [HTTP 408] would give a caller. *)
+let check_status =
+  Provider.check_status ~provider:name ~quota_message:"rate limited or out of account balance"
+    ~named:
+      [ (408, Provider.provider_error ~provider:name "upstream timed out reading the request") ]
 
 (* Flat rate per successful request. Zero cost if results list is empty. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
@@ -121,35 +87,34 @@ let search ~cost_per_1k ~snippet_chars ~text_chars ~key ~(now : unit -> float)
          (Printf.sprintf "query exceeds the backend's %d-character limit" max_query_chars))
   else
     let folded = fold_operators ~now q in
-    (* If folded query exceeds 128 codepoints, drop operators and send bare query. *)
+    (* If the folded query overflows the ceiling the operators are dropped and
+       the bare query goes, which is exactly what the notice has to report. *)
     let folded_fits = Utf8.count folded <= max_query_chars in
-    let request =
-      {
-        Caps.Authority.Net.meth = `POST;
-        uri = endpoint;
-        headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
-        body = Some (request_body ~query:(if folded_fits then folded else q.Model.query) q);
-      }
-    in
-    match net.request request with
-    | Error failure -> Error (Provider.transport_error ~provider:name failure)
-    | Ok response ->
-        let* () = check_status response.status in
-        let* data = Provider.decode_json_object ~provider:name response.body in
-        let results = parse ~snippet_chars ~text_chars data ~limit:q.Model.max_results in
-        Ok
+    let* outcome =
+      Provider.http_search ~provider:name ~net ~status:check_status
+        ~request:
           {
-            Provider.provider = name;
-            results;
-            answer = None;
-            (* 200 with empty results is not billed upstream. *)
-            cost_usd =
-              (if results <> [] then Some (cost_for ~cost_per_1k q.Model.max_results) else Some 0.0);
-            notice =
-              Provider.ignored_constraints q ~domains:folded_fits ~dates:folded_fits ~geo:false
-                ~language:(Some (folded_fits || q.Model.language = None))
-                ~safety:false;
+            Caps.Authority.Net.meth = `POST;
+            uri = endpoint;
+            headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
+            body = Some (request_body ~query:(if folded_fits then folded else q.Model.query) q);
           }
+        ~cost_for:(cost_for ~cost_per_1k)
+        ~parse:(parse ~snippet_chars ~text_chars)
+        ~notice:(fun q _data ->
+          Provider.ignored_constraints q ~domains:folded_fits ~dates:folded_fits ~geo:false
+            ~language:(Some (folded_fits || q.Model.language = None))
+            ~safety:false)
+        q
+    in
+    (* A 200 that answers with no records is not billed upstream. *)
+    Ok
+      {
+        outcome with
+        Provider.cost_usd =
+          (if outcome.Provider.results <> [] then Some (cost_for ~cost_per_1k q.Model.max_results)
+           else Some 0.0);
+      }
 
 let make ?(cost_per_1k = 0.75) ?(snippet_chars = 500) ?(text_chars = 2000) ~key ~now ~net () :
     Provider.t =

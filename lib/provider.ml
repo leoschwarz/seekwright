@@ -179,6 +179,136 @@ let to_provider_result o =
     notice = o.notice;
   }
 
+(** {1 The adapter skeleton} *)
+
+(* The caller's [max_results] is a promise about how many records the provider
+   was asked for, not about how many survived parsing, so the slice happens
+   before any validation: a record that fails to parse still spends a slot. *)
+let take n items =
+  let rec go count items acc =
+    if count <= 0 then List.rev acc
+    else match items with [] -> List.rev acc | item :: rest -> go (count - 1) rest (item :: acc)
+  in
+  go n items []
+
+(* The four branches every vendor's status mapping spells, with the vendor's
+   quota statuses and sentence as arguments. A status the vendor uses for
+   something else — Tavily's 432, Linkup's missing 402 — is a [~quota] list,
+   and a status with its own contracted sentence — DeepSeek's 408, a SearXNG
+   instance without [format=json] — is a [~named] pair, checked before the auth
+   row so a vendor can rename what 401 or 403 means on its own instance. *)
+let check_status ~provider ?(quota = [ 402; 429 ]) ?(quota_message = "quota exhausted")
+    ?(named = []) status =
+  match List.assoc_opt status named with
+  | Some failure -> Error failure
+  | None ->
+      if status = 401 || status = 403 then Error (auth_error ~provider)
+      else if List.mem status quota then Error (quota_exhausted ~provider ~message:quota_message ())
+      else if status >= 400 then Error (http_status_error ~provider status)
+      else Ok ()
+
+(* Which half of the result record carries prose: a search backend fills
+   [snippet], a content backend fills [text] and leaves [snippet] empty,
+   because filling both ships the same prose twice. *)
+type record_body =
+  | Snippet of { field : string; chars : int }
+  | Content of { field : string; chars : int; snippet : (string * int) option }
+
+let map_rows ~list_path ~url_field ~title_field ~body ?date ?score ~limit data =
+  let rec walk keys json =
+    match keys with [] -> json | key :: rest -> walk rest (Json.field key json)
+  in
+  let records = match Json.list (walk list_path data) with Some items -> items | None -> [] in
+  let date_of item = match date with Some read -> read item | None -> None in
+  let score_of item = match score with Some read -> read item | None -> None in
+  List.filter_map
+    (fun item ->
+      match (Json.string_field url_field item, Json.string_field title_field item) with
+      | Some url, Some title when url <> "" && title <> "" ->
+          let snippet, text, text_truncated, uncapped_chars =
+            match body with
+            | Snippet { field; chars } ->
+                let snippet, uncapped = truncate_snippet (Json.string_field field item) chars in
+                (snippet, None, None, uncapped)
+            | Content { field; chars; snippet } ->
+                let text, truncated, uncapped =
+                  truncate_text (Json.string_field field item) chars
+                in
+                let snippet =
+                  match snippet with
+                  | Some (field, chars) ->
+                      fst (truncate_snippet (Json.string_field field item) chars)
+                  | None -> None
+                in
+                (snippet, text, (if truncated then Some true else None), uncapped)
+          in
+          Some
+            {
+              result =
+                {
+                  Model.title;
+                  url;
+                  snippet;
+                  text;
+                  text_truncated;
+                  published_date = date_of item;
+                  score = score_of item;
+                };
+              uncapped_chars;
+            }
+      | _ -> None)
+    (take limit records)
+
+let map_records ~list_path ~url_field ~title_field ~snippet_field ~snippet_chars ?date ?score ~limit
+    data =
+  map_rows ~list_path ~url_field ~title_field
+    ~body:(Snippet { field = snippet_field; chars = snippet_chars })
+    ?date ?score ~limit data
+
+let map_content_records ~list_path ~url_field ~title_field ~content_field ~content_chars ?snippet
+    ?date ?score ~limit data =
+  map_rows ~list_path ~url_field ~title_field
+    ~body:(Content { field = content_field; chars = content_chars; snippet })
+    ?date ?score ~limit data
+
+(* One request through the grant, then status, decode, the optional payload
+   check, and the outcome record. [parse] and [notice] read the decoded object
+   because both depend on vendor shape: [notice] for the warnings an upstream
+   sends with a successful body, [parse] for where the records sit.
+
+   [~status] is the adapter's own {!check_status}, a partial application of this
+   module's — the vendor's statuses and sentence are named once, beside the
+   vendor, and an adapter with a paged walk (SearXNG) and one with a single call
+   answer a status line the same way.
+
+   [~decode] replaces {!decode_json_object} for the one vendor whose answer is
+   not required to be an object; the default is the [malformed JSON response]
+   row every other vendor gets. *)
+let http_search ~provider ~(net : Net.t) ~request ~cost_for ~parse ~notice ?status ?check ?answer
+    ?decode (q : search_query) =
+  let ( let* ) = Result.bind in
+  let on_status : int -> (unit, error) result =
+    match status with Some read -> read | None -> fun status -> check_status ~provider status
+  in
+  match net.request request with
+  | Error failure -> Error (transport_error ~provider failure)
+  | Ok response ->
+      let* () = on_status response.Caps.Authority.Net.status in
+      let* data =
+        (match decode with Some read -> read | None -> decode_json_object ~provider)
+          response.Caps.Authority.Net.body
+      in
+      let* () = match check with Some read -> read data | None -> Ok () in
+      let limit = q.Model.max_results in
+      Ok
+        {
+          provider;
+          results = parse data ~limit;
+          answer = (match answer with Some read -> read data | None -> None);
+          cost_usd = Some (cost_for limit);
+          notice = notice q data;
+        }
+
 module type S = sig
   val name : string
   val cost_per_1k : float

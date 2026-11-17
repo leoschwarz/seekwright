@@ -46,13 +46,6 @@ let hierarchy_title record =
       in
       go 6
 
-let take n items =
-  let rec go count items acc =
-    if count <= 0 then List.rev acc
-    else match items with [] -> List.rev acc | item :: rest -> go (count - 1) rest (item :: acc)
-  in
-  go n items []
-
 (* Configured attribute overrides fallback chain. Sliced before validation;
    empty title or url drops the record. *)
 let parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit =
@@ -103,18 +96,7 @@ let parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit =
                   uncapped_chars;
                 }
           | _ -> None))
-    (take limit records)
-
-let check_status status =
-  if status = 401 || status = 403 then
-    (* 403, not 401, is Algolia's answer for an invalid Application-ID or key. *)
-    Error (Provider.auth_error ~provider:name)
-  else if status = 402 || status = 429 then
-    (* 402 is Algolia's [FeatureNotEnabled], treated as quota exhaustion
-       alongside 429. *)
-    Error (Provider.quota_exhausted ~provider:name ())
-  else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
-  else Ok ()
+    (Provider.take limit records)
 
 (* Flat rate per request; max_results is ignored. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
@@ -123,39 +105,32 @@ let request_body (q : Provider.search_query) =
   Yojson.Safe.to_string
     (`Assoc [ ("query", `String q.Model.query); ("hitsPerPage", `Int q.Model.max_results) ])
 
+(* 403, not 401, is Algolia's answer for an invalid Application-ID or key, and
+   402 is its [FeatureNotEnabled] rather than a plain billing error. Those are
+   the shared status mapping's own rows with its default wording, so this adapter
+   sends no [~status] of its own. *)
 let search ~app_id ~title_attr ~url_attr ~snippet_attr ~cost_per_1k ~snippet_chars ~key ~endpoint
     (net : Provider.Net.t) (q : Provider.search_query) =
-  let ( let* ) = Result.bind in
-  let request =
-    {
-      Caps.Authority.Net.meth = `POST;
-      uri = endpoint;
-      (* Application-ID identifies deployment, API key authorises index. *)
-      headers =
-        [
-          ("x-algolia-application-id", app_id);
-          ("x-algolia-api-key", key);
-          ("Content-Type", "application/json");
-        ];
-      body = Some (request_body q);
-    }
-  in
-  match net.request request with
-  | Error failure -> Error (Provider.transport_error ~provider:name failure)
-  | Ok response ->
-      let* () = check_status response.status in
-      let* data = Provider.decode_json_object ~provider:name response.body in
-      Ok
-        {
-          Provider.provider = name;
-          results =
-            parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr data ~limit:q.Model.max_results;
-          answer = None;
-          cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          notice =
-            Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:None
-              ~safety:false;
-        }
+  Provider.http_search ~provider:name ~net
+    ~request:
+      {
+        Caps.Authority.Net.meth = `POST;
+        uri = endpoint;
+        (* Application-ID identifies deployment, API key authorises index. *)
+        headers =
+          [
+            ("x-algolia-application-id", app_id);
+            ("x-algolia-api-key", key);
+            ("Content-Type", "application/json");
+          ];
+        body = Some (request_body q);
+      }
+    ~cost_for:(cost_for ~cost_per_1k)
+    ~parse:(parse ~snippet_chars ?title_attr ?url_attr ?snippet_attr)
+    ~notice:(fun q _data ->
+      Provider.ignored_constraints q ~domains:false ~dates:false ~geo:false ~language:None
+        ~safety:false)
+    q
 
 let make ?(cost_per_1k = 0.50) ?(snippet_chars = 500) ?title_attr ?url_attr ?snippet_attr ~app_id
     ~key ~endpoint ~net () : Provider.t =

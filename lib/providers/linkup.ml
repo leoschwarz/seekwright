@@ -89,16 +89,12 @@ let parse_sources ~snippet_chars data ~limit =
     | Some items -> items
     | None -> []
   in
-  let rec take n items acc =
-    if n <= 0 then List.rev acc
-    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
-  in
   List.filter_map
     (fun item ->
       match source_url item with
       | None -> None
       | Some url -> Some (hit ~snippet_chars ~title:(title_of item url) url item "snippet"))
-    (take limit records [])
+    (Provider.take limit records)
 
 let parse_results ~snippet_chars data ~limit =
   let records =
@@ -127,52 +123,40 @@ let answer ~output data =
   | Search_results -> None
   | Sourced_answer -> Provider.Json.string_field "answer" data
 
-let check_status status =
-  if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
-  else if status = 429 then
-    (* 429 indicates rate limiting (10 QPS org-wide). *)
-    Error (Provider.quota_exhausted ~provider:name ~message:"rate limited (10 QPS org-wide)" ())
-  else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
-  else Ok ()
-
 (* Flat rate per request; max_results does not affect price. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
+(* 429 indicates rate limiting (10 QPS org-wide); Linkup answers no 402 at all,
+   so its quota list holds one status. *)
+let check_status =
+  Provider.check_status ~provider:name ~quota:[ 429 ]
+    ~quota_message:"rate limited (10 QPS org-wide)"
+
 let search ~cost_per_1k ~snippet_chars ~depth ~output ~key ~(now : unit -> float)
     (net : Provider.Net.t) (q : Provider.search_query) =
-  let ( let* ) = Result.bind in
+  (* [output] picks both the record list and whether an answer is expected. *)
+  let parse data ~limit =
+    match output with
+    | Sourced_answer -> parse_sources ~snippet_chars data ~limit
+    | Search_results -> parse_results ~snippet_chars data ~limit
+  in
   let date =
     match q.Model.recency with Some period -> Some (from_date now period) | None -> None
   in
-  let request =
-    {
-      Caps.Authority.Net.meth = `POST;
-      uri = endpoint;
-      (* Bearer token in header. *)
-      headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
-      body = Some (request_body ~depth ~output ~from_date:date q);
-    }
-  in
-  match net.request request with
-  | Error failure -> Error (Provider.transport_error ~provider:name failure)
-  | Ok response ->
-      let* () = check_status response.status in
-      let* data = Provider.decode_json_object ~provider:name response.body in
-      let results =
-        match output with
-        | Sourced_answer -> parse_sources ~snippet_chars data ~limit:q.Model.max_results
-        | Search_results -> parse_results ~snippet_chars data ~limit:q.Model.max_results
-      in
-      Ok
-        {
-          Provider.provider = name;
-          results;
-          answer = answer ~output data;
-          cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          notice =
-            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:None
-              ~safety:false;
-        }
+  Provider.http_search ~provider:name ~net ~status:check_status
+    ~request:
+      {
+        Caps.Authority.Net.meth = `POST;
+        uri = endpoint;
+        (* Bearer token in header. *)
+        headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
+        body = Some (request_body ~depth ~output ~from_date:date q);
+      }
+    ~cost_for:(cost_for ~cost_per_1k) ~parse ~answer:(answer ~output)
+    ~notice:(fun q _data ->
+      Provider.ignored_constraints q ~domains:true ~dates:true ~geo:false ~language:None
+        ~safety:false)
+    q
 
 let make ?(cost_per_1k = 6.00) ?(snippet_chars = 500) ?(depth = "standard")
     ?(output = Sourced_answer) ~key ~(now : unit -> float) ~net () : Provider.t =

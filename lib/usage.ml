@@ -313,16 +313,6 @@ let ensure (key : string) (make : unit -> 'a) (fields : (string * 'a) list) :
       let created = make () in
       (created, fields @ [ (key, created) ])
 
-(* The deque's tail trim, newest-first storage: keep the first [n], which drops
-   the oldest. *)
-let take_first (n : int) (xs : 'a list) : 'a list =
-  let rec go n acc = function
-    | _ when n <= 0 -> List.rev acc
-    | [] -> List.rev acc
-    | x :: xs -> go (n - 1) (x :: acc) xs
-  in
-  go n [] xs
-
 (* Replaces in place, and appends when the key is new. The association list
    keeps insertion order for oldest-first eviction. *)
 let set (key : string) (value : 'a) (fields : (string * 'a) list) : (string * 'a) list =
@@ -656,7 +646,7 @@ let fold_entry (t : t) (entry : Yojson.Safe.t) : bool =
             | _ -> apply_answer t entry bucket ms error_str);
             (* A bounded deque, newest kept: stored newest-first so growth is a
            cons, and the snapshot shows it in that same newest-first order. *)
-            t.recent <- take_first t.recent_max (entry :: t.recent);
+            t.recent <- Provider.take t.recent_max (entry :: t.recent);
             (match t.since with
             | None -> t.since <- Some ts
             | Some since when ts < since -> t.since <- Some ts

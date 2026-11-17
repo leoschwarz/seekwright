@@ -157,10 +157,12 @@
     ../lib/config.cmi \
     ../lib/agent.cmi
 ../lib/usage.cmo : \
+    ../lib/provider.cmi \
     ../lib/log.cmi \
     ../lib/config.cmi \
     ../lib/usage.cmi
 ../lib/usage.cmx : \
+    ../lib/provider.cmx \
     ../lib/log.cmx \
     ../lib/config.cmx \
     ../lib/usage.cmi

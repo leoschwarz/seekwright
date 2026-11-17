@@ -42,10 +42,6 @@ val parse :
 (** [hits[]] mapped onto title/url/snippet. The limit slices the upstream list before anything is
     dropped; non-object records are skipped. *)
 
-val check_status : int -> (unit, Seekwright.Provider.error) result
-(** Status codes: 401/403 authentication, 402/429 quota, anything else [>= 400] HTTP status error.
-*)
-
 val cost_for : cost_per_1k:float -> int -> float
 (** Per-query cost in USD. Flat per request. *)
 

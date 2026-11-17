@@ -46,81 +46,36 @@ let request_uri (q : Provider.search_query) =
   in
   Uri.with_query endpoint params
 
-let published_date item = Provider.Json.string_field "date" item
-
+(* Upstream has no result-count parameter, so the caller's [max_results] is
+   applied here and nowhere else. *)
 let parse ~snippet_chars data ~limit =
-  let records =
-    match Provider.Json.list (Provider.Json.field "results" data) with
-    | Some items -> items
-    | None -> []
-  in
-  let rec take n items acc =
-    if n <= 0 then List.rev acc
-    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
-  in
-  (* Upstream lacks result-count parameter; slicing happens here. *)
-  List.filter_map
-    (fun item ->
-      match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
-      | Some url, Some title when url <> "" && title <> "" ->
-          let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "snippet" item) snippet_chars
-          in
-          Some
-            {
-              Provider.result =
-                {
-                  Model.title;
-                  url;
-                  snippet;
-                  text = None;
-                  text_truncated = None;
-                  published_date = published_date item;
-                  score = None;
-                };
-              uncapped_chars;
-            }
-      | _ -> None)
-    (take limit records [])
+  Provider.map_records ~list_path:[ "results" ] ~url_field:"url" ~title_field:"title"
+    ~snippet_field:"snippet" ~snippet_chars
+    ~date:(Provider.Json.string_field "date")
+    ~limit data
 
-let check_status status =
-  if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
-  else if status = 402 || status = 429 then
-    (* 402/429 indicates Search API access not enabled or rate limit. *)
-    Error
-      (Provider.quota_exhausted ~provider:name
-         ~message:"rate limited or no Search API access on this account" ())
-  else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
-  else Ok ()
+(* 402/429 indicates Search API access not enabled or rate limit. *)
+let check_status =
+  Provider.check_status ~provider:name
+    ~quota_message:"rate limited or no Search API access on this account"
 
 (* Search API requests are free; flat zero cost. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
 let search ~cost_per_1k ~snippet_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
-  let ( let* ) = Result.bind in
-  let request =
-    {
-      Caps.Authority.Net.meth = `GET;
-      uri = request_uri q;
-      headers = [ ("X-API-Key", key) ];
-      body = None;
-    }
-  in
-  match net.request request with
-  | Error failure -> Error (Provider.transport_error ~provider:name failure)
-  | Ok response ->
-      let* () = check_status response.status in
-      let* data = Provider.decode_json_object ~provider:name response.body in
-      Ok
-        {
-          Provider.provider = name;
-          results = parse ~snippet_chars data ~limit:q.Model.max_results;
-          answer = None;
-          cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          notice =
-            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:None
-              ~safety:false;
-        }
+  Provider.http_search ~provider:name ~net ~status:check_status
+    ~request:
+      {
+        Caps.Authority.Net.meth = `GET;
+        uri = request_uri q;
+        headers = [ ("X-API-Key", key) ];
+        body = None;
+      }
+    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~snippet_chars)
+    ~notice:(fun q _data ->
+      Provider.ignored_constraints q ~domains:true ~dates:true ~geo:true ~language:None
+        ~safety:false)
+    q
 
 let make ?(cost_per_1k = 0.) ?(snippet_chars = 500) ~key ~net () : Provider.t =
   (module struct

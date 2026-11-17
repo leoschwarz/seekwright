@@ -259,82 +259,34 @@ let published_date item = Provider.Json.string_field "published_date" item
 let score item = Provider.Json.number_field "score" item
 
 let parse ~text_chars data ~limit =
-  let records =
-    match Provider.Json.list (Provider.Json.field "results" data) with
-    | Some items -> items
-    | None -> []
-  in
-  let rec take n items acc =
-    if n <= 0 then List.rev acc
-    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
-  in
-  (* The limit slices the upstream list before anything is dropped, so a record
-     that fails to parse still spends one of the slots. *)
-  List.filter_map
-    (fun item ->
-      match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
-      | Some url, Some title when url <> "" && title <> "" ->
-          (* A content backend: the extract goes in [text] and [snippet] stays
-             empty, because filling both ships the same prose twice. *)
-          let text, text_truncated, uncapped_chars =
-            Provider.truncate_text (Provider.Json.string_field "content" item) text_chars
-          in
-          Some
-            {
-              Provider.result =
-                {
-                  Model.title;
-                  url;
-                  snippet = None;
-                  text;
-                  text_truncated = (if text_truncated then Some true else None);
-                  published_date = published_date item;
-                  score = score item;
-                };
-              uncapped_chars;
-            }
-      | _ -> None)
-    (take limit records [])
+  Provider.map_content_records ~list_path:[ "results" ] ~url_field:"url" ~title_field:"title"
+    ~content_field:"content" ~content_chars:text_chars ~date:published_date ~score ~limit data
 
 let answer data = Provider.Json.string_field "answer" data
-
-let check_status status =
-  if status = 401 || status = 403 then Error (Provider.auth_error ~provider:name)
-  else if status = 429 || status = 432 then
-    (* 432 is monthly credit exhaustion; 429 is rate limit. *)
-    Error (Provider.quota_exhausted ~provider:name ~message:"rate limited or out of credits" ())
-  else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
-  else Ok ()
 
 (* Flat rate per request. *)
 let cost_for ~cost_per_1k _max_results = cost_per_1k /. 1000.
 
+(* 432 is monthly credit exhaustion; 429 is rate limit. *)
+let check_status =
+  Provider.check_status ~provider:name ~quota:[ 429; 432 ]
+    ~quota_message:"rate limited or out of credits"
+
 let search ~cost_per_1k ~text_chars ~key (net : Provider.Net.t) (q : Provider.search_query) =
-  let ( let* ) = Result.bind in
   let country = match q.Model.country with Some code -> country_param code | None -> None in
-  let request =
-    {
-      Caps.Authority.Net.meth = `POST;
-      uri = endpoint;
-      headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
-      body = Some (request_body ~country q);
-    }
-  in
-  match net.request request with
-  | Error failure -> Error (Provider.transport_error ~provider:name failure)
-  | Ok response ->
-      let* () = check_status response.status in
-      let* data = Provider.decode_json_object ~provider:name response.body in
-      Ok
-        {
-          Provider.provider = name;
-          results = parse ~text_chars data ~limit:q.Model.max_results;
-          answer = answer data;
-          cost_usd = Some (cost_for ~cost_per_1k q.Model.max_results);
-          notice =
-            Provider.ignored_constraints q ~domains:true ~dates:true ~geo:(country <> None)
-              ~language:(Some true) ~safety:true;
-        }
+  Provider.http_search ~provider:name ~net ~status:check_status
+    ~request:
+      {
+        Caps.Authority.Net.meth = `POST;
+        uri = endpoint;
+        headers = [ ("Authorization", "Bearer " ^ key); ("Content-Type", "application/json") ];
+        body = Some (request_body ~country q);
+      }
+    ~cost_for:(cost_for ~cost_per_1k) ~parse:(parse ~text_chars) ~answer
+    ~notice:(fun q _data ->
+      Provider.ignored_constraints q ~domains:true ~dates:true ~geo:(country <> None)
+        ~language:(Some true) ~safety:true)
+    q
 
 let make ?(cost_per_1k = 8.00) ?(text_chars = 2000) ~key ~net () : Provider.t =
   (module struct

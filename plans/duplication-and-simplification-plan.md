@@ -1,6 +1,6 @@
 # Plan: the structural pass — duplication and weight
 
-Status: **§5 step 0 (D-G, formatting) and step 1 (S-005) are landed; everything
+Status: **§5 steps 0–2 (D-G formatting, S-005, S-001) are landed; everything
 else on this page is a proposal.** Tree read at `6e4ad90`;
 reviewed and corrected against the tree at `742a9c7` on 2026-11-17 (the code is
 unchanged between the two commits — the diff is plans only). The corrections are
@@ -101,7 +101,7 @@ Carried forward from the wave, because the same walls bind every item below.
 
 ## 2. Duplication
 
-### S-001 — the adapter HTTP skeleton, fifteen times over
+### S-001 — the adapter HTTP skeleton, fifteen times over · **landed**
 
 **Evidence (`read`, `diff`).** `Serper.parse` and `Serpapi.parse` differ in the
 record list's key — `organic` versus `organic_results` — and in `truncate_snippet`
@@ -169,6 +169,54 @@ does not move, because no `make` signature needs to change. Expect roughly 700�
 900 lines off `lib/providers/`, and `parallel` moving onto the shared notice
 sentence is a deliberate behaviour-adjacent change: its sentences must stay
 word-for-word, or the golden re-pin belongs in the same commit.
+
+**Landed.** `Seekwright.Provider` owns five of these values rather than four:
+`take`, `check_status`, `map_records`, `map_content_records` and `http_search`;
+the separate `search_outcome` the sketch implied is `http_search`'s tail. Two
+signatures moved from the sketch because the vendor variation is wider than the
+sketch assumed: `check_status` gained `?named:(int * error) list` (SearXNG's 401
+says `format=json` is not enabled, DeepSeek's 408 is its own request-body
+timeout, Linkup has no 402, Tavily's 432 sits beside 429), and `map_records`
+takes `list_path:string list` rather than `string` (Querit walks
+`results.result`, Anysearch `data.results`) with `?date:(Yojson.Safe.t -> string
+option)` rather than `?date_field:string`, because the *reading* is what differs
+— Freeserp takes the first non-empty of `published_at`/`crawled_at`, Serper takes
+`date` as it comes. `map_content_records` is not in the sketch: Tavily, DeepSeek
+and Parallel answer `{title, url, text}` with `text_truncated` and, for two of
+them, a separately capped snippet, and one mapper over a private `body` sum
+covers both shapes. `http_search` carries `?status`, `?check`, `?answer` and
+`?decode`; `?decode` exists for Parallel alone, whose REST half answers an empty
+result set for a body that is valid JSON but not an object where
+`decode_json_object` would report the malformed row.
+
+Measured, against the proposal's −700–900: `lib/providers/*.ml` goes 3,003 →
+2,492 (−511) and `lib/provider.ml` plus its interface 405 → 630 (+225), a net
+−286. The gap is three things the estimate assumed away: the lines did not
+vanish, they moved to one owner and gained a documented contract; `exa` (by
+decision), `searxng`'s paged walk and `parallel`'s tiered warm-up keep their own
+`search`; and four `parse`s are not the search-backend record shape (Algolia's
+score-first records, Linkup's `results`+`content` split, DeepSeek's
+content-only rows, Exa's content backend).
+
+`parallel`'s notices now use `Provider.ignored_constraints`' wording, called
+twice — once with language left unanswered, once with safe-search — because that
+vendor's report names each dropped bucket in its own clause. The single joined
+clause the helper builds when both buckets are open would have diverged
+`141-parallel-constraints` and `145-parallel-warnings` from the Python oracle;
+registering that divergence is a §4 decision, not this step's, and both goldens
+are byte-stable. `Algolia.check_status` and its `algolia.mli` export are gone: an
+adapter's status rows are not a module's public fact. The fifteen `take` bodies
+are one function, called from four adapters and `Usage` directly and from
+`map_rows` for the rest; `Tabledoc`'s `take` stays, being string truncation in
+another package.
+
+Two suite facts moved with the change and no case was lost: `test_anysearch.ml`
+hands `parse` the whole envelope, because `data.results` is now one `list_path`
+argument — so the fixture is the body the vendor sends and the container-drift
+cases exercise the unwrap that used to sit in `search` — and `test_parallel.ml`'s
+notice case is renamed to what it pins. `test/router_dependencies.expected`
+grows two lines: `lib/usage.ml` links `Provider` for `take` instead of its own
+`take_first`.
 
 ### S-002 — the adapter suites: 9,217 lines, 103 lines of shared support
 
@@ -537,9 +585,9 @@ in the same commit.
 
 |Order|Step|Expected effect|
 |---|---|---|
-|0|D-G formatting: pin `.ocamlformat`, reformat the tree — the maintainer's call, taken ahead of step 1|**landed** — one-shot reformat of 272 files, ~15,800 lines each way; no golden moved; `Test_support`'s source needles made whitespace-insensitive|
+|0|D-G formatting: pin `.ocamlformat`, reformat the tree — the maintainer's call, taken ahead of step 1|**landed** — one-shot reformat of 272 files, ~15,800 lines each way; `Test_support`'s source needles made whitespace-insensitive. The claim that no pin moved was wrong: five `should_not_compile` diagnostics quote the snippet's own source line, so the sweep re-pinned them, and `dune runtest` has been red on them since — three of the five stayed hidden behind a cached `.out` until a library change invalidated it. Re-pinned with step 2|
 |1|S-005 micro-duplication: the percent-encoder, `base64`/`grouped`, the `Utf8` re-export shim|**landed** — small, no golden, no re-pin|
-|2|S-001 adapter skeleton, `take` landing in `Provider`|−700 to −900 lines in `lib/providers/`; `parallel`'s notices move onto the shared sentence|
+|2|S-001 adapter skeleton, `take` landing in `Provider`|**landed** — −511 lines in `lib/providers/`, +225 in `lib/provider.ml` and its interface (net −286, short of the estimate for the reasons in §2); 13 of 14 REST adapters on the shared tail, `parallel` onto the shared sentence with its per-bucket clauses kept word-for-word|
 |3|S-002 test harness|−~1,800 test lines, no production change|
 |4|S-003 one dispatch per verb, answering Q-002|the 400/502 mapping has one owner; the `api_answer` pre-check asymmetry is decided|
 |5|S-004 field lists, then S-006, then S-007|the schemas read the decoders' key lists; the journal's answer fields gain one owner|
@@ -635,6 +683,13 @@ above:
 - **§5 / §0.** `take` lands with S-001, not S-005; S-010 inserted as its own step;
   the line-count convention stated (`wc -l` + 1 per file; `.mli` in the two
   whole-tree scopes).
+- **Landing (steps 0–2).** The step-0 cell's "no golden moved" was measured on
+  the prose, surface and egress pins only: the sweep also moved five
+  `should_not_compile` diagnostics, which quote the snippet's source line, and
+  the tree has been red on them since `eec2e7a`. Re-pinned alongside S-001; the
+  refusals themselves are unchanged, so the capability boundary holds. S-001's
+  measured line counts replace its −700–900 estimate in §2, and the shared
+  `check_status` needed a third argument the sketch did not have.
 
 **As reported, not re-run:** the window-scan aggregates (984/150/3,604/5,343, the
 per-file numbers, the 73 querit/search1api windows, S-006's nine windows, the
@@ -643,5 +698,6 @@ reproducible; the scan itself was not re-executed for this review. The gate was
 not run — this is a plans-only edit.
 
 **Sign-off:** the plan's measurements and proposals are verified against the tree
-as corrected above. The §4 decisions (D-A … D-G) remain the maintainer's; nothing
-here is landed, and no entry was added to `plans/reviews/code_review_ledger.md`.
+as corrected above. The §4 decisions (D-A … D-G) remain the maintainer's; §5
+steps 0–2 are landed and recorded in their sections, the rest is proposal, and
+no entry was added to `plans/reviews/code_review_ledger.md`.

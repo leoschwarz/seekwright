@@ -74,11 +74,9 @@ let sample =
   }
 }|}
 
-(* The envelope's [data] half, which is what the mapping is handed. *)
-let sample_data =
-  match Provider.Json.field "data" (Yojson.Safe.from_string sample) with
-  | `Assoc _ as data -> data
-  | _ -> A.failf "the fixture carries no data object"
+(* [parse] is handed the whole envelope: the records sit under [data.results],
+   so the fixture stays the body the vendor sends. *)
+let sample_data = Yojson.Safe.from_string sample
 
 let dial ?(status = 200) ?(body = sample) ?(snippet_chars = 500) ?(cost_per_1k = 0.) () =
   let sent = ref None in
@@ -125,7 +123,7 @@ let has_field request name = List.exists (fun (key, _) -> key = name) (body_fiel
 let parse ?(snippet_chars = 500) ?(limit = 10) data = Anysearch.parse ~snippet_chars data ~limit
 
 let record fields = `Assoc fields
-let payload items = `Assoc [ ("results", `List items) ]
+let payload items = `Assoc [ ("data", `Assoc [ ("results", `List items) ]) ]
 
 let records_that_carry_a_title_and_url () =
   let hits = parse sample_data in
@@ -192,7 +190,7 @@ let the_length_the_cap_discarded_is_recorded () =
        ~needle:"uncapped")
 
 let records_without_a_url_or_title_are_dropped () =
-  let drop items = List.length (parse (`Assoc [ ("results", `List items) ])) in
+  let drop items = List.length (parse (payload items)) in
   check_int "no url" 0 (drop [ record [ ("title", `String "No url here") ] ]);
   check_int "no title" 0 (drop [ record [ ("url", `String "https://example.com") ] ]);
   (* Documented as always present but possibly empty — dropped, not kept. *)
@@ -210,8 +208,8 @@ let missing_container_is_empty_not_an_error () =
   List.iter
     (fun (what, data) -> check_int what 0 (List.length (parse data)))
     [
-      ("results is null", `Assoc [ ("results", `Null) ]);
-      ("results is absent", `Assoc []);
+      ("results is null", `Assoc [ ("data", `Assoc [ ("results", `Null) ]) ]);
+      ("results is absent", `Assoc [ ("data", `Assoc []) ]);
       ("the envelope is null", `Null);
       ("the envelope is a list", `List [ `String "a"; `String "b" ]);
       ("the envelope is a string", `String "a page, not a document");

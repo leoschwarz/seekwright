@@ -41,51 +41,25 @@ let base_params (q : Provider.search_query) =
   | Some false -> params @ [ ("safesearch", [ "0" ]) ]
   | None -> params
 
+(* A SearXNG instance puts its snippet in [content]. *)
 let parse ~snippet_chars data ~limit =
-  let records =
-    match Provider.Json.list (Provider.Json.field "results" data) with
-    | Some items -> items
-    | None -> []
-  in
-  let rec take n items acc =
-    if n <= 0 then List.rev acc
-    else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
-  in
-  List.filter_map
-    (fun item ->
-      match (Provider.Json.string_field "url" item, Provider.Json.string_field "title" item) with
-      | Some url, Some title when url <> "" && title <> "" ->
-          let snippet, uncapped_chars =
-            Provider.truncate_snippet (Provider.Json.string_field "content" item) snippet_chars
-          in
-          Some
-            {
-              Provider.result =
-                {
-                  Model.title;
-                  url;
-                  snippet;
-                  text = None;
-                  text_truncated = None;
-                  published_date = Provider.Json.string_field "publishedDate" item;
-                  score = Provider.Json.number_field "score" item;
-                };
-              uncapped_chars;
-            }
-      | _ -> None)
-    (take limit records [])
+  Provider.map_records ~list_path:[ "results" ] ~url_field:"url" ~title_field:"title"
+    ~snippet_field:"content" ~snippet_chars
+    ~date:(Provider.Json.string_field "publishedDate")
+    ~score:(Provider.Json.number_field "score")
+    ~limit data
 
-let check_status status =
-  if status = 401 || status = 403 then
-    (* 401/403 suggests format=json is not enabled on instance. *)
-    Error
-      (Provider.provider_error ~retryable:false ~provider:name
-         "authentication rejected (enable `format=json` for this client)")
-  else if status = 429 then
-    (* 429 indicates rate limiting. *)
-    Error (Provider.quota_exhausted ~provider:name ~message:"rate limited by the instance" ())
-  else if status >= 400 then Error (Provider.http_status_error ~provider:name status)
-  else Ok ()
+(* 401/403 on a self-hosted instance usually means [format=json] is not enabled
+   for this client, which an API key cannot fix, so the sentence names the fix
+   the operator has to apply. 429 is the instance's rate limit; there is no 402
+   row on a SearXNG. *)
+let instance_error =
+  Provider.provider_error ~retryable:false ~provider:name
+    "authentication rejected (enable `format=json` for this client)"
+
+let check_status =
+  Provider.check_status ~provider:name ~quota:[ 429 ] ~quota_message:"rate limited by the instance"
+    ~named:[ (401, instance_error); (403, instance_error) ]
 
 let get_strict (net : Provider.Net.t) (uri : Uri.t) =
   let request = { Caps.Authority.Net.meth = `GET; uri; headers = []; body = None } in
@@ -121,13 +95,7 @@ let search ~cost_per_1k ~snippet_chars ~endpoint (net : Provider.Net.t) (q : Pro
         else walk (pageno + 1) collected
   in
   let* collected = walk 1 [] in
-  let results =
-    let rec take n items acc =
-      if n <= 0 then List.rev acc
-      else match items with [] -> List.rev acc | item :: rest -> take (n - 1) rest (item :: acc)
-    in
-    take q.Model.max_results (List.rev collected) []
-  in
+  let results = Provider.take q.Model.max_results (List.rev collected) in
   Ok
     {
       Provider.provider = name;

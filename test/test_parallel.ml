@@ -345,7 +345,7 @@ let upstream_warnings_are_echoed () =
   check_string "the warning rides through" "upstream warnings: thin index"
     (Option.get outcome.notice)
 
-let the_notices_join_in_one_sentence () =
+let the_notices_compose_in_the_vendors_order () =
   let warned =
     {|{
   "results": [],
@@ -592,7 +592,8 @@ let () =
             test_case "a fully honoured query carries no notice" `Quick
               a_fully_honoured_query_carries_no_notice;
             test_case "upstream warnings are echoed" `Quick upstream_warnings_are_echoed;
-            test_case "the notices join in one sentence" `Quick the_notices_join_in_one_sentence;
+            test_case "the notices compose in the vendors order" `Quick
+              the_notices_compose_in_the_vendors_order;
           ] );
         ( "the failures this adapter owns",
           [
