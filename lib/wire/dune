@@ -9,6 +9,7 @@
 ; names no fetch backend, no grant and no wire model, so the direction
 ; [mcp-caps → seekwright → seekwright.providers / seekwright.fetch] is unchanged
 ; with one floor under it.
+
 (library
  (name seekwright_wire)
  (public_name seekwright.wire))

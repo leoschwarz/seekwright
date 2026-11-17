@@ -14,6 +14,7 @@
 ; [../model.ml]), never the reverse. Nothing in [lib/] may name an adapter, so
 ; the module that builds a name into a provider needs its own stanza (P5) rather
 ; than a [lib/factory.ml] here, which would close a cycle.
+
 (library
  (name seekwright_providers)
  (public_name seekwright.providers)

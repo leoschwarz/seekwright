@@ -74,6 +74,12 @@ jobs:
       - name: install opam dependencies
         run: opam install . --deps-only --with-test --with-doc -y
 
+      # The whole tree is formatted with the ocamlformat version pinned in
+      # [dune-project], and dune's own formatter over the stanzas. A step rather than a
+      # commit hook, so a formatter bump lands as one reformat commit.
+      - name: check the formatting
+        run: dune build @fmt
+
       # The ordinary gate from AGENTS.md and plans/ocaml-finalisation.md §3,
       # command for command.
       - name: build @install

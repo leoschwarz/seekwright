@@ -17,6 +17,7 @@
 ; It is also why [lib/caps/error.ml] keeps its own byte-backing helper: [mcp-caps]
 ; may not depend on a seekwright library, and this one carries the [seekwright.]
 ; prefix.
+
 (library
  (name seekwright_text)
  (public_name seekwright.text))

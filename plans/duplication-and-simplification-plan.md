@@ -885,9 +885,11 @@ call across a line break and one ended in `)`, which is the formatter's paren
 docking, not the code's. `Test_support` now matches source needles with
 whitespace collapsed (`source_includes`, `source_excludes`,
 `source_count_occurrences`) and the `)` is gone from that needle; the
-`includes`/`excludes` pair still matches prose byte-for-byte. The formatter is
-not a gate target — no `dune` rule runs it — so the pin is an instruction,
-recorded in `AGENTS.md`, `CONTRIBUTING.md` and the `ocaml` skill.
+`includes`/`excludes` pair still matches prose byte-for-byte. The follow-through landed
+with the §3 weight rows: `dune build @fmt` is clean over the whole tree — ocamlformat over
+the sources, dune's own formatter over the stanzas — and `ci-ocaml.yml` runs it as a step,
+so the pin is checked rather than instructed. `AGENTS.md`, `CONTRIBUTING.md`,
+`ocaml-docs/testing.md` and the `ocaml` skill describe the four-target gate.
 
 ## 5. Landing order
 

@@ -226,8 +226,7 @@ let test_is_supported_reads_the_json_suffix () =
 let test_describe_types_renders_the_families_in_order () =
   A.check A.string "full set" "HTML, plain text, JSON, CSV and PDF"
     (E.describe_types (E.html_types @ E.pdf_types @ E.text_types @ E.json_types @ E.table_types));
-  A.check A.string "stdlib set" "HTML, plain text, JSON and CSV"
-    (E.describe_types stdlib_types);
+  A.check A.string "stdlib set" "HTML, plain text, JSON and CSV" (E.describe_types stdlib_types);
   A.check A.string "single family" "HTML" (E.describe_types [ "text/html" ]);
   A.check A.string "unknown type appended" "HTML and application/x-thing"
     (E.describe_types [ "application/x-thing"; "text/html" ]);

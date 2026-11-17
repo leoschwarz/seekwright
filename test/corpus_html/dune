@@ -18,7 +18,8 @@
   (glob_files fixtures/*)
   cases.json
   ../../ocaml-tools/extract_bench/bench.exe)
- (action (run ../../ocaml-tools/extract_bench/bench.exe --check .)))
+ (action
+  (run ../../ocaml-tools/extract_bench/bench.exe --check .)))
 
 ; The byte pin, which the bar cannot give: [parity/port-stdlib.txt] is a digest of
 ; what the backend answers for every case, and this rule recomputes it. A bar is a
@@ -28,6 +29,7 @@
 ; gate cannot run it, so the two files are diffed by hand, and the only line that
 ; differs is [encoding-cp1252], where this port implements the cp1252 codec and the
 ; oracle's strict codec replaces fifteen bytes.
+
 (rule
  (alias runtest)
  (deps
@@ -36,4 +38,8 @@
   parity/port-stdlib.txt
   ../../ocaml-tools/extract_bench/digest_cases.exe)
  (action
-  (run ../../ocaml-tools/extract_bench/digest_cases.exe --check-parity . parity/port-stdlib.txt)))
+  (run
+   ../../ocaml-tools/extract_bench/digest_cases.exe
+   --check-parity
+   .
+   parity/port-stdlib.txt)))

@@ -10,11 +10,15 @@
 (rule
  (targets surface.actual)
  (deps surface.exe ../lib/config.mli)
- (action (with-outputs-to surface.actual (run ./surface.exe))))
+ (action
+  (with-outputs-to
+   surface.actual
+   (run ./surface.exe))))
 
 (rule
  (alias runtest)
- (action (diff surface.expected surface.actual)))
+ (action
+  (diff surface.expected surface.actual)))
 
 ; The deployment's egress lists, printed from the rows rather than re-typed:
 ; [search-allow.txt] is the union of the destinations on [Registry.rows],
@@ -34,38 +38,53 @@
 (rule
  (targets search-allow.actual)
  (deps egress_lists.exe)
- (action (with-outputs-to search-allow.actual (run ./egress_lists.exe search-allow))))
+ (action
+  (with-outputs-to
+   search-allow.actual
+   (run ./egress_lists.exe search-allow))))
 
 (rule
  (alias runtest)
- (action (diff ../deploy/compose/generated/search-allow.txt search-allow.actual)))
+ (action
+  (diff ../deploy/compose/generated/search-allow.txt search-allow.actual)))
 
 (rule
  (targets fetch-allow.actual)
  (deps egress_lists.exe ../deploy/compose/egress/fetch-allow-hosts.txt)
  (action
-  (with-outputs-to fetch-allow.actual
-   (run ./egress_lists.exe fetch-allow ../deploy/compose/egress/fetch-allow-hosts.txt))))
+  (with-outputs-to
+   fetch-allow.actual
+   (run
+    ./egress_lists.exe
+    fetch-allow
+    ../deploy/compose/egress/fetch-allow-hosts.txt))))
 
 (rule
  (alias runtest)
- (action (diff ../deploy/compose/generated/fetch-allow.txt fetch-allow.actual)))
+ (action
+  (diff ../deploy/compose/generated/fetch-allow.txt fetch-allow.actual)))
 
 (rule
  (targets fetch-deny.actual)
  (deps egress_lists.exe ../deploy/compose/egress/deny-hosts.txt)
  (action
-  (with-outputs-to fetch-deny.actual
-   (run ./egress_lists.exe fetch-deny ../deploy/compose/egress/deny-hosts.txt))))
+  (with-outputs-to
+   fetch-deny.actual
+   (run
+    ./egress_lists.exe
+    fetch-deny
+    ../deploy/compose/egress/deny-hosts.txt))))
 
 (rule
  (alias runtest)
- (action (diff ../deploy/compose/generated/fetch-deny.txt fetch-deny.actual)))
+ (action
+  (diff ../deploy/compose/generated/fetch-deny.txt fetch-deny.actual)))
 
 ; Every string embedded in [lib/prompts.ml] and [lib/dashboard_html.ml] has a
 ; committed [.expected] golden beside this file. Each rule prints the embedded
 ; literal and diffs it against its golden, so a reworded or reformatted
 ; deployed string fails [dune runtest] instead of shipping unnoticed.
+
 (executable
  (name resources)
  (libraries seekwright))
@@ -73,53 +92,77 @@
 (rule
  (targets server_instructions.out)
  (deps resources.exe)
- (action (with-outputs-to server_instructions.out (run ./resources.exe server_instructions))))
+ (action
+  (with-outputs-to
+   server_instructions.out
+   (run ./resources.exe server_instructions))))
 
 (rule
  (alias runtest)
- (action (diff server_instructions.expected server_instructions.out)))
+ (action
+  (diff server_instructions.expected server_instructions.out)))
 
 (rule
  (targets search_description.out)
  (deps resources.exe)
- (action (with-outputs-to search_description.out (run ./resources.exe search_description))))
+ (action
+  (with-outputs-to
+   search_description.out
+   (run ./resources.exe search_description))))
 
 (rule
  (alias runtest)
- (action (diff search_description.expected search_description.out)))
+ (action
+  (diff search_description.expected search_description.out)))
 
 (rule
  (targets fetch_description.out)
  (deps resources.exe)
- (action (with-outputs-to fetch_description.out (run ./resources.exe fetch_description))))
+ (action
+  (with-outputs-to
+   fetch_description.out
+   (run ./resources.exe fetch_description))))
 
 (rule
  (alias runtest)
- (action (diff fetch_description.expected fetch_description.out)))
+ (action
+  (diff fetch_description.expected fetch_description.out)))
 
 (rule
  (targets answer_description.out)
  (deps resources.exe)
- (action (with-outputs-to answer_description.out (run ./resources.exe answer_description))))
+ (action
+  (with-outputs-to
+   answer_description.out
+   (run ./resources.exe answer_description))))
 
 (rule
  (alias runtest)
- (action (diff answer_description.expected answer_description.out)))
+ (action
+  (diff answer_description.expected answer_description.out)))
 
 (rule
  (targets answer_system.out)
  (deps resources.exe)
- (action (with-outputs-to answer_system.out (run ./resources.exe answer_system))))
+ (action
+  (with-outputs-to
+   answer_system.out
+   (run ./resources.exe answer_system))))
 
 (rule
  (alias runtest)
- (action (diff answer_system.expected answer_system.out)))
+ (action
+  (diff answer_system.expected answer_system.out)))
 
 (rule
  (targets dashboard.out)
  (deps resources.exe)
- (action (with-outputs-to dashboard.out (run ./resources.exe dashboard))))
+ (action
+  (with-outputs-to
+   dashboard.out
+   (run ./resources.exe dashboard))))
 
 (rule
  (alias runtest)
- (action (diff dashboard_html.expected dashboard.out)))
+ (action
+  (diff dashboard_html.expected dashboard.out)))

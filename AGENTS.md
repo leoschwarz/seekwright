@@ -64,10 +64,11 @@ off-by-default *page* cache of extracted text, bounded by `cache_ttl_seconds`,
 
 Every shell needs the switch and, on this host, the GMP search paths — the exact
 exports are in the `ocaml` skill (`.agents/skills/ocaml/SKILL.md`; CI installs
-`libgmp-dev` and needs none of it). The gate is three targets and all three must
-be green before a change is called done:
+`libgmp-dev` and needs none of it). The gate is four targets and all four must be
+green before a change is called done:
 
 ```bash
+dune build @fmt            # the tree as its pinned ocamlformat and dune formatter would write it
 dune build @install        # both libraries, both executables, the generated .opam files
 dune runtest --force       # every suite under test/, every pinned diff, the live inventory
 dune build @doc            # odoc: a broken cross-reference is a defect
@@ -80,10 +81,10 @@ reports, the differential goldens and matrix, the negative-compilation
 diagnostics. A green run means both.
 
 Formatting is pinned by `.ocamlformat` — ocamlformat 0.29.0, `margin = 100`,
-spacing options chosen to preserve the tree's blank-line grouping. No gate
-target runs the formatter, so the pin is honoured by
-`ocamlformat --inplace <the files you touched>` before committing; a whole-tree
-`ocamlformat --check` is clean at every commit on this branch. Source-text
+spacing options chosen to preserve the tree's blank-line grouping — and
+`dune build @fmt` is the gate target that checks it, over the OCaml sources and over
+the stanzas with dune's own formatter; a formatter bump lands as one reformat commit
+rather than a per-commit hook. Source-text
 needles in the suites are matched with whitespace collapsed
 (`Test_support.source_includes`, `source_excludes`, `source_count_occurrences`),
 which is what keeps the formatter's line breaks from moving an assertion about

@@ -1,10 +1,10 @@
 # Testing the OCaml port
 
-The gate is three targets, and all three have to be green before a change is
-done:
+The gate is four targets, and all four have to be green before a change is done:
 
 ```bash
 eval $(opam env --switch=default --set-switch)     # plus the GMP search paths, see plans/infra-setup.md
+dune build @fmt            # the tree as the pinned ocamlformat and dune formatter write it
 dune build @install        # libraries, both binaries, the .opam files
 dune runtest --force       # every suite and every pinned diff
 dune build @doc            # odoc, because a broken cross-reference is a defect

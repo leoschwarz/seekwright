@@ -28,6 +28,7 @@
 ; transcript is the protocol channel and the notes are the startup surface, and
 ; pinning both is what keeps "stdout is JSON-RPC only" (§7) checked here instead
 ; of asserted in prose.
+
 (rule
  (deps
   fixture.exe
@@ -37,17 +38,21 @@
  (action
   (with-accepted-exit-codes
    0
-   (with-stderr-to stdio_transcript_notes.out
-    (with-stdout-to stdio_transcript.out
+   (with-stderr-to
+    stdio_transcript_notes.out
+    (with-stdout-to
+     stdio_transcript.out
      (run sh -c "cat transcript.jsonl | ./fixture.exe --root root --stdio"))))))
 
 (rule
  (alias runtest)
- (action (diff stdio_transcript.expected stdio_transcript.out)))
+ (action
+  (diff stdio_transcript.expected stdio_transcript.out)))
 
 (rule
  (alias runtest)
- (action (diff stdio_transcript_notes.expected stdio_transcript_notes.out)))
+ (action
+  (diff stdio_transcript_notes.expected stdio_transcript_notes.out)))
 
 ; The application half of the same idea, and the hermetic "schema/tool calls"
 ; evidence beside the live runner baseline. The bodies are the shapes the
@@ -59,17 +64,17 @@
 ; socket opens, and [application.toml] disables provider health probing.
 ; `tools/list` is deliberately not in this transcript; its full body is
 ; already pinned by `bin/smoke.expected`, descriptions and all.
+
 (rule
- (deps
-  ../../bin/main.exe
-  application.toml
-  application_transcript.jsonl)
+ (deps ../../bin/main.exe application.toml application_transcript.jsonl)
  (targets application_transcript.out application_transcript_notes.out)
  (action
   (with-accepted-exit-codes
    0
-   (with-stderr-to application_transcript_notes.out
-    (with-stdout-to application_transcript.out
+   (with-stderr-to
+    application_transcript_notes.out
+    (with-stdout-to
+     application_transcript.out
      (run
       sh
       -c
@@ -77,8 +82,12 @@
 
 (rule
  (alias runtest)
- (action (diff application_transcript.expected application_transcript.out)))
+ (action
+  (diff application_transcript.expected application_transcript.out)))
 
 (rule
  (alias runtest)
- (action (diff application_transcript_notes.expected application_transcript_notes.out)))
+ (action
+  (diff
+   application_transcript_notes.expected
+   application_transcript_notes.out)))

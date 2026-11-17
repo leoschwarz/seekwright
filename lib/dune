@@ -8,16 +8,19 @@
 ; variable for an image label or release script. The URL below has to equal
 ; [dune-project]'s [(homepage …)]; [test/test_metadata.ml] pins them together,
 ; so a homepage move changes both in one commit.
+
 (rule
  (targets version.ml)
  (action
-  (with-stdout-to version.ml
+  (with-stdout-to
+   version.ml
    (progn
     (echo "let package = \"%{version:seekwright}\"\n")
     (echo "let project_url = \"https://github.com/leoschwarz/seekwright\"\n")
     (echo
      "let user_agent = \"seekwright/\" ^ package ^ \" (+\" ^ project_url ^ \")\"\n")
     (echo "let mcp_server = \"0.1.0\"\n")))))
+
 ;
 ; The provider adapters are NOT in this library: they sit in [lib/providers/],
 ; which carries its own stanza because [(include_subdirs qualified)] here would
@@ -34,6 +37,7 @@
 ; by the absence of a [libraries] field (these are here for other modules) but by
 ; the [ocamldep] diff in test/dune, which pins the router's dependencies and fails
 ; runtest if it reaches for any sibling module.
+
 (library
  (name seekwright)
  (public_name seekwright)
@@ -43,15 +47,15 @@
  ; [ipaddr] for the bounded request-head replay and the bind address. The loop
  ; runner (eio_main) stays out: a library must not call [Eio_main.run], so bin/
  ; owns the loop and hands the library an [Eio.Stdenv.t].
-; [seekwright.text] is the shared codepoint walk (style review H1/H2),
-; [seekwright.wire] the page records the fetch path produces, and
-; [seekwright.time] the civil-date arithmetic [usage] shares with the adapters
-; and the CLI; all three sit under this library because [seekwright.fetch] links
-; them too and the direction between the two big libraries is fixed.
-(libraries
- seekwright.text
- seekwright.time
- seekwright.wire
+ ; [seekwright.text] is the shared codepoint walk (style review H1/H2),
+ ; [seekwright.wire] the page records the fetch path produces, and
+ ; [seekwright.time] the civil-date arithmetic [usage] shares with the adapters
+ ; and the CLI; all three sit under this library because [seekwright.fetch] links
+ ; them too and the direction between the two big libraries is fixed.
+ (libraries
+  seekwright.text
+  seekwright.time
+  seekwright.wire
   digestif
   mcp-caps
   eio
@@ -64,4 +68,3 @@
   http
   cstruct
   ipaddr))
-

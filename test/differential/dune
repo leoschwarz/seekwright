@@ -17,10 +17,19 @@
 ; projection of each area. [unix] is here for one thing — clearing the key
 ; environment so a golden cannot depend on what the shell that runs
 ; [dune runtest] happens to export.
+
 (library
  (name seekwright_diff)
  (modules canon projection)
- (libraries mcp-caps seekwright seekwright.fetch seekwright.providers seekwright.text unix uri yojson))
+ (libraries
+  mcp-caps
+  seekwright
+  seekwright.fetch
+  seekwright.providers
+  seekwright.text
+  unix
+  uri
+  yojson))
 
 ; The property runs. [corpus/] answers "does this behaviour still hold against the
 ; pinned answer"; this answers "does it hold for every input a generator can make",
@@ -28,10 +37,17 @@
 ; in sight. [qcheck-core] is the generator engine, [qcheck-alcotest] the
 ; adapter that makes a property an alcotest case; both are [:with-test] in
 ; [dune-project] (F3.3 records why QCheck rather than a hand-rolled loop).
+
 (test
  (name test_differential_properties)
  (modules test_differential_properties)
- (libraries seekwright seekwright.fetch seekwright.text qcheck-core qcheck-alcotest alcotest))
+ (libraries
+  seekwright
+  seekwright.fetch
+  seekwright.text
+  qcheck-core
+  qcheck-alcotest
+  alcotest))
 
 ; The golden runner. [golden/] and [corpus/] are declared deps so the sandbox
 ; carries them and the runner's directory walks see exactly what is committed —
@@ -41,6 +57,7 @@
 ; own files, not a subtree's. A new area has to be added here, which is the
 ; point: an area the deps forget cannot quietly run against a half-populated
 ; sandbox.
+
 (test
  (name test_differential_golden)
  (modules test_differential_golden)
@@ -72,6 +89,7 @@
 ; file exists is only honest when the sandbox carries it. Every pointer is
 ; port-owned, so the globs stop at this tree's [lib/], [bin/] and [test/]: a row
 ; about a module nobody wrote fails here rather than in review.
+
 (test
  (name test_differential_matrix)
  (modules test_differential_matrix)

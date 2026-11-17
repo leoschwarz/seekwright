@@ -55,10 +55,9 @@ val drive :
   (unit -> Mcp_caps.Authority.Net.request) ->
   Seekwright.Model.search_query ->
   Seekwright.Provider.outcome * Mcp_caps.Authority.Net.request
-(** [drive adapter sent q] runs the search and pairs its outcome with the
-    request the adapter dialed. The order is the point: writing
-    [(ok_search adapter q, sent ())] reads the egress before anything is dialed,
-    because a tuple's components are evaluated right-to-left. *)
+(** [drive adapter sent q] runs the search and pairs its outcome with the request the adapter
+    dialed. The order is the point: writing [(ok_search adapter q, sent ())] reads the egress before
+    anything is dialed, because a tuple's components are evaluated right-to-left. *)
 
 val json_object : string -> Yojson.Safe.t
 (** [json_object text] is a fixture decoded as an object; anything else fails the case, so a
@@ -79,8 +78,8 @@ val has_body_field : string -> Mcp_caps.Authority.Net.request -> bool
     default rather than omitting it. *)
 
 val params : Mcp_caps.Authority.Net.request -> (string * string list) list
-(** [params request] is the query string of a [GET] adapter's uri, as [Uri.query]
-    gives it: a key may carry several values. *)
+(** [params request] is the query string of a [GET] adapter's uri, as [Uri.query] gives it: a key
+    may carry several values. *)
 
 val param : Mcp_caps.Authority.Net.request -> string -> string option
 (** [param request name] is one of those pairs' value. *)

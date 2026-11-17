@@ -11,6 +11,7 @@
 ;   SEEKWRIGHT_LIVE_TESTS=1 seekwright-live freeserp
 ; A billed name is reachable only by naming it on a gated invocation; there is
 ; no "all configured providers" selector to sweep.
+
 (executable
  (name main)
  (public_name seekwright-live)
@@ -31,6 +32,7 @@
 ; the selection rules — no all-providers spelling — the per-adapter assertion
 ; arms over synthetic responses, and the live-status consistency between the
 ; harness and the registry row. No socket, no key, no clock.
+
 (test
  (name test_live_cases)
  (modules test_live_cases)

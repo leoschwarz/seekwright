@@ -115,9 +115,7 @@ let open_fds () = Array.length (Sys.readdir "/proc/self/fd")
    and the bytes of the page crossed as data, not as a shared value. *)
 let test_answer_matches_inline () =
   let inline = S.backend in
-  with_pool
-    S.backend
-    (fun _env pool ->
+  with_pool S.backend (fun _env pool ->
       match K.extract pool ~body:html ~content_type:(Some "text/html") with
       | Error e -> A.failf "extract: %s" (render e)
       | Ok r ->
@@ -309,9 +307,7 @@ let test_make_refuses_an_empty_pool () =
   Eio_main.run (fun env ->
       match
         K.make ~workers:0 ~net:env#net ~mono_clock:(Eio.Stdenv.mono_clock env)
-          ~dir:(Filename.get_temp_dir_name ())
-          ~extractor:S.backend
-          ()
+          ~dir:(Filename.get_temp_dir_name ()) ~extractor:S.backend ()
       with
       | Error message -> A.(check bool "refusal names the cause" true (String.length message > 0))
       | Ok _ -> A.failf "a zero-worker pool was accepted")

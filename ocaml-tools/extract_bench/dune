@@ -10,6 +10,7 @@
 ; both run this one program, so a bar means the same thing in both. It links the
 ; backend it measures, which is the whole point — a metric that no longer compiles
 ; against [Extractor] is a metric that stopped meaning anything.
+
 (library
  (name extract_metrics)
  (modules extract_metrics)
@@ -21,6 +22,7 @@
 ; longer matches, so a fixture can only change by changing the program that
 ; makes it. [runtest] runs the check mode, with the corpus declared as deps so
 ; the sandbox carries it.
+
 (executable
  (name gen_fixtures)
  (modules gen_fixtures)
@@ -32,7 +34,8 @@
   gen_fixtures.exe
   (glob_files ../../test/corpus_html/fixtures/*)
   ../../test/corpus_html/cases.json)
- (action (run ./gen_fixtures.exe --check ../../test/corpus_html)))
+ (action
+  (run ./gen_fixtures.exe --check ../../test/corpus_html)))
 
 ; The OCaml half of the metric table: runs the port's [stdlib] backend over the
 ; corpus and prints one metric row per case as JSON. [yojson] builds the row,
@@ -40,14 +43,15 @@
 ; header of [bench.ml]. The script that put the three backends' rows into the
 ; recorded table is gone with the implementation it ran; that table is
 ; checked-in data now.
+
 (executable
  (name bench)
  (modules bench)
  (libraries extract_metrics yojson unix))
 
-
 ; The identity check behind a plumbing change: a digest of what the backend
 ; answers for every corpus case, and the phase timings of one case.
+
 (executable
  (name digest_cases)
  (modules digest_cases)

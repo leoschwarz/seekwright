@@ -3,11 +3,12 @@
 ; P8 owns this file. The loop runner and the RNG installer belong here, not in
 ; any library: [Eio_main]'s interface says a library must not call [run], and
 ; [mirage-crypto-rng.unix] pulls stdlib [unix], which the libraries keep out.
+
 (executable
  (name main)
  (public_name seekwright)
  (package seekwright)
-(libraries
+ (libraries
   seekwright
   seekwright.cli
   seekwright.factory
@@ -32,43 +33,49 @@
 ; ready" used to. The accepted exit code is 0, and that is the assertion: a keyless
 ; MCP-only deployment serves, so the port's own missing probe must not be reported
 ; to the operator as a fault in their config.
+
 (rule
  (deps main.exe check_unbuilt.toml)
  (targets check_unbuilt.out check_unbuilt.err)
  (action
   (with-accepted-exit-codes
    0
-   (with-stderr-to check_unbuilt.err
-    (with-stdout-to check_unbuilt.out
-     (run
-      sh
-      -c
-      "SEEKWRIGHT_CONFIG=check_unbuilt.toml ./main.exe --check"))))))
+   (with-stderr-to
+    check_unbuilt.err
+    (with-stdout-to
+     check_unbuilt.out
+     (run sh -c "SEEKWRIGHT_CONFIG=check_unbuilt.toml ./main.exe --check"))))))
 
 (rule
  (alias runtest)
- (action (diff check_unbuilt.expected check_unbuilt.out)))
+ (action
+  (diff check_unbuilt.expected check_unbuilt.out)))
 
 ; A diagnosis writes to stdout only: stderr stays empty, which is the same
 ; discipline the stdio smoke pins for the serving path, and it means a traceback
 ; or a startup log line in [--check] fails the run.
+
 (rule
  (alias runtest)
- (action (diff check_unbuilt_notes.expected check_unbuilt.err)))
+ (action
+  (diff check_unbuilt_notes.expected check_unbuilt.err)))
 
 ; The stdio smoke: a scripted legacy JSON-RPC session (initialize,
 ; notifications/initialized, tools/list) piped through the real binary, with
 ; the config pointed at a path that does not exist so the keyless defaults are
 ; what runs. The protocol answers are blessed; the startup notes on stderr are
 ; pinned separately so "stdout is JSON-RPC only" stays checked.
+
 (rule
  (deps main.exe smoke.jsonl smoke.toml)
  (targets smoke.out smoke.err)
  (action
   (with-accepted-exit-codes
    0
-   (with-stderr-to smoke.err
-    (with-stdout-to smoke.out
+   (with-stderr-to
+    smoke.err
+    (with-stdout-to
+     smoke.out
      (run
       sh
       -c
@@ -76,8 +83,10 @@
 
 (rule
  (alias runtest)
- (action (diff smoke.expected smoke.out)))
+ (action
+  (diff smoke.expected smoke.out)))
 
 (rule
  (alias runtest)
- (action (diff smoke_notes.expected smoke.err)))
+ (action
+  (diff smoke_notes.expected smoke.err)))

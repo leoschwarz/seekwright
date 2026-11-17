@@ -56,15 +56,16 @@ These are the commands CI runs, in order
 request:
 
 ```bash
+dune build @fmt           # the tree as the pinned formatter would write it
 dune build @install       # the executables, the images' input, version.txt
 dune runtest --force      # the suites, the property tests, and every pin
 dune build @doc
 ```
 
-Formatting is not one of those commands: the pin in `.ocamlformat` is honoured
-by running `ocamlformat --inplace` over the files you changed before opening the
-pull request. A source file that drifts from it reads as style churn beside the
-change, and the whole tree is checked clean at every commit on `ocaml-port`.
+`@fmt` is the fourth command: the tree is formatted with the ocamlformat version pinned
+in `.ocamlformat`, and dune's own formatter over the stanzas. CI refuses a file the
+formatter would rewrite, so a formatter bump lands as one reformat commit and a change
+never carries style churn beside itself.
 
 `dune runtest` is where the frozen facts live, not beside them. It re-renders
 the surface manifest and diffs it against `ocaml-tools/surface.expected`; it

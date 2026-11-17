@@ -7,6 +7,7 @@
 ; [adapter_support] drives a [Seekwright.Provider.Net.t], so only the suites that
 ; already link [seekwright] link it; [binary_harness] runs [../bin/main.exe] as a
 ; child over a loopback socket, so only the black-box suites take stdlib [unix].
+
 (library
  (name test_support)
  (modules test_support)

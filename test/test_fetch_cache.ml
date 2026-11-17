@@ -419,8 +419,7 @@ let a_cached_page_of_a_priced_rung_is_unbilled () =
               (str (get "fallback" first)))
       | many -> A.failf "expected two journal entries, got %d" (List.length many));
       let totals = get "totals" (Usage.snapshot board.usage) in
-      A.(
-        check int "both reads are counted as fetches" 2 (Test_support.int (get "fetches" totals)));
+      A.(check int "both reads are counted as fetches" 2 (Test_support.int (get "fetches" totals)));
       A.(
         check int "and the money total covers one priced call" 1
           (Test_support.int (get "priced_fetches" totals))))

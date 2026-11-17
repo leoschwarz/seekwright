@@ -17,6 +17,7 @@
 ; P1: the routing core, the first differential proof. The suite needs no
 ; transport and no loop — the router is pure — and lib/dune gives the library
 ; no [libraries], so this is the whole dependency story.
+
 (test
  (name test_router)
  (libraries seekwright alcotest test_support))
@@ -33,16 +34,21 @@
 ; only the library's own modules appear. The pin lists every file the library
 ; has, so a new module re-pins two lines even when the router ignores it: that
 ; is deliberate, it is what makes a router that reaches for a sibling visible.
+
 (rule
  (targets router_dependencies.actual)
- (deps (glob_files ../lib/*.ml) (glob_files ../lib/*.mli))
+ (deps
+  (glob_files ../lib/*.ml)
+  (glob_files ../lib/*.mli))
  (action
-  (with-outputs-to router_dependencies.actual
+  (with-outputs-to
+   router_dependencies.actual
    (run ocamldep -I ../lib %{deps}))))
 
 (rule
  (alias runtest)
- (action (diff router_dependencies.expected router_dependencies.actual)))
+ (action
+  (diff router_dependencies.expected router_dependencies.actual)))
 
 (test
  (name test_tool)
@@ -53,26 +59,31 @@
  (libraries mcp-caps alcotest))
 
 ; The suite may speak mcp-kit: only the library's own core may not.
+
 (test
  (name test_server)
  (libraries mcp-caps mcp-kit yojson alcotest test_support))
 
 ; Reads the library's sources, so they have to be in the build sandbox.
+
 (test
  (name test_core_no_mcp_kit)
  (libraries mcp-caps alcotest test_support)
- (deps (glob_files ../lib/caps/*.ml)))
+ (deps
+  (glob_files ../lib/caps/*.ml)))
 
 ; The filesystem grant is tested against a real backend, so this suite owns an
 ; Eio loop and uses stdlib Unix to build its fixture tree. Neither belongs to
 ; mcp-caps itself: the library stays loop-agnostic and Unix-free, which
 ; test_core_no_mcp_kit.ml guards.
+
 (test
  (name test_authority_fs)
  (libraries mcp-caps alcotest test_support eio eio_main unix))
 
 ; Same: this suite serves tools over mcp-kit and builds fixture trees with
 ; Unix, so it holds a loop and the transport the core itself never names.
+
 (test
  (name test_grant_wiring)
  (libraries mcp-caps mcp-kit yojson alcotest test_support eio eio_main unix))
@@ -81,6 +92,7 @@
 ; that runs a cohttp-eio listener and a client, and it uses real loopback TCP
 ; because that is what the adapter's own bounds (body size, routing headers,
 ; Origin) are only observable through.
+
 (test
  (name test_http_transport)
  (libraries
@@ -94,7 +106,8 @@
   uri
   eio
   eio_main
-  alcotest test_support
+  alcotest
+  test_support
   unix))
 
 ; M3: the network grant. The fixture is a real loopback HTTP server (so it needs
@@ -102,11 +115,13 @@
 ; [ipaddr] to write addresses down in the form the policy thinks in). Installing
 ; a random generator belongs to the caller, and that caller-side library needs
 ; stdlib unix — which is why it is here and not in mcp-caps.
+
 (test
  (name test_authority_net)
  (libraries
   mcp-caps
-  alcotest test_support
+  alcotest
+  test_support
   eio
   cohttp-eio
   http
@@ -118,6 +133,7 @@
 
 ; P2: wire models and the sanitize pass. Both are pure, so alcotest and yojson
 ; are the only libraries.
+
 (test
  (name test_model)
  (libraries seekwright yojson alcotest))
@@ -132,12 +148,11 @@
 ; key fails here instead of at an operator's first start — and it writes one
 ; config file per case, which needs Unix. The pages are deps, so the suite runs
 ; against the same text a reader of the repo sees.
+
 (test
  (name test_config)
  (libraries seekwright alcotest test_support unix)
- (deps
-  ../ocaml-docs/reference-config.md
-  ../ocaml-docs/deploying.md))
+ (deps ../ocaml-docs/reference-config.md ../ocaml-docs/deploying.md))
 
 ; F9.1: the packaging metadata has one owner ([dune-project]) and generated
 ; manifests; the suite compares the owner with [lib/version.ml], both opam
@@ -145,6 +160,7 @@
 ; embedded prose so an installed artifact cannot lose the strings it serves.
 ; Every file it reads is a dep: a source pin that reads an undeclared tree is
 ; the failure the dune sandbox exists to prevent.
+
 (test
  (name test_metadata)
  (libraries seekwright seekwright.fetch alcotest test_support)
@@ -159,10 +175,21 @@
 ; accepts and never answers makes the bound observable, so no billed endpoint is
 ; involved; the factory sources are a dep because the config-read pin scans them,
 ; and the glob is what makes that scan see every module the library has.
+
 (test
  (name test_grant_timeouts)
- (libraries seekwright seekwright.factory mcp-caps uri yojson eio eio_main
-   mirage-crypto-rng.unix unix alcotest test_support)
+ (libraries
+  seekwright
+  seekwright.factory
+  mcp-caps
+  uri
+  yojson
+  eio
+  eio_main
+  mirage-crypto-rng.unix
+  unix
+  alcotest
+  test_support)
  (deps
   (glob_files ../lib/factory/*.ml)
   (glob_files ../lib/factory/*.mli)))
@@ -171,16 +198,25 @@
 ; and a real loopback listener (never connected to) pins that the monitor is a
 ; child of the listener's switch; the probe's net seam is a fake, so no request
 ; leaves the process.
+
 (test
  (name test_health_monitor)
- (libraries seekwright mcp-caps mcp-kit eio eio_main mirage-crypto-rng.unix
-   yojson alcotest))
+ (libraries
+  seekwright
+  mcp-caps
+  mcp-kit
+  eio
+  eio_main
+  mirage-crypto-rng.unix
+  yojson
+  alcotest))
 
 ; F2.3: the drain and the stopping state, driven in-process through an injected
 ; stop promise. The provider is an [Provider.S] module over two promises, so no
 ; endpoint is dialled; the listener and the client are real loopback TCP because
 ; the drain's observable effect is a connection that finishes (or is cancelled)
 ; on the wire. [seekwright.cli] supplies [Cli_serve], the same path [bin] runs.
+
 (test
  (name test_drain)
  (libraries
@@ -194,12 +230,14 @@
   eio
   eio_main
   unix
-  alcotest test_support))
+  alcotest
+  test_support))
 
 ; F2.3: the real binary's SIGTERM path. It is black-box on purpose — the child
 ; is [bin/main.exe] under [drain.toml], spoken to over loopback with stdlib Unix
 ; only — so the signal handler, the drain and the exit status are the process's,
 ; not a library call's.
+
 (test
  (name test_binary_drain)
  (libraries unix alcotest test_support binary_harness)
@@ -208,48 +246,84 @@
 ; The client verbs dialed by the real binary: [bin/main.exe] runs [search] against
 ; this suite's own loopback responder, so the endpoint grant, the request that
 ; leaves, and the exit status are all the process's. No billed host is contacted.
+
 (test
  (name test_cli_dial)
  (libraries unix alcotest test_support binary_harness)
  (deps ../bin/main.exe))
 
-
 ; P8: boots the shipped default configuration through the real construction
 ; path — the regression test for the default extractor. Installing a random
 ; generator is the caller's job, so the suite holds an Eio loop and stdlib
 ; Unix; no socket is opened.
+
 (test
  (name test_boot)
- (libraries seekwright seekwright.fetch
-   seekwright.providers seekwright.factory mcp-caps uri yojson eio eio_main
-   mirage-crypto-rng.unix unix alcotest))
+ (libraries
+  seekwright
+  seekwright.fetch
+  seekwright.providers
+  seekwright.factory
+  mcp-caps
+  uri
+  yojson
+  eio
+  eio_main
+  mirage-crypto-rng.unix
+  unix
+  alcotest))
 
 ; F1.1: one routable provider set. The factory's classification and startup
 ; verdict, the five sets [--check] prints from them, and the built set
 ; [/healthz] advertises. Grants are constructed and never dialled, so no
 ; provider endpoint is reached; the Eio loop and Unix belong to the caller,
 ; as in [test_boot].
+
 (test
  (name test_routing_sets)
- (libraries seekwright seekwright.fetch
-   seekwright.providers seekwright.factory mcp-caps uri yojson eio eio_main
-   mirage-crypto-rng.unix unix alcotest test_support))
+ (libraries
+  seekwright
+  seekwright.fetch
+  seekwright.providers
+  seekwright.factory
+  mcp-caps
+  uri
+  yojson
+  eio
+  eio_main
+  mirage-crypto-rng.unix
+  unix
+  alcotest
+  test_support))
 
 ; F4.1: the provider registry. The suite reads the table itself for all
 ; seventeen names — price, floor, endpoint, probe, credential — so
 ; the row is what is under test, not the adapter beside it. Grants are
 ; constructed and never dialled, and [unix] is only the environment variable a
 ; keyless row must prove it ignores.
+
 (test
  (name test_provider_registry)
- (libraries seekwright seekwright.factory seekwright.providers mcp-caps uri
-   yojson eio eio_main mirage-crypto-rng.unix unix alcotest test_support))
+ (libraries
+  seekwright
+  seekwright.factory
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  eio
+  eio_main
+  mirage-crypto-rng.unix
+  unix
+  alcotest
+  test_support))
 
 ; P4: the provider contract's machinery — the constraint report, the caps, and
 ; the failure rows provider-contract.md's Failures table fixes. It reads the
 ; adapter sources from the sandbox as well, which is what the (deps) line is:
 ; the source-discipline guard is worthless if the files it scans are not inputs
 ; to the test, and dune would otherwise let it read a tree it did not declare.
+
 (test
  (name test_provider)
  (libraries seekwright mcp-caps yojson alcotest test_support)
@@ -262,98 +336,223 @@
 ; The adapter suites. Each drives its adapter through a fake Provider.Net.t, the
 ; position httpx.MockTransport holds in the Python suites, so no socket is opened
 ; and the request that would have gone out is asserted on instead.
+
 (test
  (name test_freeserp)
- (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
-  test_support adapter_support))
+ (libraries
+  seekwright
+  seekwright.text
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
+  adapter_support))
 
 (test
  (name test_anysearch)
- (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
-  test_support adapter_support))
+ (libraries
+  seekwright
+  seekwright.text
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
+  adapter_support))
 
 (test
  (name test_serper)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
   adapter_support))
 
 (test
  (name test_scrappa)
- (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
-  test_support adapter_support))
+ (libraries
+  seekwright
+  seekwright.text
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
+  adapter_support))
 
 (test
  (name test_search1api)
- (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
-  test_support adapter_support))
+ (libraries
+  seekwright
+  seekwright.text
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
+  adapter_support))
 
 (test
  (name test_serpapi)
- (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
-  test_support adapter_support))
+ (libraries
+  seekwright
+  seekwright.text
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
+  adapter_support))
 
 (test
  (name test_querit)
- (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
-  test_support adapter_support))
+ (libraries
+  seekwright
+  seekwright.text
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
+  adapter_support))
 
 (test
  (name test_deepseek)
- (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
-  test_support adapter_support))
+ (libraries
+  seekwright
+  seekwright.text
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
+  adapter_support))
 
 (test
  (name test_searxng)
- (libraries seekwright seekwright.text seekwright.providers mcp-caps uri yojson alcotest
-  test_support adapter_support))
+ (libraries
+  seekwright
+  seekwright.text
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
+  adapter_support))
 
 (test
  (name test_tavily)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
   adapter_support))
 
 (test
  (name test_tinyfish)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
   adapter_support))
 
 (test
  (name test_linkup)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
   adapter_support))
 
 (test
  (name test_algolia)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
   adapter_support))
 
 ; F5.1: the two Exa/Parallel adapter suites. The REST half is driven through a
 ; fake Provider.Net.t; the MCP halves run their real client over a scripted
 ; endpoint, also a Provider.Net.t, so the session lifecycle runs while nothing is
 ; dialed.
+
 (test
  (name test_exa)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
   adapter_support))
 
 (test
  (name test_parallel)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
   adapter_support))
 
 ; The shared failure rows, driven over every adapter module on disk. The
 ; (deps) line is what lets the suite count those modules rather than trust the
 ; list in its own source.
+
 (test
  (name test_provider_contract)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support)
- (deps (glob_files ../lib/providers/*.ml)))
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support)
+ (deps
+  (glob_files ../lib/providers/*.ml)))
 
 ; F4.2: the narrow MCP client behind Exa and Parallel. A real loopback fixture
 ; behind a [Policy.with_endpoints] grant, the same shape [test_fetch_http] and
 ; [test_authority_net] use: what is pinned is the session half the two MCP
 ; adapters will own — framing, ids, headers, one reconnect, bounds and close —
 ; and no provider endpoint is named, so no case can bill anything.
+
 (test
  (name test_mcp_client)
  (libraries
@@ -366,12 +565,14 @@
   yojson
   eio
   eio_main
-  alcotest test_support))
+  alcotest
+  test_support))
 
 ; P5: the health board and its probe. The board's clock is injected, so the
 ; cooldown cases move a reference rather than sleeping, and the probe's net seam
 ; is a fake Provider.Net.t. The key cases set and clear environment variables,
 ; which needs Unix.
+
 (test
  (name test_health)
  (libraries seekwright mcp-caps uri yojson alcotest unix))
@@ -382,22 +583,40 @@
 ; in for a broken volume). [seekwright.time] is named because the clock cases
 ; compare the journal's stamp with the floor's [Z] stamp, which the suite would
 ; otherwise only see through [Usage].
+
 (test
  (name test_usage)
- (libraries seekwright seekwright.time alcotest test_support eio eio_main unix yojson))
+ (libraries
+  seekwright
+  seekwright.time
+  alcotest
+  test_support
+  eio
+  eio_main
+  unix
+  yojson))
 
 ; P5: the search engine. The stub providers are [Provider.S] modules closing over
 ; mutable state, the log is an injected sink, and one case drives a real adapter
 ; through a fake [Provider.Net.t] — so the suite needs the adapter library, the
 ; capability layer the fake speaks, and [uri] for its request records.
+
 (test
  (name test_engine)
- (libraries seekwright seekwright.providers mcp-caps uri yojson alcotest test_support
+ (libraries
+  seekwright
+  seekwright.providers
+  mcp-caps
+  uri
+  yojson
+  alcotest
+  test_support
   adapter_support))
 
 ; P5: the fetch engine. The page readers and the document grammars are P6, so the
 ; suite hands [Engine.Fetch] a stub [Readers] and drives the route, the notices,
 ; the escape pass and the journal around it; no adapter and no network is built.
+
 (test
  (name test_fetch_engine)
  (libraries seekwright yojson alcotest test_support))
@@ -406,6 +625,7 @@
 ; the extractor plumbing, passage selection and the stdlib backend. The cases
 ; are the Python suite's windowing, URL-shape and signature-table classes plus
 ; its extractor plumbing.
+
 (test
  (name test_fetch)
  (libraries seekwright.fetch alcotest test_support))
@@ -413,6 +633,7 @@
 ; P6: the fetcher over a real loopback fixture and a [Policy.with_endpoints]
 ; grant — the networked guardrail cases. The grant's own address policy is
 ; pinned by test_authority_net; this suite owns what the fetcher adds on top.
+
 (test
  (name test_fetch_http)
  (libraries
@@ -424,20 +645,17 @@
   eio_main
   uri
   yojson
-  alcotest test_support))
+  alcotest
+  test_support))
 
 ; F2.2: the extraction runner — a fixed pool of worker domains behind
 ; AF_UNIX sockets, so a parse costs its own core and not the loop's. The
 ; oracle's grinding-extractor and extraction-time cases
 ; at the pool seam, and the same backend through the fetcher's parse deadline.
+
 (test
  (name test_extract_pool)
- (libraries
-  seekwright.fetch
-  eio
-  eio_main
-  unix
-  alcotest test_support))
+ (libraries seekwright.fetch eio eio_main unix alcotest test_support))
 
 (test
  (name test_fetch_workers)
@@ -450,9 +668,11 @@
   eio_main
   unix
   uri
-  alcotest test_support))
+  alcotest
+  test_support))
 
 ; P6: the JSON and table halves of the fetch path — the renderers' cases.
+
 (test
  (name test_jsondoc)
  (libraries seekwright.fetch alcotest test_support)
@@ -466,6 +686,7 @@
 ; uses, and the reason [mcp-caps] and [eio_main] are here. [unix] is for the
 ; [Unix.stat] that pins the LRU divergence: a hit rewrites the sidecar and leaves
 ; the body's inode and mtime alone.
+
 (test
  (name test_page_cache)
  (libraries
@@ -483,6 +704,7 @@
 ; the private-web grant is constructed exactly once, in the branch that reads
 ; the key. The private-web cases dial 127.0.0.1 deliberately: that is the
 ; axis under test, and the fixture lives in the same case.
+
 (test
  (name test_fetch_grant)
  (libraries
@@ -495,7 +717,8 @@
   eio
   eio_main
   mirage-crypto-rng.unix
-  alcotest test_support)
+  alcotest
+  test_support)
  (deps
   (glob_files ../lib/factory/*.ml)
   (glob_files ../lib/factory/*.mli)
@@ -514,14 +737,17 @@
 ; it. Nothing is dialled under this config: its one enabled name is built here and
 ; has no connectivity probe on this port, and [jina] is named as a route, not
 ; dialled for a diagnosis.
+
 (rule
  (deps ../bin/main.exe check_transitional.toml)
  (targets check_transitional.out check_transitional.err)
  (action
   (with-accepted-exit-codes
    0
-   (with-stderr-to check_transitional.err
-    (with-stdout-to check_transitional.out
+   (with-stderr-to
+    check_transitional.err
+    (with-stdout-to
+     check_transitional.out
      (run
       sh
       -c
@@ -529,11 +755,13 @@
 
 (rule
  (alias runtest)
- (action (diff check_transitional.expected check_transitional.out)))
+ (action
+  (diff check_transitional.expected check_transitional.out)))
 
 (rule
  (alias runtest)
- (action (diff check_transitional_notes.expected check_transitional.err)))
+ (action
+  (diff check_transitional_notes.expected check_transitional.err)))
 
 ; The exit-code rule's other half: a built name this port does probe, probed and
 ; found down. [searxng] is the name to use because its host is config rather than
@@ -541,14 +769,17 @@
 ; immediate and no public provider is dialled, which is the only way a failing
 ; probe can be a test. Without this pin a [--check] that never claims a deployment
 ; is broken would look green.
+
 (rule
  (deps ../bin/main.exe check_unreachable.toml)
  (targets check_unreachable.out check_unreachable.err)
  (action
   (with-accepted-exit-codes
    1
-   (with-stderr-to check_unreachable.err
-    (with-stdout-to check_unreachable.out
+   (with-stderr-to
+    check_unreachable.err
+    (with-stdout-to
+     check_unreachable.out
      (run
       sh
       -c
@@ -556,24 +787,29 @@
 
 (rule
  (alias runtest)
- (action (diff check_unreachable.expected check_unreachable.out)))
+ (action
+  (diff check_unreachable.expected check_unreachable.out)))
 
 (rule
  (alias runtest)
- (action (diff check_unreachable_notes.expected check_unreachable.err)))
+ (action
+  (diff check_unreachable_notes.expected check_unreachable.err)))
 
 ; The two sentences kept apart: an [exa:free] this port builds but has no probe for
 ; is a gap in the diagnosis and counts as nothing, while [searxng]'s failed probe
 ; still earns the refusal sentence and the exit code. This is the pin that keeps
 ; one fix from swallowing the other.
+
 (rule
  (deps ../bin/main.exe check_probe_gap.toml)
  (targets check_probe_gap.out check_probe_gap.err)
  (action
   (with-accepted-exit-codes
    1
-   (with-stderr-to check_probe_gap.err
-    (with-stdout-to check_probe_gap.out
+   (with-stderr-to
+    check_probe_gap.err
+    (with-stdout-to
+     check_probe_gap.out
      (run
       sh
       -c
@@ -581,11 +817,13 @@
 
 (rule
  (alias runtest)
- (action (diff check_probe_gap.expected check_probe_gap.out)))
+ (action
+  (diff check_probe_gap.expected check_probe_gap.out)))
 
 (rule
  (alias runtest)
- (action (diff check_probe_gap_notes.expected check_probe_gap.err)))
+ (action
+  (diff check_probe_gap_notes.expected check_probe_gap.err)))
 
 (test
  (name test_tabledoc)
@@ -596,6 +834,7 @@
 ; [Provider.Net.t] — the same position httpx.MockTransport holds in the Python
 ; suite. The agent key cases set and clear an environment variable, which needs
 ; Unix.
+
 (test
  (name test_agent)
  (libraries seekwright mcp-caps uri yojson alcotest test_support unix))
@@ -606,16 +845,16 @@
 ; library, the capability layer, mcp-kit (to dispatch JSON-RPC lines), yojson
 ; and [http] for the wire helpers; no transport and no loop. [bin/main.ml] is a
 ; dep because the flag-table guard reads the scanner's source.
+
 (test
  (name test_p8_server)
  (libraries seekwright mcp-caps mcp-kit http yojson alcotest test_support)
- (deps
-  ../bin/main.ml
-  ../lib/cli/cli_flags.ml))
+ (deps ../bin/main.ml ../lib/cli/cli_flags.ml))
 
 ; P8: the journal-field pin behind the surface manifest. The journal is a real
 ; file under a scratch root, so the suite owns an Eio loop (the recorder's
 ; appends go through Eio.Path) and Unix (the fixture directory).
+
 (test
  (name test_p8_surface)
  (libraries seekwright alcotest test_support eio eio_main unix yojson))
@@ -624,6 +863,7 @@
 ; listener and a temp directory (no billed endpoint), and the source pins read
 ; the factory, the server and the capability layer's own dune file — those files
 ; are deps, or the guard would be reading a tree the test did not declare.
+
 (test
  (name test_caps_audit)
  (libraries
@@ -637,7 +877,8 @@
   eio
   eio_main
   mirage-crypto-rng.unix
-  alcotest test_support
+  alcotest
+  test_support
   unix)
  (deps
   (glob_files ../lib/factory/*.ml)
@@ -653,6 +894,7 @@
 ; F1.2: the operation budget. The atomicity case fans out over domains and over
 ; fibers, and the scope cases need a real filesystem grant, so this suite owns an
 ; Eio loop, a loopback listener and stdlib Unix for the fixture trees.
+
 (test
  (name test_caps_budget)
  (libraries
@@ -662,7 +904,8 @@
   uri
   eio
   eio_main
-  alcotest test_support
+  alcotest
+  test_support
   unix))
 
 ; Foundation wave A: the shared text basis (style review H1/H2). The walk and
@@ -675,10 +918,19 @@
 ; through [Server.serve_connection], which is where the ceiling, the replay and
 ; the refusal statuses meet. The timeout case injects a fake monotonic clock, so
 ; no case here waits on wall time to decide an outcome.
+
 (test
  (name test_http_head)
- (libraries seekwright mcp-caps mcp-kit eio eio_main mtime yojson alcotest
-   test_support))
+ (libraries
+  seekwright
+  mcp-caps
+  mcp-kit
+  eio
+  eio_main
+  mtime
+  yojson
+  alcotest
+  test_support))
 
 ; F2.4: shared state under concurrent serving. The suite drives the REST
 ; projection, the dashboard, the three tools and the health monitor at once over
@@ -686,6 +938,7 @@
 ; a second listener. Both listeners and every grant live on one switch, so
 ; cancellation is the shutdown case; the fixture listens through the capability
 ; layer, which is why the crypto RNG is installed here.
+
 (test
  (name test_concurrency)
  (libraries
@@ -700,7 +953,8 @@
   eio
   eio_main
   mirage-crypto-rng.unix
-  alcotest test_support
+  alcotest
+  test_support
   unix))
 
 (test
@@ -710,6 +964,7 @@
 ; Foundation wave A: the page record has one owner (style review M5). The pin
 ; is that [Engine.Fetch.page] and [Fetcher.fetched_page] are the same record,
 ; so all three libraries have to be in scope for the identity to mean anything.
+
 (test
  (name test_wire)
  (libraries seekwright seekwright.fetch seekwright.wire alcotest))
@@ -717,10 +972,12 @@
 ; Foundation wave A: the sink type has one owner (style review M1). The type
 ; identities are the compile; the source case reads the interfaces, which are
 ; only honest inputs when they are declared as deps.
+
 (test
  (name test_log)
  (libraries seekwright alcotest test_support)
- (deps (glob_files ../lib/*.mli)))
+ (deps
+  (glob_files ../lib/*.mli)))
 
 (test
  (name test_cli_extract)
@@ -741,7 +998,15 @@
 (test
  (name test_cli_check)
  (modules test_cli_check)
- (libraries seekwright seekwright.factory seekwright_cli alcotest str unix eio eio_main))
+ (libraries
+  seekwright
+  seekwright.factory
+  seekwright_cli
+  alcotest
+  str
+  unix
+  eio
+  eio_main))
 
 (test
  (name test_cli_metrics)
@@ -755,14 +1020,17 @@
 ; The [--metrics --json] fixture reports an empty board: the snapshot's
 ; shape is fixed, and the journal fold is pinned with an injected clock in
 ; [test_cli_metrics.ml] instead.
+
 (rule
  (deps ../bin/main.exe cli_usage_metrics_json.toml)
  (targets cli_usage_metrics_json.out cli_usage_metrics_json.err)
  (action
   (with-accepted-exit-codes
    0
-   (with-stderr-to cli_usage_metrics_json.err
-    (with-stdout-to cli_usage_metrics_json.out
+   (with-stderr-to
+    cli_usage_metrics_json.err
+    (with-stdout-to
+     cli_usage_metrics_json.out
      (run
       sh
       -c
@@ -770,11 +1038,13 @@
 
 (rule
  (alias runtest)
- (action (diff cli_usage_metrics_json.expected cli_usage_metrics_json.out)))
+ (action
+  (diff cli_usage_metrics_json.expected cli_usage_metrics_json.out)))
 
 (rule
  (alias runtest)
- (action (diff cli_usage_metrics_json_notes.expected cli_usage_metrics_json.err)))
+ (action
+  (diff cli_usage_metrics_json_notes.expected cli_usage_metrics_json.err)))
 
 (rule
  (deps ../bin/main.exe cli_usage_live_alone.toml)
@@ -782,8 +1052,10 @@
  (action
   (with-accepted-exit-codes
    2
-   (with-stderr-to cli_usage_live_alone.err
-    (with-stdout-to cli_usage_live_alone.out
+   (with-stderr-to
+    cli_usage_live_alone.err
+    (with-stdout-to
+     cli_usage_live_alone.out
      (run
       sh
       -c
@@ -791,11 +1063,13 @@
 
 (rule
  (alias runtest)
- (action (diff cli_usage_live_alone.expected cli_usage_live_alone.err)))
+ (action
+  (diff cli_usage_live_alone.expected cli_usage_live_alone.err)))
 
 (rule
  (alias runtest)
- (action (diff no_output.expected cli_usage_live_alone.out)))
+ (action
+  (diff no_output.expected cli_usage_live_alone.out)))
 
 (rule
  (deps ../bin/main.exe cli_usage_port.toml)
@@ -803,8 +1077,10 @@
  (action
   (with-accepted-exit-codes
    2
-   (with-stderr-to cli_usage_port.err
-    (with-stdout-to cli_usage_port.out
+   (with-stderr-to
+    cli_usage_port.err
+    (with-stdout-to
+     cli_usage_port.out
      (run
       sh
       -c
@@ -812,11 +1088,13 @@
 
 (rule
  (alias runtest)
- (action (diff cli_usage_port.expected cli_usage_port.err)))
+ (action
+  (diff cli_usage_port.expected cli_usage_port.err)))
 
 (rule
  (alias runtest)
- (action (diff no_output.expected cli_usage_port.out)))
+ (action
+  (diff no_output.expected cli_usage_port.out)))
 
 (rule
  (deps ../bin/main.exe cli_usage_client.toml)
@@ -824,8 +1102,10 @@
  (action
   (with-accepted-exit-codes
    2
-   (with-stderr-to cli_usage_client.err
-    (with-stdout-to cli_usage_client.out
+   (with-stderr-to
+    cli_usage_client.err
+    (with-stdout-to
+     cli_usage_client.out
      (run
       sh
       -c
@@ -833,24 +1113,29 @@
 
 (rule
  (alias runtest)
- (action (diff cli_usage_client.expected cli_usage_client.err)))
+ (action
+  (diff cli_usage_client.expected cli_usage_client.err)))
 
 (rule
  (alias runtest)
- (action (diff no_output.expected cli_usage_client.out)))
+ (action
+  (diff no_output.expected cli_usage_client.out)))
 
 ; Startup refusals: exit 1, one sentence on stderr, nothing on stdout, and no
 ; provider built — so the run reaches no endpoint. The keys rule clears both
 ; variables it names: a developer shell that holds a real Exa key would
 ; otherwise start a server on the build machine instead of refusing.
+
 (rule
  (deps ../bin/main.exe cli_startup_keys.toml)
  (targets cli_startup_keys.out cli_startup_keys.err)
  (action
   (with-accepted-exit-codes
    1
-   (with-stderr-to cli_startup_keys.err
-    (with-stdout-to cli_startup_keys.out
+   (with-stderr-to
+    cli_startup_keys.err
+    (with-stdout-to
+     cli_startup_keys.out
      (run
       sh
       -c
@@ -858,11 +1143,13 @@
 
 (rule
  (alias runtest)
- (action (diff cli_startup_keys.expected cli_startup_keys.err)))
+ (action
+  (diff cli_startup_keys.expected cli_startup_keys.err)))
 
 (rule
  (alias runtest)
- (action (diff no_output.expected cli_startup_keys.out)))
+ (action
+  (diff no_output.expected cli_startup_keys.out)))
 
 (rule
  (deps ../bin/main.exe cli_startup_primary.toml)
@@ -870,25 +1157,27 @@
  (action
   (with-accepted-exit-codes
    1
-   (with-stderr-to cli_startup_primary.err
-    (with-stdout-to cli_startup_primary.out
-     (run
-      sh
-      -c
-      "SEEKWRIGHT_CONFIG=cli_startup_primary.toml ../bin/main.exe"))))))
+   (with-stderr-to
+    cli_startup_primary.err
+    (with-stdout-to
+     cli_startup_primary.out
+     (run sh -c "SEEKWRIGHT_CONFIG=cli_startup_primary.toml ../bin/main.exe"))))))
 
 (rule
  (alias runtest)
- (action (diff cli_startup_primary.expected cli_startup_primary.err)))
+ (action
+  (diff cli_startup_primary.expected cli_startup_primary.err)))
 
 (rule
  (alias runtest)
- (action (diff no_output.expected cli_startup_primary.out)))
+ (action
+  (diff no_output.expected cli_startup_primary.out)))
 
 ; F6.1: the ladder the factory builds — which names a deployment gets (the
 ; permission set, the credential and prerequisite gates) and what each built
 ; row carries (its price), plus one round trip through a loopback renderer
 ; fixture so the grant, the target vet and the vendor mapping meet in one call.
+
 (test
  (name test_fetch_ladder)
  (libraries
@@ -902,36 +1191,86 @@
   eio_main
   unix
   mirage-crypto-rng.unix
-  alcotest test_support))
+  alcotest
+  test_support))
 
 ; F6.1: the five vendor fallback modules over the scripted seam in
 ; [fetch_support/] — request shape, status arms, and envelope mapping, with no
 ; socket and no third party. Each suite is the port of its Python test module.
+
 (test
  (name test_fallback_jina)
- (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+ (libraries
+  seekwright.fetch
+  mcp-caps
+  eio
+  eio_main
+  uri
+  yojson
+  alcotest
+  fallback_fixtures))
 
 (test
  (name test_fallback_scrappa)
- (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+ (libraries
+  seekwright.fetch
+  mcp-caps
+  eio
+  eio_main
+  uri
+  yojson
+  alcotest
+  fallback_fixtures))
 
 (test
  (name test_fallback_crawl4ai)
- (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+ (libraries
+  seekwright.fetch
+  mcp-caps
+  eio
+  eio_main
+  uri
+  yojson
+  alcotest
+  fallback_fixtures))
 
 (test
  (name test_fallback_tavily)
- (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+ (libraries
+  seekwright.fetch
+  mcp-caps
+  eio
+  eio_main
+  uri
+  yojson
+  alcotest
+  fallback_fixtures))
 
 (test
  (name test_fallback_linkup)
- (libraries seekwright.fetch mcp-caps eio eio_main uri yojson alcotest fallback_fixtures))
+ (libraries
+  seekwright.fetch
+  mcp-caps
+  eio
+  eio_main
+  uri
+  yojson
+  alcotest
+  fallback_fixtures))
 
 ; The composition of the two guards every remote fallback runs, in order:
 ; [validate_url] then the public-address vet.
+
 (test
  (name test_remote_target)
- (libraries seekwright.fetch mcp-caps eio eio_main uri alcotest fallback_fixtures))
+ (libraries
+  seekwright.fetch
+  mcp-caps
+  eio
+  eio_main
+  uri
+  alcotest
+  fallback_fixtures))
 
 ; F7: the page cache on the served path — the seam between the engine and the
 ; entry format. The pages come from stub fetchers, so nothing here reaches a
@@ -940,6 +1279,7 @@
 ; [eio] is the fibers and the clock of the singleflight cases; the fixture's cache
 ; directory is an ordinary [Filename.temp_dir], which the cache's written root
 ; then creates and caps.
+
 (test
  (name test_fetch_cache)
  (libraries

@@ -14,11 +14,12 @@
 ; The direction is the one [lib/dune] states: this library links [seekwright] and
 ; [seekwright.factory] (the diagnosis builds providers and probes them), and
 ; nothing links it except [bin/] and the suites.
+
 (library
  (name seekwright_cli)
  (public_name seekwright.cli)
  (wrapped false)
-(libraries
+ (libraries
   seekwright
   seekwright.factory
   ; [Cli_metrics] re-renders a journal timestamp, so it needs the civil-date

@@ -5,6 +5,7 @@
 ; same reason [lib/providers/] is one: the adapters depend on [seekwright], so a
 ; factory inside that library could not name them without closing a cycle
 ; (plans/seekwright-ocaml-port.md, the P4 note).
+
 (library
  (name seekwright_factory)
  (public_name seekwright.factory)

@@ -139,10 +139,10 @@ Verified against `opam list` on 2026-11-13 (switch `default`):
   the same commit.
 - Commits: one lowercase line, area first (`plans: …`, `caps: …`, `skills: …`).
 - Gate before reporting done: `eval $(opam env --switch=default) && dune build
-  @install && dune runtest --force && dune build @doc`.
+  @fmt @install && dune runtest --force && dune build @doc`.
 - Formatting is pinned by `.ocamlformat` (ocamlformat 0.29.0, `margin = 100`,
-  spacing options that preserve the tree's blank lines): run
-  `ocamlformat --inplace` over the files you touched. No gate target runs it.
+  spacing options that preserve the tree's blank lines) and checked by
+  `dune build @fmt`, which runs dune's own formatter over the stanzas as well.
 - The twenty-point review checklist and its examples live in
   `plans/reviews/2026-11-12-style-review.md` §3; the correctness findings in
   `plans/reviews/2026-11-12-quality-review.md`. Use those, not a copy here.
