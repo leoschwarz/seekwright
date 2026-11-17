@@ -2,8 +2,8 @@
 
 Three artefacts live here, and they answer three different questions.
 
-- `matrix/` — *what is the parity story, row by row?* One row per provider, config
-  key, behaviour and surface item, naming the port consumer, the baseline
+- `matrix/` — *what is the parity story, row by row?* One row per behaviour and per
+  surface item, naming the port consumer, the baseline
   evidence this tree keeps, and the kind of verification that backs the claim. It
   is the inventory the finalisation plan asks for, and
   `test_differential_matrix.ml` keeps it honest.
@@ -179,7 +179,7 @@ afterwards.
 | point a matrix row at a module that does not exist | the table fails: *points at …, which is not in the sandbox the test runs in* |
 | rename a matrix column | the table fails: *the header changed* |
 | let a not-ported row claim a real verification kind | the table fails: *it must say which wave will verify it (pending-F\*)* |
-| drop a provider row from `providers.tsv` | the cross-check fails: *only in the config: freeserp* |
+| drop a behaviour row from `behaviours.tsv` | the cross-check fails: *the behaviour rows and the corpus disagree about coverage — areas with a corpus but no row: router* |
 | raise an area's `min_cases` above its golden count | `coverage:<area>` fails: *pins N goldens, below the floor of N+1* |
 | invert the `utf8` slice-partition assertion in the property suite | `utf8: the codepoint slices are the input, in order` fails with a shrunk counterexample |
 
@@ -241,19 +241,25 @@ those claims against the directories that actually exist.
 
 ## The matrix
 
-Four tables, one row per thing that has to be equivalent:
+Two tables, one row per thing this tree has to keep true:
 
 | Table | Row per |
 | --- | --- |
-| `providers.tsv` | provider name — baseline evidence, endpoint, auth, default price, timeout, constraint behaviour, result field, quota class, live status, port state |
-| `config-fields.tsv` | config key — the port consumer, and whether it is honoured, transitional, refused on the port, or declined |
 | `behaviours.tsv` | behaviour — the baseline evidence, the port module and suite, status |
 | `surface.tsv` | surface item — the three tools, the REST routes, the operational paths, the CLI, the log and journal fields |
 
-`test_differential_matrix.ml` pins the headers and column counts, requires every
-cell to be filled, keeps the state/quota/live-status columns inside closed
-vocabularies, and requires every verification cell to name a kind from the plan's
-vocabulary — `unit`, `differential-golden`, `loopback-integration`,
+`providers.tsv` and `config-fields.tsv` used to sit here. They re-typed the provider
+vocabulary (endpoint, auth, default price, timeout, constraint behaviour, result field,
+quota class, live status) and the config-key vocabulary that `Factory.Registry.rows`
+states and `ocaml-tools/surface.ml` prints from the code; the validator spent a third of
+its lines policing the copies. The code is the owner, so both tables and their arms are
+deleted, and what this harness keeps is the evidence pointer per behaviour, which nothing
+else in the tree records.
+
+`test_differential_matrix.ml` pins the headers and column counts, requires every cell to
+be filled, keeps each table's state column inside its own closed vocabulary, and requires
+every verification cell to name a kind from the plan's vocabulary —
+`unit`, `differential-golden`, `loopback-integration`,
 `official-conformance`, `local-live`, `keyless-live`, `keyed-live`,
 `explicit-divergence` — or to be an explicit `pending-F*` on a row whose port side
 does not exist yet. A ported or honoured row resting on `pending` fails, and a
@@ -263,9 +269,9 @@ globs in this `dune` file carry this tree and nothing outside it — and a row
 crediting a consumer that was renamed away or never written is a failure. A
 `baseline` cell names the evidence that survives here: `differential:<area>` for a
 corpus area, `differential-golden(provider)` where a pinned provider golden set
-exists for the name, or the port suite. The provider rows must be exactly
-`Config.known_providers`, and the areas the behaviour rows claim must be exactly
-the areas `corpus/` carries.
+exists for the name, or the port suite. The areas the behaviour rows claim must be
+exactly the areas `corpus/` carries; the provider and config-key vocabularies are not the
+matrix's to restate, since `Config.known_providers` and the surface manifest own them.
 
 ## Accepted divergences
 

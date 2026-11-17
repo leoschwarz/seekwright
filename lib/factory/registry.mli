@@ -1,12 +1,6 @@
 (** One declarative row per provider name: what building an adapter costs, needs, and is allowed to
     reach. *)
 
-(** Which policy cap bounds this name's results. The oracle fills [snippet] from a SERP adapter and
-    [text] from a content adapter, never both (AGENTS.md, "A result carries snippet or text, never
-    both"); [deepseek] is the one name that fills both, its documented summary riding beside its
-    snippet. *)
-type context_cap = Snippets | Text | Snippets_and_text
-
 (** Where the name's credential rides, when it has one. This is the shape the adapter uses on the
     wire {i and} the shape the readiness probe uses — one declaration, so a probe that authenticates
     differently from a search is a bug this module cannot express.
@@ -87,7 +81,6 @@ type row = {
   default_cost : float option;
   cost_model : cost_model;
   timeout_floor : float;
-  context : context_cap;
   probe : probe_source;
   settings : string list;
   ocaml_live_tested : bool;

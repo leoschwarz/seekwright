@@ -64,10 +64,13 @@ evidence of, which is a provider answering the way a fixture once said it did.
 
 Two suites consume the pinned data: `test_differential_golden` (the projection must
 equal the pinned answer, a floor per area, and every corpus input must have a golden)
-and `test_differential_matrix` (the four tables under `test/differential/matrix/` —
-`behaviours`, `config-fields`, `providers`, `surface` — whose `baseline` column names
-the surviving evidence for a row: a `differential:<area>` corpus area, or the suite
-that pins it).
+and `test_differential_matrix` (the two tables under `test/differential/matrix/` —
+`behaviours` and `surface` — whose `baseline` column names the surviving evidence for a
+row: a `differential:<area>` corpus area, or the suite that pins it). The provider and
+config-key tables that used to sit beside them are deleted: `ocaml-tools/surface.ml`
+prints both vocabularies from the code and `ocaml-tools/egress_lists.ml` renders the
+deployment's host lists from `Factory.Registry.rows`, so a hand-typed copy of either was
+something to police rather than an owner.
 
 A divergence is registered rather than smoothed over: such a golden carries
 `verification: explicit-divergence` and a `reason` line, pins the port's answer next

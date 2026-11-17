@@ -1,9 +1,9 @@
 (* The parity-matrix validator.
 
-   [matrix/*.tsv] is the F0.1 inventory: one row per provider, config key,
-   behaviour and surface item, each naming the port consumer, the baseline
-   evidence behind the claim and the verification that tests it. A table like
-   that is evidence only while its shape holds, so this suite re-reads it at
+   [matrix/*.tsv] is the half of the F0.1 inventory that nothing else owns: one row per
+   behaviour and per surface item, each naming the port consumer, the baseline evidence
+   behind the claim and the verification that tests it. A table like that is evidence
+   only while its shape holds, so this suite re-reads it at
    every [dune runtest] rather than taking the table's word for it:
 
    - the header and the column count are pinned, so a column cannot be renamed,
@@ -11,8 +11,8 @@
    - no cell is blank, and no cell outsources a consumer to a phrase — [unknown
      consumer] and [the code looks equivalent] are the two ways a manifest like
      this goes wrong, and both fail here rather than in review;
-   - the state, quota and live-status columns come from closed vocabularies, so
-     a row cannot invent a status that no reader would know how to act on;
+   - each table's state column comes from its own closed vocabulary, so a row cannot
+     invent a status that no reader would know how to act on;
    - every verification cell names a kind from the plan's vocabulary, or is an
      explicit [pending-F*] on a row whose port side does not exist yet. A ported
      or honoured row resting on [pending] fails, and a not-ported row may not
@@ -20,8 +20,7 @@
    - every module or suite a row points at is a file this tree carries — the
      staged deps are the point, so a consumer that was renamed away or never
      written fails the row that credits it;
-   - the provider rows are exactly [Config.known_providers], and the corpus
-     areas the golden runner pins are exactly the areas the behaviour rows
+   - the corpus areas the golden runner pins are exactly the areas the behaviour rows
      claim to cover;
    - the accepted divergences are the record in [divergences.tsv] and the
      [explicit-divergence] goldens are its evidence: every row names a golden
@@ -31,8 +30,6 @@
    The [baseline] columns are the frozen corpus's counterpart: a cell names the
    corpus area, provider golden set or port suite that carries the evidence, so a
    pointer outside this tree is not one of the forms the check accepts. *)
-
-open Seekwright
 
 type table = {
   file : string; (* the table's path in the test sandbox *)
@@ -330,98 +327,32 @@ let check_row table header row =
                  table.state_column state header_name text))
       (List.mapi (fun at value -> (at, value)) row)
 
-let tables =
-  [
-    {
-      file = "matrix/providers.tsv";
-      header =
-        [
-          "provider";
-          "baseline";
-          "port_adapter";
-          "port_state";
-          "kind";
-          "endpoint";
-          "auth";
-          "cost_per_1k_default";
-          "timeout";
-          "constraints";
-          "result_field";
-          "quota_class";
-          "live_status";
-          "verification";
-        ];
-      state_column = "port_state";
-      state_allowed = [ "ported"; "not-ported" ];
-      placeholder_columns = [ "port_adapter"; "cost_per_1k_default" ];
-    };
-    {
-      file = "matrix/config-fields.tsv";
-      header = [ "path"; "port_consumer"; "status"; "verification" ];
-      state_column = "status";
-      state_allowed = [ "honoured"; "transitional"; "refused"; "declined" ];
-      placeholder_columns = [];
-    };
-    {
-      file = "matrix/behaviours.tsv";
-      header = [ "behaviour"; "baseline"; "port"; "port_suite"; "status"; "verification" ];
-      state_column = "status";
-      state_allowed = [ "ported"; "partial"; "not-ported" ];
-      placeholder_columns = [ "port"; "port_suite" ];
-    };
-    {
-      file = "matrix/surface.tsv";
-      header = [ "item"; "kind"; "port"; "status"; "verification" ];
-      state_column = "status";
-      state_allowed = [ "honoured"; "partial"; "not-ported"; "transitional"; "declined" ];
-      placeholder_columns = [ "port" ];
-    };
-  ]
+(* The two tables this validator owns. The provider and config-key vocabularies used to
+   sit here as hand-typed copies of what [ocaml-tools/surface.ml] prints from
+   [lib/config.ml] and what [Factory.Registry.rows] states — the same rows
+   [ocaml-tools/egress_lists.ml] renders the deployment's host lists from. A copy that
+   needs policing is not an owner, so those tables and their arms are gone. What is left
+   is the part of the inventory nothing else in the tree records: which behaviour a
+   change must keep true, and which evidence carries it. *)
+let behaviours_table =
+  {
+    file = "matrix/behaviours.tsv";
+    header = [ "behaviour"; "baseline"; "port"; "port_suite"; "status"; "verification" ];
+    state_column = "status";
+    state_allowed = [ "ported"; "partial"; "not-ported" ];
+    placeholder_columns = [ "port"; "port_suite" ];
+  }
 
-(* Columns whose values are a closed set beyond the state column: a provider row
-   that invents a quota class or a live status is a row nobody can act on. *)
-let closed_columns =
-  [
-    ( "providers.tsv",
-      [
-        ("timeout", [ "policy.provider_timeout_seconds" ]);
-        ("result_field", [ "snippet"; "text"; "snippet-or-answer" ]);
-        ( "quota_class",
-          [
-            "keyless";
-            "keyless-free";
-            "keyed-billed";
-            "keyed-free-tier";
-            "keyed-free-tier-then-metered";
-            "keyed-free";
-            "keyed-billed-free-first";
-            "self-hosted-free";
-          ] );
-        ( "live_status",
-          [
-            "keyless-live";
-            "keyed-live";
-            "keyed-live-free";
-            "keyed-live-fixture";
-            "local-live-fixture";
-            "untested-in-repo";
-          ] );
-      ] );
-  ]
+let surface_table =
+  {
+    file = "matrix/surface.tsv";
+    header = [ "item"; "kind"; "port"; "status"; "verification" ];
+    state_column = "status";
+    state_allowed = [ "honoured"; "partial"; "not-ported"; "transitional"; "declined" ];
+    placeholder_columns = [ "port" ];
+  }
 
-let check_closed table header row =
-  let name = Filename.basename table.file in
-  match List.assoc_opt name closed_columns with
-  | None -> ()
-  | Some columns ->
-      List.iter
-        (fun (column, allowed) ->
-          let value = cell header column row in
-          if not (List.mem value allowed) then
-            failwith
-              (Printf.sprintf "%s: %S = %S, outside its closed vocabulary (%s)" name column value
-                 (String.concat ", " allowed)))
-        columns
+let tables = [ behaviours_table; surface_table ]
 
 let rows_of table =
   let lines = read_lines table.file in
@@ -441,38 +372,18 @@ let check_table table () =
   List.iter
     (fun row ->
       check_row table table.header row;
-      check_closed table table.header row;
       check_pointers table.file table.header row;
       let key = List.hd row in
       if List.mem key !seen then failwith (Printf.sprintf "%s: two rows describe %S" table.file key);
       seen := key :: !seen)
     rows
 
-(* The provider table is the inventory of the ported provider surface, so it has
-   to be exactly the set the port's own validator accepts. A name added to
-   [Config.known_providers] without a row, or a row naming a retired spelling,
-   fails here. *)
-let check_provider_names () =
-  let table = List.hd tables in
-  let rows = rows_of table in
-  let found = List.map (fun row -> cell table.header "provider" row) rows in
-  let expected = List.sort String.compare Config.known_providers in
-  let found_sorted = List.sort String.compare found in
-  if found_sorted <> expected then
-    failwith
-      (Printf.sprintf
-         "providers.tsv does not name the provider set of Config.known_providers.\n\
-         \  only in the matrix: %s\n\
-         \  only in the config: %s"
-         (String.concat ", " (List.filter (fun name -> not (List.mem name expected)) found))
-         (String.concat ", " (List.filter (fun name -> not (List.mem name found)) expected)))
-
 (* The behaviour rows that claim corpus coverage must be exactly the areas the
    golden runner pins: a corpus area nobody wrote a row for, or a row pointing at
    an area the harness does not carry, is a manifest that has drifted from the
    suite. *)
 let check_corpus_areas () =
-  let behaviours = List.nth tables 2 in
+  let behaviours = behaviours_table in
   let rows = rows_of behaviours in
   let claimed =
     List.concat_map
@@ -692,11 +603,7 @@ let () =
   Alcotest.run "differential-matrix"
     (groups
     @ [
-        ( "cross-checks",
-          [
-            ("the provider rows are Config.known_providers", `Quick, check_provider_names);
-            ("the behaviour rows are the corpus areas", `Quick, check_corpus_areas);
-          ] );
+        ("cross-checks", [ ("the behaviour rows are the corpus areas", `Quick, check_corpus_areas) ]);
         ( "divergences",
           [ ("the record and the goldens name the same divergences", `Quick, check_divergences) ] );
       ])

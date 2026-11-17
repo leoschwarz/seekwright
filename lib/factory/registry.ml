@@ -20,8 +20,6 @@ module Parallel = Seekwright_providers.Parallel
 
 let ( let* ) = Result.bind
 
-type context_cap = Snippets | Text | Snippets_and_text
-
 type credential =
   | No_credential
   | Header of { header : string; prefix : string }
@@ -65,15 +63,14 @@ type row = {
   default_cost : float option;
   cost_model : cost_model;
   timeout_floor : float;
-  context : context_cap;
   probe : probe_source;
   settings : string list;
   ocaml_live_tested : bool;
 }
 
 let make_row ~name ~endpoint ~build ?(credential = No_credential) ?(requires = [ Api_key ])
-    ?(default_cost = Some 0.0) ?(cost_model = Flat) ?(timeout_floor = 0.0) ?(context = Snippets)
-    ?(probe = No_probe) ?(settings = []) ?(ocaml_live_tested = false) () =
+    ?(default_cost = Some 0.0) ?(cost_model = Flat) ?(timeout_floor = 0.0) ?(probe = No_probe)
+    ?(settings = []) ?(ocaml_live_tested = false) () =
   {
     name;
     build;
@@ -83,7 +80,6 @@ let make_row ~name ~endpoint ~build ?(credential = No_credential) ?(requires = [
     default_cost;
     cost_model;
     timeout_floor;
-    context;
     probe;
     settings;
     ocaml_live_tested;
@@ -179,7 +175,7 @@ let rows =
        adapter's, recorded in F5.5. *)
     make_row ~name:"deepseek"
       ~endpoint:(Fixed_uri (Uri.of_string "https://api.deepseek.com/v1/tools/search"))
-      ~credential:bearer ~default_cost:(Some 0.75) ~context:Snippets_and_text
+      ~credential:bearer ~default_cost:(Some 0.75)
       ~probe:(probe_at (Uri.of_string "https://api.deepseek.com/v1/tools/search"))
       ~build:
         (Adapter
@@ -192,7 +188,7 @@ let rows =
        is what spends. The floor is the MCP handshake's headroom; the [url]
        override and [free_cooldown_seconds] are the two settings its builder reads. *)
     make_row ~name:"exa" ~endpoint:(Url_override Exa.default_uri) ~credential:bearer
-      ~default_cost:(Some 7.00) ~timeout_floor:30.0 ~context:Text
+      ~default_cost:(Some 7.00) ~timeout_floor:30.0
       ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
       ~settings:[ "free_cooldown_seconds"; "url" ]
       ~build:
@@ -207,7 +203,7 @@ let rows =
        never read even when the environment holds one. No ladder behind it, because
        it cannot bill. *)
     make_row ~name:"exa:free" ~endpoint:(Url_override Exa.default_uri) ~requires:[]
-      ~default_cost:None ~timeout_floor:30.0 ~context:Text
+      ~default_cost:None ~timeout_floor:30.0
       ~cost_model:(Extra_results { first = 10; per_extra_1k = 1.0 })
       ~settings:[ "url" ] ~ocaml_live_tested:true
       ~build:
@@ -249,7 +245,7 @@ let rows =
        whose quota a search spends. REST, not the authenticated MCP, is the surface
        that carries the filter fields, and [mode] is the preset that decides price. *)
     make_row ~name:"parallel" ~endpoint:(Fixed_uri Parallel.endpoint)
-      ~credential:(key_header "x-api-key") ~default_cost:(Some 1.00) ~context:Text
+      ~credential:(key_header "x-api-key") ~default_cost:(Some 1.00)
       ~probe:(probe_at Parallel.endpoint) ~settings:[ "mode" ]
       ~build:
         (Adapter
@@ -262,7 +258,7 @@ let rows =
        vocabulary cannot drive a handshake, so its {!Provider.session.warmup} is
        the proof this row carries instead. *)
     make_row ~name:"parallel:free" ~endpoint:(Url_override Parallel.mcp_uri) ~requires:[]
-      ~timeout_floor:30.0 ~context:Text ~settings:[ "url" ]
+      ~timeout_floor:30.0 ~settings:[ "url" ]
       ~ocaml_live_tested:true
         (* [ParallelMcpProvider] is a subclass of [ExaMcpProvider] in the oracle, so
          its [cost_for] is Exa's rung and this row spells the same shape; a config
@@ -362,7 +358,7 @@ let rows =
        search, and unlike [linkup]'s [depth] the vendor does not price it as a rung
        an operator turns. *)
     make_row ~name:"tavily" ~endpoint:(Fixed_uri Tavily.endpoint) ~credential:bearer
-      ~default_cost:(Some 8.00) ~context:Text ~probe:(probe_at Tavily.endpoint)
+      ~default_cost:(Some 8.00) ~probe:(probe_at Tavily.endpoint)
       ~build:
         (Adapter
            (fun a ->

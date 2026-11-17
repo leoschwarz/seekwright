@@ -3202,12 +3202,15 @@ where the row says so.
 | S-009 | `bin/main.ml`'s private cohttp-eio + TLS stack deleted: the client verbs dial through `Factory.grant_of_endpoint` over a `Policy_net.endpoint_of_uri` endpoint, with the response ceiling and the operation bound now grant properties | `b98a460` |
 | S-010 | the `'tag` erased from every `Fallback_*.config` (D2 lifted): `Remote_target.make_check` is a value the factory builds once per rung, and `Fallback.status_rule` / `status_error` / `send` / `send_json` own the tail the five readers shared | `423ee5b` |
 | D-A | `test/differential/drive.exe` and `ocaml-tools/oracle/README.md` deleted; the corpus claim renamed to "does this behaviour still hold"; `AGENTS.md`, `ocaml-docs/testing.md` and `test/differential/README.md` corrected to `test/differential/divergences.tsv` and the freeze | this change |
+| D-B — the parity matrix | `matrix/providers.tsv` and `matrix/config-fields.tsv` deleted with the validator's arms for them — `check_provider_names`, `closed_columns`, `check_closed` — the provider row set's only other consumer; the matrix keeps the behaviour and surface evidence pointers, the refused-key fact the config table carried is pinned by `ocaml-docs/configuration.md` and `test_config.ml`, and `Factory.Registry`'s `context_cap` / `context` / six `~context:` rows go with the table that read them | this change |
 
 Two corrections to the plan's own predictions, recorded where they were wrong rather
 than left for a reader to find: D2's resolver (above, in §40), and S-010's line-count
 claim — the five readers lost 19 lines while `fallback.ml` gained 31, so the gain is the
 single owner of the status reading, not a smaller tree.
 
-Still open on this pass: the §3 weight rows (`Registry.row`'s `context`, `settings` and
-`cost_model`, the `Factory` façade, the extractor's double representation, the adapter
-interfaces), the D-B matrix decision, and D-C … D-F.
+Still open on this pass: the §3 weight rows (`Registry.row`'s `settings` and `cost_model`,
+the `Factory` façade, the extractor's double representation, the adapter interfaces) and
+D-C … D-F. The `context` row closed with D-B rather than on its own: its one reader was the
+`providers.tsv` row the validator cross-checked, so `context_cap`, the field and the six
+`~context:` rows went with the table that consumed them.
