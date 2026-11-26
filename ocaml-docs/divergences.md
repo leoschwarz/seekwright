@@ -34,7 +34,7 @@ path only — under stdio, EOF on stdin is the shutdown signal.
 
 `seekwright` has **no `--help` and no `--version` flag**. An unknown flag is a
 usage error: `seekwright: unknown flag --help`, exit 2. Usage prose lives in
-`README.ocaml.md`; the binary's contract is the flag list the surface golden
+`README.md`; the binary's contract is the flag list the surface golden
 prints.
 
 ## `fetch.extractor` is `stdlib`, and that is the whole difference in extraction

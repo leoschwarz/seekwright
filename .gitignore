@@ -12,12 +12,8 @@ test/conformance/node_modules/
 usage-journal/
 p8-surface-journal/
 
-__pycache__/
-*.py[cod]
-.venv/
-.pytest_cache/
-pytest-of-*/
-dist/
+# A local SQLite snapshot of the usage journal, made by hand to query it: never
+# committable, and nothing in the tree writes one.
 *.db
 *.db-wal
 *.db-shm

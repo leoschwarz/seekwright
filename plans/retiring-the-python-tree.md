@@ -96,9 +96,28 @@ no Python release is planned in between.
 - `test/corpus_html`'s wall-clock bar is load-sensitive on a busy host, and the
   quality numbers in `cases.json` are now this port's own bar rather than a
   comparison.
-- The only Python left in the tree is `test/conformance/compare_results.py` and
-  `compare_application.py` — stdlib-only scripts that diff the official runner's
-  JSON, called by the conformance drivers. They never imported `seekwright`.
+- The last two Python files are gone as well. The conformance comparators are
+  `compare_results.ml` and `compare_application.ml` over one shared reader,
+  `compare_common`, and the drivers call `manifest_check.exe` and
+  `readiness_check.exe` for their own two checks instead of embedding an
+  interpreter. The port and its evidence are the section below.
+
+## The last two scripts, ported (2026-11-21)
+
+| was | now |
+|---|---|
+| `compare_results.py` scored the fixture run and `compare_application.py` the application run, each holding its own copy of the grammar for reading the runner's output directory | `compare_results.ml` and `compare_application.ml` over one library, `compare_common`: the manifest line grammar, the `runner list --requirements` section grammar, the result-directory name grammar, the `checks.json` reader, the duplicate-key-refusing JSON reader, the report writer. Two readers of that grammar could drift, and the drift would surface as a gate that stopped failing closed rather than as a failing build |
+| the drivers reached for an interpreter four times: a `python3 -` heredoc importing `compare_results.py` to check the pinned manifest against the runner's own list, a heredoc asserting the readiness body was a JSON-RPC result, a heredoc probing whether the server's port had closed, and a `python3 -c` picking a free loopback port | `manifest_check.exe` and `readiness_check.exe`, reading through the same module as the comparators, plus bash's own `/dev/tcp` redirection for the two port probes. The drivers hold no language of their own now |
+| the reader treated the end of the runner transcript as a terminator for the scored section, and a stat of a missing directory raised | the shared reader requires the next section header, as the retired one did — a truncated transcript is a refusal, never a short expected set — and `dir_exists` is total as its interface promised: a results directory the runner never wrote becomes an error line, not an uncaught `Unix.Unix_error` |
+| the two scripts were the parity reference, so a port of them could only be judged by reading both side by side | a throwaway differential harness generated 59 synthetic run directories — 47 for the results gate (required and pending modes, baseline validation, evidence rendering, run metadata, the list and unscored sets, the `checks.json` shapes) and 12 for the applicability gate — and compared exit code, stdout, every stderr line and the report JSON: **0 mismatches**. One accepted divergence: a manifest with a duplicate ID, where the script died with a CPython traceback and the port refuses with a single sentence and writes no report. The harness and both scripts are deleted; what they established is recorded here |
+
+After the port, both live gates were re-run end to end through the OCaml
+comparators: the fixture at **19 pass / 18 fail / 0 inconclusive** against
+`expected-failures-2026-07-28-server.json`, the application at **90 / 90**
+applicable checks over 177 classified. Both are written beside the older rows in
+`test/conformance/README.md`, which owns the runner baselines. The four gate
+targets — `@fmt`, `@install`, `runtest --force`, `@doc` — are green with no
+Python anywhere in the tree.
 
 ## If new differential evidence is genuinely ever needed
 

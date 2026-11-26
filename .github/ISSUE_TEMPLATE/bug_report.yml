@@ -28,7 +28,7 @@ body:
     id: expected
     attributes:
       label: What did you expect instead?
-      description: What `README.ocaml.md` or `ocaml-docs/` led you to expect.
+      description: What `README.md` or `ocaml-docs/` led you to expect.
     validations:
       required: true
   - type: textarea

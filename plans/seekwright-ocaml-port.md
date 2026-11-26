@@ -817,7 +817,7 @@ module owner:
 drives `bin/main.exe --http` with the same pinned runner and the same 37 scored
 + 13 unscored scenarios, but scores through
 `application-classification-2026-07-28-server.json` and
-`compare_application.py`. Every check is classed `applicable`, `fixture-declaration`,
+`compare_application.exe`. Every check is classed `applicable`, `fixture-declaration`,
 `absent-feature`, `oracle-parity` or `port-divergence`; every applicable check
 must pass, every excluded check must keep its recorded status, and the runner's
 scenario/check sets must still equal the classification. Measured 2026-11-13:
