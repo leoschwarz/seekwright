@@ -3,8 +3,18 @@
 ; keeping it in the default build is what makes "the fixture still compiles" part
 ; of the gate.
 
+; Both live comparators read the same run directory, so they read it through one
+; module: two readers of the runner's grammar could drift, and the drift would
+; show up as a gate that stopped failing closed rather than as a failing build.
+
+(library
+ (name compare_common)
+ (modules compare_common)
+ (libraries unix yojson))
+
 (executable
  (name fixture)
+ (modules fixture)
  (libraries
   mcp-caps
   mcp-kit
@@ -13,6 +23,38 @@
   cohttp-eio
   eio
   eio_main))
+
+; The two live gates the drivers call. They are executables rather than tests
+; because they score a run the pinned runner produced outside the build; the
+; default build still compiles them, which is what keeps "the comparator still
+; speaks the runner's grammar" inside the gate.
+
+(executable
+ (name compare_results)
+ (modules compare_results)
+ (libraries compare_common unix yojson))
+
+(executable
+ (name compare_application)
+ (modules compare_application)
+ (libraries compare_common unix yojson))
+
+; The drivers' manifest pre-check: the runner's own scenario list against the
+; pinned requirements file, before a run is spent. Same reader as the
+; comparators, so the two cannot disagree about what the manifest says.
+
+(executable
+ (name manifest_check)
+ (modules manifest_check)
+ (libraries compare_common unix))
+
+; The drivers' readiness answer: the probe response is a JSON-RPC result for the
+; request the driver sent. Silent; the exit code is the answer.
+
+(executable
+ (name readiness_check)
+ (modules readiness_check)
+ (libraries compare_common unix))
 
 ; The stdio half of the conformance evidence. The official runner has no stdio
 ; mode — `conformance server` takes `--url` and nothing else — so the JSON-RPC

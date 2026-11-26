@@ -2,13 +2,14 @@
 # Live run of the pinned official MCP conformance runner against the mcp-caps
 # fixture in this directory.
 #
-# Structure and the fail-closed gates are mcp-kit's (v0.2.0,
-# scripts/run_live_mcp_conformance.sh and test/conformance/compare_results.py,
-# MIT — see README.md, "Provenance"): same pinned runner, same requirements
-# manifest, same comparator, so a number produced here is comparable to the
-# 37/37 upstream records. What differs is the fixture (built through
-# Mcp_caps.Registry / Server.of_registry) and the expected-failures baseline,
-# which classifies this fixture's declared surface.
+# Structure and the fail-closed gates come from mcp-kit v0.2.0 (its
+# scripts/run_live_mcp_conformance.sh and its own conformance comparator, MIT —
+# see README.md, "Provenance"): same pinned runner, same requirements manifest,
+# same gate shape, so a number produced here is comparable to the 37/37 upstream
+# records. What differs is the fixture (built through Mcp_caps.Registry /
+# Server.of_registry), the comparator (this tree's OCaml compare_results.exe)
+# and the expected-failures baseline, which classifies this fixture's declared
+# surface.
 #
 # Default `dune runtest` never runs this: it needs Node and an npm fetch.
 #
@@ -27,6 +28,10 @@ runner="$conformance_dir/node_modules/.bin/conformance"
 manifest="$conformance_dir/requirements-2026-07-28-server.txt"
 pending_manifest="$conformance_dir/pending-2026-07-28-server.txt"
 baseline="${MCP_CONFORMANCE_BASELINE:-$conformance_dir/expected-failures-2026-07-28-server.json}"
+build_dir="$repo_root/_build/default/test/conformance"
+comparator="$build_dir/compare_results.exe"
+manifest_check="$build_dir/manifest_check.exe"
+readiness_check="$build_dir/readiness_check.exe"
 fixture_pid=''
 fixture_url=''
 fixture_root=''
@@ -37,6 +42,11 @@ if [[ -n $(find "$output_dir" -mindepth 1 -maxdepth 1 -print -quit) ]]; then
   exit 2
 fi
 
+if [[ ! -x "$comparator" || ! -x "$manifest_check" || ! -x "$readiness_check" ]]; then
+  echo "error: build the comparators first: dune build test/conformance" >&2
+  exit 1
+fi
+
 cleanup() {
   local prior_status=$?
   trap - EXIT
@@ -45,19 +55,19 @@ cleanup() {
     wait "$fixture_pid" 2>/dev/null || true
   fi
   if [[ -n "$fixture_url" ]]; then
-    if ! python3 - "$fixture_url" <<'PY'
-import socket, sys, time, urllib.parse
-url = urllib.parse.urlparse(sys.argv[1])
-for _ in range(20):
-    try:
-        with socket.create_connection((url.hostname, url.port), timeout=0.1):
-            pass
-    except OSError:
-        sys.exit(0)
-    time.sleep(0.1)
-sys.exit(1)
-PY
-    then
+    # bash's own /dev/tcp redirection is the probe: a connect that succeeds
+    # means the listener is still up. The twenty attempts are what make this a
+    # statement about the shutdown rather than about a scheduling accident.
+    port=${fixture_url##*:}
+    port_open=yes
+    for _ in {1..20}; do
+      if ! (exec 3<>"/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
+        port_open=''
+        break
+      fi
+      sleep 0.1
+    done
+    if [[ -n "$port_open" ]]; then
       echo "error: fixture port remains open after cleanup" | tee "$output_dir/cleanup-error.txt" >&2
       prior_status=1
     fi
@@ -92,19 +102,7 @@ phase='runner-list'
 "$runner" --version > "$output_dir/runner-version.txt"
 timeout 60 "$runner" list --server --requirements 2026-07-28 > "$output_dir/runner-list.stdout" 2> "$output_dir/runner-list.stderr"
 phase='manifest-validation'
-python3 - "$manifest" "$output_dir/runner-list.stdout" "$conformance_dir" <<'PY'
-import importlib.util, pathlib, sys
-root = pathlib.Path(sys.argv[3])
-spec = importlib.util.spec_from_file_location('compare_results', root / 'compare_results.py')
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-expected = module.ids(pathlib.Path(sys.argv[1]))
-actual = module.runner_list(pathlib.Path(sys.argv[2]).read_text())
-errors = []
-module.exact('official runner manifest', actual, expected, errors)
-if errors:
-    raise SystemExit('\n'.join(errors))
-PY
+"$manifest_check" --manifest "$manifest" --list-output "$output_dir/runner-list.stdout"
 
 # The fixture's filesystem tool reads a real subtree, so the run supplies one;
 # [root/note.txt] in the tree is its committed shape.
@@ -123,7 +121,7 @@ if [[ -n "${MCP_CONFORMANCE_FIXTURE_BIN:-}" ]]; then
   # path in it may contain whitespace.
   fixture_args=(${MCP_CONFORMANCE_FIXTURE_ARGS-})
 else
-  fixture_bin="$repo_root/_build/default/test/conformance/fixture.exe"
+  fixture_bin="$build_dir/fixture.exe"
   fixture_args=(--root "$fixture_root" --http)
 fi
 printf '%s\n' "$fixture_bin ${fixture_args[*]}" > "$output_dir/fixture-identity.txt"
@@ -154,17 +152,7 @@ for ((attempt=0; attempt<100; attempt++)); do
     -H 'MCP-Protocol-Version: 2026-07-28' \
     -H 'Mcp-Method: server/discover' \
     --data "$readiness_body" "$fixture_url" 2> "$output_dir/readiness.stderr" || true)
-  if [[ "$status" == 200 ]] && python3 - "$output_dir/readiness-response.json" <<'PY'
-import json, sys
-try:
-    document = json.load(open(sys.argv[1]))
-    assert document['jsonrpc'] == '2.0'
-    assert document['id'] == 'readiness'
-    assert isinstance(document['result'], dict)
-except (OSError, ValueError, KeyError, AssertionError, TypeError):
-    sys.exit(1)
-PY
-  then
+  if [[ "$status" == 200 ]] && "$readiness_check" --response "$output_dir/readiness-response.json"; then
     break
   fi
   if (( attempt == 99 )); then
@@ -200,12 +188,12 @@ done < "$pending_manifest"
 
 phase='comparison'
 set +e
-python3 "$conformance_dir/compare_results.py" --mode pending \
+"$comparator" --mode pending \
   --manifest "$pending_manifest" --results "$output_dir/pending" \
   --pending-classifications "$conformance_dir/pending-classifications-2026-07-28-server.json" \
   --report "$output_dir/pending-report.json"
 pending_gate=$?
-python3 "$conformance_dir/compare_results.py" --mode required \
+"$comparator" --mode required \
   --manifest "$manifest" --list-output "$output_dir/runner-list.stdout" \
   --results "$output_dir/required" --stdout "$output_dir/required.stdout" \
   --exit-code "$output_dir/required.exit-code" --baseline "$baseline" \

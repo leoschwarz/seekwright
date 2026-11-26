@@ -9,8 +9,8 @@ counting how many of the runner's fixture-shaped scenarios an application
 passes measures resemblance, not conformance.
 
 Nothing here runs under plain `dune runtest` except the stdio transcript rules
-at the bottom: the live jobs need Node and an npm fetch, so the Python suite's
-hermeticity rule holds on the OCaml side too.
+at the bottom: the live jobs need Node and an npm fetch, so the gate never dials
+out or needs a package cache.
 
 ## What is pinned, and by which file
 
@@ -22,7 +22,7 @@ hermeticity rule holds on the OCaml side too.
 | unscored scenarios the same command also runs | 13 (ten `tasks-*` extension, `json-schema-2020-12`, `http-header-validation`, `http-custom-header-server-validation`) | parsed out of `runner-list.stdout` by the comparator |
 | failure baseline | 18 scenarios, each naming its failing check IDs with a cause and a reason | `expected-failures-2026-07-28-server.json` |
 | application classification | every scored and unscored check, classed `applicable` or excluded and carrying its recorded status | `application-classification-2026-07-28-server.json` |
-| application comparator | fail-closed applicability gate; no expected-failures list | `compare_application.py` |
+| application comparator | fail-closed applicability gate; no expected-failures list | `compare_application.exe` |
 
 `run_live.sh` fails closed: exact required-ID equality (no missing, extra or
 duplicate), then a required gate and a pending gate that treat an unexpected
@@ -33,7 +33,7 @@ commit the fixture was built from.
 
 ```sh
 export PATH="$HOME/.local/opt/node22/bin:$PATH"       # Node 22, see plans/infra-setup.md
-dune build test/conformance/fixture.exe
+dune build test/conformance
 test/conformance/run_live.sh /tmp/mcp-caps-conformance-results
 ```
 
@@ -56,6 +56,12 @@ are statements about what this fixture declares, not about the machine, the
 setup or mcp-kit. `MCP_CONFORMANCE_FIXTURE_BIN` is what `run_live.sh` uses to
 point at a different fixture; its `fixture-identity.txt` records which binary a
 run drove (its `server-commit.txt` names *this* checkout either way).
+
+Re-run 2026-11-21 with the comparator rewritten as this tree's own OCaml program
+(§"Provenance"): **19 pass / 18 fail / 0 inconclusive**, gate pass, against the
+same baseline and the same pinned runner. The port moved no number, which is the
+point of pinning the failure sentences: the red gate a reader would have read in
+2026-11 is the red gate they read now.
 
 The two example rows are the reason the fixture exists at all. The examples
 declare no scenario-named tool, and every one of their eight passes is a
@@ -114,7 +120,7 @@ never "mcp-kit fails it" — the control row shows mcp-kit passing all 37.
 
 `run_live_application.sh` points the same 50-scenario runner at
 `bin/main.exe --http`, then scores it through
-`application-classification-2026-07-28-server.json` and `compare_application.py`
+`application-classification-2026-07-28-server.json` and `compare_application.exe`
 instead of an expected-failures list. The question is not "how much of the
 fixture's surface does seekwright resemble" — it deliberately has none of it —
 but "is the surface it *does* declare MCP-conformant".
@@ -148,6 +154,10 @@ Same machine (`vps-01`), same switch, same pinned runner as the fixture rows.
 | scenario classes | 4 `applicable`, 3 `mixed`, 4 `fixture-declaration`, 39 `absent-feature` |
 | check classes | 90 `applicable`, 73 `absent-feature`, 12 `fixture-declaration`, 1 `oracle-parity`, 1 `port-divergence` |
 | gate | pass |
+
+Re-run 2026-11-21 with the applicability gate rewritten as this tree's own OCaml
+program (`compare_application.exe`): the same **90 / 90** applicable checks, the
+same 177 classified checks, gate pass.
 
 The four `applicable` scenarios all pass: `tools-list` (three tools, valid
 names, valid wire schema), `server-sse-multiple-streams` (three concurrent POST
@@ -250,23 +260,31 @@ Recorded 2026-11-11, in the order they were found:
 ## Provenance
 
 `package.json`, `package-lock.json`, `requirements-2026-07-28-server.txt`,
-`pending-2026-07-28-server.txt`, `pending-classifications-2026-07-28-server.json`
-and `compare_results.py` are copied from mcp-kit v0.2.0 (`test/conformance/`),
-and `run_live.sh` follows its `scripts/run_live_mcp_conformance.sh` — same
-pinned runner, same manifest, same comparator, so the numbers above are
-comparable to upstream's records rather than a new measuring stick. This
-repository is Apache-2.0 (root `LICENSE`); the copied/derived upstream files
+`pending-2026-07-28-server.txt` and `pending-classifications-2026-07-28-server.json`
+are copied from mcp-kit v0.2.0 (`test/conformance/`), and `run_live.sh` follows
+its `scripts/run_live_mcp_conformance.sh` — same pinned runner, same manifest,
+same fail-closed gate shape — so the numbers above are comparable to upstream's
+records rather than a new measuring stick. The comparator that gate runs is this
+tree's own program: `compare_results.ml` over the shared run-directory reader
+`compare_common.ml`, written from upstream's `compare_results.py`. The sentences
+it prints are deliberately the sentences that script printed, because a reader
+comparing two runs of the same failure should read the same text twice. This
+repository is Apache-2.0 (root `LICENSE`); the copied and derived upstream files
 are MIT-licensed by the Epure Team and carry that notice in
-`UPSTREAM-LICENSE.md`, which lists them. The archive the
-switch installs is
+`UPSTREAM-LICENSE.md`, which lists them. The archive the switch installs is
 `https://gitlab.com/nomadic-labs/ai-harness/ocaml-mcp/-/archive/v0.2.0/ocaml-mcp-v0.2.0.tar.gz`,
 `sha256=43c8319a13be91e323ae952a71ab673533fb3295886029eed9d81e5828de5ef7`
 (the `mcp-kit.0.2.0` opam entry). The control fixture is that archive's own
-`test/conformance/{server,multiple_inputs_fixture,multi_round_fixture}.ml`
-built unmodified in a scratch dune project; it is not committed here.
+`test/conformance/{server,multiple_inputs_fixture,multi_round_fixture}.ml` built
+unmodified in a scratch dune project; it is not committed here.
 
-`compare_application.py`, `application-classification-2026-07-28-server.json`,
-`run_live_application.sh`, `application.toml` and `application_transcript.*`
-are this branch's own (F3.3); they reuse the pinned runner and, through
-`compare_results.py`, its list parsing and `checks.json` reader, but no upstream
-file was modified.
+`compare_application.ml`, `application-classification-2026-07-28-server.json`,
+`run_live_application.sh`, `application.toml` and `application_transcript.*` are
+this branch's own (F3.3); they reuse the pinned runner and, through
+`compare_common.ml`, the same list parsing and `checks.json` reader, but no
+upstream file was modified. The two small programs the drivers call beside the
+comparators — `manifest_check.ml`, the pinned runner list against the pinned
+requirements file before a run is spent, and `readiness_check.ml`, the probe
+response really is a JSON-RPC result for the request that was sent — are this
+branch's own too, and they exist so that the drivers hold no interpreter of
+their own.

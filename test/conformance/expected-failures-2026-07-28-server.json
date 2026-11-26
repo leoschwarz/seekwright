@@ -1,6 +1,6 @@
 {
   "_comment": [
-    "Regression gate for test/conformance/run_live.sh, read by compare_results.py.",
+    "Regression gate for test/conformance/run_live.sh, read by compare_results.exe.",
     "Every entry names an official check ID this fixture does not pass and why. It is",
     "not a claim that those scenarios pass, and an entry whose check stops failing is a",
     "stale baseline the comparator refuses. Causes and reasons are mcp-caps v1's declared",

@@ -22,8 +22,10 @@ SOFTWARE.
 
 ---
 
-Files in this directory copied or derived from mcp-kit v0.2.0 (MIT, above):
-`compare_results.py`, `run_live.sh`, `package.json`, `package-lock.json`,
+Files in this directory copied from, or written from, mcp-kit v0.2.0 (MIT,
+above): `run_live.sh`, `package.json`, `package-lock.json`,
 `requirements-2026-07-28-server.txt`, `pending-2026-07-28-server.txt`,
-`pending-classifications-2026-07-28-server.json`. Source:
-gitlab.com/nomadic-labs/ai-harness/ocaml-mcp @ v0.2.0.
+`pending-classifications-2026-07-28-server.json`; and `compare_common.ml` plus
+`compare_results.ml`, written from that release's
+`test/conformance/compare_results.py` and keeping its failure sentences.
+Source: gitlab.com/nomadic-labs/ai-harness/ocaml-mcp @ v0.2.0.

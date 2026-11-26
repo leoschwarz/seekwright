@@ -1,7 +1,7 @@
 {
   "_comment": [
     "Applicability baseline for the pinned MCP conformance runner against bin/main.exe.",
-    "Read by compare_application.py; every check names its class, the status this run",
+    "Read by compare_application.exe; every check names its class, the status this run",
     "observed, and why it is or is not an obligation of seekwright's three-tool surface.",
     "An applicable check must pass; an excluded check must keep its recorded status.",
     "oracle-parity means the Python implementation fails identically; port-divergence",

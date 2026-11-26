@@ -534,9 +534,15 @@ Each entry cost a build; one or two lines, dated. Group by the tool that bit.
   behaviour is fine. An ordinary three-tool server therefore scores **8/37**
   without doing anything; the port's scores live in
   `plans/seekwright-ocaml-port.md` §7 and §16. (2026-11-11, 2026-11-13)
-- `compare_results.py`'s `exact()` treats a repeated ID as a duplicate even when
-  both sides repeat it; runner check IDs repeat, so compare Counters.
-  (2026-11-13)
+- `Compare_common.exact` treats a repeated ID as a duplicate even when both sides
+  repeat it; runner check IDs repeat, so compare counters — `multiset_diff` is the
+  arm that tolerates a repeat. (2026-11-13, retargeted 2026-11-21)
+- Both comparators are OCaml programs in this tree (`compare_results.exe`,
+  `compare_application.exe`, one shared `compare_common` reader), and the drivers
+  call `manifest_check.exe` and `readiness_check.exe` for their own two checks
+  rather than reaching for an interpreter. Parity work on a comparator is
+  sentence-for-sentence work: the failure wording is what a reader of a red gate
+  reads. (2026-11-21)
 
 ### Tests, shell and git
 
